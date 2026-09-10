@@ -83,3 +83,27 @@ _Avoid_: MVS, dense reconstruction
 The step recovering camera positions and a sparse point cloud from unordered
 images. A prerequisite of both Gaussian Splatting and Photogrammetry.
 _Avoid_: SfM on first use, camera solve, alignment
+
+### Pipeline structure
+
+**Pipeline**:
+An automated route from a Capture to one kind of deliverable. Each product has
+its own — Orthomosaic, Gaussian Splatting, 3D Timelapse — rather than one
+pipeline branching internally.
+_Avoid_: workflow, job, process
+
+**Node**:
+One named step in a Pipeline, with declared inputs and outputs. A Node belongs
+to no single Pipeline: any manifest that needs the step references the same one.
+_Avoid_: stage, task, step, operation
+
+**Manifest**:
+The declarative description of a Pipeline — its Nodes, and the edges between
+them. Read both by the runner that executes it and by anything that draws it.
+_Avoid_: config, definition, graph file
+
+**Runner**:
+The component that executes a Manifest, placing each Node's work on whichever
+machine is meant to do it.
+_Avoid_: orchestrator, scheduler, engine
+
