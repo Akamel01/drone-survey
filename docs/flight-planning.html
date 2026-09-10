@@ -255,6 +255,25 @@
   .route li { margin-bottom: 6px; }
   .route .links { margin-top: auto; display: flex; flex-wrap: wrap; gap: 8px 14px; font-size: 14px; font-family: var(--display); }
 
+  .warnbox {
+    border-left: 3px solid var(--amber);
+    background: var(--accent-bg);
+    border-radius: 0 3px 3px 0;
+    padding: 16px 18px;
+    margin: 0 0 18px;
+  }
+  .warnbox-title {
+    font-family: var(--display);
+    font-weight: 600;
+    font-size: 14.5px;
+    color: var(--amber);
+    margin: 0 0 8px !important;
+  }
+  .warnbox p { font-size: 14.5px; margin: 0 0 10px; }
+  .warnbox p:last-child { margin-bottom: 0; }
+  .warnbox ul { margin: 0 0 10px; padding-left: 18px; font-size: 14.5px; }
+  .warnbox li { margin-bottom: 5px; }
+
   /* ---- checklist ---- */
   .checklist { list-style: none; margin: 8px 0 0; padding: 0; }
   .checklist li {
@@ -553,10 +572,33 @@
         <span class="hazard-n">03</span>
         <div>
           <h3>Re-planning after a battery swap</h3>
-          <p>A grid mission outlasts one battery, which is fine. Resume the same mission. Re-planning mid-site shifts the grid and leaves a gap along the join.</p>
+          <p>A grid mission outlasts one battery, which is fine. Resume the same mission. Re-planning mid-site shifts the grid and leaves a gap along the join. Budget on roughly 25–30 minutes of real flying per battery, not the rated figure.</p>
+        </div>
+      </div>
+      <div class="hazard">
+        <span class="hazard-n">04</span>
+        <div>
+          <h3>Steel on site</h3>
+          <p>Rebar, structural steel and reinforced slabs distort the compass and degrade the GPS this whole workflow already treats as marginal. Calibrate away from the structure, watch for heading drift on the first pass, and treat position data from directly above heavy steel as suspect.</p>
+        </div>
+      </div>
+      <div class="hazard">
+        <span class="hazard-n">05</span>
+        <div>
+          <h3>Wind, on a sub-250g airframe</h3>
+          <p>The aircraft is rated to roughly 12 m/s and is more wind-sensitive than a purpose-built mapping platform. Wind pushes it off the planned line and forces attitude changes that tilt the camera off nadir — which is the one thing the whole capture depends on.</p>
         </div>
       </div>
     </div>
+  </section>
+
+  <section class="col">
+    <p class="kicker">Beyond the basic grid</p>
+    <h2>When a plain nadir grid isn't enough</h2>
+    <p><strong>Vertical structures.</strong> A pure nadir grid sees roofs and almost nothing of walls. Buildings and anything tall need either a second grid flown perpendicular to the first (a cross-hatch, which doubles the viewing angles on every surface) or an orbit with the gimbal tilted to about −45°, flown as a separate pass and reconstructed together.</p>
+    <p><strong>Sloped sites.</strong> Constant altitude above the takeoff point means constant altitude above <em>sea level</em>, not above ground. On a slope the effective altitude — and therefore the resolution and the real overlap — drift across the site. Either fly terrain-following if the planner supports it, or step the mission into altitude bands.</p>
+    <p><strong>Rolling shutter.</strong> The aircraft almost certainly reads its sensor out line by line rather than exposing the whole frame at once, so movement during readout skews the image. Flying slowly is the mitigation, and it is another reason speed is a capture parameter rather than a convenience.</p>
+    <p><strong>Before committing a full mission,</strong> take a few test shots at working altitude and confirm on the controller that exposure is sane, the horizon is level, the gimbal is genuinely at −90°, and GPS is being written.</p>
   </section>
 
   <section>
@@ -569,12 +611,22 @@
       <div class="route lead">
         <p class="route-tag">Recommended</p>
         <h3>Third-party grid planner</h3>
-        <p>Draw a polygon over the site, enter altitude and overlap, and the planner computes pass spacing and shutter intervals. Export as KMZ, import into DJI Fly, fly it.</p>
+        <p>Draw a polygon over the site, enter altitude and overlap, and the planner computes pass spacing. You then move the generated KMZ onto the controller and fly it.</p>
         <ul>
           <li>Overlap is calculated, not guessed</li>
           <li>Repeatable — the same mission reflown on a later date</li>
           <li>Handles the margin for you</li>
         </ul>
+        <div class="warnbox">
+          <p class="warnbox-title">This is not a supported import path</p>
+          <p>There is no official KMZ import in DJI Fly. The KMZ is copied by hand into DJI Fly's internal waypoint folder on the controller — a file-replacement workaround, not a feature. Three consequences:</p>
+          <ul>
+            <li><strong>Android or RC2 only.</strong> Pixpro's own documentation states iOS does not produce proper straight flight paths.</li>
+            <li><strong>The drone will not trigger capture automatically.</strong> The mission flies the path; you start interval shooting yourself, and it is not synchronised to the waypoints.</li>
+            <li><strong>A DJI Fly update can break it silently</strong> by changing the folder path or naming.</li>
+          </ul>
+          <p>Verify capture is actually firing on the first pass of every mission. A flown grid with no photos is the most expensive possible outcome.</p>
+        </div>
         <div class="links">
           <a href="https://www.pix-pro.com/blog/pixpro-waypoints-how-to">Pixpro Waypoints guide</a>
           <a href="https://www.pix-pro.com/blog/dji-mini-5-photogrammetry">Mini 5 photogrammetry notes</a>
@@ -605,7 +657,10 @@
       <li><span class="box" aria-hidden="true"></span><span>Grid extends at least one pass beyond the site<span class="note">Turns fall outside the boundary</span></span></li>
       <li><span class="box" aria-hidden="true"></span><span>Exposure locked, shooting stills not video</span></li>
       <li><span class="box" aria-hidden="true"></span><span>Light is flat, or the sun is high and stable</span></li>
-      <li><span class="box" aria-hidden="true"></span><span>Enough batteries to finish without re-planning</span></li>
+      <li><span class="box" aria-hidden="true"></span><span>Enough batteries to finish without re-planning<span class="note">Roughly 25–30 minutes of real flying each</span></span></li>
+      <li><span class="box" aria-hidden="true"></span><span>Compass calibrated away from steel, wind within limits</span></li>
+      <li><span class="box" aria-hidden="true"></span><span>Test shots taken at altitude — exposure, level horizon, gimbal at −90°</span></li>
+      <li><span class="box" aria-hidden="true"></span><span>Capture confirmed firing on the first pass<span class="note">A planner-generated mission does not trigger the shutter for you</span></span></li>
       <li><span class="box" aria-hidden="true"></span><span>Confirm GPS is written to EXIF on the first few frames<span class="note">If footage is all you have, enable Video Caption so the SRT sidecar exists — it cannot be recovered later</span></span></li>
     </ul>
   </section>
