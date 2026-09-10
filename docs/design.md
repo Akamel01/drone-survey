@@ -47,9 +47,10 @@ across dates is the hardest problem in the system ([ADR 0007](adr/0007-anchors-f
 
 | Machine | Role |
 |---|---|
-| `akamel-linux` — RTX 4070 SUPER, 12GB VRAM, i7-14700F, 62GB RAM, Ubuntu 24.04 | All reconstruction, training, rendering, and interactive inspection |
+| `akamel-linux` — RTX 4070 SUPER, 12GB VRAM, i7-14700F, 62GB RAM, Ubuntu 24.04 | Development, iteration, and production jobs within its limits; interactive inspection |
+| Rented GPU, hourly | Production jobs exceeding the local host — larger datasets, splat training above its video-memory ceiling |
 | MacBook Air M1, 8GB | Control client only |
-| Managed static hosting | Client delivery |
+| Object storage | Client delivery |
 
 The two machines reach each other over Tailscale, which the Runner uses for
 dispatch. Docker with the NVIDIA container runtime is already configured on the
@@ -62,18 +63,35 @@ large splat alone wants several gigabytes of VRAM. Interactive inspection —
 including splat cleaning, which runs in a browser — happens against the GPU host
 over Tailscale. The Air issues commands and reads reports.
 
-**The GPU host is shared, and this is a live constraint.** It runs an unrelated
-production stack of around forty containers with several hundred gigabytes of
-volumes. Consequences the pipelines must respect:
+**Heavy work is rented, not squeezed onto the local host**
+([ADR 0013](adr/0013-rent-gpu-for-production-jobs.md)). Hourly GPU rental costs
+roughly one to three dollars per job, so a month of production runs costs less
+than any subscription in this stack. A rented card with twice the video memory
+lifts the splat-training ceiling above the scale we intend to fly, and takes
+production work off a machine we do not own the uptime of.
+
+The local host keeps what it is genuinely good for: a fast development loop with
+no provisioning, no data transfer and no per-run cost. It still runs production
+jobs that fit comfortably within it.
+
+**The local host is shared, and that still constrains what fits.** It runs an
+unrelated production stack of around forty containers with several hundred
+gigabytes of volumes:
 
 - Reconstruction jobs contend for RAM with a running service. A job that
-  overcommits takes that service down.
-- VRAM must be treated as borrowed. An embedding model was found pinned
-  indefinitely, holding roughly half the card; the arrangement is that
-  reconstruction and that model do not run at once.
+  overcommits takes that service down. This is now a reason to rent rather than
+  a risk to absorb.
+- VRAM is borrowed. An embedding model was found pinned indefinitely, holding
+  roughly half the card; the arrangement is that reconstruction and that model do
+  not run at once.
 - Free disk is the tightest resource. A dedicated SSD is planned; until it
   exists, working space is scarce and cold Captures are archived off the working
   volume.
+
+**Every Node must run in a freshly provisioned environment**, not only on a
+machine configured by hand. Containerised, no reliance on local state, inputs and
+outputs addressed explicitly. This follows from renting, and it is worth having
+regardless of where a job lands.
 
 ## 4. Pipeline model
 
