@@ -1,0 +1,300 @@
+# Aerial Survey Production System — Design
+
+Status: agreed 2026-09-10. Supersedes the stack described in
+[the handoff](handoff-2026-09-10.md).
+
+This document is the spec handed to the build phase. It states the shape of the
+system and the reasoning that is not obvious from the shape. Where a decision
+was contested, the argument lives in an ADR under [`adr/`](adr/) and is linked
+rather than repeated. Vocabulary is defined once in [`../CONTEXT.md`](../CONTEXT.md)
+and used precisely here — capitalised terms are glossary terms.
+
+---
+
+## 1. What the system is for
+
+A one-person aerial-survey business turns repeated visits to a Site into
+finished deliverables that clients pay for. Phase 1 sells two:
+
+- an **Orthomosaic** — a uniform-scale top-down map of a Site
+- a **Gaussian Splatting** Reconstruction — an explorable 3D scene
+
+Phase 2 adds the **3D Timelapse**, the same Site across dates. It is deferred,
+not dropped, and section 8 explains what phase 1 must do to keep it possible.
+
+Everything targets **visual-grade**: relative geometry sound, appearance
+finished, no stated absolute accuracy. Survey-grade work needs Ground Control
+Points and better positioning hardware than a DJI Mini 5 Pro provides, and
+claiming it now would be selling something we cannot deliver.
+
+## 2. Constraints the design answers to
+
+**Budget.** Software spend is approximately zero. This is a real constraint, not
+a preference, and it was tested rather than assumed: the affordable tier of the
+obvious commercial tool cannot export georeferenced Orthomosaics at all, so the
+commercial entry point is thousands of dollars ([ADR 0001](adr/0001-opendronemap-for-orthomosaics.md)).
+
+**Licensing.** Deliverables are sold, so any engine whose licence forbids
+commercial use is unusable regardless of quality. This excludes most of the
+well-known Gaussian Splatting implementations ([ADR 0003](adr/0003-permissive-splat-engines-only.md)).
+
+**Hardware.** One GPU host and one thin laptop, detailed in section 3.
+
+**Capture.** A consumer drone with GPS and no RTK. This is why Registration
+across dates is the hardest problem in the system ([ADR 0007](adr/0007-anchors-for-cross-capture-registration.md)).
+
+## 3. Compute topology
+
+| Machine | Role |
+|---|---|
+| `akamel-linux` — RTX 4070 SUPER, 12GB VRAM, i7-14700F, 62GB RAM, Ubuntu 24.04 | All reconstruction, training, rendering, and interactive inspection |
+| MacBook Air M1, 8GB | Control client only |
+| Managed static hosting | Client delivery |
+
+The two machines reach each other over Tailscale, which the Runner uses for
+dispatch. Docker with the NVIDIA container runtime is already configured on the
+GPU host, so engines run as containers and none of the source-build work from
+the proof-of-concept needs repeating.
+
+**The laptop does not view results.** The original plan had it as a light
+viewing client; 8GB cannot be trusted to open large scenes, and rendering a
+large splat alone wants several gigabytes of VRAM. Interactive inspection —
+including splat cleaning, which runs in a browser — happens against the GPU host
+over Tailscale. The Air issues commands and reads reports.
+
+**The GPU host is shared, and this is a live constraint.** It runs an unrelated
+production stack of around forty containers with several hundred gigabytes of
+volumes. Consequences the pipelines must respect:
+
+- Reconstruction jobs contend for RAM with a running service. A job that
+  overcommits takes that service down.
+- VRAM must be treated as borrowed. An embedding model was found pinned
+  indefinitely, holding roughly half the card; the arrangement is that
+  reconstruction and that model do not run at once.
+- Free disk is the tightest resource. A dedicated SSD is planned; until it
+  exists, working space is scarce and cold Captures are archived off the working
+  volume.
+
+## 4. Pipeline model
+
+A Pipeline is a **Manifest**: a declarative file naming its Nodes, their inputs
+and outputs, and the edges between them. A thin **Runner** executes a Manifest,
+placing each Node's work on the machine meant to do it
+([ADR 0006](adr/0006-pipelines-as-declarative-manifests.md)).
+
+There is no workflow engine. The general ones solve problems this system does
+not have, at the cost of operational surface on the machine least able to spare
+it. The deciding argument is that a Manifest has two readers: the Runner
+executes it, and the planned developer view draws it. Defining Pipelines as data
+means the graph can be drawn without an engine to interrogate.
+
+**Node reuse is structural.** A Node is a named unit that any Manifest may
+reference, so shared steps exist once by construction rather than by discipline.
+This is how the no-duplicated-logic requirement is met.
+
+### Node inventory
+
+| Node | Purpose | Used by |
+|---|---|---|
+| `ingest` | Copy a Capture into the working store, verify completeness | both |
+| `exif-audit` | Confirm GPS and camera metadata are present; report coverage | both |
+| `frame-extract` | Video to frames | footage-derived only |
+| `geotag-backfill` | Interpolate SRT telemetry onto extracted frames | footage-derived only |
+| `correct` | Exposure consistency, white balance, lens profile | both |
+| `solve` | Camera solve via ODM's SfM stage | both |
+| `reconstruct` | ODM dense reconstruction, mesh, orthophoto | Orthomosaic |
+| `export-cog` | Orthophoto to Cloud-Optimized GeoTIFF with overviews | Orthomosaic |
+| `export-colmap` | Camera solve to COLMAP format | Gaussian Splatting |
+| `train-splat` | splatfacto training | Gaussian Splatting |
+| `clean-splat` | Crop, remove floaters, trim ground noise | Gaussian Splatting |
+| `compress-splat` | Trained splat to compressed web format | Gaussian Splatting |
+| `render` | Camera paths to frames | cinematic deliverables |
+| `grade` | Aesthetic pass on rendered output | cinematic deliverables |
+| `bundle` | Assemble a Delivery Bundle | both |
+| `publish` | Deploy a Delivery Bundle to static hosting | both |
+
+`ingest`, `exif-audit`, `correct`, `solve`, `bundle` and `publish` are shared by
+both phase-1 Pipelines. `frame-extract` and `geotag-backfill` exist for material
+that already exists as footage; they are not part of the supported capture path
+([ADR 0002](adr/0002-stills-from-grid-missions-not-video.md)).
+
+`clean-splat` is human-in-the-loop. Aerial splats arrive with floaters and
+ground-plane noise, and removing them is judgement, not a parameter. The Runner
+should treat it as a Node that blocks awaiting an operator rather than pretend
+it is automatic.
+
+### The two phase-1 Pipelines
+
+```
+Orthomosaic:
+  ingest → exif-audit → correct → solve → reconstruct → export-cog → bundle → publish
+
+Gaussian Splatting:
+  ingest → exif-audit → correct → solve → export-colmap → train-splat
+         → clean-splat → compress-splat → bundle → publish
+```
+
+They diverge after `solve` and rejoin at `bundle`.
+
+### Why `solve` is one Node and not two
+
+Both products need camera poses, so a shared upstream SfM node is the obvious
+design. It is not buildable: ODM cannot accept an external camera solve, so a
+shared node would have to be ODM's own internal stage, extracted by forking its
+pipeline for no gain ([ADR 0005](adr/0005-reuse-odm-camera-solve-for-splatting.md)).
+
+Instead `solve` **is** ODM, run only as far as its camera solve, and its output
+serves whichever Pipeline continues. Where one Capture feeds both products, the
+solve happens once and both share a coordinate frame.
+
+That case is less common than it sounds. A Nadir Grid Mission is the right
+Capture for an Orthomosaic and poor input for Gaussian Splatting, which wants
+oblique views around a subject. A Site flown for both usually yields two
+Captures, each with its own solve, related to each other by the same Registration
+mechanism used across dates.
+
+> **To verify during build.** The exact mechanism for stopping ODM at the camera
+> solve, and the precise input and output contract of the COLMAP export, were
+> not confirmed during research. Both are load-bearing for the Gaussian
+> Splatting Pipeline. Confirm before building `solve` and `export-colmap`, and
+> check that camera conventions survive the conversion rather than assuming it.
+
+## 5. Capture standard
+
+Capture is part of the system, not a precondition of it. A Capture flown wrongly
+cannot be rescued in software, so its requirements are specified and checkable.
+
+**Orthomosaic Captures** are stills from an automated Nadir Grid Mission: gimbal
+at −90° locked, 80% forward and 70% side Overlap, constant altitude, locked
+exposure, and the grid extended at least one pass beyond the Site boundary. The
+reasoning and the failure modes are in the
+[flight planning reference](flight-planning.html).
+
+**Every Site gets Anchors before its first flight** — marked positions outside
+the part of the Site that changes, present in every Capture
+([ADR 0007](adr/0007-anchors-for-cross-capture-registration.md)). Anchors are
+not Ground Control Points: their real-world coordinates are unknown, and they
+exist to tie Captures to each other rather than to absolute space.
+
+**Every Site gets a Cadence at onboarding.** A 3D Timelapse can only be
+assembled from Captures that were already being collected, so the recapture
+interval is fixed when the Site is taken on, not when the timelapse Pipeline is
+eventually built.
+
+Anchors and Cadence produce no phase-1 value. They are the price of phase 2
+remaining possible, and they cost almost nothing at the time they must be paid.
+
+## 6. Appearance
+
+Gaussian Splatting bakes appearance into the model, so the interactive
+deliverable cannot be treated after the fact. Colour work therefore splits by
+purpose ([ADR 0009](adr/0009-correction-on-input-grading-on-output.md)):
+
+**Correction** runs on input images before `solve`. Exposure consistency, white
+balance, lens profile — deterministic and technical. It earns its place on
+reconstruction quality rather than looks: inconsistent exposure across a flight
+degrades feature matching and produces visible seams.
+
+**Grading** runs on rendered output, per deliverable. Aesthetic, reversible, and
+it never touches the Reconstruction.
+
+The interactive embed shows a corrected model: neutral, clean, technically
+sound. Cinematic deliverables carry a graded look on top. The test for which
+side an adjustment belongs on is whether a reasonable person could disagree
+about it — if so, it is Grading.
+
+## 7. Viewing and delivery
+
+No single open-source tool covers a georeferenced raster, a splat, and a mesh
+for both inspection and web embedding. Each deliverable uses the tool built for
+it ([ADR 0008](adr/0008-fit-for-purpose-viewers.md)):
+
+| Data | Local inspection | Client-facing |
+|---|---|---|
+| Gaussian Splatting | SuperSplat Editor (MIT) | SuperSplat Viewer (MIT) |
+| Orthomosaic | QGIS | MapLibre GL JS reading the COG directly |
+| Mesh, point cloud | CloudCompare (GPL-3.0) | Potree (BSD-2) |
+
+A **Delivery Bundle** is a self-contained directory holding the deliverables and
+what is needed to view them, deployed to managed static hosting at an unlisted
+URL ([ADR 0011](adr/0011-static-delivery-bundles.md)). Nothing runs behind it: a
+Cloud-Optimized GeoTIFF is read by the browser over HTTP range requests with no
+tile server, and the splat viewer is a static site.
+
+Two consequences worth stating plainly. An unlisted URL is obscurity, not access
+control — acceptable for visual-grade work, and the first client with real
+confidentiality requirements is the trigger to revisit. And because a Bundle is
+static and self-contained, archiving a finished project means keeping a
+directory, not keeping a system running.
+
+Delivery is deliberately not hosted on the GPU box. That machine runs an
+unrelated production service, and coupling client availability to its
+maintenance windows trades a real risk for a saving that does not exist.
+
+## 8. Phase 2
+
+The 3D Timelapse is deferred because it is gated by the calendar rather than by
+engineering: it cannot be demonstrated, sold, or debugged until one Site has
+been captured repeatedly over months
+([ADR 0010](adr/0010-phase-one-excludes-the-3d-timelapse.md)).
+
+Phase 1 keeps it reachable by collecting for it from the first flight — Anchors
+on every Site, a fixed Cadence, and Captures retained rather than discarded once
+delivered.
+
+A two-dimensional version is available in phase 1 at almost no cost: a
+before-and-after swipe between two Orthomosaics of the same Site uses mature
+existing tooling. It is a genuine deliverable, and it exercises Registration on
+easier ground before the 3D version depends on it.
+
+Also deferred: Ground Control Points and survey-grade accuracy, interactive
+control from the developer graph view, and client authentication.
+
+## 9. Risks
+
+**The differentiating deliverable has no off-the-shelf answer.** Mature swipe
+tooling exists for 2D maps; nothing production-ready exists for presenting a 3D
+scene across dates. Phase 2 is a real engineering project, not a feature, and
+deferring it makes it later rather than cheaper. If clients turn out to buy the
+timelapse above everything else, that changes the plan rather than the schedule.
+
+**Registration degrades as the Site succeeds.** Automatic alignment locks onto
+geometry that has not changed, which is exactly what a construction site removes
+over time. Anchors are the mitigation and they are unproven at our scale. This
+is the single most likely thing to fail quietly.
+
+**The GPU host is shared with production.** Every heavy job runs beside a live
+service on one machine, with contended RAM, borrowed VRAM, and scarce disk. The
+dedicated SSD helps disk and nothing else.
+
+**Capture quality carries risk that software absorbed elsewhere.** ODM degrades
+less gracefully than commercial engines on marginal input and reports less about
+why. We chose to control input quality rather than buy tolerance for bad input,
+which makes flight discipline load-bearing.
+
+**No client-facing quality report.** Commercial tools ship one; we do not. If a
+client ever needs a result defended, that is ours to produce.
+
+## 10. Open questions
+
+Low-stakes, and none block starting:
+
+- Which static host for Delivery Bundles
+- The Grading toolchain
+- The Manifest schema itself, and the language the Runner is written in
+- Sizing and mount point for the dedicated SSD
+
+## 11. First moves
+
+1. Buy and mount the SSD; establish hot working space and cold archive.
+2. Stand up ODM as a container service on the GPU host and put one existing
+   Capture through it end to end, ignoring the Manifest entirely. Learn what the
+   Nodes actually need before declaring them.
+3. Fly one small Site properly — Anchors placed, Nadir Grid Mission, stills — and
+   run it through the same path.
+4. Only then write the Manifest and the Runner, against Nodes whose real inputs
+   and outputs are known.
+
+Step 4 comes last deliberately. The Node inventory in section 4 is a design, not
+an observation, and declaring the interface before running the tools is the
+reliable way to get it wrong.
