@@ -32,3 +32,31 @@ than guessed at now.
 Because a Delivery Bundle is self-contained and static, it is also
 straightforwardly archivable. A finished project can be kept as a directory
 rather than as rows in a system that has to stay running to remain readable.
+
+## Revision, 2026-09-10
+
+Two things this ADR asserted without checking.
+
+**Most static hosts cannot serve a real orthomosaic.** GitHub Pages hard-blocks
+at 100MB and does not reliably serve large files through its LFS path.
+Cloudflare Pages caps individual files at 25MB, which rules it out entirely.
+Netlify needs paid tooling past its own cap. Object storage — S3 or R2 — is the
+only option that actually fits, so "managed static hosting" means object storage
+here, not a static-site host. Note that R2 rejects multi-range requests, which
+is acceptable because single-range is what the viewer needs.
+
+**Cross-origin access must be configured.** The moment the imagery and the
+viewer page are not served from the same origin, range requests fail without
+correct cross-origin headers. This works by accident while everything shares an
+origin and breaks silently later, so configure it from the start.
+
+**Attribution is an unmet obligation.** Every Bundle ships permissively licensed
+third-party code — the splat viewer, the map library, the COG protocol handler,
+the point-cloud viewer — and all of those licences require their notices to be
+retained when redistributed. Handing a client a Bundle is redistribution. The
+`bundle` Node must assemble a notices file; today nothing does, which makes every
+delivery non-compliant in a way that is trivial to fix and easy to forget.
+
+Finally, unlisted URLs should at least carry the free mitigations: robots
+exclusion, a no-index header, and no third-party analytics that would leak the
+URL through a referrer header.

@@ -28,3 +28,16 @@ can be adopted without reopening the principle.
 The client-facing site therefore has to present more than one kind of embed.
 That is a real cost in the website build, and it is accepted because the
 alternative degrades every deliverable to make one page simpler.
+
+## Revision, 2026-09-10
+
+Licence corrections after review. CloudCompare is **GPL-2.0-or-later**, not
+GPL-3.0 as previously recorded here. MapLibre GL JS is **BSD-3-Clause** and its
+licence was never stated; note that it is a fork of Mapbox GL JS made after that
+project became proprietary, so the `mapbox-gl` and `maplibre-gl` packages are
+easy to confuse and only the latter is acceptable.
+
+Everything client-facing therefore ships under permissive terms — MIT for the
+splat viewer, BSD for the map and point-cloud viewers — which is what makes
+static delivery possible at all. The obligation those licences do impose is
+attribution: see ADR 0011.
