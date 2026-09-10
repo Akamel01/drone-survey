@@ -316,12 +316,26 @@ metres from bystanders. It is **not** declared for operations within five metres
 of, or over, people. No certificate lifts that: it is a property of the airframe
 as declared.
 
-That is a real constraint on the product rather than a formality. A construction
-site has workers who move unpredictably, and a five-metre floor around every
-non-crew person has to hold for the whole flight. Grid missions at altitude are
-comfortably clear of it; low or oblique passes near an active face are not.
-Declarations can also be withdrawn, so the status is worth re-checking rather
-than assumed permanent.
+**Captures are flown when the Site is not being worked**, which is the operating
+answer to this. With no non-crew people present, the five-metre floor stops
+governing how the Site itself can be flown, and low and oblique passes become
+available again.
+
+It does not remove the rule, only the usual way of breaching it. People outside
+the Site boundary still count — a pavement, a road, an adjacent occupied
+property — and the buffer applies to them exactly as it would to a worker. The
+pre-flight check is for people within five metres of the flight path, not for
+people on the Site.
+
+Flying an unworked Site has two further benefits that are not about compliance.
+Moving people, plant and vehicles are a known source of reconstruction
+artifacts, so an empty Site reconstructs more cleanly. And imagery of an empty
+Site contains far less personal information, which materially reduces the
+retention problem in [ADR 0012](adr/0012-twelve-month-capture-retention.md)
+rather than merely bounding it.
+
+Declarations can be withdrawn, so the aircraft's status is worth re-checking
+rather than assumed permanent.
 
 Insurance is a commercial expectation rather than a federal mandate, and clients
 will ask for it regardless.
@@ -402,9 +416,9 @@ this design addresses what that means for confidentiality.
 
 **The aircraft cannot legally be flown within five metres of people.** Its
 safety-assurance declaration does not cover it, and no pilot certificate
-substitutes. On an active construction site with workers moving, this is the
-likeliest route to an actual violation, and it constrains the low and oblique
-passes that vertical structures otherwise want.
+substitutes. Flying Sites when they are not being worked removes the usual way
+of breaching this, but not the rule: bystanders beyond the Site boundary count
+the same, and a Site that is quiet when planned may not be when flown.
 
 ## 10. Open questions
 
