@@ -43,3 +43,16 @@ logged, and the log is what demonstrates the policy is real.
 Client contracts should state the retention period, and clients who need longer
 retention for their own reasons should be handled explicitly rather than by
 quietly keeping their data.
+
+## Revision, 2026-09-10
+
+The compliance research could not confirm the raw-versus-derived distinction
+above against regulator guidance. It remains a reasonable reading rather than a
+settled one, so the conservative position holds by default: Reconstructions are
+covered by the same twelve-month limit until someone qualified says otherwise.
+
+Two additions from that work. The retention limit needs a **written policy**
+stating purpose, notice, the period, and the deletion procedure — the period
+alone is not the obligation. And Quebec Sites or clients bring Law 25, under
+which the operator is the privacy officer by default and the policy has to be
+published.

@@ -295,17 +295,36 @@ not. Commercial clients generally demand proof of liability cover regardless of
 whether the law requires it. Order of magnitude: one to two thousand a year and
 paperwork, not engineering.
 
-The operating country is **Canada**, so the governing regime is the Canadian
-Aviation Regulations Part IX, administered by Transport Canada, together with
-Canadian privacy law. The specific certificate, registration and airspace
-requirements are being established as compliance work and belong in a checklist
-rather than in this document.
+The operating country is **Canada**: Canadian Aviation Regulations Part IX,
+administered by Transport Canada, together with Canadian privacy law. The full
+checklist, with fees and sources, is in
+[the compliance research](research/canada-compliance-2026.md). What matters at
+the level of this document:
 
-Two things are already clear. The aircraft weighs slightly over 250g in
-real-world units, so any exemption resting on being under that threshold does
-not apply. And commercial operation over construction sites, near people, and
-potentially in controlled airspace is the demanding end of the rules rather than
-the permissive end.
+**The certificate required is Advanced Operations, not Basic.** Construction
+sites mean proximity to people and often controlled airspace, which is the
+demanding end of the rules. The aircraft is over 250g in flight configuration,
+so no micro-drone exemption applies. Registration, the Advanced exam and the
+certificate are small fees; the **in-person flight review is the bottleneck**,
+with a booking lag of weeks. Zero to legally flying is realistically three to
+six weeks, and almost all of it is waiting rather than working.
+
+**A hard limit follows from the aircraft, not the certificate.** Transport
+Canada records safety-assurance declarations per model per operation type. This
+aircraft is declared for controlled airspace and for operations five to thirty
+metres from bystanders. It is **not** declared for operations within five metres
+of, or over, people. No certificate lifts that: it is a property of the airframe
+as declared.
+
+That is a real constraint on the product rather than a formality. A construction
+site has workers who move unpredictably, and a five-metre floor around every
+non-crew person has to hold for the whole flight. Grid missions at altitude are
+comfortably clear of it; low or oblique passes near an active face are not.
+Declarations can also be withdrawn, so the status is worth re-checking rather
+than assumed permanent.
+
+Insurance is a commercial expectation rather than a federal mandate, and clients
+will ask for it regardless.
 
 Also note the aircraft weighs slightly over 250g in real-world units, so any
 plan that leaned on the sub-250g class should not.
@@ -380,6 +399,12 @@ mitigation, and replacement may not be straightforward.
 **The shared host's threat model covers contention, not exposure.** Client
 imagery will sit on a machine running forty unrelated containers. Nothing in
 this design addresses what that means for confidentiality.
+
+**The aircraft cannot legally be flown within five metres of people.** Its
+safety-assurance declaration does not cover it, and no pilot certificate
+substitutes. On an active construction site with workers moving, this is the
+likeliest route to an actual violation, and it constrains the low and oblique
+passes that vertical structures otherwise want.
 
 ## 10. Open questions
 
