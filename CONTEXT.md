@@ -46,8 +46,21 @@ _Avoid_: top-down, vertical, overhead
 
 **Ground Control Point**:
 A marked position on a Site whose real-world coordinates are independently known,
-used to anchor a reconstruction to absolute space.
+used to anchor a Reconstruction to absolute space.
 _Avoid_: GCP on first use, marker, target, control
+
+**Anchor**:
+A marked position placed outside the part of a Site that changes, present in
+every Capture, used to register Captures to one another. Its real-world
+coordinates are not known — that is what separates it from a Ground Control
+Point.
+_Avoid_: marker, target, pseudo-GCP, tie point
+
+**Registration**:
+Bringing two or more Captures of the same Site into a single coordinate frame so
+they can be compared. Distinct from georeferencing, which places a single
+Reconstruction into absolute space.
+_Avoid_: alignment, matching, co-registration
 
 ### Deliverables
 
