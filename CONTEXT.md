@@ -28,9 +28,10 @@ One visit to a Site producing the images a Reconstruction is built from. A Site
 accumulates many Captures over time; a 3D Timelapse is built from them.
 
 **Cadence**:
-The interval at which a Site is recaptured. Fixed when the Site is onboarded,
-because a 3D Timelapse can only be assembled from Captures that were already
-being collected.
+The interval at which a Site is recaptured, and the time of day it is recaptured
+at. Both are fixed when the Site is onboarded: a 3D Timelapse can only be
+assembled from Captures that were already being collected, and only reads as one
+subject changing if the light did not change with it.
 _Avoid_: schedule, frequency, interval
 
 **Grid Mission**:

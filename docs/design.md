@@ -201,10 +201,25 @@ the part of the Site that changes, present in every Capture
 not Ground Control Points: their real-world coordinates are unknown, and they
 exist to tie Captures to each other rather than to absolute space.
 
-**Every Site gets a Cadence at onboarding.** A 3D Timelapse can only be
-assembled from Captures that were already being collected, so the recapture
-interval is fixed when the Site is taken on, not when the timelapse Pipeline is
-eventually built.
+**Every Site gets a Cadence at onboarding** — an interval *and* a time of day. A
+3D Timelapse can only be assembled from Captures that were already being
+collected, so the interval is fixed when the Site is taken on rather than when
+the timelapse Pipeline is eventually built.
+
+The time of day is fixed for a different reason, and it resolves a conflict
+between two requirements that would otherwise be left to chance. Captures are
+flown when the Site is not being worked, which pushes them toward early morning,
+evening and weekends. Early morning and evening are exactly when the sun is
+lowest, and long shadows are what the capture standard warns against. **Weekends
+around midday satisfy both**: no workers, and the sun high enough not to lay
+shadows across the Site.
+
+Consistency then matters more than any single Capture's quality. Two Captures of
+one Site flown at different times of day differ in shadow direction and length
+everywhere, which reads as the whole Site changing rather than the construction
+changing, and gives Registration spurious surface differences to fit against.
+Flying a Site at the same time of day every time is therefore part of its
+Cadence, not an operator preference.
 
 Anchors and Cadence produce no phase-1 value. They are the price of phase 2
 remaining possible, and they cost almost nothing at the time they must be paid.
