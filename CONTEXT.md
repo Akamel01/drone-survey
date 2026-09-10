@@ -27,6 +27,12 @@ The physical location being surveyed. The unit a client buys work about.
 One visit to a Site producing the images a Reconstruction is built from. A Site
 accumulates many Captures over time; a 3D Timelapse is built from them.
 
+**Cadence**:
+The interval at which a Site is recaptured. Fixed when the Site is onboarded,
+because a 3D Timelapse can only be assembled from Captures that were already
+being collected.
+_Avoid_: schedule, frequency, interval
+
 **Grid Mission**:
 An automated flight covering a Site in parallel passes at fixed altitude, camera
 pointed straight down, capturing stills at a spacing chosen to guarantee Overlap.
