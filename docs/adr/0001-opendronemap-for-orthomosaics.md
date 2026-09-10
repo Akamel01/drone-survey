@@ -49,3 +49,40 @@ network by anyone other than the operator, the source-offer obligation applies.
 
 Never let a client reach NodeODM, even through a thin proxy. Delivery is static
 files precisely because nothing needs to.
+
+## Revision, 2026-09-10 — the premise was too narrow
+
+This ADR argued from cost, on the assumption that the alternatives were
+open-source tools or expensive commercial ones. That was wrong: there is a third
+category, and it was worth checking properly.
+
+**RealityScan** — the current name for RealityCapture — is genuinely free below
+$1M of annual revenue, has a real command-line interface including orthomosaic
+and ground-control commands, and its video-memory requirement is comfortably
+within our card. On quality it is a serious tool, not a compromise. It was
+dismissed too quickly the first time on a one-line "Windows-only".
+
+It is still not the right choice here, on operational grounds rather than
+quality or price. Its Linux path is Epic's own experimental build running under
+a compatibility layer, and it requires a kernel newer than the one this host
+runs — a host carrying an unrelated production stack, where a kernel upgrade is
+a real risk taken for our convenience. There is also an unconfirmed report of it
+hanging on authentication dialogs when run headless, which is precisely the
+failure mode that matters for automation.
+
+What OpenDroneMap offers is not superior reconstruction. It is that it runs
+natively, in a container, headless, on the machine we already have, alongside
+everything else already on it. For an automated pipeline that is the property
+that decides the question. RealityScan's real strength is mesh and 3D
+reconstruction speed, which overlaps ground already covered by the Gaussian
+Splatting choice rather than the orthomosaic gap this ADR exists to fill.
+
+Nothing surveyed alongside it — Metashape, Zephyr Free, Pix4D, DroneDeploy, Site
+Scan, iTwin Capture, Correlator3D — is free for commercial use while also
+producing georeferenced orthomosaics.
+
+**A standing option, deliberately off-pipeline.** RealityScan on an ordinary
+Windows machine is a reasonable manual second opinion for a job ODM handles
+badly. That is a fallback for hard datasets, not a pipeline component, and no
+automation should be built on its Linux path until Epic stops calling it
+experimental.
