@@ -453,13 +453,21 @@ which makes flight discipline load-bearing.
 **No client-facing quality report.** Commercial tools ship one; we do not. If a
 client ever needs a result defended, that is ours to produce.
 
-**The video-memory ceiling is lower than first stated.** An earlier reading put
-splat training's failure point at around a thousand images; that figure came
-from a card twice this size. On 12GB the practical ceiling is a few hundred
-images, which is the scale we actually intend to fly rather than a comfortable
-margin above it. ODM's memory needs are likewise close to what this host has
-free once its production stack is counted. Both are measurable and neither has
-been measured.
+**Full-resolution Fitting does not fit the local card, and this is now measured.**
+Two runs on 180 video frames at 8 megapixels both ran out of video memory — the
+second after evaluation was disabled and fragmentation fixed, failing inside
+training at 79% of the way through. Only about 10.9 GB of the card is usable,
+since the production stack holds the rest permanently. Real stills carry six
+times the pixels, so full-resolution Fitting of a real Capture should be expected
+to leave the local host under ADR 0014, unless densification is capped or the
+images downscaled at some cost to quality that has not been measured. Both
+failures arrived 12 to 15 minutes in, which is the case for deciding placement
+before a job starts rather than by attempting it
+([measurements](research/splat-first-runs-2026-09-10.md)).
+
+ODM, by contrast, used 4.7 GiB of RAM for the same frames — comfortable, though
+again a floor rather than a threshold for real stills
+([measurements](research/odm-first-run-2026-09-10.md)).
 
 **No stated ceiling on viewable scene size.** Nothing published says how large a
 splat the client-facing viewer will open on an ordinary device. A deliverable
