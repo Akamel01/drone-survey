@@ -24,8 +24,25 @@ _Avoid_: accurate, precise, professional-grade
 The physical location being surveyed. The unit a client buys work about.
 
 **Capture**:
-One visit to a Site producing footage or stills. A Site accumulates many Captures
-over time; a 3D Timelapse is built from them.
+One visit to a Site producing the images a Reconstruction is built from. A Site
+accumulates many Captures over time; a 3D Timelapse is built from them.
+
+**Grid Mission**:
+An automated flight covering a Site in parallel passes at fixed altitude, camera
+pointed straight down, capturing stills at a spacing chosen to guarantee Overlap.
+The capture method for Orthomosaics.
+_Avoid_: lawnmower, mapping mission, survey flight
+
+**Overlap**:
+The proportion of a Site's surface appearing in more than one image, stated
+separately along a flight pass and between adjacent passes. The dominant control
+on whether a Reconstruction succeeds.
+_Avoid_: coverage, redundancy
+
+**Nadir**:
+Camera orientation pointing straight down. The orientation an Orthomosaic
+requires, and the one an appearance-focused Capture usually avoids.
+_Avoid_: top-down, vertical, overhead
 
 **Ground Control Point**:
 A marked position on a Site whose real-world coordinates are independently known,
