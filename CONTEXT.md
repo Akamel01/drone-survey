@@ -120,3 +120,16 @@ The component that executes a Manifest, placing each Node's work on whichever
 machine is meant to do it.
 _Avoid_: orchestrator, scheduler, engine
 
+### Appearance
+
+**Correction**:
+Deterministic per-image adjustment applied before reconstruction — exposure
+consistency, white balance, lens profile. Justified by reconstruction quality,
+not by taste, and baked irreversibly into whatever is built from the images.
+_Avoid_: colour correction, normalisation, pre-processing
+
+**Grading**:
+Aesthetic treatment applied to rendered output, per deliverable. Reversible, and
+it never alters the Reconstruction it was rendered from.
+_Avoid_: colour grading, toning, post
+
