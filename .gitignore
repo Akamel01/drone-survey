@@ -1,0 +1,37 @@
+# Heavy data + build artifacts — never in git
+.venv/
+tools/
+00_raw/
+01_video_frames/
+02_images/
+03_colmap/
+04_gaussian_splat/
+05_photogrammetry/
+06_cloudcompare/
+07_blender/
+08_qgis/
+09_exports/
+
+# Media / reconstruction outputs, wherever they land
+*.mp4
+*.mov
+*.dng
+*.jpg
+*.jpeg
+*.png
+*.tif
+*.tiff
+*.ply
+*.splat
+*.ksplat
+*.obj
+*.laz
+*.las
+*.bin
+*.blend
+*.blend[0-9]*
+
+# OS / editor / python
+.DS_Store
+__pycache__/
+*.pyc
