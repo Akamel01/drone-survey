@@ -33,3 +33,21 @@ person could disagree about it.
 Two deliverables from one Reconstruction can differ in Grading but never in
 Correction. If a client ever needs the interactive embed itself to carry a
 distinct look, that is a retrain, and should be priced as one.
+
+## Revision, 2026-09-10
+
+Two corrections after review.
+
+**Lens correction is removed from this Node.** DJI applies lens correction in
+firmware before writing a JPEG, so there is no distortion left in the images we
+capture — only RAW retains it. Applying a lens profile on top is a no-op at
+best, and at worst re-warps an already-corrected image. It also works against
+ODM, which estimates its own distortion parameters and expects images that have
+not been undistorted. Correction is therefore strictly radiometric: exposure
+consistency and white balance.
+
+**Metadata survival is now an explicit output contract.** Most image libraries
+drop EXIF on re-save unless told to preserve it, and losing GPS here would
+silently destroy the justification for capturing stills at all. Correction must
+preserve EXIF and XMP, and this must be checked after the Node runs rather than
+only before it.
