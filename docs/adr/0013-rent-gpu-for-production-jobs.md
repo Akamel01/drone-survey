@@ -43,3 +43,33 @@ Client imagery will be processed on infrastructure we do not own. That belongs
 in the privacy policy required by
 [ADR 0012](adr/0012-twelve-month-capture-retention.md), and in client contracts,
 rather than being discovered later.
+
+## Revision, 2026-09-10 — a borrowed 24GB machine replaces renting as the plan
+
+A third machine is available that this ADR did not know about: an RTX 3090 with
+24GB of video memory, on a separate network, reachable over SSH. Access to it is
+time-limited — certain hours, with someone else holding priority — so it is
+schedulable rather than on-demand.
+
+That suits the work. Fitting and dense reconstruction are batch jobs measured in
+hours with nobody waiting on the result, so queueing for an availability window
+costs almost nothing. Its 24GB lifts the Fitting ceiling above the scale we
+intend to fly, which was the reason renting looked necessary.
+
+**Renting therefore becomes the fallback**, not the plan: used when the window
+will not arrive soon enough and a job cannot wait. Everything recorded above
+about renting still applies when it happens, but the privacy consequence largely
+does not — a known machine is not a third party, so client imagery does not
+routinely leave infrastructure we control.
+
+The containerisation requirement stands, and now earns its place for a better
+reason than renting gave it. Three heterogeneous targets — the local card, the
+borrowed one, and a rented one — are exactly the case where a Node that assumes
+a hand-configured machine cannot move. Running in a freshly provisioned
+environment is what makes the pool usable at all.
+
+Connectivity to the 3090 is a build step with a testable outcome, not an
+assumption. The two machines are on different Tailscale accounts, so the route
+must be chosen and then proven end to end: authentication, a container run, and
+a measured transfer rate in both directions. Transfer time is part of a job's
+duration and belongs in scheduling decisions as a number.

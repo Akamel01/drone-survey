@@ -94,6 +94,14 @@ optimised to reproduce the source views. Strong on appearance, weak as a
 measurable surface.
 _Avoid_: splat (ambiguous with the file), 3DGS on first use
 
+**Fitting**:
+The optimisation that produces a Gaussian Splatting Reconstruction: gaussians are
+adjusted over many iterations until rendering them reproduces the Capture's
+images. The tools call this training, and their commands keep that name, but
+nothing is learned and nothing transfers — the result describes one Capture of
+one Site and every Capture is fitted from scratch.
+_Avoid_: training (implies a reusable model), inference, prediction
+
 **Photogrammetry**:
 A reconstruction technique deriving explicit geometry — point cloud, then mesh —
 from overlapping images. Strong as a measurable surface, weaker on appearance.

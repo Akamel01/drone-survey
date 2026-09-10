@@ -48,7 +48,8 @@ across dates is the hardest problem in the system ([ADR 0007](adr/0007-anchors-f
 | Machine | Role |
 |---|---|
 | `akamel-linux` — RTX 4070 SUPER, 12GB VRAM, i7-14700F, 62GB RAM, Ubuntu 24.04 | Development, iteration, and production jobs within its limits; interactive inspection |
-| Rented GPU, hourly | Production jobs exceeding the local host — larger datasets, splat training above its video-memory ceiling |
+| Remote RTX 3090, 24GB VRAM — separate network, reachable over SSH | Primary heavy compute: Fitting and large reconstructions, during the hours it is available |
+| Rented GPU, hourly | Fallback when the 3090 is unavailable and a job will not wait |
 | MacBook Air M1, 8GB | Control client only |
 | Object storage | Client delivery |
 
@@ -63,12 +64,20 @@ large splat alone wants several gigabytes of VRAM. Interactive inspection —
 including splat cleaning, which runs in a browser — happens against the GPU host
 over Tailscale. The Air issues commands and reads reports.
 
-**Heavy work is rented, not squeezed onto the local host**
-([ADR 0013](adr/0013-rent-gpu-for-production-jobs.md)). Hourly GPU rental costs
-roughly one to three dollars per job, so a month of production runs costs less
-than any subscription in this stack. A rented card with twice the video memory
-lifts the splat-training ceiling above the scale we intend to fly, and takes
-production work off a machine we do not own the uptime of.
+**Heavy work goes to the 24GB machine when it is available, and is rented when
+it is not** ([ADR 0013](adr/0013-rent-gpu-for-production-jobs.md)). Its 24GB
+lifts the Fitting ceiling above the scale we intend to fly, which was the
+sharpest hardware constraint in the earlier design.
+
+Access to it is **time-limited**: certain hours, with someone else holding
+priority. That makes it schedulable rather than on-demand, which is a good match
+for this work — Fitting and dense reconstruction are batch jobs measured in
+hours, with nobody waiting on the result. Jobs queue for the window rather than
+starting the moment a Capture lands.
+
+Rented compute stays in the design as the fallback for when the window will not
+come soon enough, at roughly one to three dollars a job. It is no longer the
+plan.
 
 The local host keeps what it is genuinely good for: a fast development loop with
 no provisioning, no data transfer and no per-run cost. It still runs production
@@ -481,12 +490,18 @@ Low-stakes, and none block starting:
    This gates paid flying and nothing else in this list depends on it, so it
    should run in parallel from day one.
 2. Buy and mount the SSD; establish hot working space and cold archive.
-3. Stand up ODM as a container service on the GPU host and put one existing
+3. Establish and verify connectivity to the 3090 host. It is on a different
+   Tailscale account, so decide between plain SSH, Tailscale's sharing, or
+   adding it to the tailnet, then prove the whole path: key-based login, a
+   container run end to end, and a large file moved both ways at a measured
+   rate. Transfer time is part of a job's duration and should be a number, not
+   an assumption.
+4. Stand up ODM as a container service on the GPU host and put one existing
    Capture through it end to end, ignoring the Manifest entirely. Learn what the
    Nodes actually need before declaring them.
-4. Fly one small Site properly — Anchors placed, Nadir Grid Mission, stills — and
+5. Fly one small Site properly — Anchors placed, Nadir Grid Mission, stills — and
    run it through the same path.
-5. Only then write the Manifest and the Runner, against Nodes whose real inputs
+6. Only then write the Manifest and the Runner, against Nodes whose real inputs
    and outputs are known.
 
 The last step comes last deliberately. The Node inventory in section 4 is a design, not
