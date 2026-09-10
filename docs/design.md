@@ -47,9 +47,9 @@ across dates is the hardest problem in the system ([ADR 0007](adr/0007-anchors-f
 
 | Machine | Role |
 |---|---|
-| `akamel-linux` — RTX 4070 SUPER, 12GB VRAM, i7-14700F, 62GB RAM, Ubuntu 24.04 | Development, iteration, and production jobs within its limits; interactive inspection |
-| Remote RTX 3090, 24GB VRAM — separate network, reachable over SSH | Primary heavy compute: Fitting and large reconstructions, during the hours it is available |
-| Rented GPU, hourly | Fallback when the 3090 is unavailable and a job will not wait |
+| `akamel-linux` — RTX 4070 SUPER, 12GB VRAM, i7-14700F, 62GB RAM, Ubuntu 24.04 | **First choice for everything**, including jobs it runs slowly. Development, iteration, interactive inspection |
+| Remote RTX 3090, 24GB VRAM — separate network, reachable over SSH, time-limited | Second choice: jobs that do not fit locally, during the hours it is available |
+| Rented GPU, hourly | Third choice: jobs that do not fit locally when the 3090 will not be free soon enough |
 | MacBook Air M1, 8GB | Control client only |
 | Object storage | Client delivery |
 
@@ -64,24 +64,29 @@ large splat alone wants several gigabytes of VRAM. Interactive inspection —
 including splat cleaning, which runs in a browser — happens against the GPU host
 over Tailscale. The Air issues commands and reads reports.
 
-**Heavy work goes to the 24GB machine when it is available, and is rented when
-it is not** ([ADR 0013](adr/0013-rent-gpu-for-production-jobs.md)). Its 24GB
-lifts the Fitting ceiling above the scale we intend to fly, which was the
-sharpest hardware constraint in the earlier design.
+**Work runs locally by default, even when that is slower**
+([ADR 0014](adr/0014-compute-placement-ladder.md)). Running locally moves no
+data, waits for no availability window, depends on nobody and costs nothing per
+run. A job that takes three hours here rather than one hour elsewhere is usually
+the better job, because these are batch runs with nobody waiting.
 
-Access to it is **time-limited**: certain hours, with someone else holding
-priority. That makes it schedulable rather than on-demand, which is a good match
-for this work — Fitting and dense reconstruction are batch jobs measured in
-hours, with nobody waiting on the result. Jobs queue for the window rather than
-starting the moment a Capture lands.
+Work leaves the local host only when it will not fit. The 3090's 24GB then lifts
+the Fitting ceiling above the scale we intend to fly; its access is time-limited
+with someone else holding priority, so jobs queue for a window rather than
+starting on arrival. Rented compute is the third rung, for a job that fits
+neither locally nor into the next window.
 
-Rented compute stays in the design as the fallback for when the window will not
-come soon enough, at roughly one to three dollars a job. It is no longer the
-plan.
+**The Runner decides placement before a job starts, not by failing.** Fitting and
+dense reconstruction can exhaust memory hours in, so sizing is estimated up front
+from image count, resolution and the settings requested, and compared against a
+measured threshold per target. Those thresholds do not exist yet and must be
+established by running jobs of increasing size until they fail; until then they
+should be conservative, since a queued window is cheaper than hours of wasted
+compute.
 
-The local host keeps what it is genuinely good for: a fast development loop with
-no provisioning, no data transfer and no per-run cost. It still runs production
-jobs that fit comfortably within it.
+**The 3090's availability is checked, not assumed** — reachable, inside the
+permitted window, and the card actually free rather than merely the host
+answering.
 
 **The local host is shared, and that still constrains what fits.** It runs an
 unrelated production stack of around forty containers with several hundred
@@ -496,9 +501,13 @@ Low-stakes, and none block starting:
    container run end to end, and a large file moved both ways at a measured
    rate. Transfer time is part of a job's duration and should be a number, not
    an assumption.
-4. Stand up ODM as a container service on the GPU host and put one existing
+4. Stand up ODM as a container service on the local host and put one existing
    Capture through it end to end, ignoring the Manifest entirely. Learn what the
-   Nodes actually need before declaring them.
+   Nodes actually need before declaring them, and **measure**: peak memory, peak
+   disk, wall clock. Then repeat with progressively larger Captures until
+   something fails. Those failure points are the placement thresholds in
+   [ADR 0014](adr/0014-compute-placement-ladder.md), and nothing else in this
+   design can supply them.
 5. Fly one small Site properly — Anchors placed, Nadir Grid Mission, stills — and
    run it through the same path.
 6. Only then write the Manifest and the Runner, against Nodes whose real inputs
