@@ -98,9 +98,11 @@ This is how the no-duplicated-logic requirement is met.
 |---|---|---|
 | `ingest` | Copy a Capture into the working store, verify completeness | both |
 | `exif-audit` | Confirm GPS and camera metadata are present; report coverage | both |
+| `filter` | Reject blurred, misexposed and near-duplicate frames | both |
 | `frame-extract` | Video to frames | footage-derived only |
 | `geotag-backfill` | Interpolate SRT telemetry onto extracted frames | footage-derived only |
-| `correct` | Exposure consistency, white balance, lens profile | both |
+| `correct` | Exposure consistency and white balance; must preserve EXIF and XMP | both |
+| `register` | Tag Anchors and emit the ground control file tying this Capture to the Site frame | both |
 | `solve` | Camera solve via ODM's SfM stage | both |
 | `reconstruct` | ODM dense reconstruction, mesh, orthophoto | Orthomosaic |
 | `export-cog` | Orthophoto to Cloud-Optimized GeoTIFF with overviews | Orthomosaic |
@@ -110,11 +112,12 @@ This is how the no-duplicated-logic requirement is met.
 | `compress-splat` | Trained splat to compressed web format | Gaussian Splatting |
 | `render` | Camera paths to frames | cinematic deliverables |
 | `grade` | Aesthetic pass on rendered output | cinematic deliverables |
-| `bundle` | Assemble a Delivery Bundle | both |
+| `export-mesh` | Mesh and point cloud into deliverable and viewer formats | when delivered |
+| `bundle` | Assemble a Delivery Bundle, including third-party licence notices | both |
 | `publish` | Deploy a Delivery Bundle to static hosting | both |
 
-`ingest`, `exif-audit`, `correct`, `solve`, `bundle` and `publish` are shared by
-both phase-1 Pipelines. `frame-extract` and `geotag-backfill` exist for material
+`ingest`, `exif-audit`, `filter`, `correct`, `register`, `solve`, `bundle` and
+`publish` are shared by both phase-1 Pipelines. `frame-extract` and `geotag-backfill` exist for material
 that already exists as footage; they are not part of the supported capture path
 ([ADR 0002](adr/0002-stills-from-grid-missions-not-video.md)).
 
@@ -126,15 +129,33 @@ it is automatic.
 ### The two phase-1 Pipelines
 
 ```
+Shared head:
+  ingest → exif-audit → filter → correct → register → solve
+
 Orthomosaic:
-  ingest → exif-audit → correct → solve → reconstruct → export-cog → bundle → publish
+  <shared head> → reconstruct → export-cog → bundle → publish
 
 Gaussian Splatting:
-  ingest → exif-audit → correct → solve → export-colmap → train-splat
-         → clean-splat → compress-splat → bundle → publish
+  <shared head> → export-colmap → train-splat → clean-splat
+                → compress-splat → bundle → publish
+
+Footage-derived input, prepended when a Capture is video rather than stills:
+  frame-extract → geotag-backfill → <shared head>
 ```
 
-They diverge after `solve` and rejoin at `bundle`.
+They share everything up to and including `solve`, diverge, and rejoin at
+`bundle`. The footage path has its own head because extracted frames carry no
+EXIF until `geotag-backfill` has run, so `exif-audit` cannot precede it.
+
+`register` runs before `solve` because the ground control file it emits is an
+input to the solve, not a correction applied afterwards
+([ADR 0007](adr/0007-anchors-for-cross-capture-registration.md)).
+
+`reconstruct` is written here as one Node but is several hour-scale stages. It
+should be split along ODM's own stage boundaries, because a single opaque
+multi-hour Node defeats the resume behaviour that
+[ADR 0006](adr/0006-pipelines-as-declarative-manifests.md) identifies as the
+thing we are taking on ourselves.
 
 ### Why `solve` is one Node and not two
 
@@ -153,11 +174,15 @@ oblique views around a subject. A Site flown for both usually yields two
 Captures, each with its own solve, related to each other by the same Registration
 mechanism used across dates.
 
-> **To verify during build.** The exact mechanism for stopping ODM at the camera
-> solve, and the precise input and output contract of the COLMAP export, were
-> not confirmed during research. Both are load-bearing for the Gaussian
-> Splatting Pipeline. Confirm before building `solve` and `export-colmap`, and
-> check that camera conventions survive the conversion rather than assuming it.
+> **Resolved, with a trade-off.** Nerfstudio reads ODM's output natively, so no
+> COLMAP conversion is inherently required — but the native importer needs files
+> ODM writes near the end of its run, making it incompatible with stopping
+> early. Running ODM to completion is the safer default: the conversion path
+> forces the principal point to the image centre for perspective cameras and
+> degrades silently. See [ADR 0004](adr/0004-splatfacto-as-the-splat-engine.md).
+> Resolve the stop-point with a documented flag rather than a patch — ODM is
+> AGPL-3.0, and modifying it changes our obligations
+> ([ADR 0001](adr/0001-opendronemap-for-orthomosaics.md)).
 
 ## 5. Capture standard
 
@@ -212,12 +237,15 @@ it ([ADR 0008](adr/0008-fit-for-purpose-viewers.md)):
 | Data | Local inspection | Client-facing |
 |---|---|---|
 | Gaussian Splatting | SuperSplat Editor (MIT) | SuperSplat Viewer (MIT) |
-| Orthomosaic | QGIS | MapLibre GL JS reading the COG directly |
-| Mesh, point cloud | CloudCompare (GPL-3.0) | Potree (BSD-2) |
+| Orthomosaic | QGIS | MapLibre GL JS (BSD-3) reading the COG directly |
+| Mesh, point cloud | CloudCompare (GPL-2.0-or-later) | Potree (BSD-2) |
 
 A **Delivery Bundle** is a self-contained directory holding the deliverables and
-what is needed to view them, deployed to managed static hosting at an unlisted
-URL ([ADR 0011](adr/0011-static-delivery-bundles.md)). Nothing runs behind it: a
+what is needed to view them, deployed to **object storage** at an unlisted URL
+([ADR 0011](adr/0011-static-delivery-bundles.md)). Object storage specifically:
+the common static-site hosts cap individual files well below the size of a real
+Orthomosaic. Cross-origin headers must be configured, and the Bundle must carry
+the licence notices of the third-party viewers it redistributes. Nothing runs behind it: a
 Cloud-Optimized GeoTIFF is read by the browser over HTTP range requests with no
 tile server, and the splat viewer is a static site.
 
@@ -250,6 +278,48 @@ easier ground before the 3D version depends on it.
 Also deferred: Ground Control Points and survey-grade accuracy, interactive
 control from the developer graph view, and client authentication.
 
+## 8a. Operating legally
+
+The first version of this document specified the system in detail and never
+asked whether the work may be sold. That is a gap in the plan rather than in the
+architecture, and it gates the first paid flight rather than any build step.
+
+**Before a paid flight.** Commercial operation requires pilot certification,
+operator registration, and Remote ID, and the specific obligations differ by
+country: the United States requires Part 107 certification, registration, and
+Remote ID, and commercial use removes the sub-250g exemption entirely. The
+United Kingdom requires a Flyer ID and an Operator ID, with camera drones
+registering at any weight. The European Union requires operator registration and
+carries **legally mandatory** third-party insurance, which the United States does
+not. Commercial clients generally demand proof of liability cover regardless of
+whether the law requires it. Order of magnitude: one to two thousand a year and
+paperwork, not engineering.
+
+> **Open.** The operating country is not yet recorded, so this section states
+> the shape of the obligation rather than the specific one. Fix this before the
+> first flight, not before the first line of code.
+
+Also note the aircraft weighs slightly over 250g in real-world units, so any
+plan that leaned on the sub-250g class should not.
+
+**Imagery of people and private property.** Aerial capture over inhabited areas
+records identifiable people, vehicles and neighbouring private property by
+default. That makes us a data controller under GDPR and comparable regimes,
+with obligations we have not designed for: a lawful basis for the processing,
+storage limitation, and the ability to erase on request.
+
+This **directly contradicts** section 8's plan to retain every Capture
+indefinitely so that a future timelapse can use it. Wanting the data for a
+product we have not built yet is not a lawful basis, and it is not one of the
+exceptions to the right of erasure. The contradiction is real and is not
+solvable by engineering.
+
+> **Open decision.** Either adopt a retention limit with a defined lawful basis,
+> or anonymise Captures on a schedule so that what is retained no longer
+> identifies anyone, or narrow the timelapse product to Sites where the question
+> does not arise. This must be decided before Captures start accumulating,
+> because the whole point of the phase 2 preparation is that they accumulate.
+
 ## 9. Risks
 
 **The differentiating deliverable has no off-the-shelf answer.** Mature swipe
@@ -275,6 +345,26 @@ which makes flight discipline load-bearing.
 **No client-facing quality report.** Commercial tools ship one; we do not. If a
 client ever needs a result defended, that is ours to produce.
 
+**The hardware may not be sufficient, and this is untested.** Community guidance
+for ODM suggests more memory than this host has free once its production stack
+is accounted for, and splat training has been reported running out of video
+memory on a card this size with a dataset of the scale we intend, uncontended.
+Mitigations exist and none are yet in the design. Measure before committing to
+dataset sizes.
+
+**No stated ceiling on viewable scene size.** Nothing published says how large a
+splat the client-facing viewer will open on an ordinary device. A deliverable
+that will not load is indistinguishable from no deliverable.
+
+**Single aircraft, and a supply-side risk.** One airframe, no backup, and a
+manufacturer added to the FCC Covered List in December 2025 with this model
+never officially sold in the United States. A crash mid-contract has no
+mitigation, and replacement may not be straightforward.
+
+**The shared host's threat model covers contention, not exposure.** Client
+imagery will sit on a machine running forty unrelated containers. Nothing in
+this design addresses what that means for confidentiality.
+
 ## 10. Open questions
 
 Low-stakes, and none block starting:
@@ -286,15 +376,18 @@ Low-stakes, and none block starting:
 
 ## 11. First moves
 
-1. Buy and mount the SSD; establish hot working space and cold archive.
-2. Stand up ODM as a container service on the GPU host and put one existing
+1. Settle certification, registration and insurance for the operating country.
+   This gates paid flying and nothing else in this list depends on it, so it
+   should run in parallel from day one.
+2. Buy and mount the SSD; establish hot working space and cold archive.
+3. Stand up ODM as a container service on the GPU host and put one existing
    Capture through it end to end, ignoring the Manifest entirely. Learn what the
    Nodes actually need before declaring them.
-3. Fly one small Site properly — Anchors placed, Nadir Grid Mission, stills — and
+4. Fly one small Site properly — Anchors placed, Nadir Grid Mission, stills — and
    run it through the same path.
-4. Only then write the Manifest and the Runner, against Nodes whose real inputs
+5. Only then write the Manifest and the Runner, against Nodes whose real inputs
    and outputs are known.
 
-Step 4 comes last deliberately. The Node inventory in section 4 is a design, not
+The last step comes last deliberately. The Node inventory in section 4 is a design, not
 an observation, and declaring the interface before running the tools is the
 reliable way to get it wrong.
