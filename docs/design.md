@@ -195,6 +195,18 @@ exposure, and the grid extended at least one pass beyond the Site boundary. The
 reasoning and the failure modes are in the
 [flight planning reference](flight-planning.html).
 
+**Every Grid Mission is flown with oblique passes alongside the nadir grid.** A
+nadir-only block lets systematic error accumulate into a dome: the reconstructed
+surface bows, because nothing in the geometry distinguishes a small lens-model
+error from real curvature. Adding oblique imagery breaks that ambiguity, and the
+reported reduction in vertical error is up to two orders of magnitude. It costs
+one extra pass and no new hardware, which makes it the cheapest accuracy
+available to us.
+
+This is also why flying unworked Sites matters beyond compliance: oblique passes
+sit lower and closer to structures than the nadir grid, and are exactly what the
+five-metre bystander floor would otherwise restrict.
+
 **Every Site gets Anchors before its first flight** — marked positions outside
 the part of the Site that changes, present in every Capture
 ([ADR 0007](adr/0007-anchors-for-cross-capture-registration.md)). Anchors are
@@ -409,12 +421,13 @@ which makes flight discipline load-bearing.
 **No client-facing quality report.** Commercial tools ship one; we do not. If a
 client ever needs a result defended, that is ours to produce.
 
-**The hardware may not be sufficient, and this is untested.** Community guidance
-for ODM suggests more memory than this host has free once its production stack
-is accounted for, and splat training has been reported running out of video
-memory on a card this size with a dataset of the scale we intend, uncontended.
-Mitigations exist and none are yet in the design. Measure before committing to
-dataset sizes.
+**The video-memory ceiling is lower than first stated.** An earlier reading put
+splat training's failure point at around a thousand images; that figure came
+from a card twice this size. On 12GB the practical ceiling is a few hundred
+images, which is the scale we actually intend to fly rather than a comfortable
+margin above it. ODM's memory needs are likewise close to what this host has
+free once its production stack is counted. Both are measurable and neither has
+been measured.
 
 **No stated ceiling on viewable scene size.** Nothing published says how large a
 splat the client-facing viewer will open on an ordinary device. A deliverable

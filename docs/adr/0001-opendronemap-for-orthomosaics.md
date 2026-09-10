@@ -86,3 +86,30 @@ Windows machine is a reasonable manual second opinion for a job ODM handles
 badly. That is a fallback for hard datasets, not a pipeline component, and no
 automation should be built on its Linux path until Epic stops calling it
 experimental.
+
+## Revision, 2026-09-10 — the real blocker is the licence, not the platform
+
+Two corrections to the reasoning above, from a deeper verification pass. The
+decision is unchanged; the argument for it was partly wrong.
+
+**The kernel objection was weaker than stated.** Ubuntu 24.04's hardware-enablement
+kernels have shipped 6.14 or newer since 24.04.3, so the requirement is
+satisfiable without changing distribution. The real cost is a reboot of a host
+running forty production containers, which is a scheduling problem rather than a
+technical barrier. The headless authentication hang is now confirmed first-party
+by Epic staff rather than being a single unverified report, and it has a
+documented workaround.
+
+**The blocker is the licence.** RealityScan's terms bar "service bureau" use, and
+the established industry meaning of that phrase — using your own software to
+process other people's work for a fee — plausibly describes this business
+exactly. Whether Epic intends that reading could not be resolved, because the
+licence text is behind a login. That ambiguity is itself disqualifying: building
+a business on a tool whose terms may prohibit the business is not a risk worth
+taking to save on an engine that has a working free alternative.
+
+This subsumes the earlier operational argument. Even with the kernel satisfied,
+the container question answered and the authentication hang worked around,
+RealityScan is unavailable until someone reads the actual terms and finds them
+permissive. The Windows-machine fallback recorded above carries the same
+question and should not be used commercially until it is answered.
