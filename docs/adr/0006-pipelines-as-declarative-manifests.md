@@ -39,3 +39,24 @@ starts growing features rather than staying thin.
 When phase 2 brings interactive control from the website, the manifest is
 already the contract between the two. That work adds an execution API; it does
 not rewrite the pipelines.
+
+## Revision, 2026-09-10
+
+This ADR presented the choice as a binary between a general workflow engine and
+a runner of our own, and it skipped the middle. **NodeODM already has a job
+queue with concurrency and slot management**, and we had already committed to
+driving ODM through it. Make and systemd units are also unconsidered options
+that cover part of the ground.
+
+The decision stands, narrowed: the Runner should **delegate** rather than
+reimplement. ODM work is queued through NodeODM's own mechanism, and the Runner
+sequences Nodes and moves artifacts between them rather than scheduling.
+
+**Thinness now has a stated threshold**, because the original ADR set none while
+listing exactly the features that constitute a workflow engine. The Runner is no
+longer thin once it needs any of: its own persistent job store, a scheduler, a
+retry policy engine, or a concurrency model beyond "one job at a time on the GPU
+host". Reaching any of those is the trigger to stop extending it and adopt
+something existing. Resume is the exception, and belongs in how Nodes are
+structured — small enough that re-running one is cheap — rather than in
+machinery that can resume an arbitrary long step.
