@@ -139,3 +139,11 @@ Aesthetic treatment applied to rendered output, per deliverable. Reversible, and
 it never alters the Reconstruction it was rendered from.
 _Avoid_: colour grading, toning, post
 
+### Delivery
+
+**Delivery Bundle**:
+The self-contained set of files handed to a client for one project — the
+deliverables plus whatever is needed to view them. Readable on its own, with
+nothing running behind it.
+_Avoid_: package, export, deliverables folder
+
