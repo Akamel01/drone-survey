@@ -295,9 +295,17 @@ not. Commercial clients generally demand proof of liability cover regardless of
 whether the law requires it. Order of magnitude: one to two thousand a year and
 paperwork, not engineering.
 
-> **Open.** The operating country is not yet recorded, so this section states
-> the shape of the obligation rather than the specific one. Fix this before the
-> first flight, not before the first line of code.
+The operating country is **Canada**, so the governing regime is the Canadian
+Aviation Regulations Part IX, administered by Transport Canada, together with
+Canadian privacy law. The specific certificate, registration and airspace
+requirements are being established as compliance work and belong in a checklist
+rather than in this document.
+
+Two things are already clear. The aircraft weighs slightly over 250g in
+real-world units, so any exemption resting on being under that threshold does
+not apply. And commercial operation over construction sites, near people, and
+potentially in controlled airspace is the demanding end of the rules rather than
+the permissive end.
 
 Also note the aircraft weighs slightly over 250g in real-world units, so any
 plan that leaned on the sub-250g class should not.
@@ -314,11 +322,19 @@ product we have not built yet is not a lawful basis, and it is not one of the
 exceptions to the right of erasure. The contradiction is real and is not
 solvable by engineering.
 
-> **Open decision.** Either adopt a retention limit with a defined lawful basis,
-> or anonymise Captures on a schedule so that what is retained no longer
-> identifies anyone, or narrow the timelapse product to Sites where the question
-> does not arise. This must be decided before Captures start accumulating,
-> because the whole point of the phase 2 preparation is that they accumulate.
+**Resolved: Captures are retained for twelve months, then deleted**
+([ADR 0012](adr/0012-twelve-month-capture-retention.md)). The limit applies to
+raw Captures; whether derived Reconstructions may outlive it depends on whether
+they still identify anyone at our capture resolution, which is part of the
+compliance work rather than an assumption to make here.
+
+The consequence for section 8 is direct: a 3D Timelapse cannot be assembled from
+raw Captures older than a year, so the Reconstruction becomes the durable
+artifact and reprocessing from source has a deadline.
+
+Deletion has to be scheduled and logged. A retention limit that is written down
+and never executed documents an obligation being ignored, which is worse than
+having none.
 
 ## 9. Risks
 
