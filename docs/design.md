@@ -27,6 +27,14 @@ finished, no stated absolute accuracy. Survey-grade work needs Ground Control
 Points and better positioning hardware than a DJI Mini 5 Pro provides, and
 claiming it now would be selling something we cannot deliver.
 
+**The primary goal is automation**
+([ADR 0015](adr/0015-automation-is-the-primary-goal.md)). The operator's manual
+work is limited to client-facing work, driving to the Site, and flying.
+Everything else — mission planning, preparing the controller, go/no-go checks,
+processing, quality control, delivery and retention — is automated. Deliverable
+quality is not traded for it: every automated step carries a quality gate, and a
+person is involved only when a gate fails, never as a routine step.
+
 ## 2. Constraints the design answers to
 
 **Budget.** Software spend is approximately zero. This is a real constraint, not
@@ -360,47 +368,34 @@ checklist, with fees and sources, is in
 [the compliance research](research/canada-compliance-2026.md). What matters at
 the level of this document:
 
-**The certificate required is Advanced Operations, not Basic.** Construction
-sites mean proximity to people and often controlled airspace, which is the
-demanding end of the rules. The aircraft is over 250g in flight configuration,
-so no micro-drone exemption applies. Registration, the Advanced exam and the
-certificate are small fees; the **in-person flight review is the bottleneck**,
-with a booking lag of weeks. Zero to legally flying is realistically three to
-six weeks, and almost all of it is waiting rather than working.
+**The aircraft is a microdrone.** The Mini 5 Pro is under 250g in flight
+configuration, which in Canada removes registration, the pilot certificate, and
+the safety-assurance requirement — for commercial work as well as recreational,
+since Canada does not distinguish the two for microdrones. The earlier plan for
+Advanced Operations certification, and the five-metre bystander limit that came
+from the aircraft's safety-assurance declaration, no longer apply.
 
-**A hard limit follows from the aircraft, not the certificate.** Transport
-Canada records safety-assurance declarations per model per operation type. This
-aircraft is declared for controlled airspace and for operations five to thirty
-metres from bystanders. It is **not** declared for operations within five metres
-of, or over, people. No certificate lifts that: it is a property of the airframe
-as declared.
+**That status holds only in flight configuration, and the pilot must be able to
+show it.** The standard battery keeps the aircraft under 250g; the Plus battery,
+propeller guards or any accessory can take it over, at which point registration,
+certification and the declaration limits all return. The capture standard
+therefore specifies the standard battery.
 
-**Captures are flown when the Site is not being worked**, which is the operating
-answer to this. With no non-crew people present, the five-metre floor stops
-governing how the Site itself can be flown, and low and oblique passes become
-available again.
+Microdrone operation is still regulated: no reckless or negligent flight,
+staying clear of aerodromes, emergency sites and restricted airspace, and
+trespass and privacy law apply in full.
 
-It does not remove the rule, only the usual way of breaching it. People outside
-the Site boundary still count — a pavement, a road, an adjacent occupied
-property — and the buffer applies to them exactly as it would to a worker. The
-pre-flight check is for people within five metres of the flight path, not for
-people on the Site.
-
-Flying an unworked Site has two further benefits that are not about compliance.
+**Captures are still flown when the Site is not being worked**, for reasons that
+stand on their own. Moving people, plant and vehicles are a known source of
+reconstruction artifacts, so an empty Site reconstructs more cleanly.
 Moving people, plant and vehicles are a known source of reconstruction
-artifacts, so an empty Site reconstructs more cleanly. And imagery of an empty
+artifacts, so an empty Site reconstructs more cleanly. Imagery of an empty
 Site contains far less personal information, which materially reduces the
 retention problem in [ADR 0012](adr/0012-twelve-month-capture-retention.md)
-rather than merely bounding it.
-
-Declarations can be withdrawn, so the aircraft's status is worth re-checking
-rather than assumed permanent.
+rather than merely bounding it. And an empty Site is simply safer to fly.
 
 Insurance is a commercial expectation rather than a federal mandate, and clients
 will ask for it regardless.
-
-Also note the aircraft weighs slightly over 250g in real-world units, so any
-plan that leaned on the sub-250g class should not.
 
 **Imagery of people and private property.** Aerial capture over inhabited areas
 records identifiable people, vehicles and neighbouring private property by
@@ -482,11 +477,11 @@ mitigation, and replacement may not be straightforward.
 imagery will sit on a machine running forty unrelated containers. Nothing in
 this design addresses what that means for confidentiality.
 
-**The aircraft cannot legally be flown within five metres of people.** Its
-safety-assurance declaration does not cover it, and no pilot certificate
-substitutes. Flying Sites when they are not being worked removes the usual way
-of breaching this, but not the rule: bystanders beyond the Site boundary count
-the same, and a Site that is quiet when planned may not be when flown.
+**Microdrone status is fragile.** It depends on flight configuration: fitting
+the Plus battery or any accessory moves the aircraft over 250g, and with it every
+registration, certification and declaration requirement returns at once. This is
+easy to do without noticing and should be enforced by the capture standard
+rather than remembered.
 
 ## 10. Open questions
 
@@ -499,9 +494,9 @@ Low-stakes, and none block starting:
 
 ## 11. First moves
 
-1. Settle certification, registration and insurance for the operating country.
-   This gates paid flying and nothing else in this list depends on it, so it
-   should run in parallel from day one.
+1. Put insurance, the privacy policy and the client contract in place. As a
+   microdrone the aircraft needs no registration or certificate, so this is the
+   only compliance work, and it gates paid flying and nothing else.
 2. Buy and mount the SSD; establish hot working space and cold archive.
 3. Establish and verify connectivity to the 3090 host. It is on a different
    Tailscale account, so decide between plain SSH, Tailscale's sharing, or
