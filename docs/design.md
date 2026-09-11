@@ -142,7 +142,7 @@ This is how the no-duplicated-logic requirement is met.
 | `frame-extract` | Video to frames | footage-derived only |
 | `geotag-backfill` | Interpolate SRT telemetry onto extracted frames | footage-derived only |
 | `correct` | Exposure consistency and white balance; must preserve EXIF and XMP | both |
-| `register` | Tag Anchors and emit the ground control file tying this Capture to the Site frame | both |
+| `register` | Detect Anchors automatically, gate the detections, and emit the ground control file tying this Capture to the Site frame | both |
 | `solve` | Camera solve via ODM's SfM stage | both |
 | `reconstruct` | ODM dense reconstruction, mesh, orthophoto | Orthomosaic |
 | `export-cog` | Orthophoto to Cloud-Optimized GeoTIFF with overviews | Orthomosaic |
@@ -170,7 +170,7 @@ it is automatic.
 
 ```
 Shared head:
-  ingest → exif-audit → filter → correct → register → solve
+  ingest → exif-audit → filter → correct → solve → register → solve
 
 Orthomosaic:
   <shared head> → reconstruct → export-cog → bundle → publish
@@ -187,9 +187,18 @@ They share everything up to and including `solve`, diverge, and rejoin at
 `bundle`. The footage path has its own head because extracted frames carry no
 EXIF until `geotag-backfill` has run, so `exif-audit` cannot precede it.
 
-`register` runs before `solve` because the ground control file it emits is an
-input to the solve, not a correction applied afterwards
-([ADR 0007](adr/0007-anchors-for-cross-capture-registration.md)).
+`solve` runs twice around `register`. Anchors are identified by projecting each
+Anchor's recorded coordinate into every image and matching it to the nearest
+detected target, which needs camera poses — and the ground control file that
+`register` emits is itself an input to the final solve. So a first solve runs
+without ground control to recover poses, `register` detects and gates the
+Anchors against those poses, and the second solve runs with the ground control
+file ([ADR 0007](adr/0007-anchors-for-cross-capture-registration.md)). The second
+pass repeats only the camera solve, which is small next to dense reconstruction.
+
+`register`'s quality gate sits **before** ODM, not after it. ODM does not reject
+bad control points; it fails on them, so a wrong detection must be caught before
+it is written into the file.
 
 `reconstruct` is written here as one Node but is several hour-scale stages. It
 should be split along ODM's own stage boundaries, because a single opaque

@@ -52,3 +52,39 @@ absolute measurement, which we do not claim. Phase 2 upgrades this by replacing
 the placeholder coordinates with surveyed ones: the correspondences do not
 change, so previously flown Captures can be re-registered rather than refllown.
 Place Anchors where a surveyor could later reach them.
+
+## Revision, 2026-09-10 — Anchors are detected automatically
+
+ADR 0015 makes automation the primary goal, which rules out the manual tagging
+described above. Anchors are now found and identified by software, with no
+person in the routine path.
+
+**Uncoded targets, identified by position.** Coded fiducials that carry their own
+identity were ruled out on resolution: at this aircraft's ground sample distance
+they would need to be between 66cm and 2.75m across. Instead each Anchor is a
+40cm square slab painted with a black-and-white quadrant-in-circle target, which
+is detected by shape. Its identity comes from projecting every Anchor's recorded
+coordinate into the image and matching each detection to the nearest projection.
+This is the approach Pix4D and DroneDeploy use in production. The target's
+quadrant edges give a precise centre by line intersection, which also holds up
+in oblique images better than a plain cross.
+
+**Poses come from a first solve.** Projection needs camera poses, and raw
+consumer GPS is too loose to trust for matching. So the camera solve runs twice:
+once without ground control to recover poses, then detection and matching
+against those poses, then the solve again with the ground control file. The
+extra pass repeats only the camera solve.
+
+**Anchors must be at least 8 to 10 metres apart.** Matching assigns each
+detection to the nearest projected Anchor, so two Anchors closer together than
+the projection error could be confused. This spacing rule is added to Site
+onboarding alongside placing Anchors outside the changing footprint.
+
+**The quality gate runs before ODM.** ODM does not discard bad control points —
+it fails on them — so a wrong detection must never reach the ground control
+file. The gate checks that each Anchor is detected in enough images, that each
+detection sits close to its projection, and that detections of one Anchor agree
+across images; after the solve it checks residuals. Any failure stops the Capture
+and flags it for a person, which is the exception path ADR 0015 allows.
+
+This supersedes the consequence above that tagging is manual per Capture.
