@@ -232,8 +232,9 @@ cannot be rescued in software, so its requirements are specified and checkable.
 **Orthomosaic Captures** are stills from an automated Nadir Grid Mission: gimbal
 at −90° locked, 80% forward and 70% side Overlap, constant altitude, locked
 exposure, and the grid extended at least one pass beyond the Site boundary. The
-reasoning and the failure modes are in the
-[flight planning reference](flight-planning.html).
+aircraft flies on the **standard battery** only: the Plus battery takes it over
+250g and out of the microdrone category. The reasoning and the failure modes are
+in the [flight planning reference](flight-planning.html).
 
 **Every Grid Mission is flown with oblique passes alongside the nadir grid.** A
 nadir-only block lets systematic error accumulate into a dome: the reconstructed
