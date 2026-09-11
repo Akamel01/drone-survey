@@ -93,8 +93,10 @@ from Site to Site, and the library's flight-time and battery estimates are wrong
 by the same factor. The error inflates overlap rather than reducing it, so
 quality does not suffer, but the operator's time does.
 
-The library's main users map near the equator, which is probably why nobody has
-reported it.
+The library's main users map near the equator, which is probably why nobody had
+reported it. **Reported upstream as
+[hotosm/drone-tm#887](https://github.com/hotosm/drone-tm/issues/887)**, after
+reproducing it on the `dev` branch at commit 067de31 with the same ratios.
 
 ## Bug 2 — speed is fixed at 11.5 m/s
 

@@ -25,7 +25,7 @@ overwrites the KMZ file inside a placeholder mission's folder on the controller.
 - **The Node corrects the library's latitude bug.** The grid is laid out in Web
   Mercator without scale correction, so spacing shrinks by cos(latitude): 27–50%
   too tight across Canada. The Node applies the correction until upstream fixes
-  it.
+  it ([hotosm/drone-tm#887](https://github.com/hotosm/drone-tm/issues/887)).
 - **Every plan passes a gate before it is loaded:** true ground spacing measured
   geodesically against the requested Overlap, photo count, altitude, and gimbal
   angle. A plan that fails is not loaded. The latitude bug went unnoticed upstream
