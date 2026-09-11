@@ -47,8 +47,10 @@ manual step to capture photos.** Overlap is then exact, because photos are taken
 at computed positions rather than by a timer that drifts with wind and speed.
 Waylines mode cannot avoid the manual interval-shooting step.
 
-Whether DJI Fly honours those actions is **not verified**. It needs the
-operator's video transcripts or one flight with the RC2.
+**Update:** the operator confirmed from other pilots' flight videos that DJI Fly
+takes the photos itself during an imported mission, so waypoints mode is the
+chosen mode ([ADR 0016](../adr/0016-mission-generation-and-loading-for-the-rc2.md)).
+Our own proving flight still has to show it on this aircraft and controller.
 
 ### Camera settings
 
@@ -96,7 +98,10 @@ reported it.
 
 ## Bug 2 — speed is fixed at 11.5 m/s
 
-**Read from the source, not yet flight-tested.** In `calculate_parameters`:
+**Fixed upstream, not yet released.** The `dev` branch of `hotosm/drone-tm`, where
+the library now lives, uses `min(ground_speed, 11.5)`, so a computed speed below
+the cap is kept. PyPI's latest release is still 1.0.0, which has the bug. Read
+from 1.0.0's `calculate_parameters`, not flight-tested:
 
 ```python
 if ground_speed > 12 and drone_type in [DJI_MINI_5_PRO, DJI_MINI_4_PRO, DJI_AIR_3]:
@@ -143,9 +148,9 @@ controller connected.
 3. **Correct the latitude bug**, preferably by laying the grid out in a local UTM
    projection rather than Web Mercator; otherwise by dividing the intended spacing
    by cos(latitude) before it is applied.
-4. **Use waypoints mode**, if flight evidence confirms DJI Fly honours
-   `takePhoto`, so that capture needs no manual step and overlap is exact.
-5. Set gimbal pitch explicitly, to whichever angle the capture standard settles on.
+4. **Use waypoints mode**, so that capture needs no manual step and overlap is
+   exact.
+5. Set gimbal pitch explicitly to −80°, the capture standard's angle.
 6. Pass a DEM for sloped Sites.
 7. Verify every generated plan before loading it: photo count, true ground
    spacing measured the way this test did, and the gimbal angle. The latitude bug
@@ -154,7 +159,8 @@ controller connected.
 ## Not verified
 
 - Whether DJI Fly on the RC2 executes `takePhoto` actions at waypoints for the
-  Mini 5 Pro.
+  Mini 5 Pro, on our own flight. The operator has confirmed it from other pilots'
+  flight videos.
 - Whether the RC2's waypoint folder can be written over MTP from Linux.
 - The RC2's behaviour at the 11.5 m/s speed the generator writes.
 - Whether waypoints mode's stop at every point is fast enough to cover a Site on

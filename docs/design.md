@@ -161,10 +161,23 @@ This is how the no-duplicated-logic requirement is met.
 that already exists as footage; they are not part of the supported capture path
 ([ADR 0002](adr/0002-stills-from-grid-missions-not-video.md)).
 
-`clean-splat` is human-in-the-loop. Aerial splats arrive with floaters and
-ground-plane noise, and removing them is judgement, not a parameter. The Runner
-should treat it as a Node that blocks awaiting an operator rather than pretend
-it is automatic.
+`clean-splat` is automatic, with a quality gate
+([research](research/splat-auto-cleaning-2026.md)). It refuses to start when
+ODM's report shows a weak camera solve, because no cleaning rescues bad poses.
+Fitting runs with settings that produce fewer floaters in the first place; the
+Node then crops to the Site boundary, removes statistical outliers, and prunes
+by opacity and scale. The gate combines held-out image fidelity, the fraction of
+gaussians the crop removed, residual floaters, and agreement between the splat's
+depth and ODM's mesh. A splat that fails the gate is held for review and never
+delivered.
+
+No published thresholds exist for that gate, so it starts with a **calibration
+period**. Until the period ends, the operator reviews every splat before
+delivery, and the gate's verdict and metrics are logged beside the operator's.
+The review is temporary debt under
+[ADR 0015](adr/0015-automation-is-the-primary-goal.md). It retires when the gate
+has matched the operator's verdict on at least 20 consecutive deliveries without
+passing one the operator rejected. After that, only failures reach a person.
 
 ### The two phase-1 Pipelines
 
@@ -239,8 +252,15 @@ Capture is part of the system, not a precondition of it. A Capture flown wrongly
 cannot be rescued in software, so its requirements are specified and checkable.
 
 **Orthomosaic Captures** are stills from an automated Nadir Grid Mission: gimbal
-at −90° locked, 80% forward and 70% side Overlap, constant altitude, locked
+at −80° locked, 80% forward and 70% side Overlap, constant altitude, locked
 exposure, and the grid extended at least one pass beyond the Site boundary. The
+mission is flown in stop-at-each-waypoint mode, so the mission itself takes
+every photo at a computed position; nobody arms interval shooting by hand.
+
+The gimbal sits ten degrees off vertical rather than straight down. A slightly
+off-nadir camera is a known way to reduce doming, it is the default of the
+mission generator we use, and it works alongside the oblique passes below rather
+than replacing them. The
 aircraft flies on the **standard battery** only: the Plus battery takes it over
 250g and out of the microdrone category. The reasoning and the failure modes are
 in the [flight planning reference](flight-planning.html).

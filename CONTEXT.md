@@ -47,8 +47,10 @@ on whether a Reconstruction succeeds.
 _Avoid_: coverage, redundancy
 
 **Nadir**:
-Camera orientation pointing straight down. The orientation an Orthomosaic
-requires, and the one an appearance-focused Capture usually avoids.
+Camera orientation pointing down, at or near vertical. Our Grid Missions fly
+the gimbal at −80°, ten degrees off vertical, which still counts as Nadir. The
+orientation an Orthomosaic requires, and the one an appearance-focused Capture
+usually avoids.
 _Avoid_: top-down, vertical, overhead
 
 **Ground Control Point**:
