@@ -36,7 +36,7 @@ _Avoid_: schedule, frequency, interval
 
 **Grid Mission**:
 An automated flight covering a Site in parallel passes at fixed altitude, camera
-pointed straight down, capturing stills at a spacing chosen to guarantee Overlap.
+at Nadir, capturing stills at a spacing chosen to guarantee Overlap.
 The capture method for Orthomosaics.
 _Avoid_: lawnmower, mapping mission, survey flight
 
@@ -70,6 +70,30 @@ Bringing two or more Captures of the same Site into a single coordinate frame so
 they can be compared. Distinct from georeferencing, which places a single
 Reconstruction into absolute space.
 _Avoid_: alignment, matching, co-registration
+
+### Flight
+
+**Mission**:
+Everything the aircraft executes on one flight: where each waypoint is, where
+the camera looks, what happens at each point, how fast and how it moves between
+them, and what it does if something goes wrong. A Grid Mission is one kind.
+_Avoid_: KML, flight plan file, route
+
+**Controller**:
+The handheld unit the operator flies with, which runs the flight app and holds
+the Missions. The system supports one exact Controller — a specific model on a
+specific app and firmware version, proven by a test flight — not a family of
+them.
+_Avoid_: RC, remote, smart controller
+
+**Placeholder Mission**:
+A Mission created by hand on the Controller once, so that a slot exists for a
+generated Mission to replace. Its own contents never fly.
+_Avoid_: dummy mission, dummy file, template
+
+**Load**:
+To replace a Placeholder Mission on the Controller with a generated Mission.
+_Avoid_: inject, upload, transfer, sync
 
 ### Deliverables
 
