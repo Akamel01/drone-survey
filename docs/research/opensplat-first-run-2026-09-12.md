@@ -57,13 +57,35 @@ default. The run was repeated with `--no-gpu-cache` to test that:
 saves 1.3% of the memory and costs 2% in time. Neither the gaussians nor the
 cached images explain 10 GB.
 
-What remains is the per-step work on one image: rendering a 3840×2160 view and
-holding the backward pass for it. That points at memory scaling with **the pixels
-in a single image**, rather than with the number of images or the size of the
-scene. If it holds, real Captures are still the harder case, but for a different
-reason than assumed: a 50 MP still carries six times the pixels of these frames.
-**This is untested.** The measurement that discriminates it is the same run at
-half resolution, where this explanation predicts roughly a fourfold drop.
+The next suspect was the per-step work on one image — rendering a view and
+holding its backward pass — which would make memory scale with the pixels in an
+image. That was tested by repeating the run at half and quarter resolution, each
+time on an uncontaminated card:
+
+| Resolution | Pixels per image | Peak job memory | Wall time | Gaussians |
+|---|---|---|---|---|
+| 3840×2160 | 8.3 MP | 10,210 MiB | 902 s | 75,392 |
+| 1920×1080 | 2.1 MP | 7,038 MiB | 232 s | 70,812 |
+| 960×540 | 0.52 MP | 1,896 MiB | 66 s | 55,993 |
+
+**Time is very nearly linear in pixels**: each quartering cut the run by about
+3.7×. **Memory is not.** The first quartering cost 31% of the memory, the second
+73%. Neither a straight line through the pixel count nor a fixed cost plus a
+per-pixel term fits all three points, so that hypothesis fails too.
+
+The shape of the memory curve explains why no simple law was going to hold. Peak
+memory arrives in the middle of each run — at 66%, 47% and 50% of the three —
+and falls back afterwards. That peak belongs to the densification phase, which
+creates gaussians it then discards: the three runs ended with 75,392, 70,812 and
+55,993 gaussians, a far narrower spread than their peak memory. Peak memory
+measures the transient, not the scene.
+
+**The practical consequence is that a Capture's memory cannot be predicted from
+its resolution.** It has to be measured per class of Capture, which is what the
+placement ladder in [ADR 0014](../adr/0014-compute-placement-ladder.md) needs
+anyway. Two things soften the cost of being wrong: `--save-every` and `--resume`
+mean a failed run is not lost entirely, and the danger point is the middle of the
+run rather than the end.
 
 - `--max-gaussians` never bound here. The default 5,000,000 was never
   approached, so the cap that made OpenSplat attractive was not what made this
@@ -83,8 +105,9 @@ splatfacto twice.
 
 - Quality, on real stills, judged against splatfacto's output at whatever
   downscale lets splatfacto finish.
-- Memory behaviour on 50 MP stills, and whether memory follows the pixels in one
-  image as the half-resolution test suggests.
+- Memory behaviour on 50 MP stills. Nothing measured here predicts it: three
+  resolutions of the same project gave 10.2 GB, 7.0 GB and 1.9 GB, so
+  extrapolating to six times the pixels of the largest would be guesswork.
 - Whether the reported failures of OpenSplat on large datasets — killed by
   running out of ordinary system memory rather than card memory — appear at our
   Capture sizes.
