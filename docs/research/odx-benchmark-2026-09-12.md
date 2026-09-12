@@ -66,8 +66,29 @@ them is its own business, and ODX 3.8.3 changed related behaviour — ground
 resolution is now estimated from the bottom 10th percentile rather than the
 average. So this measures the fork at equal *settings*, not at equal *work*.
 
-The fair question is what ODX costs to produce what ODM produced. A second run
-at higher settings is measuring that.
+The fair question is what ODX costs to produce what ODM produced. A second ODX
+run, one notch higher at `feature-quality medium` and `pc-quality low`, answers
+it from the other side:
+
+| | ODM 3.5.6, low | ODX 3.8.3, low | ODX 3.8.3, medium |
+|---|---|---|---|
+| Wall time | 406 s | 271 s | **526 s** |
+| Cameras registered | 178 of 180 | 164 of 180 | **180 of 180** |
+| Sparse points | 6,826 | 4,022 | **14,570** |
+| Dense points | 1,025,371 | 299,542 | **1,271,088** |
+| Mesh faces | 170,889 | 154,442 | 158,229 |
+| Archive | 78.0 MB | 62.6 MB | 92.5 MB |
+
+**ODX beat the control on every reconstruction measure, and took 30% longer to
+do it.** So the two runs bracket the answer rather than settling it: the setting
+that is faster produces less, and the setting that produces more is slower.
+Matching ODM's output exactly would need a setting between the two, costing
+somewhere between 271 s and 526 s.
+
+**We are not going to interpolate that into a number.** The same arithmetic-on-
+two-points reasoning was wrong three times in one afternoon while measuring
+OpenSplat's memory. What the evidence supports is narrower: **no tested ODX
+setting produced ODM's output faster than ODM did.**
 
 ## What stands regardless
 

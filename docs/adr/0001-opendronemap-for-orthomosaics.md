@@ -113,3 +113,48 @@ the container question answered and the authentication hang worked around,
 RealityScan is unavailable until someone reads the actual terms and finds them
 permissive. The Windows-machine fallback recorded above carries the same
 question and should not be used commercially until it is answered.
+
+## Revision, 2026-09-12 — OpenDroneMap forked, and the fork was measured
+
+**The project this ADR chose has split.** In April 2026 the maintainer of WebODM
+left OpenDroneMap and took WebODM with him into a separate organisation, forking
+the engine as **ODX**, with matching `NodeODX` and `ClusterODX` services. Both
+sides are alive and similarly active — roughly equal commit rates over the
+following months — so a future reader will reasonably ask why we stayed on the
+original. This records the answer.
+
+**It was benchmarked rather than argued about.** The same 180 frames, the same
+options, the same host, back to back, against a freshly run control
+(`docs/research/odx-benchmark-2026-09-12.md`):
+
+| | ODM 3.5.6, low | ODX 3.8.3, low | ODX 3.8.3, medium |
+|---|---|---|---|
+| Wall time | 406 s | 271 s | 526 s |
+| Cameras registered | 178 of 180 | 164 of 180 | 180 of 180 |
+| Dense points | 1,025,371 | 299,542 | 1,271,088 |
+
+At equal settings the fork is a third faster because it reconstructs
+considerably less. One setting higher it beats the control on every
+reconstruction measure and takes 30% longer. **No tested setting produced the
+control's output faster than the control did**, so the fork's headline claim does
+not hold on our hardware and there is no reason to move.
+
+**The decision is unchanged, and cheap to revisit.** `NodeODX` serves the same
+REST endpoints and option names as NodeODM, confirmed by diffing the published
+API documents and by querying a live container, so switching later would cost
+almost nothing in our code. This measurement used video frames, which tests
+throughput rather than deliverable quality; it is worth repeating once real
+Grid Mission stills exist.
+
+**Two related tools from the same organisation were rejected outright.**
+`ClusterODX` cannot pin a task to a chosen machine, which is exactly what the
+placement ladder in [ADR 0014](0014-compute-placement-ladder.md) requires, and
+`CloudODX` is a client for a processing endpoint rather than a way to rent one
+(`docs/research/odx-cluster-cloud-2026-09-12.md`). Their `OpenSplat` engine is a
+genuine find, but it belongs to
+[ADR 0004](0004-splatfacto-as-the-splat-engine.md) rather than here.
+
+One detail from that organisation's work is worth keeping regardless of engine:
+**`cog` defaults to off in NodeODX**, where NodeODM turns it on and delivers a
+file that fails GDAL's validator. The conversion code itself is unchanged between
+the two, so `export-cog` remains a real Node under either engine.
