@@ -33,6 +33,30 @@ overwrites the KMZ file inside a placeholder mission's folder on the controller.
 - **Loading happens on the Linux host over USB (MTP).** The loader overwrites the
   KMZ inside placeholder missions that are created once, by hand, in DJI Fly.
 
+## Controller support, updates, and how loading fails
+
+Settled in a later grilling session, and binding on the loader:
+
+- **Exactly one Controller is supported**: the RC2, on a specific DJI Fly and
+  firmware version, proven by a test flight. No other controller, and no phone
+  with an RC-N, is supported until it passes the same test. A controller
+  *family* is never claimed.
+- **Versions cannot be pinned**, so updates are installed deliberately: right
+  after a Capture, never the day before one. After any update the Controller is
+  unproven, and the next Load includes a short proving Mission that is flown
+  first on Site. If it flies and the photo count rises, the real Missions go
+  ahead.
+- **If the RC2 is unavailable on a Capture day, the visit is rescheduled**
+  within the Site's Cadence window. A spare RC2 is bought when repeat clients
+  justify it. A hand-flown Capture is never delivered, because Overlap and
+  spacing cannot be guaranteed.
+- **Loading is all or nothing.** Every Mission for the visit is written and read
+  back identical, or the Controller is left exactly as it was. The loader
+  refuses to write at all when the folder layout does not match what the
+  Controller's recorded profile says. It never tries an alternative route. When
+  it fails, loading by hand with a third-party tool is a logged exception, not a
+  routine step.
+
 ## Considered and rejected
 
 - **Waylines mode.** It carries no photo actions, so it needs interval shooting
