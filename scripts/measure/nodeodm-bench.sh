@@ -18,7 +18,10 @@ name="bench-$run"
 # The baseline run's options, unchanged — the comparison is only fair if these match.
 # OPTS overrides them, for asking what a second engine costs at equal output rather
 # than at equal settings.
-opts="${OPTS:-[{\"name\":\"feature-quality\",\"value\":\"low\"},{\"name\":\"pc-quality\",\"value\":\"lowest\"},{\"name\":\"use-3dmesh\",\"value\":true},{\"name\":\"orthophoto-resolution\",\"value\":5}]}"
+# Kept out of the ${OPTS:-...} default: a } inside the default would end the
+# expansion early and silently mangle the options.
+default_opts='[{"name":"feature-quality","value":"low"},{"name":"pc-quality","value":"lowest"},{"name":"use-3dmesh","value":true},{"name":"orthophoto-resolution","value":5}]'
+opts="${OPTS:-$default_opts}"
 
 ss -ltn | grep -q ":$port " && { echo "ABORT: port $port is in use" >&2; exit 2; }
 
