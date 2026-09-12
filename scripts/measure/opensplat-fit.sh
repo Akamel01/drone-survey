@@ -17,8 +17,13 @@ mkdir -p "$out"
 # has to be mounted back at that same path or OpenSplat cannot find the images.
 inner="/datasets/$(basename "$project")"
 
-if curl -s --max-time 2 localhost:11434/api/ps 2>/dev/null | grep -q '"name"'; then
+# ollama runs inside the sme_ollama container, not on a host port, and its models
+# are kept loaded forever, so any gateway call reloads one mid-run and ruins the
+# measurement. Check the container, and record the card's state either way.
+if docker exec sme_ollama ollama ps 2>/dev/null | grep -qv '^NAME' && \
+   [ "$(docker exec sme_ollama ollama ps 2>/dev/null | wc -l)" -gt 1 ]; then
   echo "ABORT: an ollama model is loaded; the GPU measurement would be meaningless" >&2
+  docker exec sme_ollama ollama ps >&2
   exit 2
 fi
 
