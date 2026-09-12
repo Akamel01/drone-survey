@@ -43,15 +43,31 @@ run, against 130–150 ms for splatfacto in its late, heavy steps.
 OpenSplat's own README quotes, those account for roughly 150 MiB. The run used
 about 10.2 GB.
 
-So on this input **the memory was almost entirely the cached images, not the
-scene**. OpenSplat loads and caches the source images on the GPU by default, and
-180 frames at 3840×2160 is what filled the card. That has direct consequences:
+The scene is therefore not what filled the card. The obvious suspect was
+OpenSplat's GPU image cache, since it holds the source images on the card by
+default. The run was repeated with `--no-gpu-cache` to test that:
 
-- `--no-gpu-cache` is the first lever to pull, not `--max-gaussians`. The cap
-  never bound here; the default 5,000,000 was never approached.
-- **Real Captures are the harder case.** 50 MP stills carry six times the pixels
-  of these frames, so the cache grows with them. Whether a real Capture fits
-  depends on how many images it holds, and that is still unmeasured.
+| | cache on | cache off |
+|---|---|---|
+| Wall time | 902 s | 921 s |
+| Peak job memory | 10,210 MiB | 10,073 MiB |
+| Gaussians | 75,392 | 75,414 |
+
+**The cache accounts for 137 MiB, and the hypothesis was wrong.** Turning it off
+saves 1.3% of the memory and costs 2% in time. Neither the gaussians nor the
+cached images explain 10 GB.
+
+What remains is the per-step work on one image: rendering a 3840×2160 view and
+holding the backward pass for it. That points at memory scaling with **the pixels
+in a single image**, rather than with the number of images or the size of the
+scene. If it holds, real Captures are still the harder case, but for a different
+reason than assumed: a 50 MP still carries six times the pixels of these frames.
+**This is untested.** The measurement that discriminates it is the same run at
+half resolution, where this explanation predicts roughly a fourfold drop.
+
+- `--max-gaussians` never bound here. The default 5,000,000 was never
+  approached, so the cap that made OpenSplat attractive was not what made this
+  run finish. What made it finish was densification stopping halfway.
 - The comparison with splatfacto is not like for like on scene detail. 75,392
   gaussians is a sparse result; splatfacto was still densifying hard when it
   died. **Nothing here shows OpenSplat produces an equal-quality scene** — only
@@ -67,7 +83,8 @@ splatfacto twice.
 
 - Quality, on real stills, judged against splatfacto's output at whatever
   downscale lets splatfacto finish.
-- Memory behaviour on 50 MP stills, with and without the GPU image cache.
+- Memory behaviour on 50 MP stills, and whether memory follows the pixels in one
+  image as the half-resolution test suggests.
 - Whether the reported failures of OpenSplat on large datasets — killed by
   running out of ordinary system memory rather than card memory — appear at our
   Capture sizes.
