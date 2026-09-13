@@ -288,3 +288,54 @@ accepted only as a stopgap.
 - **Licence:** the library is AGPL-3.0. Running it as an internal process carries
   no obligations; distributing a patched copy or exposing it as a network service
   would.
+
+## Revision, 2026-09-13 — writing to the Controller is proven, and by a different tool
+
+**Writes are proven.** This supersedes the note above that reads were proven and
+writes were not. A KMZ produced by our own writer was written into a Placeholder
+Mission's folder over USB from the Linux host, read back, and hashed identical;
+DJI Fly then listed it with the expected waypoint count, confirmed by the
+operator on the Controller's screen. Loading is therefore demonstrated end to
+end rather than assumed, on this Controller, on its current firmware.
+
+**The loader keeps `jmtpfs`, as this ADR originally specified.** An earlier
+wording of this revision said the tool was `aft-mtp-cli` instead. That was too
+broad and is corrected here. Both tools work, with different limits, and the
+difference decides which one the loader uses:
+
+- `aft-mtp-cli` writes and replaces **files** in folders that already exist, and
+  needs no mount, which suits a script. It **cannot create folders** on this
+  Controller: `SendObjectInfo` returns `GeneralError (0x2002)`, and it fails the
+  same way in `Download`, so this is the client's limitation and not a
+  restriction imposed by the Controller.
+- `jmtpfs` creates folders and files both, proven by creating a Placeholder-shaped
+  folder with its `image` subfolder and a KMZ inside it.
+
+Since replacing a Placeholder's KMZ only ever writes into a folder that already
+exists, either tool can perform the Load. `jmtpfs` remains the choice because it
+covers both cases. libmtp still does not recognise `2ca3:1021` by name and falls
+back to generic Android handling. Success remains the read-back comparison,
+never the copy command's exit status.
+
+**The pool of Placeholder Missions cannot be grown from the filesystem.** A ninth
+Placeholder-shaped folder was created on the Controller, complete with its KMZ
+and `image/ShotSnap.json` sidecar, and DJI Fly did not list it — before or after
+the app was closed and reopened. The app enumerates its own database, not the
+directory. This confirms from the other direction what the name test showed: the
+file supplies a Mission's geometry, and the database supplies its existence and
+its label. Placeholders are therefore created by hand in DJI Fly and in no other
+way, which makes the size of the pool a decision to take once and generously
+rather than a constraint to work around.
+
+**The name written into the archive does not reach DJI Fly's list.** The earlier
+revision said this was worth testing during the first write and that nothing
+depends on it. It was tested: the file underneath changed and the Controller
+continued to show the previous name, across a power cycle. `wpml:author` is
+therefore ours alone, and the identification remains the slot label and the
+running direction, exactly as already decided.
+
+**`Android/data` is readable over MTP on this Controller**, which is not true of
+most Android 11 devices and is the fact the whole loading path depends on. The
+Controller also publishes its limits in `capability/` beside the Missions, so the
+validation this ADR requires can read them at the moment of loading rather than
+trusting values recorded months earlier.

@@ -21,7 +21,11 @@ _Avoid_: accurate, precise, professional-grade
 ### Capture
 
 **Site**:
-The physical location being surveyed. The unit a client buys work about.
+The physical location being surveyed. The unit a client buys work about. A Site
+is identified once at onboarding by a short identifier that never changes; the
+name written beside it is a label that may. Cadence is fixed against a Site and
+Captures accumulate under it, so identity has to outlive any renaming.
+_Avoid_: the name as the identifier, location, job, project
 
 **Capture**:
 One visit to a Site producing the images a Reconstruction is built from. A Site
@@ -79,6 +83,12 @@ the camera looks, what happens at each point, how fast and how it moves between
 them, and what it does if something goes wrong. A Grid Mission is one kind.
 _Avoid_: KML, flight plan file, route
 
+**Mission Spec**:
+The planner's record of a Mission, in our own format, from which the file the
+Controller reads is generated. A Spec is never edited: a change is a new Spec
+that supersedes the earlier one.
+_Avoid_: JSON, plan, config, mission file
+
 **Controller**:
 The handheld unit the operator flies with, which runs the flight app and holds
 the Missions. The system supports one exact Controller — a specific model on a
@@ -93,7 +103,18 @@ _Avoid_: dummy mission, dummy file, template
 
 **Load**:
 To replace a Placeholder Mission on the Controller with a generated Mission.
-_Avoid_: inject, upload, transfer, sync
+_Avoid_: inject, upload, transfer, sync, push
+
+**Dispatch**:
+To put a Mission Spec into the store from the planner. A Dispatched Spec is
+waiting to be Collected; nothing has reached the Controller yet.
+_Avoid_: upload, send, sync
+
+**Collect**:
+To fetch Dispatched Mission Specs onto the host that Loads. Collecting is what
+the host does on its own; Loading is what happens when the Controller is
+plugged in.
+_Avoid_: download, pull, sync
 
 ### Deliverables
 
