@@ -1,0 +1,17 @@
+{
+  "pipeline": "deliver",
+  "nodes": [
+    {
+      "name": "bundle",
+      "command": ["python3", "nodes/bundle/build.py", "--out", "{out.bundle}"],
+      "outputs": {"bundle": "bundle"},
+      "notes": "No ingest/reconstruct/export-cog Node exists yet to wire as {in.x}, so the source Orthomosaic/splat/report/vendor-asset paths are read from the BUNDLE_ORTHO / BUNDLE_SPLAT_SCENE / BUNDLE_SPLAT_META / BUNDLE_REPORT / BUNDLE_VENDOR_DIR env vars (see nodes/bundle/build.py). At least one of BUNDLE_ORTHO or BUNDLE_SPLAT_SCENE is required."
+    },
+    {
+      "name": "publish",
+      "command": ["python3", "nodes/publish/publish.py", "--bundle", "{in.bundle}", "--bucket", "wayfinder-delivery-bundles", "--dry-run"],
+      "inputs": {"bundle": {"node": "bundle", "output": "bundle"}},
+      "notes": "--dry-run is hardcoded: the delivery bucket and its application key do not exist yet (docs/business/object-storage-setup.md). Remove --dry-run once they do, and confirm 'wayfinder-delivery-bundles' against the operator's actual bucket name."
+    }
+  ]
+}
