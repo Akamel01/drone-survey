@@ -147,10 +147,20 @@ during an exposure, capped by the Controller's stated 15 m/s and held below the
 ~12 m/s point where the RC2 is reported to drop Missions to 2.5 m/s. The proving
 flight measures whether the computed speed holds in the air.
 
-**Deferred, and worth designing for:** a Capture that pauses for a battery change
-at the take-off point and continues where it stopped, using the aircraft's own
-return-to-home. Whether DJI Fly can resume an interrupted Mission at all is
-unconfirmed, and is being researched before anything is built on it.
+**Resuming a Mission after a battery change is not available on this aircraft**
+([research](../research/battery-swap-resume-2026.md)). DJI Fly's pause and
+continue survives an interruption in the air only, not powering down to swap a
+battery, and a low-battery return-to-home ends a waypoint Mission outright. The
+breakpoint resume that does exist is an enterprise feature and has never covered
+the consumer line; nothing in the route file format carries mission progress
+either.
+
+So a Site larger than one battery is flown as **several Missions, not one
+interrupted Mission**. Each part occupies its own Placeholder slot, and after
+swapping the battery the operator selects the next part by hand. That is one
+selection per leg, which the operator accepts, and it makes the seam handling in
+the split rule load-bearing: consecutive parts share a waypoint so no coverage is
+lost where one battery ends and the next begins. #31 carries the detail.
 
 ## Revision — Placeholder slots and what does the loading
 
