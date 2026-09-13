@@ -1,0 +1,262 @@
+#!/usr/bin/env python3
+"""The Runner: executes a Manifest, one Node at a time, in order.
+
+Delegates rather than schedules (ADR 0006 revision): it sequences Nodes and
+moves artifacts between them; it does not queue, retry, or manage jobs of its
+own. A Node's outputs become the absolute paths substituted into the next
+Node's command (see manifest.py's docstring for the `{in.x}` / `{out.x}`
+placeholders).
+
+Per-Node status is written to `<workdir>/state.json` after every Node, so a
+run interrupted by a crash or a failed Node resumes from the first incomplete
+Node on the next `run` rather than restarting (the reason ADR 0006 gives for
+owning a Runner at all). A Node's exit code is never softened: a non-zero
+exit stops the run immediately and becomes the Runner's own exit code.
+
+Only one run may be in progress at a time, system-wide (#12), enforced by a
+lock file rather than a queue -- there is no concurrency model to build.
+
+    python3 runner.py MANIFEST.json --workdir RUN_DIR
+    python3 runner.py --selftest
+"""
+
+import argparse
+import hashlib
+import json
+import os
+import subprocess
+import sys
+import types
+from pathlib import Path
+
+from manifest import ManifestError, load as load_manifest
+
+LOCK_PATH = Path(__file__).resolve().parent / ".runner.lock"
+
+
+class LockedError(Exception):
+    pass
+
+
+def acquire_lock(lock_path: Path = LOCK_PATH) -> None:
+    """One job at a time (#12): refuse to start a second run."""
+    try:
+        fd = os.open(lock_path, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+    except FileExistsError:
+        pid = lock_path.read_text().strip() if lock_path.exists() else "?"
+        if pid.isdigit() and _pid_alive(int(pid)):
+            raise LockedError(f"another run is in progress (pid {pid}, lock {lock_path})")
+        lock_path.unlink(missing_ok=True)  # stale: the owning process is gone
+        return acquire_lock(lock_path)
+    else:
+        os.write(fd, str(os.getpid()).encode())
+        os.close(fd)
+
+
+def release_lock(lock_path: Path = LOCK_PATH) -> None:
+    lock_path.unlink(missing_ok=True)
+
+
+def _pid_alive(pid: int) -> bool:
+    try:
+        os.kill(pid, 0)
+    except OSError:
+        return False
+    return True
+
+
+def node_dir(workdir: Path, name: str) -> Path:
+    return workdir / "nodes" / name
+
+
+def resolve_paths(workdir: Path, node: dict, nodes_by_name: dict) -> tuple[types.SimpleNamespace, types.SimpleNamespace]:
+    """Absolute paths for {in.x} / {out.x}: deterministic from workdir + names, never stored."""
+    out = {key: str(node_dir(workdir, node["name"]) / rel) for key, rel in node.get("outputs", {}).items()}
+    inp = {}
+    for key, ref in node.get("inputs", {}).items():
+        producer = nodes_by_name[ref["node"]]
+        inp[key] = str(node_dir(workdir, producer["name"]) / producer["outputs"][ref["output"]])
+    return types.SimpleNamespace(**inp), types.SimpleNamespace(**out)
+
+
+def manifest_hash(data: dict) -> str:
+    return hashlib.sha256(json.dumps(data, sort_keys=True).encode()).hexdigest()
+
+
+def load_state(workdir: Path) -> dict:
+    path = workdir / "state.json"
+    return json.loads(path.read_text()) if path.exists() else {}
+
+
+def save_state(workdir: Path, state: dict) -> None:
+    (workdir / "state.json").write_text(json.dumps(state, indent=1))
+
+
+def run(manifest_path: Path, workdir: Path) -> None:
+    """Run every Node in order; resume past ones already marked done."""
+    data = load_manifest(manifest_path)
+    workdir.mkdir(parents=True, exist_ok=True)
+    nodes_by_name = {n["name"]: n for n in data["nodes"]}
+
+    state = load_state(workdir)
+    digest = manifest_hash(data)
+    if state.get("manifest_hash") != digest:
+        if state:
+            print(f"Manifest changed since the last run in {workdir}; starting over.", file=sys.stderr)
+        state = {"manifest_hash": digest, "nodes": {}}
+
+    acquire_lock()
+    try:
+        for node in data["nodes"]:
+            name = node["name"]
+            if state["nodes"].get(name, {}).get("status") == "done":
+                print(f"skip {name} (already done)")
+                continue
+
+            node_dir(workdir, name).mkdir(parents=True, exist_ok=True)
+            inp, out = resolve_paths(workdir, node, nodes_by_name)
+            command = [arg.format(**{"in": inp, "out": out}) for arg in node["command"]]
+            if "image" in node:
+                command = ["docker", "run", "--rm", "-v", f"{workdir}:{workdir}", node["image"], *command]
+
+            print(f"run {name}: {' '.join(command)}")
+            result = subprocess.run(command)
+
+            if result.returncode != 0:
+                state["nodes"][name] = {"status": "failed", "returncode": result.returncode}
+                save_state(workdir, state)
+                print(f"{name} failed (exit {result.returncode}); run stopped.", file=sys.stderr)
+                sys.exit(result.returncode)  # the exit code is final, never softened
+
+            state["nodes"][name] = {"status": "done", "returncode": 0}
+            save_state(workdir, state)
+    finally:
+        release_lock()
+
+    print(f"pipeline '{data['pipeline']}' complete.")
+
+
+# --- self-check -------------------------------------------------------
+
+def _write(path: Path, data: dict) -> Path:
+    path.write_text(json.dumps(data))
+    return path
+
+
+def _selftest() -> None:
+    import tempfile
+
+    py = sys.executable
+
+    # 1. Schema rejects malformed Manifests.
+    from manifest import validate
+    assert validate({"pipeline": "x", "nodes": []}), "empty nodes list should be rejected"
+    assert validate({"nodes": [{"name": "a", "command": ["x"]}]}), "missing pipeline name should be rejected"
+    assert validate({"pipeline": "x", "nodes": [{"name": "a", "command": ["x"]}, {"name": "a", "command": ["y"]}]}), "duplicate names should be rejected"
+    assert validate({"pipeline": "x", "nodes": [{"name": "a", "command": ["x"], "inputs": {"z": {"node": "nope", "output": "o"}}}]}), "unknown input reference should be rejected"
+    assert not validate({"pipeline": "x", "nodes": [{"name": "a", "command": ["x"]}]}), "a well-formed Manifest should pass"
+
+    with tempfile.TemporaryDirectory() as tmp:
+        tmp = Path(tmp)
+
+        # 2. Nodes run in order, outputs wired into the next Node's inputs.
+        wired = _write(tmp / "wired.json", {
+            "pipeline": "wiring-check",
+            "nodes": [
+                {
+                    "name": "produce",
+                    "command": [py, "-c", "import sys,pathlib; pathlib.Path(sys.argv[1]).write_text('hello')", "{out.data}"],
+                    "outputs": {"data": "data.txt"},
+                },
+                {
+                    "name": "consume",
+                    "command": [py, "-c", "import sys,pathlib; pathlib.Path(sys.argv[2]).write_text(pathlib.Path(sys.argv[1]).read_text().upper())", "{in.data}", "{out.result}"],
+                    "inputs": {"data": {"node": "produce", "output": "data"}},
+                    "outputs": {"result": "result.txt"},
+                },
+            ],
+        })
+        run(wired, tmp / "run1")
+        assert (tmp / "run1" / "nodes" / "consume" / "result.txt").read_text() == "HELLO"
+
+        # 3 & 4. A failing Node stops the run with its own exit code, never softened;
+        #        a completed Node is skipped on resume; a Node gated on the failure
+        #        never runs until the run actually proceeds past it.
+        gate = tmp / "gate"  # absent => step2 fails; created between the two runs
+        counter = tmp / "counter"
+        done_marker = tmp / "done"
+        resumable = _write(tmp / "resumable.json", {
+            "pipeline": "resume-check",
+            "nodes": [
+                {
+                    "name": "step1",
+                    "command": [py, "-c",
+                                "import sys,pathlib; p=pathlib.Path(sys.argv[1]); p.write_text(str(int(p.read_text() or 0) + 1)) if p.exists() else p.write_text('1')",
+                                str(counter)],
+                },
+                {
+                    "name": "step2",
+                    "command": [py, "-c",
+                                "import sys,pathlib; sys.exit(0 if pathlib.Path(sys.argv[1]).exists() else 5)",
+                                str(gate)],
+                },
+                {
+                    "name": "step3",
+                    "command": [py, "-c", "import sys,pathlib; pathlib.Path(sys.argv[1]).touch()", str(done_marker)],
+                },
+            ],
+        })
+        run_dir = tmp / "run2"
+        try:
+            run(resumable, run_dir)
+        except SystemExit as e:
+            assert e.code == 5, f"expected step2's own exit code 5, got {e.code}"
+        else:
+            raise AssertionError("a failing Node should have stopped the run")
+        assert counter.read_text() == "1"
+        assert not done_marker.exists(), "step3 must not run once step2 failed"
+        state = load_state(run_dir)
+        assert state["nodes"]["step1"]["status"] == "done"
+        assert state["nodes"]["step2"]["status"] == "failed"
+
+        gate.touch()
+        run(resumable, run_dir)  # resume: step1 must be skipped, not re-run
+        assert counter.read_text() == "1", "a completed Node re-ran on resume"
+        assert done_marker.exists(), "step3 should run once step2 passes"
+
+        # Lock: a run cannot start while another is already flagged in progress.
+        acquire_lock()
+        try:
+            try:
+                acquire_lock()
+            except LockedError:
+                pass
+            else:
+                raise AssertionError("a second concurrent run should have been refused")
+        finally:
+            release_lock()
+
+    print("runner self-check: ok")
+
+
+def main() -> None:
+    p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    p.add_argument("manifest", nargs="?", type=Path, help="the Manifest to run")
+    p.add_argument("--workdir", type=Path, default=Path("run"), help="where Node outputs and state.json live")
+    p.add_argument("--selftest", action="store_true", help="run the offline self-check and exit")
+    args = p.parse_args()
+
+    if args.selftest:
+        _selftest()
+        return
+    if not args.manifest:
+        sys.exit("name a Manifest to run")
+
+    try:
+        run(args.manifest, args.workdir)
+    except (ManifestError, LockedError) as e:
+        sys.exit(str(e))
+
+
+if __name__ == "__main__":
+    main()
