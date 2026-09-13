@@ -16,6 +16,7 @@ Usage:
 import argparse
 import json
 import math
+import sys
 import time
 import zipfile
 from pathlib import Path
@@ -29,6 +30,11 @@ DRONE_ENUM, DRONE_SUB_ENUM = 68, 0
 # Read off the controller's own capability files, not from a library's constants.
 LIMITS = {"gimbal_pitch": (-90.0, 55.0), "speed": (0.1, 15.0), "max_waypoints": 200}
 NS = "http://www.uav.com/wpmz/1.0.2"
+
+# Stopping at a photo point costs roughly one v/a of extra time per waypoint:
+# decelerate to a halt, accelerate back. An estimate until the rehearsal measures
+# it. web/lib/mission.ts holds the same constant and must be changed with it.
+STOP_ACCEL_MS2 = 2.5
 
 
 def local_frame(points):
@@ -248,7 +254,7 @@ def write_kmz(path, name, pts, alt, speed, pitch, turn_mode):
         z.writestr("wpmz/waylines.wpml", waylines)
 
 
-def verify(pts, plan, alt, speed, pitch):
+def verify(pts, plan, alt, speed, pitch, turn="through"):
     """Check the mission against the request and the aircraft's limits before it is loaded."""
     problems = []
     lo, hi = LIMITS["gimbal_pitch"]
@@ -271,19 +277,42 @@ def verify(pts, plan, alt, speed, pitch):
         problems.append(f"measured spacing {measured:.2f} m differs from intended {plan['fwd_spacing_m']:.2f} m by {drift:.1f}%")
 
     dist = sum(geodesic_m(pts[i], pts[i + 1]) for i in range(len(pts) - 1))
+    # Stopping at each point buys a still taken at rest and costs time per waypoint.
+    penalty = len(pts) * speed / STOP_ACCEL_MS2 if turn == "stop" else 0.0
     return {
         "measured_fwd_spacing_m": round(measured, 2),
         "path_length_m": round(dist),
-        "flight_time_min_at_speed": round(dist / speed / 60, 1),
+        "flight_time_min_at_speed": round((dist / speed + penalty) / 60, 1),
         "problems": problems,
     }
 
 
+def load_spec(path, args):
+    """Fill the arguments from a Mission Spec written by the planner (web/lib/spec.ts)."""
+    spec = json.loads(Path(path).read_text())
+    if spec.get("version") != 1:
+        raise SystemExit(f"unsupported Mission Spec version {spec.get('version')!r}")
+    f, cam = spec["flight"], spec["camera"]
+    args.aoi = [f"{lat},{lon}" for lat, lon in spec["aoi"]]
+    args.altitude = f["altitude_m"]
+    args.forward_overlap = f["forward_overlap_pct"]
+    args.side_overlap = f["side_overlap_pct"]
+    args.gimbal = f["gimbal_pitch_deg"]
+    args.speed = f["speed_ms"]
+    args.turn = f["turn"]
+    args.margin_passes = f["margin_passes"]
+    args.interval = cam["interval_s"]
+    if not args.name:
+        args.name = f"{spec['site']} {spec['date']}".strip()
+    return spec
+
+
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--aoi", nargs="+", required=True, help="polygon corners as lat,lon")
+    ap.add_argument("--spec", help="Mission Spec JSON from the planner; supplies everything but --out")
+    ap.add_argument("--aoi", nargs="+", help="polygon corners as lat,lon")
     ap.add_argument("--out", required=True)
-    ap.add_argument("--name", required=True)
+    ap.add_argument("--name")
     ap.add_argument("--altitude", type=float, default=80.0)
     ap.add_argument("--forward-overlap", type=float, default=80.0)
     ap.add_argument("--side-overlap", type=float, default=70.0)
@@ -299,6 +328,11 @@ def main():
                          "missions start at different corners and can be told apart on the Controller")
     args = ap.parse_args()
 
+    if args.spec:
+        load_spec(args.spec, args)
+    if not args.aoi or not args.name:
+        ap.error("--spec, or both --aoi and --name, are required")
+
     # The camera, not the aircraft, sets the pace when a photo is due at every
     # waypoint: DJI Fly cannot shoot faster than its interval, and a mission
     # flown quicker than that silently drops photographs.
@@ -307,8 +341,9 @@ def main():
         spacing = along * (1 - args.forward_overlap / 100)
         cap = spacing / args.interval
         if args.speed > cap:
+            # Notices go to stderr: stdout is the machine-readable report.
             print(f"speed capped at {cap:.2f} m/s by the {args.interval:g}s shutter interval "
-                  f"(was {args.speed:g})")
+                  f"(was {args.speed:g})", file=sys.stderr)
             args.speed = round(cap, 2)
 
     aoi = [tuple(float(v) for v in c.split(",")) for c in args.aoi]
@@ -330,6 +365,12 @@ def main():
     # Balance the parts rather than filling each to the ceiling: packing greedily
     # gives a long leg followed by a stub, which is a poor sequence in the field.
     per_line = len(rows[0])
+    if per_line > LIMITS["max_waypoints"]:
+        print(json.dumps({"problems": [
+            f"one flight line holds {per_line} waypoints, more than DJI Fly's "
+            f"{LIMITS['max_waypoints']}; the area is too long to split at a line boundary"
+        ]}, indent=2))
+        return 1
     n_parts = max(1, math.ceil(len(pts) / LIMITS["max_waypoints"]))
     lines_per_part = math.ceil(len(rows) / n_parts)
     while lines_per_part * per_line > LIMITS["max_waypoints"]:
@@ -348,7 +389,7 @@ def main():
     for i, part in enumerate(parts, 1):
         path = out if len(parts) == 1 else out.with_name(f"{out.stem}-part{i}{out.suffix}")
         name = args.name if len(parts) == 1 else f"{args.name} part {i}"
-        report = verify(part, plan, args.altitude, args.speed, args.gimbal)
+        report = verify(part, plan, args.altitude, args.speed, args.gimbal, args.turn)
         write_kmz(path, name, part, args.altitude, args.speed, args.gimbal, turn_mode)
         failed = failed or bool(report["problems"])
         results.append({"out": str(path), "name": name, "waypoints": len(part), **report})
