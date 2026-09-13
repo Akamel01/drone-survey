@@ -119,6 +119,39 @@ and version-controlled. The KMZ is build output, never hand-edited. Flying a Sit
 again regenerates it from the same inputs, so repeat visits produce identical
 waypoints, which is what makes two Captures comparable.
 
+## Revision — how the aircraft moves, splits and paces a Capture
+
+**Movement through a photo point is an input, not a fixed rule.** The Controller's
+own Mission uses fly-through (`toPointAndPassWithContinuityCurvature`) on middle
+waypoints and stop-and-turn at the ends, so photographs at exact positions do not
+require stopping. Both are offered when a Mission is planned, with the predicted
+flight time shown for each, and the operator chooses. **The default is set by
+measurement, not by argument**: the same Mission is flown both ways and the
+results compared — coverage, flight time, batteries used, and whether motion blur
+appears at the chosen speed.
+
+**Arming interval capture by hand is acceptable to the operator**, so a Mission
+that relies on a camera timer is not disqualified. It remains second choice,
+because timer spacing drifts with wind and turns while photo actions fire at
+computed positions, but it is not the manual step
+[ADR 0015](0015-automation-is-the-primary-goal.md) exists to remove.
+
+**A Site larger than one Mission is split at the end of a flight line**, with one
+waypoint shared across the seam so the next leg resumes where the last ended.
+Battery endurance sets the split before the 200-waypoint ceiling does. Each part
+is its own Mission in its own Placeholder slot, named by Site, date and part.
+
+**Speed follows a blur budget**, not a constant: derived from the ground
+resolution and the shutter time so the aircraft moves under roughly half a pixel
+during an exposure, capped by the Controller's stated 15 m/s and held below the
+~12 m/s point where the RC2 is reported to drop Missions to 2.5 m/s. The proving
+flight measures whether the computed speed holds in the air.
+
+**Deferred, and worth designing for:** a Capture that pauses for a battery change
+at the take-off point and continues where it stopped, using the aircraft's own
+return-to-home. Whether DJI Fly can resume an interrupted Mission at all is
+unconfirmed, and is being researched before anything is built on it.
+
 ## Considered and rejected
 
 - **Waylines mode.** It carries no photo actions, so it needs interval shooting
