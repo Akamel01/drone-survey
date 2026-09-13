@@ -26,11 +26,13 @@
   z-index: 1;
 }
 
+/* Take-off, not the orbit subject: those are different things and the subject
+   marker is the amber one, so this reads as its own mark rather than a twin. */
 .homeMarker {
-  width: 14px;
-  height: 14px;
-  border-radius: 50%;
-  background: #e0a94f;
+  width: 12px;
+  height: 12px;
+  background: #f2f5f7;
   border: 2px solid #06110f;
-  box-shadow: 0 0 0 2px #e0a94f;
+  box-shadow: 0 0 0 2px #f2f5f7;
+  transform: rotate(45deg);
 }

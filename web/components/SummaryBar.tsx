@@ -16,6 +16,7 @@ export default function SummaryBar({ spec, preview, onSaveMission }: SummaryBarP
   const [copied, setCopied] = useState(false);
   const [saved, setSaved] = useState(false);
   const hasProblems = preview.problems.length > 0;
+  const isOrbit = spec.mission_type === "orbit";
 
   function save() {
     onSaveMission();
@@ -34,9 +35,19 @@ export default function SummaryBar({ spec, preview, onSaveMission }: SummaryBarP
       <div className={styles.row}>
         <Stat label="GSD" value={preview.gsd_cm.toFixed(2)} unit="cm/px" />
         <Stat label="Photos" value={String(preview.photo_count)} />
-        <Stat label="Lines" value={String(preview.line_count)} />
-        <Stat label="Fwd spacing" value={preview.fwd_spacing_m.toFixed(1)} unit="m" />
-        <Stat label="Side spacing" value={preview.side_spacing_m.toFixed(1)} unit="m" />
+        {/* The same three numbers mean different things for an orbit, so they
+            are named for what they are rather than left quietly wrong. */}
+        <Stat label={isOrbit ? "Rings" : "Lines"} value={String(preview.line_count)} />
+        <Stat
+          label={isOrbit ? "Arc spacing" : "Fwd spacing"}
+          value={preview.fwd_spacing_m.toFixed(1)}
+          unit="m"
+        />
+        <Stat
+          label={isOrbit ? "Ring spacing" : "Side spacing"}
+          value={preview.side_spacing_m.toFixed(1)}
+          unit="m"
+        />
         <Stat
           label="Effective speed"
           value={preview.capped_speed_ms.toFixed(1)}

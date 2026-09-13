@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { DEFAULT_SPEC, type MissionSpec } from "@/lib/spec";
+import { DEFAULT_SPEC, type CircleShape, type MissionSpec } from "@/lib/spec";
 import { preview, areaHectares } from "@/lib/mission";
 import { loadSavedMissions, saveMission, deleteMission, type SavedMission } from "@/lib/savedMissions";
 import MapPane, { type DrawMode } from "@/components/MapPane";
@@ -12,9 +12,11 @@ import styles from "./plan.module.css";
 export default function PlanPage() {
   const [spec, setSpecState] = useState<MissionSpec>(DEFAULT_SPEC);
   const [mode, setMode] = useState<DrawMode>("idle");
+  // Off by default: the operator expects a number on every photo position to
+  // crowd the map, and they are right at 400 positions.
+  const [showNumbers, setShowNumbers] = useState(false);
   // Empty on the server (no localStorage there); filled in after mount so the
-  // server-rendered and first client-rendered HTML match, then never touched
-  // by this effect again — later changes go through setSavedMissions directly.
+  // server-rendered and first client-rendered HTML match.
   const [savedMissions, setSavedMissions] = useState<SavedMission[]>([]);
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- one-time client-only read of localStorage
@@ -24,12 +26,16 @@ export default function PlanPage() {
   }, []);
 
   const setSpec = (updater: (s: MissionSpec) => MissionSpec) => setSpecState(updater);
-  const setAoi = (aoi: [number, number][]) => setSpecState((s) => ({ ...s, aoi }));
+  const setAoi = (aoi: [number, number][], shape: CircleShape | null = null) =>
+    setSpecState((s) => ({ ...s, aoi, shape }));
   const setHome = (home: [number, number]) => setSpecState((s) => ({ ...s, home }));
+  const setPoi = (center: [number, number]) =>
+    setSpecState((s) => ({ ...s, orbit: { ...s.orbit, center } }));
 
-  // Entering a draw mode starts a fresh area; leaving one (idle/set-home) does not.
+  // Choosing a shape starts a fresh area; every other mode leaves it alone, so
+  // "Add points" can resume an existing polygon.
   const selectMode = (m: DrawMode) => {
-    if (m === "draw-polygon" || m === "draw-rectangle") setAoi([]);
+    if (m === "draw-polygon" || m === "draw-rectangle" || m === "draw-circle") setAoi([], null);
     setMode(m);
   };
 
@@ -39,7 +45,17 @@ export default function PlanPage() {
   return (
     <div className={styles.page}>
       <div className={styles.top}>
-        <MapPane spec={spec} preview={preview_} mode={mode} onAoiChange={setAoi} onHomeChange={setHome} onModeChange={setMode} />
+        <MapPane
+          spec={spec}
+          preview={preview_}
+          mode={mode}
+          showNumbers={showNumbers}
+          onShowNumbersChange={setShowNumbers}
+          onAoiChange={setAoi}
+          onHomeChange={setHome}
+          onPoiChange={setPoi}
+          onModeChange={setMode}
+        />
         <Sidebar
           spec={spec}
           setSpec={setSpec}
@@ -52,7 +68,11 @@ export default function PlanPage() {
           onDeleteMission={(saved_at) => setSavedMissions(deleteMission(saved_at))}
         />
       </div>
-      <SummaryBar spec={spec} preview={preview_} onSaveMission={() => setSavedMissions(saveMission(spec))} />
+      <SummaryBar
+        spec={spec}
+        preview={preview_}
+        onSaveMission={() => setSavedMissions(saveMission(spec))}
+      />
     </div>
   );
 }

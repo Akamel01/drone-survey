@@ -11,95 +11,156 @@ import {
 } from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 import { BASEMAP, BASEMAP_OSM } from "@/lib/basemap";
-import type { MissionSpec } from "@/lib/spec";
+import { circlePolygon, geodesicM } from "@/lib/mission";
+import type { CircleShape, MissionSpec } from "@/lib/spec";
 import type { Preview } from "@/lib/mission";
 import styles from "./MapPane.module.css";
 
-export type DrawMode = "idle" | "draw-polygon" | "draw-rectangle" | "set-home" | "append-polygon";
+export type DrawMode =
+  | "idle"
+  | "draw-polygon"
+  | "draw-rectangle"
+  | "draw-circle"
+  | "append-polygon"
+  | "set-home"
+  | "set-poi";
 
 interface MapPaneProps {
   spec: MissionSpec;
   preview: Preview;
   mode: DrawMode;
-  onAoiChange: (aoi: [number, number][]) => void;
+  showNumbers: boolean;
+  onShowNumbersChange: (v: boolean) => void;
+  onAoiChange: (aoi: [number, number][], shape?: CircleShape | null) => void;
   onHomeChange: (home: [number, number]) => void;
+  onPoiChange: (center: [number, number]) => void;
   onModeChange: (mode: DrawMode) => void;
 }
 
 const START = { lat: 49.1891, lon: -122.8396, zoom: 16 };
+type LL = [number, number];
 
 // GeoJSON is [lon, lat]; the spec/contract is [lat, lon]. Convert at the edges only.
-const toLngLat = (p: [number, number]): [number, number] => [p[1], p[0]];
+const toLngLat = (p: LL): [number, number] => [p[1], p[0]];
 
-function aoiPolygonGeoJSON(aoi: [number, number][]): GeoJSON.FeatureCollection {
-  if (aoi.length < 3) return { type: "FeatureCollection", features: [] };
+/** Due east of a point, used to give a circle one radius handle to drag. */
+function eastOf(center: LL, radiusM: number): LL {
+  return [center[0], center[1] + radiusM / (111320 * Math.cos((center[0] * Math.PI) / 180))];
+}
+
+function fc(features: GeoJSON.Feature[]): GeoJSON.FeatureCollection {
+  return { type: "FeatureCollection", features };
+}
+
+function aoiPolygonGeoJSON(aoi: LL[]): GeoJSON.FeatureCollection {
+  if (aoi.length < 3) return fc([]);
   const ring = aoi.map(toLngLat);
   ring.push(ring[0]);
-  return {
-    type: "FeatureCollection",
-    features: [{ type: "Feature", properties: {}, geometry: { type: "Polygon", coordinates: [ring] } }],
-  };
+  return fc([{ type: "Feature", properties: {}, geometry: { type: "Polygon", coordinates: [ring] } }]);
 }
 
-function verticesGeoJSON(aoi: [number, number][]): GeoJSON.FeatureCollection {
-  return {
-    type: "FeatureCollection",
-    features: aoi.map((p, i) => ({
-      type: "Feature",
-      properties: { index: i },
-      geometry: { type: "Point", coordinates: toLngLat(p) },
+function pointsGeoJSON(points: LL[], props: (i: number) => object = () => ({})) {
+  return fc(
+    points.map((p, i) => ({
+      type: "Feature" as const,
+      properties: props(i),
+      geometry: { type: "Point" as const, coordinates: toLngLat(p) },
     })),
-  };
+  );
 }
 
-// Midpoint of every edge of a finished polygon — the handle that inserts a new
-// vertex between the two corners of that edge.
-function midpointsGeoJSON(aoi: [number, number][]): GeoJSON.FeatureCollection {
-  if (aoi.length < 3) return { type: "FeatureCollection", features: [] };
-  return {
-    type: "FeatureCollection",
-    features: aoi.map((p, i) => {
+/** Midpoint of every edge — the handle that inserts a vertex on that edge. */
+function midpointsGeoJSON(aoi: LL[], shape: CircleShape | null | undefined) {
+  if (aoi.length < 3 || shape) return fc([]);
+  return fc(
+    aoi.map((p, i) => {
       const q = aoi[(i + 1) % aoi.length];
-      const mid: [number, number] = [(p[0] + q[0]) / 2, (p[1] + q[1]) / 2];
       return {
-        type: "Feature",
+        type: "Feature" as const,
         properties: { edgeIndex: i },
-        geometry: { type: "Point", coordinates: toLngLat(mid) },
+        geometry: { type: "Point" as const, coordinates: toLngLat([(p[0] + q[0]) / 2, (p[1] + q[1]) / 2]) },
       };
     }),
-  };
+  );
 }
 
-function linesGeoJSON(lines: [number, number][][]): GeoJSON.FeatureCollection {
-  return {
-    type: "FeatureCollection",
-    features: lines.map((line) => ({
-      type: "Feature",
+function linesGeoJSON(lines: LL[][]) {
+  return fc(
+    lines.map((line) => ({
+      type: "Feature" as const,
       properties: {},
-      geometry: { type: "LineString", coordinates: line.map(toLngLat) },
+      geometry: { type: "LineString" as const, coordinates: line.map(toLngLat) },
     })),
-  };
+  );
 }
 
-function pointsGeoJSON(points: [number, number][]): GeoJSON.FeatureCollection {
-  return {
-    type: "FeatureCollection",
-    features: points.map((p) => ({
-      type: "Feature",
-      properties: {},
-      geometry: { type: "Point", coordinates: toLngLat(p) },
-    })),
-  };
+/**
+ * An arrowhead drawn to a canvas.
+ *
+ * Direction has to be readable at a glance, and a symbol layer placed along a
+ * line gives evenly spaced, map-rotated arrows for free. It must be an *icon*
+ * rather than a text character: the basemap style carries no `glyphs` URL, so a
+ * text symbol would render nothing at all, and silently.
+ */
+function arrowImage(): ImageData {
+  const size = 32;
+  const c = document.createElement("canvas");
+  c.width = size;
+  c.height = size;
+  const ctx = c.getContext("2d")!;
+  ctx.fillStyle = "#f2f5f7";
+  ctx.strokeStyle = "#06110f";
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(size * 0.82, size * 0.5);
+  ctx.lineTo(size * 0.3, size * 0.24);
+  ctx.lineTo(size * 0.42, size * 0.5);
+  ctx.lineTo(size * 0.3, size * 0.76);
+  ctx.closePath();
+  ctx.stroke();
+  ctx.fill();
+  return ctx.getImageData(0, 0, size, size);
 }
 
 function addLayers(map: MaplibreMap) {
   if (map.getSource("aoi")) return; // already added for this style
+  if (!map.hasImage("flight-arrow")) map.addImage("flight-arrow", arrowImage());
 
   map.addSource("aoi", { type: "geojson", data: aoiPolygonGeoJSON([]) });
   map.addLayer({ id: "aoi-fill", type: "fill", source: "aoi", paint: { "fill-color": "#4fb8a8", "fill-opacity": 0.18 } });
   map.addLayer({ id: "aoi-outline", type: "line", source: "aoi", paint: { "line-color": "#4fb8a8", "line-width": 2 } });
 
-  map.addSource("aoi-vertices", { type: "geojson", data: verticesGeoJSON([]) });
+  map.addSource("flight-lines", { type: "geojson", data: linesGeoJSON([]) });
+  map.addLayer({
+    id: "flight-lines",
+    type: "line",
+    source: "flight-lines",
+    paint: { "line-color": "#d8dcdf", "line-width": 1.5, "line-opacity": 0.8 },
+  });
+  map.addLayer({
+    id: "flight-arrows",
+    type: "symbol",
+    source: "flight-lines",
+    layout: {
+      "symbol-placement": "line",
+      "symbol-spacing": 110,
+      "icon-image": "flight-arrow",
+      "icon-size": 0.45,
+      "icon-rotation-alignment": "map",
+      "icon-allow-overlap": true,
+      "icon-ignore-placement": true,
+    },
+  });
+
+  map.addSource("flight-points", { type: "geojson", data: pointsGeoJSON([]) });
+  map.addLayer({
+    id: "flight-points",
+    type: "circle",
+    source: "flight-points",
+    paint: { "circle-radius": 2.5, "circle-color": "#e0704f" },
+  });
+
+  map.addSource("aoi-vertices", { type: "geojson", data: pointsGeoJSON([]) });
   map.addLayer({
     id: "aoi-vertices",
     type: "circle",
@@ -107,8 +168,8 @@ function addLayers(map: MaplibreMap) {
     paint: { "circle-radius": 5, "circle-color": "#4fb8a8", "circle-stroke-width": 1.5, "circle-stroke-color": "#06110f" },
   });
 
-  // Smaller, amber handles distinct from the teal vertices: click or drag to insert.
-  map.addSource("aoi-midpoints", { type: "geojson", data: midpointsGeoJSON([]) });
+  // Smaller, amber handles distinct from the teal vertices: click to insert.
+  map.addSource("aoi-midpoints", { type: "geojson", data: pointsGeoJSON([]) });
   map.addLayer({
     id: "aoi-midpoints",
     type: "circle",
@@ -122,30 +183,67 @@ function addLayers(map: MaplibreMap) {
     },
   });
 
-  map.addSource("flight-lines", { type: "geojson", data: linesGeoJSON([]) });
-  map.addLayer({ id: "flight-lines", type: "line", source: "flight-lines", paint: { "line-color": "#d8dcdf", "line-width": 1.5, "line-opacity": 0.8 } });
-
-  map.addSource("flight-points", { type: "geojson", data: pointsGeoJSON([]) });
+  // A circle is edited as a centre and a radius, not as sixty-four vertices.
+  map.addSource("circle-handles", { type: "geojson", data: pointsGeoJSON([]) });
   map.addLayer({
-    id: "flight-points",
+    id: "circle-handles",
     type: "circle",
-    source: "flight-points",
-    paint: { "circle-radius": 2.5, "circle-color": "#e0704f" },
+    source: "circle-handles",
+    paint: { "circle-radius": 6, "circle-color": "#4fb8a8", "circle-stroke-width": 2, "circle-stroke-color": "#06110f" },
   });
 }
 
-export default function MapPane({ spec, preview, mode, onAoiChange, onHomeChange, onModeChange }: MapPaneProps) {
+function labelMarker(text: string, background: string, color: string): HTMLElement {
+  const el = document.createElement("div");
+  el.textContent = text;
+  el.style.cssText = `background:${background};color:${color};font:600 10px/1 var(--mono, monospace);
+    letter-spacing:0.06em;padding:4px 6px;border-radius:4px;border:1px solid #06110f;white-space:nowrap;
+    transform:translateY(-14px);pointer-events:none`;
+  return el;
+}
+
+export default function MapPane({
+  spec,
+  preview,
+  mode,
+  showNumbers,
+  onShowNumbersChange,
+  onAoiChange,
+  onHomeChange,
+  onPoiChange,
+  onModeChange,
+}: MapPaneProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<MaplibreMap | null>(null);
   const homeMarkerRef = useRef<Marker | null>(null);
+  const poiMarkerRef = useRef<Marker | null>(null);
+  const endMarkersRef = useRef<Marker[]>([]);
+  const numberMarkersRef = useRef<Marker[]>([]);
   const [basemap, setBasemap] = useState<"esri" | "osm">("esri");
+  const [pendingRadius, setPendingRadius] = useState<number | null>(null);
 
-  // Latest props, readable from map event handlers registered once on init.
-  const stateRef = useRef({ spec, mode, onAoiChange, onHomeChange, onModeChange });
-  useEffect(() => {
-    stateRef.current = { spec, mode, onAoiChange, onHomeChange, onModeChange };
-  });
   const dragIndexRef = useRef<number | null>(null);
+  const circleDragRef = useRef<null | "center" | "radius">(null);
+  const circleCenterRef = useRef<LL | null>(null);
+
+  // Leaving circle mode with a centre placed but no radius must not leave that
+  // half-drawn circle behind, so every mode change discards it. Doing this in an
+  // effect on `mode` instead would cost a second render on every mode change.
+  const changeMode = (next: DrawMode) => {
+    if (next !== "draw-circle") {
+      circleCenterRef.current = null;
+      setPendingRadius(null);
+    }
+    onModeChange(next);
+  };
+
+  // Latest props, readable from map handlers registered once on init. This must
+  // be refreshed on every render: without it the handlers keep reading the spec
+  // as it was at mount, and every click would see an empty area.
+  const stateRef = useRef({ spec, mode, onAoiChange, onHomeChange, onPoiChange, onModeChange: changeMode });
+  useEffect(() => {
+    stateRef.current = { spec, mode, onAoiChange, onHomeChange, onPoiChange, onModeChange: changeMode };
+  });
 
   useEffect(() => {
     const map = new MaplibreMap({
@@ -169,12 +267,16 @@ export default function MapPane({ spec, preview, mode, onAoiChange, onHomeChange
     map.on("style.load", () => addLayers(map));
 
     map.on("click", (e: MapMouseEvent) => {
-      // Idle-mode clicks (including the one that follows a vertex drag) do nothing here.
-      const { mode, spec, onAoiChange, onHomeChange, onModeChange } = stateRef.current;
-      const p: [number, number] = [e.lngLat.lat, e.lngLat.lng];
+      const { mode, spec, onAoiChange, onHomeChange, onPoiChange, onModeChange } = stateRef.current;
+      const p: LL = [e.lngLat.lat, e.lngLat.lng];
 
       if (mode === "set-home") {
         onHomeChange(p);
+        onModeChange("idle");
+        return;
+      }
+      if (mode === "set-poi") {
+        onPoiChange(p);
         onModeChange("idle");
         return;
       }
@@ -187,13 +289,21 @@ export default function MapPane({ spec, preview, mode, onAoiChange, onHomeChange
           onAoiChange([p]);
         } else {
           const [a] = spec.aoi;
-          const rect: [number, number][] = [
-            [a[0], a[1]],
-            [a[0], p[1]],
-            [p[0], p[1]],
-            [p[0], a[1]],
-          ];
-          onAoiChange(rect);
+          onAoiChange([[a[0], a[1]], [a[0], p[1]], [p[0], p[1]], [p[0], a[1]]]);
+          onModeChange("idle");
+        }
+        return;
+      }
+      if (mode === "draw-circle") {
+        if (!circleCenterRef.current) {
+          circleCenterRef.current = p;
+          setPendingRadius(0);
+        } else {
+          const center = circleCenterRef.current;
+          const radius_m = Math.max(1, geodesicM(center, p));
+          circleCenterRef.current = null;
+          setPendingRadius(null);
+          onAoiChange(circlePolygon(center, radius_m), { kind: "circle", center, radius_m });
           onModeChange("idle");
         }
       }
@@ -201,7 +311,6 @@ export default function MapPane({ spec, preview, mode, onAoiChange, onHomeChange
 
     // ponytail: a double-click delivers two click events before the dblclick
     // fires, so the last 1-2 vertices are spurious clicks, not real corners.
-    // Drop them (keeping at least 3) instead of building a proper draw FSM.
     map.on("dblclick", () => {
       const { mode, spec, onAoiChange, onModeChange } = stateRef.current;
       if (mode !== "draw-polygon" && mode !== "append-polygon") return;
@@ -215,77 +324,105 @@ export default function MapPane({ spec, preview, mode, onAoiChange, onHomeChange
     });
 
     map.on("mousedown", "aoi-vertices", (e: MapLayerMouseEvent) => {
-      if (stateRef.current.mode !== "idle") return;
-      if (!e.features?.length) return;
+      if (stateRef.current.mode !== "idle" || !e.features?.length) return;
       e.preventDefault();
       dragIndexRef.current = e.features[0].properties!.index as number;
       map.dragPan.disable();
       map.getCanvas().style.cursor = "grabbing";
     });
 
-    // Right-click a vertex to delete it, refusing to go below a triangle.
-    map.on("contextmenu", "aoi-vertices", (e: MapLayerMouseEvent) => {
-      if (stateRef.current.mode !== "idle") return;
-      if (!e.features?.length) return;
-      e.originalEvent.preventDefault();
-      const { spec, onAoiChange } = stateRef.current;
-      if (spec.aoi.length <= 3) return;
-      const index = e.features[0].properties!.index as number;
-      onAoiChange(spec.aoi.filter((_, i) => i !== index));
-    });
-
-    // Click or drag a midpoint handle: splice a real vertex in at that spot,
-    // between the edge's two corners, then hand it straight to the normal
-    // vertex-drag machinery so a drag can keep repositioning it.
+    // Clicking a midpoint inserts a vertex there, then hands straight over to the
+    // existing drag machinery so a click drops it and a drag positions it.
     map.on("mousedown", "aoi-midpoints", (e: MapLayerMouseEvent) => {
-      if (stateRef.current.mode !== "idle") return;
-      if (!e.features?.length) return;
+      const { mode, spec, onAoiChange } = stateRef.current;
+      if (mode !== "idle" || !e.features?.length) return;
       e.preventDefault();
-      const { spec, onAoiChange } = stateRef.current;
-      const edgeIndex = e.features[0].properties!.edgeIndex as number;
-      const a = spec.aoi[edgeIndex];
-      const b = spec.aoi[(edgeIndex + 1) % spec.aoi.length];
-      if (!a || !b) return;
-      const mid: [number, number] = [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];
+      const edge = e.features[0].properties!.edgeIndex as number;
       const next = spec.aoi.slice();
-      next.splice(edgeIndex + 1, 0, mid);
+      next.splice(edge + 1, 0, [e.lngLat.lat, e.lngLat.lng]);
       onAoiChange(next);
-      dragIndexRef.current = edgeIndex + 1;
+      dragIndexRef.current = edge + 1;
       map.dragPan.disable();
       map.getCanvas().style.cursor = "grabbing";
     });
-    map.on("mouseenter", "aoi-midpoints", () => {
-      if (stateRef.current.mode === "idle") map.getCanvas().style.cursor = "copy";
+
+    map.on("mousedown", "circle-handles", (e: MapLayerMouseEvent) => {
+      if (stateRef.current.mode !== "idle" || !e.features?.length) return;
+      e.preventDefault();
+      circleDragRef.current = e.features[0].properties!.kind as "center" | "radius";
+      map.dragPan.disable();
+      map.getCanvas().style.cursor = "grabbing";
     });
-    map.on("mouseleave", "aoi-midpoints", () => {
-      if (dragIndexRef.current === null) map.getCanvas().style.cursor = "";
+
+    map.on("contextmenu", "aoi-vertices", (e: MapLayerMouseEvent) => {
+      const { spec, onAoiChange } = stateRef.current;
+      if (!e.features?.length || spec.shape) return;
+      e.preventDefault();
+      e.originalEvent.preventDefault();
+      if (spec.aoi.length <= 3) return; // a polygon needs three corners
+      const i = e.features[0].properties!.index as number;
+      onAoiChange(spec.aoi.filter((_, j) => j !== i));
     });
 
     map.on("mousemove", (e: MapMouseEvent) => {
+      const { spec, onAoiChange, mode } = stateRef.current;
+      const p: LL = [e.lngLat.lat, e.lngLat.lng];
+
+      // Live circle while it is being drawn, painted straight into the source:
+      // committing to state on every mouse move would be a render per pixel.
+      if (mode === "draw-circle" && circleCenterRef.current) {
+        const r = Math.max(1, geodesicM(circleCenterRef.current, p));
+        const src = map.getSource("aoi") as GeoJSONSource | undefined;
+        if (src) src.setData(aoiPolygonGeoJSON(circlePolygon(circleCenterRef.current, r)));
+        setPendingRadius(r);
+        return;
+      }
+
+      if (circleDragRef.current && spec.shape) {
+        const s = spec.shape;
+        if (circleDragRef.current === "center") {
+          onAoiChange(circlePolygon(p, s.radius_m), { ...s, center: p });
+        } else {
+          const radius_m = Math.max(1, geodesicM(s.center, p));
+          onAoiChange(circlePolygon(s.center, radius_m), { ...s, radius_m });
+        }
+        return;
+      }
+
       if (dragIndexRef.current === null) return;
-      const { spec, onAoiChange } = stateRef.current;
       const next = spec.aoi.slice();
-      next[dragIndexRef.current] = [e.lngLat.lat, e.lngLat.lng];
-      onAoiChange(next);
+      next[dragIndexRef.current] = p;
+      onAoiChange(next, spec.shape);
     });
 
     const endDrag = () => {
-      if (dragIndexRef.current === null) return;
+      if (dragIndexRef.current === null && circleDragRef.current === null) return;
       dragIndexRef.current = null;
+      circleDragRef.current = null;
       map.dragPan.enable();
       map.getCanvas().style.cursor = "";
     };
     map.on("mouseup", endDrag);
-    map.on("mouseenter", "aoi-vertices", () => {
-      if (stateRef.current.mode === "idle") map.getCanvas().style.cursor = "grab";
-    });
-    map.on("mouseleave", "aoi-vertices", () => {
-      if (dragIndexRef.current === null) map.getCanvas().style.cursor = "";
-    });
+    for (const layer of ["aoi-vertices", "aoi-midpoints", "circle-handles"]) {
+      map.on("mouseenter", layer, () => {
+        if (stateRef.current.mode === "idle") map.getCanvas().style.cursor = "grab";
+      });
+      map.on("mouseleave", layer, () => {
+        if (dragIndexRef.current === null && circleDragRef.current === null) {
+          map.getCanvas().style.cursor = "";
+        }
+      });
+    }
 
     const onKeydown = (e: KeyboardEvent) => {
-      if (e.key !== "Enter") return;
       const { mode, spec, onAoiChange, onModeChange } = stateRef.current;
+      if (e.key === "Escape") {
+        circleCenterRef.current = null;
+        setPendingRadius(null);
+        onModeChange("idle");
+        return;
+      }
+      if (e.key !== "Enter") return;
       if ((mode === "draw-polygon" || mode === "append-polygon") && spec.aoi.length >= 3) {
         onAoiChange(spec.aoi);
         onModeChange("idle");
@@ -299,19 +436,69 @@ export default function MapPane({ spec, preview, mode, onAoiChange, onHomeChange
     };
   }, []);
 
-  // Push data updates into the live sources whenever the spec/preview change.
+  // Push data into the live sources whenever the spec or the preview changes.
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !map.getSource("aoi")) return;
-    (map.getSource("aoi") as GeoJSONSource).setData(aoiPolygonGeoJSON(spec.aoi));
-    (map.getSource("aoi-vertices") as GeoJSONSource).setData(verticesGeoJSON(spec.aoi));
-    // Handles only make sense once a polygon is finished, not while it's still being drawn.
-    (map.getSource("aoi-midpoints") as GeoJSONSource).setData(
-      midpointsGeoJSON(mode === "idle" ? spec.aoi : []),
+    const isOrbit = spec.mission_type === "orbit";
+    const set = (id: string, data: GeoJSON.FeatureCollection) =>
+      (map.getSource(id) as GeoJSONSource).setData(data);
+
+    set("aoi", isOrbit ? fc([]) : aoiPolygonGeoJSON(spec.aoi));
+    set("aoi-vertices", isOrbit || spec.shape ? fc([]) : pointsGeoJSON(spec.aoi, (i) => ({ index: i })));
+    set("aoi-midpoints", isOrbit || mode !== "idle" ? fc([]) : midpointsGeoJSON(spec.aoi, spec.shape));
+    set(
+      "circle-handles",
+      !isOrbit && spec.shape
+        ? fc([
+            {
+              type: "Feature",
+              properties: { kind: "center" },
+              geometry: { type: "Point", coordinates: toLngLat(spec.shape.center) },
+            },
+            {
+              type: "Feature",
+              properties: { kind: "radius" },
+              geometry: { type: "Point", coordinates: toLngLat(eastOf(spec.shape.center, spec.shape.radius_m)) },
+            },
+          ])
+        : fc([]),
     );
-    (map.getSource("flight-lines") as GeoJSONSource).setData(linesGeoJSON(preview.lines));
-    (map.getSource("flight-points") as GeoJSONSource).setData(pointsGeoJSON(preview.points));
+    set("flight-lines", linesGeoJSON(preview.lines));
+    set("flight-points", pointsGeoJSON(preview.points));
   });
+
+  // Where the path begins and where it ends, so a wasteful route is obvious.
+  useEffect(() => {
+    const map = mapRef.current;
+    endMarkersRef.current.forEach((m) => m.remove());
+    endMarkersRef.current = [];
+    if (!map || preview.points.length < 2) return;
+    const first = preview.points[0];
+    const last = preview.points[preview.points.length - 1];
+    const start = new Marker({ element: labelMarker("START", "#4fb8a8", "#06110f"), anchor: "bottom" })
+      .setLngLat(toLngLat(first))
+      .addTo(map);
+    const end = new Marker({ element: labelMarker("END", "#e0704f", "#06110f"), anchor: "bottom" })
+      .setLngLat(toLngLat(last))
+      .addTo(map);
+    endMarkersRef.current = [start, end];
+  }, [preview.points]);
+
+  // Capture order, off by default: a number on every position crowds the map.
+  useEffect(() => {
+    const map = mapRef.current;
+    numberMarkersRef.current.forEach((m) => m.remove());
+    numberMarkersRef.current = [];
+    if (!map || !showNumbers) return;
+    numberMarkersRef.current = preview.points.map((p, i) => {
+      const el = document.createElement("div");
+      el.textContent = String(i + 1);
+      el.style.cssText = `color:#f2f5f7;font:600 10px/1 var(--mono, monospace);
+        text-shadow:0 0 3px #06110f,0 0 3px #06110f;pointer-events:none;transform:translate(6px,-6px)`;
+      return new Marker({ element: el, anchor: "left" }).setLngLat(toLngLat(p)).addTo(map);
+    });
+  }, [preview.points, showNumbers]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -321,15 +508,36 @@ export default function MapPane({ spec, preview, mode, onAoiChange, onHomeChange
       homeMarkerRef.current = null;
       return;
     }
-    const lngLat = toLngLat(spec.home);
     if (!homeMarkerRef.current) {
       const el = document.createElement("div");
       el.className = styles.homeMarker;
       homeMarkerRef.current = new Marker({ element: el, anchor: "center" });
     }
-    homeMarkerRef.current.setLngLat(lngLat).addTo(map);
+    homeMarkerRef.current.setLngLat(toLngLat(spec.home)).addTo(map);
   }, [spec.home]);
 
+  // The subject an orbit is flown around.
+  useEffect(() => {
+    const map = mapRef.current;
+    const center = spec.orbit.center;
+    if (!map || spec.mission_type !== "orbit" || !center) {
+      poiMarkerRef.current?.remove();
+      poiMarkerRef.current = null;
+      return;
+    }
+    if (!poiMarkerRef.current) {
+      const el = document.createElement("div");
+      el.style.cssText = `width:14px;height:14px;border-radius:50%;background:#e0a94f;
+        border:2px solid #06110f;box-shadow:0 0 0 4px rgba(224,169,79,0.25)`;
+      poiMarkerRef.current = new Marker({ element: el, anchor: "center" });
+    }
+    poiMarkerRef.current.setLngLat(toLngLat(center)).addTo(map);
+  }, [spec.mission_type, spec.orbit.center]);
+
+  // Only the cursor belongs here: it is an external system being synchronised
+  // with React state. The half-drawn circle is cleared where the mode actually
+  // changes instead, because reacting to the change afterwards means a second
+  // render every time the mode moves.
   useEffect(() => {
     const map = mapRef.current;
     if (map) map.getCanvas().style.cursor = mode === "idle" ? "" : "crosshair";
@@ -350,12 +558,26 @@ export default function MapPane({ spec, preview, mode, onAoiChange, onHomeChange
         <button className={basemap === "osm" ? "active" : ""} onClick={() => toggleBasemap("osm")}>
           OSM
         </button>
-      </div>
-      <div className={styles.homeControl}>
-        <button className={mode === "set-home" ? "active" : ""} onClick={() => onModeChange(mode === "set-home" ? "idle" : "set-home")}>
-          {mode === "set-home" ? "Click map to set home…" : "Set home point"}
+        {/* Near what it affects: a display option for the map lives on the map. */}
+        <button
+          className={showNumbers ? "active" : ""}
+          onClick={() => onShowNumbersChange(!showNumbers)}
+          title="Number each photo position in capture order"
+        >
+          Numbers
         </button>
       </div>
+      {mode === "draw-circle" && (
+        <div className={styles.homeControl}>
+          {/* Driven by state, not by the ref: a ref read during render is not
+              guaranteed to be the value React rendered with. */}
+          <button disabled>
+            {pendingRadius === null
+              ? "Click the centre"
+              : `Radius ${Math.round(pendingRadius)} m — click to finish`}
+          </button>
+        </div>
+      )}
     </div>
   );
 }

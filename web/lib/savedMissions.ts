@@ -16,11 +16,15 @@ function normalizeSpec(raw: Partial<MissionSpec> | null | undefined): MissionSpe
   const r = raw ?? {};
   return {
     version: 1,
+    // A Spec saved before orbits existed has no mission_type, and is a grid.
+    mission_type: r.mission_type === "orbit" ? "orbit" : "grid",
     site: r.site ?? DEFAULT_SPEC.site,
     date: r.date ?? DEFAULT_SPEC.date,
     aoi: Array.isArray(r.aoi) ? r.aoi : DEFAULT_SPEC.aoi,
+    shape: r.shape ?? null,
     home: r.home ?? DEFAULT_SPEC.home,
     flight: { ...DEFAULT_SPEC.flight, ...(r.flight ?? {}) },
+    orbit: { ...DEFAULT_SPEC.orbit, ...(r.orbit ?? {}) },
     camera: { ...DEFAULT_SPEC.camera, ...(r.camera ?? {}) },
   };
 }
@@ -29,11 +33,14 @@ function normalizeSpec(raw: Partial<MissionSpec> | null | undefined): MissionSpe
 export function toMissionSpec(entry: SavedMission): MissionSpec {
   return {
     version: entry.version,
+    mission_type: entry.mission_type,
     site: entry.site,
     date: entry.date,
     aoi: entry.aoi,
+    shape: entry.shape ?? null,
     home: entry.home,
     flight: entry.flight,
+    orbit: entry.orbit,
     camera: entry.camera,
   };
 }

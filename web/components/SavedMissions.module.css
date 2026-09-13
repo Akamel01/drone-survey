@@ -46,6 +46,23 @@
   margin: 0 0 8px;
 }
 
+/* The take-off point decides whether DJI Fly refuses the flight, so a mission
+   saved without one is worth seeing before it is loaded, not after. */
+.home,
+.homeMissing {
+  font-family: var(--mono);
+  font-size: 11px;
+  margin: 0 0 8px;
+}
+
+.home {
+  color: var(--text-dim);
+}
+
+.homeMissing {
+  color: var(--warn);
+}
+
 .entryActions {
   display: flex;
   gap: 6px;
