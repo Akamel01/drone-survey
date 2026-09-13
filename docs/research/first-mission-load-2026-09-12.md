@@ -48,17 +48,44 @@ removed first. A loader must do the same.
 
 ## Still unknown, and each matters
 
-- **What DJI Fly displays.** Mission names live in DJI Fly's own database, not in
-  the file, and the thumbnails under `map_preview/` were generated from the
-  missions that used to be in those slots. The list may therefore show the old
-  names and old pictures over the new flight plans. Only opening the list on the
-  Controller answers it.
-- **Whether opening a Mission causes DJI Fly to rewrite it.** FlyPath reports
-  that the app rebuilds `waylines.wpml` from `template.kml` on save or cloud
-  sync. Re-reading a slot after the operator opens it will show whether our file
-  survives being viewed.
+- ~~What DJI Fly displays.~~ **Answered: the loaded Missions display correctly.**
+  The operator opened all four on the Controller and confirmed the waypoints
+  appear. Mission names still come from DJI Fly's own database rather than our
+  file, so the slot labelling in ADR 0016 stands.
+- ~~Whether opening a Mission causes DJI Fly to rewrite it.~~ **Answered: it does
+  not.** After the operator opened all four, each slot's file was still
+  byte-identical to its source. FlyPath's report that the app rebuilds
+  `waylines.wpml` from `template.kml` does not apply to merely viewing a Mission
+  — though it may still apply to one that is *edited and saved* in the app, which
+  we have no reason to do and should avoid.
 - **Whether the aircraft flies it**, takes a photograph at each waypoint, and
   holds −80°. That is the proving flight (#10).
+
+## Stopping at a point is a turn mode, not an action
+
+Worth stating because it reads as a missing feature. The two variants differ in
+exactly one field, `waypointTurnMode`:
+
+| | fly-through | stop-at-point |
+|---|---|---|
+| `waypointTurnMode` | `toPointAndPassWithContinuityCurvature` | `toPointAndStopWithContinuityCurvature` |
+| `takePhoto` actions | 120 | 120 |
+| Everything else | identical | identical |
+
+The stop variant decelerates to a halt at each photo position, captures, and
+accelerates on. It carries no `hover` action, because a hover is a separate
+instruction meaning "remain here for N seconds" — the five-second dwell in the
+operator's own test Mission.
+
+**Whether a short hover would help is unresolved and probably not worth the
+cost.** Stopping already removes motion during the exposure. A hover would only
+settle residual oscillation, and since our action groups run in `parallel` mode
+with a `reachPoint` trigger, the photograph is taken on arrival rather than after
+the hover elapses — so a hover may add time without delaying the shutter at all.
+Making the aircraft settle *before* capturing would need a `sequence` group with
+the hover first, which is not the shape DJI Fly writes for itself and is
+therefore unproven. If the stop variant's photographs show smearing, that is the
+experiment to run.
 
 ## An aside worth recording
 
