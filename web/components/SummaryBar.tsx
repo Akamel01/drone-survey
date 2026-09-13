@@ -16,7 +16,7 @@ interface SummaryBarProps {
 // secret the operator holds, not something the planner should ship with.
 const PASSPHRASE_KEY = "drone-planner.wayfinder-key";
 
-type DispatchState = { kind: "idle" } | { kind: "sending" } | { kind: "ok"; key: string } | { kind: "error"; message: string };
+type DispatchState = { kind: "idle" } | { kind: "sending" } | { kind: "ok"; key: string; parts: number } | { kind: "error"; message: string };
 
 export default function SummaryBar({ spec, preview, onSaveMission }: SummaryBarProps) {
   const [copied, setCopied] = useState(false);
@@ -57,7 +57,7 @@ export default function SummaryBar({ spec, preview, onSaveMission }: SummaryBarP
       // A failed Dispatch must never look like a success, so only a 2xx with
       // a storage key counts — anything else surfaces the server's own text.
       if (res.ok && body.key) {
-        setDispatch({ kind: "ok", key: body.key });
+        setDispatch({ kind: "ok", key: body.key, parts: preview.parts });
       } else {
         setDispatch({ kind: "error", message: body.error ?? `Dispatch failed (${res.status})` });
       }
@@ -138,7 +138,11 @@ export default function SummaryBar({ spec, preview, onSaveMission }: SummaryBarP
           </button>
         </div>
       </div>
-      {dispatch.kind === "ok" && <div className={styles.dispatchOk}>Dispatched: {dispatch.key}</div>}
+      {dispatch.kind === "ok" && (
+        <div className={styles.dispatchOk}>
+          Dispatched: {dispatch.key}. On the Controller, open {cardsFor(dispatch.parts)} once it is Loaded.
+        </div>
+      )}
       {dispatch.kind === "error" && <div className={styles.dispatchError}>{dispatch.message}</div>}
       {hasProblems && (
         <ul className={styles.problems}>
@@ -149,6 +153,12 @@ export default function SummaryBar({ spec, preview, onSaveMission }: SummaryBarP
       )}
     </div>
   );
+}
+
+// A Load puts part i into card WAYFINDER i (ADR 0016), so the card is known
+// before the Controller is plugged in.
+function cardsFor(parts: number): string {
+  return parts > 1 ? `WAYFINDER 1 to WAYFINDER ${parts}, one part each, in order` : "WAYFINDER 1";
 }
 
 function Stat({
