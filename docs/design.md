@@ -246,6 +246,29 @@ mechanism used across dates.
 > AGPL-3.0, and modifying it changes our obligations
 > ([ADR 0001](adr/0001-opendronemap-for-orthomosaics.md)).
 
+### Verification: each Node, then the whole path
+
+Every Node is verified against a known input, and its check measures the output
+rather than reading the exit status. That distinction is not theoretical here: a
+run of ODM exited cleanly having produced a 934-face mesh from a 5.4-million-point
+cloud and an orthophoto that was 87% empty, and NodeODM's `cog` flag reports
+success while writing a file that fails GDAL's validator.
+
+**Passing Nodes individually proves nothing about the seams between them**, and
+the seams are where the expensive failures live. OpenSplat's first run failed in
+45 seconds because ODM records absolute image paths from the container it ran in —
+two Nodes, each correct, joined wrongly. So after the Nodes pass in isolation,
+**the whole path runs end to end on a real Capture, from ingest to Delivery
+Bundle, before anything reaches a client**.
+
+A Node that changes re-runs the end-to-end pass, not only its own check. The
+golden Capture is what makes that cheap enough to actually happen rather than
+being skipped under time pressure.
+
+Gates decide, not people. Humans are involved by exception when a gate fails, and
+during a declared calibration period while a gate's thresholds are still being
+learned.
+
 ## 5. Capture standard
 
 Capture is part of the system, not a precondition of it. A Capture flown wrongly

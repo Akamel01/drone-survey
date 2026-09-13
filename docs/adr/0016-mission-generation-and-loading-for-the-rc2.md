@@ -152,6 +152,28 @@ at the take-off point and continues where it stopped, using the aircraft's own
 return-to-home. Whether DJI Fly can resume an interrupted Mission at all is
 unconfirmed, and is being researched before anything is built on it.
 
+## Revision — Placeholder slots and what does the loading
+
+**Placeholder Missions are a fixed pool, created once.** The operator makes
+roughly eight by hand in DJI Fly and never repeats the exercise. The loader keeps
+its own record of which slot currently holds which Site and part, and overwrites
+the same slots on every trip. Creating one per flight would put a manual step
+back into every Capture.
+
+**The Controller's own labels are the identification, not ours.** DJI Fly shows a
+mission name and a thumbnail it generated itself, and neither lives in the file
+we overwrite — so after a Load the list may still show the previous Site's name
+and picture while the file underneath is current. The slots are therefore
+labelled once, plainly, and **the loader reports which slot holds which Site and
+part for this trip**. Whether a written name propagates into DJI Fly's list is
+worth testing during the first write, but nothing depends on it.
+
+**Loading is its own small program, not a Runner Node.** It is triggered by the
+Controller being plugged in, hours after the work that produced the files. The
+Runner generates and verifies Missions; the loader copies verified files and
+reports what it did. Teaching the Runner about USB devices would breach the
+thinness threshold [ADR 0006](0006-pipelines-as-declarative-manifests.md) sets.
+
 ## Considered and rejected
 
 - **Waylines mode.** It carries no photo actions, so it needs interval shooting
