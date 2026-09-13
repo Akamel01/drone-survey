@@ -1,0 +1,34 @@
+name: Mission planning
+
+# The planner's preview maths is a deliberate mirror of the writer's. Mirrors
+# drift, and a preview that lies about photo count or flight time is worse than
+# no preview — so the end-to-end test runs on every push that touches either
+# side, not only when someone remembers.
+
+on:
+  push:
+    paths:
+      - "scripts/mission/**"
+      - "web/lib/**"
+      - ".github/workflows/mission.yml"
+  pull_request:
+    paths:
+      - "scripts/mission/**"
+      - "web/lib/**"
+  workflow_dispatch:
+
+jobs:
+  end-to-end:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          # Node strips the TypeScript itself, so there is no build step and no
+          # dependency to install for this check.
+          node-version: "24"
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: A Mission Spec becomes a Mission the aircraft can fly
+        run: python3 scripts/mission/e2e_test.py
