@@ -45,8 +45,14 @@ def newest_unloaded(specs: Path, record: Path) -> Path | None:
     found = sorted(specs.glob("*/*/*.json"), key=lambda f: f.name)
     if not found:
         return None
-    done = set(json.loads(record.read_text())) if record.exists() else set()
-    return None if str(found[-1]) in done else found[-1]
+    if not record.exists():
+        # A lost record Loads nothing (ADR 0017, #38): it adopts what is already
+        # there as Loaded and says so, rather than overwriting a card on a guess.
+        record.parent.mkdir(parents=True, exist_ok=True)
+        record.write_text(json.dumps([str(found[-1])], indent=1))
+        print(f"no record of past Loads; adopted {found[-1]} as already Loaded, Loaded nothing")
+        return None
+    return None if str(found[-1]) in set(json.loads(record.read_text())) else found[-1]
 
 
 def cards() -> list[tuple[str, str]]:
@@ -184,9 +190,12 @@ def _selftest() -> None:
             f = specs / "site" / "2026-09-13" / f"{stamp}.json"
             f.parent.mkdir(parents=True, exist_ok=True)
             f.write_text("{}")
-        assert newest_unloaded(specs, record).name == "20260913T140000Z.json"
-        record.write_text(json.dumps([str(newest_unloaded(specs, record))]))
-        assert newest_unloaded(specs, record) is None
+        assert newest_unloaded(specs, record) is None  # no record: Load nothing, adopt the newest
+        assert json.loads(record.read_text()) == [str(specs / "site" / "2026-09-13" / "20260913T140000Z.json")]
+        newer = specs / "site" / "2026-09-14" / "20260914T080000Z.json"
+        newer.parent.mkdir(parents=True)
+        newer.write_text("{}")
+        assert newest_unloaded(specs, record) == newer
 
         # More parts than cards is refused, never truncated.
         try:
