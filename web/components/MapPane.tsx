@@ -15,7 +15,7 @@ import type { MissionSpec } from "@/lib/spec";
 import type { Preview } from "@/lib/mission";
 import styles from "./MapPane.module.css";
 
-export type DrawMode = "idle" | "draw-polygon" | "draw-rectangle" | "set-home";
+export type DrawMode = "idle" | "draw-polygon" | "draw-rectangle" | "set-home" | "append-polygon";
 
 interface MapPaneProps {
   spec: MissionSpec;
@@ -49,6 +49,24 @@ function verticesGeoJSON(aoi: [number, number][]): GeoJSON.FeatureCollection {
       properties: { index: i },
       geometry: { type: "Point", coordinates: toLngLat(p) },
     })),
+  };
+}
+
+// Midpoint of every edge of a finished polygon — the handle that inserts a new
+// vertex between the two corners of that edge.
+function midpointsGeoJSON(aoi: [number, number][]): GeoJSON.FeatureCollection {
+  if (aoi.length < 3) return { type: "FeatureCollection", features: [] };
+  return {
+    type: "FeatureCollection",
+    features: aoi.map((p, i) => {
+      const q = aoi[(i + 1) % aoi.length];
+      const mid: [number, number] = [(p[0] + q[0]) / 2, (p[1] + q[1]) / 2];
+      return {
+        type: "Feature",
+        properties: { edgeIndex: i },
+        geometry: { type: "Point", coordinates: toLngLat(mid) },
+      };
+    }),
   };
 }
 
@@ -87,6 +105,21 @@ function addLayers(map: MaplibreMap) {
     type: "circle",
     source: "aoi-vertices",
     paint: { "circle-radius": 5, "circle-color": "#4fb8a8", "circle-stroke-width": 1.5, "circle-stroke-color": "#06110f" },
+  });
+
+  // Smaller, amber handles distinct from the teal vertices: click or drag to insert.
+  map.addSource("aoi-midpoints", { type: "geojson", data: midpointsGeoJSON([]) });
+  map.addLayer({
+    id: "aoi-midpoints",
+    type: "circle",
+    source: "aoi-midpoints",
+    paint: {
+      "circle-radius": 4,
+      "circle-color": "#e0a94f",
+      "circle-opacity": 0.85,
+      "circle-stroke-width": 1,
+      "circle-stroke-color": "#06110f",
+    },
   });
 
   map.addSource("flight-lines", { type: "geojson", data: linesGeoJSON([]) });
@@ -145,7 +178,7 @@ export default function MapPane({ spec, preview, mode, onAoiChange, onHomeChange
         onModeChange("idle");
         return;
       }
-      if (mode === "draw-polygon") {
+      if (mode === "draw-polygon" || mode === "append-polygon") {
         onAoiChange([...spec.aoi, p]);
         return;
       }
@@ -171,7 +204,7 @@ export default function MapPane({ spec, preview, mode, onAoiChange, onHomeChange
     // Drop them (keeping at least 3) instead of building a proper draw FSM.
     map.on("dblclick", () => {
       const { mode, spec, onAoiChange, onModeChange } = stateRef.current;
-      if (mode !== "draw-polygon") return;
+      if (mode !== "draw-polygon" && mode !== "append-polygon") return;
       let pts = spec.aoi;
       if (pts.length >= 5) pts = pts.slice(0, -2);
       else if (pts.length === 4) pts = pts.slice(0, -1);
@@ -188,6 +221,44 @@ export default function MapPane({ spec, preview, mode, onAoiChange, onHomeChange
       dragIndexRef.current = e.features[0].properties!.index as number;
       map.dragPan.disable();
       map.getCanvas().style.cursor = "grabbing";
+    });
+
+    // Right-click a vertex to delete it, refusing to go below a triangle.
+    map.on("contextmenu", "aoi-vertices", (e: MapLayerMouseEvent) => {
+      if (stateRef.current.mode !== "idle") return;
+      if (!e.features?.length) return;
+      e.originalEvent.preventDefault();
+      const { spec, onAoiChange } = stateRef.current;
+      if (spec.aoi.length <= 3) return;
+      const index = e.features[0].properties!.index as number;
+      onAoiChange(spec.aoi.filter((_, i) => i !== index));
+    });
+
+    // Click or drag a midpoint handle: splice a real vertex in at that spot,
+    // between the edge's two corners, then hand it straight to the normal
+    // vertex-drag machinery so a drag can keep repositioning it.
+    map.on("mousedown", "aoi-midpoints", (e: MapLayerMouseEvent) => {
+      if (stateRef.current.mode !== "idle") return;
+      if (!e.features?.length) return;
+      e.preventDefault();
+      const { spec, onAoiChange } = stateRef.current;
+      const edgeIndex = e.features[0].properties!.edgeIndex as number;
+      const a = spec.aoi[edgeIndex];
+      const b = spec.aoi[(edgeIndex + 1) % spec.aoi.length];
+      if (!a || !b) return;
+      const mid: [number, number] = [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];
+      const next = spec.aoi.slice();
+      next.splice(edgeIndex + 1, 0, mid);
+      onAoiChange(next);
+      dragIndexRef.current = edgeIndex + 1;
+      map.dragPan.disable();
+      map.getCanvas().style.cursor = "grabbing";
+    });
+    map.on("mouseenter", "aoi-midpoints", () => {
+      if (stateRef.current.mode === "idle") map.getCanvas().style.cursor = "copy";
+    });
+    map.on("mouseleave", "aoi-midpoints", () => {
+      if (dragIndexRef.current === null) map.getCanvas().style.cursor = "";
     });
 
     map.on("mousemove", (e: MapMouseEvent) => {
@@ -215,7 +286,7 @@ export default function MapPane({ spec, preview, mode, onAoiChange, onHomeChange
     const onKeydown = (e: KeyboardEvent) => {
       if (e.key !== "Enter") return;
       const { mode, spec, onAoiChange, onModeChange } = stateRef.current;
-      if (mode === "draw-polygon" && spec.aoi.length >= 3) {
+      if ((mode === "draw-polygon" || mode === "append-polygon") && spec.aoi.length >= 3) {
         onAoiChange(spec.aoi);
         onModeChange("idle");
       }
@@ -234,6 +305,10 @@ export default function MapPane({ spec, preview, mode, onAoiChange, onHomeChange
     if (!map || !map.getSource("aoi")) return;
     (map.getSource("aoi") as GeoJSONSource).setData(aoiPolygonGeoJSON(spec.aoi));
     (map.getSource("aoi-vertices") as GeoJSONSource).setData(verticesGeoJSON(spec.aoi));
+    // Handles only make sense once a polygon is finished, not while it's still being drawn.
+    (map.getSource("aoi-midpoints") as GeoJSONSource).setData(
+      midpointsGeoJSON(mode === "idle" ? spec.aoi : []),
+    );
     (map.getSource("flight-lines") as GeoJSONSource).setData(linesGeoJSON(preview.lines));
     (map.getSource("flight-points") as GeoJSONSource).setData(pointsGeoJSON(preview.points));
   });

@@ -3,30 +3,25 @@
 import { useState } from "react";
 import type { MissionSpec } from "@/lib/spec";
 import type { Preview } from "@/lib/mission";
+import { downloadMission } from "@/lib/savedMissions";
 import styles from "./SummaryBar.module.css";
 
 interface SummaryBarProps {
   spec: MissionSpec;
   preview: Preview;
+  onSaveMission: () => void;
 }
 
-function slug(s: string) {
-  return (s || "site").trim().replace(/[^a-z0-9]+/gi, "-").toLowerCase();
-}
-
-function download(spec: MissionSpec) {
-  const blob = new Blob([JSON.stringify(spec, null, 2)], { type: "application/json" });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = `${slug(spec.site)}-${spec.date}.mission.json`;
-  a.click();
-  URL.revokeObjectURL(url);
-}
-
-export default function SummaryBar({ spec, preview }: SummaryBarProps) {
+export default function SummaryBar({ spec, preview, onSaveMission }: SummaryBarProps) {
   const [copied, setCopied] = useState(false);
+  const [saved, setSaved] = useState(false);
   const hasProblems = preview.problems.length > 0;
+
+  function save() {
+    onSaveMission();
+    setSaved(true);
+    setTimeout(() => setSaved(false), 1500);
+  }
 
   async function copy() {
     await navigator.clipboard.writeText(JSON.stringify(spec, null, 2));
@@ -52,7 +47,8 @@ export default function SummaryBar({ spec, preview }: SummaryBarProps) {
         <Stat label="Parts" value={String(preview.parts)} warn={preview.parts > 1} />
         <div className={styles.actions}>
           <button onClick={copy}>{copied ? "Copied" : "Copy spec"}</button>
-          <button className="primary" onClick={() => download(spec)}>
+          <button onClick={save}>{saved ? "Saved" : "Save mission"}</button>
+          <button className="primary" onClick={() => downloadMission(spec)}>
             Download Mission Spec
           </button>
         </div>

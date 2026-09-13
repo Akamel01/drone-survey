@@ -41,7 +41,15 @@ export interface MissionSpec {
 export const DEFAULT_SPEC: MissionSpec = {
   version: 1,
   site: "",
-  date: new Date().toISOString().slice(0, 10),
+  // Deliberately empty, and filled in on the client after mount. Calling
+  // new Date() here reads the clock when the module is evaluated, which for a
+  // statically rendered page is *build* time: the server bakes the build date
+  // into the HTML, the browser renders today's, React finds the text does not
+  // match and hydration fails. A failed hydration leaves the whole tree
+  // unhydrated, so every button and map click silently does nothing — while the
+  // map still draws, because MapLibre runs outside React. That is what the
+  // planner did the day after it was deployed.
+  date: "",
   aoi: [],
   home: null,
   flight: {

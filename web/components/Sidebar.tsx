@@ -3,7 +3,9 @@
 import type { ReactNode } from "react";
 import type { MissionSpec, TurnMode } from "@/lib/spec";
 import type { Preview } from "@/lib/mission";
+import type { SavedMission } from "@/lib/savedMissions";
 import type { DrawMode } from "./MapPane";
+import SavedMissions from "./SavedMissions";
 import styles from "./Sidebar.module.css";
 
 interface SidebarProps {
@@ -13,6 +15,16 @@ interface SidebarProps {
   onModeChange: (m: DrawMode) => void;
   areaHa: number;
   preview: Preview;
+  savedMissions: SavedMission[];
+  onLoadMission: (spec: MissionSpec) => void;
+  onDeleteMission: (saved_at: string) => void;
+}
+
+// Plain metric area: m² under 1,000,000, km² (3 decimals) above.
+function formatArea(areaHa: number): string {
+  const m2 = areaHa * 10000;
+  if (m2 > 1_000_000) return `${(m2 / 1_000_000).toFixed(3)} km²`;
+  return `${Math.round(m2).toLocaleString()} m²`;
 }
 
 function Section({ title, children }: { title: string; children: ReactNode }) {
@@ -49,7 +61,17 @@ function Field({
   );
 }
 
-export default function Sidebar({ spec, setSpec, mode, onModeChange, areaHa, preview }: SidebarProps) {
+export default function Sidebar({
+  spec,
+  setSpec,
+  mode,
+  onModeChange,
+  areaHa,
+  preview,
+  savedMissions,
+  onLoadMission,
+  onDeleteMission,
+}: SidebarProps) {
   const flight = spec.flight;
   const camera = spec.camera;
 
@@ -73,11 +95,18 @@ export default function Sidebar({ spec, setSpec, mode, onModeChange, areaHa, pre
           <button className={mode === "draw-rectangle" ? "active" : ""} onClick={() => onModeChange("draw-rectangle")}>
             Rectangle
           </button>
+          <button
+            className={mode === "append-polygon" ? "active" : ""}
+            disabled={spec.aoi.length < 3}
+            onClick={() => onModeChange("append-polygon")}
+          >
+            Add points
+          </button>
           <button onClick={() => setSpec((s) => ({ ...s, aoi: [] }))}>Clear area</button>
         </div>
         <div className={styles.readout}>
           <span>
-            Area: <span className="mono">{areaHa.toFixed(3)} ha</span>
+            Area: <span className="mono">{formatArea(areaHa)}</span>
           </span>
           <span>
             Corners: <span className="mono">{spec.aoi.length}</span>
@@ -256,6 +285,10 @@ export default function Sidebar({ spec, setSpec, mode, onModeChange, areaHa, pre
           </span>
         </div>
       </Section>
+
+      <section className={styles.section}>
+        <SavedMissions missions={savedMissions} onLoad={onLoadMission} onDelete={onDeleteMission} />
+      </section>
     </aside>
   );
 }

@@ -1,0 +1,57 @@
+.details summary {
+  cursor: pointer;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-dim);
+  margin-bottom: 10px;
+}
+
+.empty {
+  font-size: 12px;
+  color: var(--text-dim);
+}
+
+.entry {
+  background: var(--panel-raised);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 10px;
+  margin-bottom: 8px;
+}
+
+.entryHead {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.entryHead strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.savedAt {
+  font-size: 11px;
+  color: var(--text-dim);
+  margin: 2px 0 8px;
+}
+
+.meta {
+  font-size: 12px;
+  color: var(--text-dim);
+  line-height: 1.6;
+  margin: 0 0 8px;
+}
+
+.entryActions {
+  display: flex;
+  gap: 6px;
+}
+
+.entryActions button {
+  padding: 4px 8px;
+  font-size: 12px;
+}
