@@ -217,6 +217,36 @@ Runner generates and verifies Missions; the loader copies verified files and
 reports what it did. Teaching the Runner about USB devices would breach the
 thinness threshold [ADR 0006](0006-pipelines-as-declarative-manifests.md) sets.
 
+## Revision — how a Mission Spec reaches the loader
+
+The planner is a static site; the loader runs on the Linux host. Neither can
+reach the other, and the operator plans from whichever machine is to hand.
+
+**The planner drops a Mission Spec into object storage and the host collects
+it.** The host polls; plugging the Controller in still triggers the Load, which
+is unchanged. This keeps the rule that the operator plugs in before leaving
+rather than remembering a command at the Site.
+
+Three things follow, and the first decides the shape:
+
+- **A browser cannot hold the storage credential.** Anything shipped to the
+  client is readable by anyone who opens the page, so the write goes through a
+  small server-side function that holds the token, and the browser never sees
+  one. This is the only part of the planner that is not static.
+- **A Spec is immutable once dropped**, named by Site and date. The host keeps
+  its own record of which Placeholder slot holds which Site and part, exactly as
+  before — the store carries Specs, not slot assignments.
+- **Specs carry Site coordinates, which is client location data.** Putting them
+  in third-party storage is a disclosure decision, not just a transport one. An
+  unlisted bucket is obscurity rather than access control, the same caveat
+  [ADR 0011](0011-static-delivery-bundles.md) records for Delivery Bundles, and
+  the first client with confidentiality requirements is the trigger to revisit.
+
+This depends on object storage being stood up (#18). Until then the Spec is
+carried by hand, which is the manual step
+[ADR 0015](0015-automation-is-the-primary-goal.md) exists to remove and is
+accepted only as a stopgap.
+
 ## Considered and rejected
 
 - **Waylines mode.** It carries no photo actions, so it needs interval shooting
