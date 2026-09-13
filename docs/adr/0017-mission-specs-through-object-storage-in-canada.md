@@ -31,11 +31,18 @@ transport one, as ADR 0016 already records.
   planner, unlike a Capture; and because the endpoint holding it is gated. The
   capability exists and is never exercised. If the provider later allows a
   narrower preset, take it.
-- **Specs are keyed `specs/<site-id>/<date>/<part>-<dispatch-timestamp>.json`.**
-  ADR 0016 names a Spec by Site and date; part separates the legs of a Site too
-  large for one battery, and the timestamp makes supersession explicit and
-  lexically sortable. A Spec is never rewritten. The host collects the newest
-  timestamp for each Site, date and part.
+- **Specs are keyed `specs/<site-id>/<date>/<dispatch-timestamp>.json`.**
+  ADR 0016 names a Spec by Site and date; the timestamp makes supersession
+  explicit and lexically sortable, so the host takes the newest without parsing
+  anything. A Spec is never rewritten.
+
+  **Parts do not appear in the key.** An earlier wording placed one before the
+  timestamp, on the assumption that a Site too large for one battery is
+  Dispatched as several Specs. It is not. One Spec describes the whole Site, and
+  the writer splits it into parts when it builds, computing the shared seam
+  waypoint as it goes. Splitting in the planner as well would make two things
+  responsible for where a Mission is cut, and the seam is precisely what must not
+  be decided twice.
 - **Specs are retained twelve months**, on the same clock and the same deletion
   job as the Capture they produced, per
   [ADR 0012](0012-twelve-month-capture-retention.md).
