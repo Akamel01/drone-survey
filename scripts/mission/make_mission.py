@@ -292,12 +292,38 @@ def main():
     ap.add_argument("--margin-passes", type=float, default=1.0)
     ap.add_argument("--turn", choices=["through", "stop"], default="through",
                     help="fly through each photo point, or stop at it")
+    ap.add_argument("--interval", type=float, default=0.0,
+                    help="slowest the camera can shoot, in seconds; caps speed so no photo is missed")
+    ap.add_argument("--reverse", action="store_true",
+                    help="run the lines from the opposite end, so two otherwise identical "
+                         "missions start at different corners and can be told apart on the Controller")
     args = ap.parse_args()
+
+    # The camera, not the aircraft, sets the pace when a photo is due at every
+    # waypoint: DJI Fly cannot shoot faster than its interval, and a mission
+    # flown quicker than that silently drops photographs.
+    if args.interval > 0:
+        _, along, _ = footprint(args.altitude)
+        spacing = along * (1 - args.forward_overlap / 100)
+        cap = spacing / args.interval
+        if args.speed > cap:
+            print(f"speed capped at {cap:.2f} m/s by the {args.interval:g}s shutter interval "
+                  f"(was {args.speed:g})")
+            args.speed = round(cap, 2)
 
     aoi = [tuple(float(v) for v in c.split(",")) for c in args.aoi]
     pts, rows, plan = plan_grid(aoi, args.altitude, args.forward_overlap, args.side_overlap, args.margin_passes)
     turn_mode = ("toPointAndPassWithContinuityCurvature" if args.turn == "through"
                  else "toPointAndStopWithContinuityCurvature")
+
+    if args.reverse:
+        rows = rows[::-1]
+        # Keep the lawnmower continuous after flipping the running order: each line
+        # starts at whichever end is nearer where the previous one finished.
+        for i in range(1, len(rows)):
+            if geodesic_m(rows[i][0], rows[i - 1][-1]) > geodesic_m(rows[i][-1], rows[i - 1][-1]):
+                rows[i] = rows[i][::-1]
+        pts = [p for row in rows for p in row]
 
     # Cut at the end of a flight line, never mid-line, and let consecutive parts
     # share a waypoint so no coverage is lost at the seam (ADR 0016).
