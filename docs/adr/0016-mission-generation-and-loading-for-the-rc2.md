@@ -160,6 +160,19 @@ how many batteries a Site needs. It is reported rather than measured, and the
 proving flight should establish the real interval: the cheaper the camera's
 interval, the faster every future Capture.
 
+**The aircraft refuses Missions that exceed DJI Fly's own safety limits**, and
+those limits are invisible to us. The first real Mission was suspended twice —
+"reached max flight distance" and "reached max flight altitude" — by settings
+that live in the app, appear nowhere in the route file, and cannot be read or
+written over USB. A Mission can therefore be perfectly valid, pass every gate,
+load and verify, and still be refused on the launch pad.
+
+Two consequences. The Controller's profile must record the operator's configured
+maximum altitude and distance as **declared values**, checked against every plan
+before loading, since nothing else can catch the conflict. And the distance limit
+is measured from the home point, which makes the take-off position part of the
+plan rather than a detail of the day.
+
 **Two otherwise identical Missions are told apart by running their lines from
 opposite ends.** DJI Fly's mission names live in its own database and cannot be
 written by us — confirmed by searching the Controller's whole accessible storage
