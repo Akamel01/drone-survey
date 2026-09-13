@@ -187,7 +187,7 @@ def mission_config(speed):
     </wpml:missionConfig>"""
 
 
-def placemark(i, lat, lon, alt, speed, pitch, turn_mode, first):
+def placemark(i, lat, lon, alt, speed, pitch, turn_mode, first, poi=None):
     # DJI Fly writes an explicit gimbalRotate on the first waypoint and
     # gimbalEvenlyRotate on the rest; mirroring that rather than inventing a shape.
     if first:
@@ -220,6 +220,19 @@ def placemark(i, lat, lon, alt, speed, pitch, turn_mode, first):
             </wpml:actionActuatorFuncParam>
           </wpml:action>
 """
+    # An orbit aims the aircraft at its subject; a grid follows the flight line.
+    if poi:
+        heading = (
+            "          <wpml:waypointHeadingMode>towardPOI</wpml:waypointHeadingMode>\n"
+            "          <wpml:waypointHeadingAngle>0</wpml:waypointHeadingAngle>\n"
+            f"          <wpml:waypointPoiPoint>{poi[0]:.12f},{poi[1]:.12f},{poi[2]:g}</wpml:waypointPoiPoint>\n"
+        )
+    else:
+        heading = (
+            "          <wpml:waypointHeadingMode>followWayline</wpml:waypointHeadingMode>\n"
+            "          <wpml:waypointHeadingAngle>0</wpml:waypointHeadingAngle>\n"
+            "          <wpml:waypointPoiPoint>0.000000,0.000000,0.000000</wpml:waypointPoiPoint>\n"
+        )
     return f"""      <Placemark>
         <Point>
           <coordinates>
@@ -230,10 +243,7 @@ def placemark(i, lat, lon, alt, speed, pitch, turn_mode, first):
         <wpml:executeHeight>{alt:g}</wpml:executeHeight>
         <wpml:waypointSpeed>{speed:g}</wpml:waypointSpeed>
         <wpml:waypointHeadingParam>
-          <wpml:waypointHeadingMode>followWayline</wpml:waypointHeadingMode>
-          <wpml:waypointHeadingAngle>0</wpml:waypointHeadingAngle>
-          <wpml:waypointPoiPoint>0.000000,0.000000,0.000000</wpml:waypointPoiPoint>
-          <wpml:waypointHeadingAngleEnable>1</wpml:waypointHeadingAngleEnable>
+{heading}          <wpml:waypointHeadingAngleEnable>1</wpml:waypointHeadingAngleEnable>
           <wpml:waypointHeadingPathMode>followBadArc</wpml:waypointHeadingPathMode>
           <wpml:waypointHeadingPoiIndex>0</wpml:waypointHeadingPoiIndex>
         </wpml:waypointHeadingParam>
@@ -267,7 +277,53 @@ def placemark(i, lat, lon, alt, speed, pitch, turn_mode, first):
 """
 
 
-def write_kmz(path, name, pts, alt, speed, pitch, turn_mode):
+def orbit_rings(orbit, camera_interval, speed):
+    """Photo positions around a subject: one ring per altitude, each starting due north.
+
+    Mirrors orbitPreview() in web/lib/mission.ts. The gimbal angle is computed per
+    ring from the slant geometry, so the fixed tilt and the point-of-interest
+    framing agree rather than fight — ADR 0016 records that a heading aimed at a
+    point of interest otherwise cancels a fixed angle.
+    """
+    lat0, lon0 = orbit["center"]
+    to_xy, to_ll = local_frame([(lat0, lon0)])
+    n = int(round(orbit["photos_per_ring"]))
+    r = float(orbit["radius_m"])
+    direction = 1 if orbit.get("clockwise", True) else -1
+    target_h = float(orbit.get("target_height_m", 0.0))
+
+    rings = []
+    for alt in sorted(float(a) for a in orbit["altitudes_m"]):
+        # Looking down at the subject from this ring: negative is below horizontal.
+        pitch = -math.degrees(math.atan2(alt - target_h, r))
+        pitch = max(LIMITS["gimbal_pitch"][0], min(LIMITS["gimbal_pitch"][1], pitch))
+        ring = []
+        for i in range(n):
+            th = direction * 2 * math.pi * i / n
+            lat, lon = to_ll(math.sin(th) * r, math.cos(th) * r)
+            ring.append((lat, lon, alt, pitch))
+        rings.append(ring)
+
+    arc = 2 * math.pi * r / n
+    cap = arc / camera_interval if camera_interval > 0 else float("inf")
+    if speed > cap:
+        print(f"speed capped at {cap:.2f} m/s by the {camera_interval:g}s shutter interval "
+              f"(was {speed:g})", file=sys.stderr)
+        speed = round(cap, 2)
+
+    slant = max(math.hypot(r, ring[0][2] - target_h) for ring in rings)
+    across = SENSOR_W_MM / FOCAL_MM * slant
+    return rings, speed, {
+        "gsd_cm": across / IMAGE_W_PX * 100,
+        "arc_spacing_m": arc,
+        "overlap_pct": (1 - arc / across) * 100,
+        "rings": len(rings),
+        "photos": sum(len(x) for x in rings),
+        "slant_range_m": slant,
+    }
+
+
+def write_kmz(path, name, pts, alt, speed, pitch, turn_mode, poi=None):
     now = int(time.time() * 1000)
     cfg = mission_config(speed)
     template = f"""<?xml version="1.0" encoding="UTF-8"?>
@@ -280,9 +336,11 @@ def write_kmz(path, name, pts, alt, speed, pitch, turn_mode):
   </Document>
 </kml>
 """
+    # A grid flies one height at one angle; an orbit carries its own per ring.
     body = "".join(
-        placemark(i, lat, lon, alt, speed, pitch, turn_mode, i == 0)
-        for i, (lat, lon) in enumerate(pts)
+        placemark(i, p[0], p[1], p[2] if len(p) > 2 else alt, speed,
+                  p[3] if len(p) > 3 else pitch, turn_mode, i == 0, poi)
+        for i, p in enumerate(pts)
     )
     waylines = f"""<?xml version="1.0" encoding="UTF-8"?>
 <kml xmlns="http://www.opengis.net/kml/2.2" xmlns:wpml="{NS}">
@@ -343,7 +401,10 @@ def load_spec(path, args):
     if spec.get("version") != 1:
         raise SystemExit(f"unsupported Mission Spec version {spec.get('version')!r}")
     f, cam = spec["flight"], spec["camera"]
-    args.aoi = [f"{lat},{lon}" for lat, lon in spec["aoi"]]
+    # A Spec written before orbits existed has neither field, and is a grid.
+    args.mission_type = spec.get("mission_type", "grid")
+    args.orbit = spec.get("orbit")
+    args.aoi = [f"{lat},{lon}" for lat, lon in spec.get("aoi", [])]
     args.altitude = f["altitude_m"]
     args.forward_overlap = f["forward_overlap_pct"]
     args.side_overlap = f["side_overlap_pct"]
@@ -357,8 +418,68 @@ def load_spec(path, args):
     return spec
 
 
+def run_orbit(args):
+    """Write an orbit Mission: rings of photo positions aimed at a subject.
+
+    The capture a nadir grid cannot produce. Splatting wants to see a subject from
+    around it, and design.md section 5 requires oblique passes alongside the grid
+    for the same reason: nothing in a nadir-only block distinguishes a small lens
+    error from real curvature, so the surface bows.
+    """
+    if not args.orbit or not args.orbit.get("center"):
+        print(json.dumps({"problems": ["no point of interest set"]}, indent=2))
+        return 1
+
+    rings, speed, plan = orbit_rings(args.orbit, args.interval, args.speed)
+    poi = (args.orbit["center"][0], args.orbit["center"][1],
+           float(args.orbit.get("target_height_m", 0.0)))
+    turn_mode = ("toPointAndPassWithContinuityCurvature" if args.turn == "through"
+                 else "toPointAndStopWithContinuityCurvature")
+
+    longest = max(len(r) for r in rings)
+    if longest > LIMITS["max_waypoints"]:
+        print(json.dumps({"problems": [
+            f"one ring holds {longest} waypoints, more than DJI Fly's {LIMITS['max_waypoints']}"
+        ]}, indent=2))
+        return 1
+    parts = split_rows(rings, LIMITS["max_waypoints"])
+
+    out = Path(args.out)
+    results, failed = [], False
+    for i, part in enumerate(parts, 1):
+        path = out if len(parts) == 1 else out.with_name(f"{out.stem}-part{i}{out.suffix}")
+        name = args.name if len(parts) == 1 else f"{args.name} part {i}"
+
+        problems = []
+        lo, hi = LIMITS["speed"]
+        if not lo <= speed <= hi:
+            problems.append(f"speed {speed} outside the aircraft's {lo}..{hi}")
+        highest = max(p[2] for p in part)
+        if highest > 120:
+            problems.append(f"altitude {highest} m is above the 120 m ceiling")
+        if plan["overlap_pct"] < 60:
+            problems.append(f"only {plan['overlap_pct']:.0f}% overlap between neighbouring "
+                            f"photos; raise photos per ring or the radius")
+
+        dist = sum(geodesic_m(part[j][:2], part[j + 1][:2]) for j in range(len(part) - 1))
+        penalty = len(part) * speed / STOP_ACCEL_MS2 if args.turn == "stop" else 0.0
+        write_kmz(path, name, part, args.altitude, speed, args.gimbal, turn_mode, poi)
+        failed = failed or bool(problems)
+        results.append({
+            "out": str(path), "name": name, "waypoints": len(part),
+            "path_length_m": round(dist),
+            "flight_time_min_at_speed": round((dist / speed + penalty) / 60, 1),
+            "problems": problems,
+        })
+
+    print(json.dumps({"mission_type": "orbit", "turn": args.turn, "parts": len(parts),
+                      "speed_ms": speed, **plan, "missions": results}, indent=2))
+    return 1 if failed else 0
+
+
 def main():
     ap = argparse.ArgumentParser()
+    ap.set_defaults(mission_type="grid", orbit=None)
     ap.add_argument("--spec", help="Mission Spec JSON from the planner; supplies everything but --out")
     ap.add_argument("--aoi", nargs="+", help="polygon corners as lat,lon")
     ap.add_argument("--out", required=True)
@@ -380,7 +501,11 @@ def main():
 
     if args.spec:
         load_spec(args.spec, args)
-    if not args.aoi or not args.name:
+    if not args.name:
+        ap.error("--spec, or both --aoi and --name, are required")
+    if args.mission_type == "orbit":
+        return run_orbit(args)
+    if not args.aoi:
         ap.error("--spec, or both --aoi and --name, are required")
 
     # The camera, not the aircraft, sets the pace when a photo is due at every

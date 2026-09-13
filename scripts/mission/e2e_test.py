@@ -129,6 +129,8 @@ def waypoints_of(kmz):
             "gimbal": [float(e.text) for e in pm.findall(".//wpml:gimbalPitchRotateAngle", NS)],
             "group_mode": pm.find(".//wpml:actionGroupMode", NS).text,
             "trigger": pm.find(".//wpml:actionTriggerType", NS).text,
+            "heading_mode": pm.find(".//wpml:waypointHeadingMode", NS).text,
+            "poi": pm.find(".//wpml:waypointPoiPoint", NS).text,
         })
     return names, marks, waylines, template
 
@@ -240,6 +242,84 @@ def case(title, spec, expect_parts=None):
               plan["start_corner"] == corner, f"{plan['start_corner']} vs {corner}")
 
 
+def orbit_spec(center, **orbit):
+    """A Spec shaped as web/lib/spec.ts writes one for an orbit."""
+    o = {"center": center, "target_height_m": 20.0, "radius_m": 40.0,
+         "altitudes_m": [40.0, 60.0], "photos_per_ring": 24, "clockwise": True}
+    o.update(orbit)
+    s = spec_for([list(center), [center[0] - 0.001, center[1]], [center[0], center[1] - 0.001]])
+    s["mission_type"] = "orbit"
+    s["orbit"] = o
+    return s
+
+
+def orbit_case(title, spec):
+    print(f"\n=== {title} ===")
+    with tempfile.TemporaryDirectory() as tmp:
+        tmp = Path(tmp)
+        spec_path = tmp / "orbit.mission.json"
+        spec_path.write_text(json.dumps(spec))
+
+        plan = run_planner(spec_path)
+        report, code = run_writer(spec_path, tmp / "orbit.kmz")
+        o = spec["orbit"]
+
+        check("the writer knows this is an orbit", report.get("mission_type") == "orbit",
+              str(report.get("mission_type")))
+        close(plan["gsd_cm"], report["gsd_cm"], 1e-6, "ground resolution agrees", " cm/px")
+        close(plan["fwd_spacing_m"], report["arc_spacing_m"], 1e-6, "arc spacing agrees", " m")
+        check("photo count agrees", plan["photo_count"] == report["photos"],
+              f"{plan['photo_count']} vs {report['photos']}")
+        check("ring count agrees", plan["line_count"] == report["rings"],
+              f"{plan['line_count']} vs {report['rings']}")
+        close(plan["capped_speed_ms"], report["speed_ms"], 1e-6, "shutter-capped speed agrees", " m/s")
+        check("part count agrees", plan["parts"] == report["parts"],
+              f"{plan['parts']} vs {report['parts']}")
+        check("writer exited clean", code == 0, f"exit {code}")
+        check("the planner reported no problems", not plan["problems"], str(plan["problems"]))
+
+        parts = sorted(tmp.glob("orbit*.kmz"),
+                       key=lambda p: int(p.stem.rsplit("part", 1)[-1]) if "part" in p.stem else 0)
+        flown = []
+        for kmz in parts:
+            names, marks, waylines, template = waypoints_of(kmz)
+            check(f"{kmz.name}: consumer namespace, not enterprise",
+                  "uav.com/wpmz" in waylines and "dji.com/wpmz" not in waylines)
+            check(f"{kmz.name}: a photo at every waypoint", all(m["take_photo"] == 1 for m in marks))
+            check(f"{kmz.name}: aimed at the subject, not along the wayline",
+                  all(m["heading_mode"] == "towardPOI" for m in marks),
+                  str(sorted({m["heading_mode"] for m in marks})))
+            # The point of interest must be the subject, carrying its height.
+            want = f"{o['center'][0]:.12f},{o['center'][1]:.12f},{o['target_height_m']:g}"
+            check(f"{kmz.name}: the point of interest is the subject",
+                  all(m["poi"] == want for m in marks), str(sorted({m["poi"] for m in marks})[:1]))
+            check(f"{kmz.name}: within DJI Fly's 200 waypoints", len(marks) <= 200, str(len(marks)))
+            flown.extend(marks)
+
+        # What makes an orbit an orbit: every position the stated radius from the
+        # subject, at one of the requested ring altitudes, tilted to look at it.
+        worst = max(abs(geodesic_m(m["ll"], tuple(o["center"])) - o["radius_m"]) for m in flown)
+        check("every waypoint sits on the circle", worst < 0.2, f"worst {worst:.3f} m off {o['radius_m']} m")
+
+        heights = sorted({m["height"] for m in flown})
+        check("one ring per requested altitude", heights == sorted(o["altitudes_m"]),
+              f"{heights} vs {sorted(o['altitudes_m'])}")
+
+        for m in flown:
+            want_pitch = round(-math.degrees(math.atan2(m["height"] - o["target_height_m"], o["radius_m"])), 6)
+            if abs(m["gimbal"][0] - want_pitch) > 0.01:
+                check("gimbal aims at the subject from every ring", False,
+                      f"{m['gimbal'][0]} vs {want_pitch} at {m['height']} m")
+                break
+        else:
+            check("gimbal aims at the subject from every ring", True)
+
+        # A ring that starts anywhere but due north is a different flight.
+        first = flown[0]["ll"]
+        bearing_ok = first[0] > o["center"][0] and abs(first[1] - o["center"][1]) < 1e-6
+        check("the first photograph is due north of the subject", bearing_ok, str(first))
+
+
 def main():
     # The rehearsal area, as marked on the Controller: 120 x 100 m.
     small = [[49.1896507, -122.8402975], [49.1885718, -122.8402975],
@@ -257,6 +337,12 @@ def main():
     case("a triangle, which must not be flown as its bounding box", spec_for(triangle), expect_parts=1)
     case("the same area, stopping at each point", spec_for(small, turn="stop"), expect_parts=1)
     case("an area too big for one Mission", spec_for(large))
+
+    # The capture a nadir grid cannot produce: a subject seen from around it.
+    tower = (49.1891, -122.8396)
+    orbit_case("an orbit around a tower, two rings", orbit_spec(tower))
+    orbit_case("a single low ring, flown anticlockwise",
+               orbit_spec(tower, altitudes_m=[30.0], photos_per_ring=18, clockwise=False))
 
     print()
     if failures:

@@ -28,6 +28,11 @@ const ALTITUDE_CEILING_M = 120;
 // this constant is what that measurement corrects.
 const STOP_ACCEL_MS2 = 2.5;
 
+// An orbit closer than this is inside the aircraft's own comfort zone around a
+// structure, and fewer than this many photographs does not circle a subject.
+const ORBIT_MIN_RADIUS_M = 5;
+const ORBIT_MIN_PHOTOS = 6;
+
 export interface Preview {
   points: [number, number][];
   lines: [number, number][][];
@@ -160,7 +165,110 @@ function startCorner(first: LL, points: LL[]): string {
   return `${first[0] >= lat0 ? "north" : "south"}-${first[1] >= lon0 ? "east" : "west"}`;
 }
 
+/** A circle as a polygon, so a circular area needs no special case downstream. */
+export function circlePolygon(center: LL, radiusM: number, segments = 64): LL[] {
+  const { toLL } = localFrame([center]);
+  const pts: LL[] = [];
+  for (let i = 0; i < segments; i++) {
+    const a = (2 * Math.PI * i) / segments;
+    pts.push(toLL(Math.sin(a) * radiusM, Math.cos(a) * radiusM));
+  }
+  return pts;
+}
+
+/**
+ * An orbit around a subject: one ring of photo positions per altitude.
+ *
+ * Resolution is set by the slant range to the subject, not by altitude — the
+ * camera is looking sideways and down, so a 40 m ring at 40 m up is 57 m from
+ * what it is photographing. Using altitude alone would overstate the detail.
+ */
+function orbitPreview(spec: MissionSpec): Preview {
+  const o = spec.orbit;
+  const problems: string[] = [];
+  if (!o.center) return { ...EMPTY, problems: ["no point of interest set"] };
+  if (o.radius_m < ORBIT_MIN_RADIUS_M)
+    problems.push(`radius ${o.radius_m} m is below the ${ORBIT_MIN_RADIUS_M} m minimum`);
+  if (o.photos_per_ring < ORBIT_MIN_PHOTOS)
+    problems.push(`${o.photos_per_ring} photos per ring is below the ${ORBIT_MIN_PHOTOS} needed to circle a subject`);
+  const altitudes = o.altitudes_m.filter((a) => Number.isFinite(a));
+  if (!altitudes.length) problems.push("no ring altitudes set");
+  if (problems.length) return { ...EMPTY, problems };
+
+  const { toLL } = localFrame([o.center]);
+  const n = Math.round(o.photos_per_ring);
+  const dir = o.clockwise ? 1 : -1;
+
+  // Rings run from the lowest altitude up, each starting due north.
+  const sorted = [...altitudes].sort((a, b) => a - b);
+  const rings: LL[][] = sorted.map(() => []);
+  sorted.forEach((_, r) => {
+    for (let i = 0; i < n; i++) {
+      const th = (dir * 2 * Math.PI * i) / n;
+      rings[r].push(toLL(Math.sin(th) * o.radius_m, Math.cos(th) * o.radius_m));
+    }
+  });
+
+  const arc = (2 * Math.PI * o.radius_m) / n;
+  // The worst ring decides the figure we report: the one furthest from the subject.
+  const slant = Math.max(...sorted.map((alt) => Math.hypot(o.radius_m, alt - o.target_height_m)));
+  const across = (SENSOR_W_MM / FOCAL_MM) * slant;
+  const gsdCm = (across / IMAGE_W_PX) * 100;
+
+  const cap = spec.camera.interval_s > 0 ? arc / spec.camera.interval_s : Infinity;
+  const speed = spec.flight.speed_ms > cap ? Math.round(cap * 100) / 100 : spec.flight.speed_ms;
+
+  const [sLo, sHi] = SPEED_RANGE;
+  if (speed < sLo || speed > sHi) problems.push(`speed ${speed} outside the aircraft's ${sLo}..${sHi}`);
+  const highest = Math.max(...sorted);
+  if (highest > ALTITUDE_CEILING_M)
+    problems.push(`altitude ${highest} m is above the ${ALTITUDE_CEILING_M} m ceiling`);
+  if (n > MAX_WAYPOINTS)
+    problems.push(`one ring holds ${n} waypoints, more than DJI Fly's ${MAX_WAYPOINTS}`);
+  // Overlap between neighbours on a ring, which is what a reconstruction needs.
+  const overlap = (1 - arc / across) * 100;
+  if (overlap < 60)
+    problems.push(
+      `only ${overlap.toFixed(0)}% overlap between neighbouring photos; ` +
+        `raise photos per ring or the radius`,
+    );
+
+  const points: LL[] = rings.flat();
+  let pathLength = 0;
+  for (const ring of rings) {
+    for (let i = 0; i < ring.length - 1; i++) pathLength += geodesicM(ring[i], ring[i + 1]);
+    pathLength += geodesicM(ring[ring.length - 1], ring[0]); // closing the circle
+  }
+  // Climbing between rings is flown too, and it is not free.
+  for (let i = 0; i < sorted.length - 1; i++) pathLength += Math.abs(sorted[i + 1] - sorted[i]);
+
+  const stopPenalty = spec.flight.turn === "stop" ? (points.length * speed) / STOP_ACCEL_MS2 : 0;
+
+  return {
+    points,
+    lines: rings,
+    gsd_cm: gsdCm,
+    fwd_spacing_m: arc,
+    side_spacing_m: sorted.length > 1 ? sorted[1] - sorted[0] : 0,
+    line_count: rings.length,
+    photo_count: points.length,
+    capped_speed_ms: speed,
+    path_length_m: pathLength,
+    flight_time_min: (pathLength / speed + stopPenalty) / 60,
+    parts: partCount(rings, MAX_WAYPOINTS),
+    start_corner: `north, ${o.clockwise ? "clockwise" : "anticlockwise"}`,
+    home_distance_m: spec.home
+      ? Math.max(...points.map((p) => geodesicM(spec.home as LL, p)))
+      : 0,
+    problems,
+  };
+}
+
 export function preview(spec: MissionSpec): Preview {
+  return spec.mission_type === "orbit" ? orbitPreview(spec) : gridPreview(spec);
+}
+
+function gridPreview(spec: MissionSpec): Preview {
   const aoi = spec.aoi;
   if (aoi.length < 3) return { ...EMPTY };
 

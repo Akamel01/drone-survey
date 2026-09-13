@@ -9,21 +9,60 @@
 
 export type TurnMode = "through" | "stop";
 
+/** A nadir grid over an area, or an orbit around a subject. */
+export type MissionType = "grid" | "orbit";
+
+/**
+ * An orbit around a point of interest — a tower, a building, a structure.
+ *
+ * This is the Capture that Gaussian Splatting actually wants: a nadir grid gives
+ * almost no angular diversity, and no amount of overlap from straight above
+ * substitutes for seeing a subject from around it. It is also the oblique pass
+ * the capture standard requires alongside the grid (design.md section 5).
+ *
+ * The camera is aimed by the point of interest, not by a fixed tilt. ADR 0016
+ * records why the two cannot be combined: a heading aimed at a point of interest
+ * cancels the fixed gimbal angle, so `flight.gimbal_pitch_deg` is ignored for an
+ * orbit and the framing follows the subject.
+ */
+export interface OrbitSpec {
+  center: [number, number] | null; // the subject, [lat, lon]
+  target_height_m: number; // how tall the subject is, above the take-off point
+  radius_m: number; // horizontal distance from the subject
+  altitudes_m: number[]; // one ring per altitude, so a tower is covered top to bottom
+  photos_per_ring: number;
+  clockwise: boolean;
+}
+
+/**
+ * How a circular area was drawn, kept so the planner can offer a centre and a
+ * radius to drag instead of sixty-four meaningless vertices. The `aoi` polygon
+ * stays authoritative — the writer never reads this.
+ */
+export interface CircleShape {
+  kind: "circle";
+  center: [number, number];
+  radius_m: number;
+}
+
 export interface MissionSpec {
   version: 1;
+  mission_type: MissionType;
   site: string;
   date: string; // YYYY-MM-DD
-  aoi: [number, number][]; // [lat, lon] corners, not closed
+  aoi: [number, number][]; // [lat, lon] corners, not closed. Grid missions only.
+  shape?: CircleShape | null; // an editing hint, never an input to the geometry
   home: [number, number] | null; // take-off point; DJI Fly measures its distance limit from here
   flight: {
     altitude_m: number;
     forward_overlap_pct: number;
     side_overlap_pct: number;
-    gimbal_pitch_deg: number;
+    gimbal_pitch_deg: number; // grid only; an orbit is framed by its point of interest
     speed_ms: number;
     turn: TurnMode;
     margin_passes: number;
   };
+  orbit: OrbitSpec;
   // Recorded, not flown. The mission file carries no camera settings beyond the
   // shutter action itself; these are set by hand on the Controller and kept here
   // so a Capture can be repeated under the same conditions.
@@ -40,17 +79,15 @@ export interface MissionSpec {
 
 export const DEFAULT_SPEC: MissionSpec = {
   version: 1,
+  mission_type: "grid",
   site: "",
   // Deliberately empty, and filled in on the client after mount. Calling
   // new Date() here reads the clock when the module is evaluated, which for a
   // statically rendered page is *build* time: the server bakes the build date
-  // into the HTML, the browser renders today's, React finds the text does not
-  // match and hydration fails. A failed hydration leaves the whole tree
-  // unhydrated, so every button and map click silently does nothing — while the
-  // map still draws, because MapLibre runs outside React. That is what the
-  // planner did the day after it was deployed.
+  // into the HTML and the browser renders today's, so the two disagree.
   date: "",
   aoi: [],
+  shape: null,
   home: null,
   flight: {
     altitude_m: 90,
@@ -60,6 +97,14 @@ export const DEFAULT_SPEC: MissionSpec = {
     speed_ms: 5,
     turn: "through",
     margin_passes: 1,
+  },
+  orbit: {
+    center: null,
+    target_height_m: 0,
+    radius_m: 40,
+    altitudes_m: [40],
+    photos_per_ring: 24,
+    clockwise: true,
   },
   camera: {
     interval_s: 5,
