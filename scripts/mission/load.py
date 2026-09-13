@@ -10,6 +10,7 @@ fresh mount, never the copy's exit status; on any mismatch every card is put
 back as it was, so a Load is all or nothing.
 
     python3 load.py SPEC.json --yes
+    python3 load.py --newest --yes     # what cron runs while the Controller is plugged in
     python3 load.py --selftest
 """
 
@@ -30,6 +31,22 @@ from push_to_rc import WAYPOINT_DIR, read_create_time, with_create_time  # noqa:
 MOUNT = Path.home() / "rc2"
 STORAGE = "Internal shared storage"
 LOADS = Path.home() / "wayfinder" / "loads"
+SPECS = Path.home() / "wayfinder" / "specs"
+LOADED = LOADS / "loaded.json"
+
+
+def newest_unloaded(specs: Path, record: Path) -> Path | None:
+    """The most recently Dispatched Spec, unless it has already been Loaded.
+
+    Only the newest counts: an older Spec that was never Loaded has been
+    superseded by the pilot's latest Dispatch, and must not overwrite it.
+    Dispatch timestamps are the file names and sort lexically (ADR 0017).
+    """
+    found = sorted(specs.glob("*/*/*.json"), key=lambda f: f.name)
+    if not found:
+        return None
+    done = set(json.loads(record.read_text())) if record.exists() else set()
+    return None if str(found[-1]) in done else found[-1]
 
 
 def cards() -> list[tuple[str, str]]:
@@ -161,6 +178,16 @@ def _selftest() -> None:
             raise AssertionError("a mismatched read-back was accepted")
         assert md5(live) == md5(tmp / "backup2" / f"{first_guid}.kmz")
 
+        # --newest: only the latest Dispatch, and never twice.
+        specs, record = tmp / "specs", tmp / "loaded.json"
+        for stamp in ("20260913T090000Z", "20260913T140000Z"):
+            f = specs / "site" / "2026-09-13" / f"{stamp}.json"
+            f.parent.mkdir(parents=True, exist_ok=True)
+            f.write_text("{}")
+        assert newest_unloaded(specs, record).name == "20260913T140000Z.json"
+        record.write_text(json.dumps([str(newest_unloaded(specs, record))]))
+        assert newest_unloaded(specs, record) is None
+
         # More parts than cards is refused, never truncated.
         try:
             assign([{}] * (len(cards()) + 1), cards())
@@ -174,6 +201,7 @@ def _selftest() -> None:
 def main() -> None:
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("spec", nargs="?", type=Path, help="the Mission Spec to Load")
+    p.add_argument("--newest", action="store_true", help="Load the newest Collected Spec if not already Loaded")
     p.add_argument("--yes", action="store_true", help="confirm replacing the WAYFINDER cards")
     p.add_argument("--selftest", action="store_true", help="run the offline self-check and exit")
     args = p.parse_args()
@@ -181,6 +209,10 @@ def main() -> None:
     if args.selftest:
         _selftest()
         return
+    if args.newest:
+        args.spec = newest_unloaded(SPECS, LOADED)
+        if args.spec is None:
+            return  # nothing new; cron calls this every minute
     if not args.spec or not args.spec.exists():
         sys.exit("name a Mission Spec file to Load")
     if not args.yes:
@@ -193,6 +225,9 @@ def main() -> None:
     loaded = load(args.spec, MOUNT / STORAGE, backups, fresh_mount=lambda: remount(MOUNT))
     sheet = "\n".join(f"Open {card}: {part['name']} ({part['waypoints']} waypoints)" for card, part in loaded)
     (backups / "cards.txt").write_text(sheet + "\n")
+    done = json.loads(LOADED.read_text()) if LOADED.exists() else []
+    LOADED.write_text(json.dumps(done + [str(args.spec)], indent=1))
+    print(time.strftime("%Y-%m-%d %H:%M:%S"), args.spec)
     print(sheet)
     print("Close and reopen each card's waypoint editor on the Controller to load it.")
 
