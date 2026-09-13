@@ -1,0 +1,89 @@
+:root {
+  --bg: #0b0d0f;
+  --panel: #131619;
+  --panel-raised: #1b1f23;
+  --border: #2a2f34;
+  --text: #d8dcdf;
+  --text-dim: #8a9096;
+  --accent: #4fb8a8;
+  --warn: #e0a94f;
+  --danger: #e0704f;
+  --mono: "SF Mono", ui-monospace, "Cascadia Code", Consolas, monospace;
+  --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--sans);
+  font-size: 14px;
+}
+
+input,
+select,
+button {
+  font-family: inherit;
+  font-size: inherit;
+  color: inherit;
+}
+
+.mono {
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+}
+
+button {
+  background: var(--panel-raised);
+  border: 1px solid var(--border);
+  color: var(--text);
+  padding: 6px 10px;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+button:hover {
+  border-color: var(--accent);
+}
+
+button.active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #06110f;
+}
+
+button.primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #06110f;
+  font-weight: 600;
+}
+
+button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+input[type="range"] {
+  width: 100%;
+}
+
+input[type="number"],
+input[type="text"],
+input[type="date"],
+select {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 4px 6px;
+  width: 100%;
+}

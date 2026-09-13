@@ -1,0 +1,36 @@
+.wrap {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+}
+
+.map {
+  position: absolute;
+  inset: 0;
+}
+
+.basemapToggle {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  z-index: 1;
+  display: flex;
+  gap: 4px;
+}
+
+.homeControl {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  z-index: 1;
+}
+
+.homeMarker {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #e0a94f;
+  border: 2px solid #06110f;
+  box-shadow: 0 0 0 2px #e0a94f;
+}

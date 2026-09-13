@@ -1,0 +1,82 @@
+.sidebar {
+  width: 360px;
+  flex: none;
+  height: 100%;
+  overflow-y: auto;
+  background: var(--panel);
+  border-left: 1px solid var(--border);
+  padding: 16px;
+}
+
+.section {
+  margin-bottom: 24px;
+  padding-bottom: 20px;
+  border-bottom: 1px solid var(--border);
+}
+
+.section:last-child {
+  border-bottom: none;
+}
+
+.section h2 {
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-dim);
+  margin: 0 0 12px;
+}
+
+.field {
+  margin-bottom: 14px;
+}
+
+.fieldHead {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-bottom: 4px;
+}
+
+.fieldHead label {
+  color: var(--text-dim);
+}
+
+.value {
+  color: var(--text);
+}
+
+.hint {
+  font-size: 12px;
+  color: var(--text-dim);
+  margin-top: 2px;
+}
+
+.warnHint {
+  font-size: 12px;
+  color: var(--warn);
+  margin-top: 4px;
+}
+
+.modeButtons {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 10px;
+  flex-wrap: wrap;
+}
+
+.readout {
+  display: flex;
+  justify-content: space-between;
+  color: var(--text-dim);
+}
+
+.note {
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--warn);
+  background: rgba(224, 169, 79, 0.08);
+  border: 1px solid rgba(224, 169, 79, 0.35);
+  border-radius: 4px;
+  padding: 8px;
+  margin: 10px 0 0;
+}

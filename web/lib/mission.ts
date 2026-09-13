@@ -163,7 +163,7 @@ export function preview(spec: MissionSpec): Preview {
     y += sideSpacing;
   }
 
-  let rows: LL[][] = rowsXY.map((row) => row.map(([x, yy]) => toLL(...unrot(x, yy))));
+  const rows: LL[][] = rowsXY.map((row) => row.map(([x, yy]) => toLL(...unrot(x, yy))));
   const points: LL[] = rows.flat();
 
   const problems: string[] = [];

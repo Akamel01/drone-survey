@@ -1,0 +1,49 @@
+.wrap {
+  flex: none;
+  background: var(--panel);
+  border-top: 1px solid var(--border);
+  padding: 10px 16px;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  overflow-x: auto;
+}
+
+.stat {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  white-space: nowrap;
+}
+
+.label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-dim);
+}
+
+.statValue {
+  font-size: 15px;
+}
+
+.warn {
+  color: var(--warn);
+}
+
+.actions {
+  margin-left: auto;
+  display: flex;
+  gap: 8px;
+  flex: none;
+}
+
+.problems {
+  margin: 8px 0 0;
+  padding-left: 18px;
+  color: var(--danger);
+  font-size: 12px;
+}
