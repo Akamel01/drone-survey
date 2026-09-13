@@ -339,3 +339,78 @@ most Android 11 devices and is the fact the whole loading path depends on. The
 Controller also publishes its limits in `capability/` beside the Missions, so the
 validation this ADR requires can read them at the moment of loading rather than
 trusting values recorded months earlier.
+
+## Revision, 2026-09-13 — the Mission name is computable, which is how the pilot picks a card
+
+A Mission Loaded into a Placeholder has to be identifiable by the pilot on the
+Controller's screen, so they tap the card that actually holds today's Site and
+part rather than yesterday's. Four candidate handles were measured against the
+real Controller, with 37 Placeholder Missions in the pool. Three failed.
+
+**The name does not come from the file.** This was established earlier and is
+re-confirmed here across a power cycle: overwriting the KMZ leaves the
+Controller's displayed name untouched.
+
+**The card thumbnail does not come from the file either.**
+`waypoint/map_preview/<guid>/<guid>.jpg` is written by DJI Fly and never read
+back. A test image was written into a slot, confirmed on the device by hash,
+and the Controller's list did not change. A second proof cuts the other way: the
+37 slots held five distinct thumbnail images on disk while the screen showed
+only three, which only makes sense if the screen is drawing from its own
+database rather than from any file.
+
+**The distance and waypoint count on each card are stale for the same reason.**
+A slot holding a 62-waypoint, 990 m Mission still displayed "900m(5)" — figures
+left over from whatever Mission the Placeholder last showed, not the one now
+sitting in its folder. Name, picture, distance and point count are all frozen at
+Placeholder creation; the file we overwrite governs only what flies.
+
+**The fourth candidate works, and needs nothing extra.** DJI Fly names each
+Mission with its creation timestamp to the second — for example
+"2026-09-12 18:50:07" — and every slot's KMZ carries that same moment as
+`<wpml:createTime>`, epoch milliseconds, in `wpmz/template.kml`. Formatted in
+America/Vancouver, it reproduces the displayed name exactly: checked against a
+photograph of the Controller's screen, where the predicted names
+"2026-09-13 11:15:03" and "2026-09-13 11:15:01" both matched their slots. The
+pilot-visible name is therefore computed from a file we already read, with no
+calibration pass, no renaming step, and no extra hardware. The planner can tell
+the operator which card to tap. This replaces the plan recorded above under
+"Placeholder slots and what does the loading" and "writing to the Controller is
+proven," where identification was left to the slot label and to running the
+lines from opposite ends — that plan still works, but it needed a label read by
+a human and a shape read off the map. A timestamp read off the file is simpler
+than both.
+
+**This is also why the loader must not touch `createTime` when it overwrites a
+slot.** Our writer was stamping its own `createTime` over the slot's existing
+one, which desynchronises the file from the name DJI Fly still shows and
+destroys the mapping this identification depends on. Two slots already carry
+that damage — 4EB8CF63 and 0F4D66A4 — where the KMZ's timestamp no longer
+matches the name on screen. The loader must read the slot's existing
+`createTime` before writing and preserve it, never generate a fresh one.
+
+**A damaged slot can still be recovered, from a second file, with a rule that
+looks wrong until it is checked.** The `map_preview` JPEG's mtime survives our
+overwrites, and formatting it as a timestamp reproduces the clobbered name. But
+it must be read as UTC and left there, not converted to America/Vancouver:
+`jmtpfs` reports the device's local wall clock already encoded as a UTC epoch,
+so converting it a second time shifts it by the timezone offset. Measured
+across the pool, formatting the mtime as UTC matched on 33 of 37 slots, and
+converting that UTC value to America/Vancouver matched on 0 of 37. The two
+timestamps in this section are not interchangeable: `createTime` is a real
+epoch, so it is formatted in local time; the JPEG mtime is a local wall clock
+that MTP has already relabelled as UTC, so it must be formatted as UTC. Worth
+stating plainly, because the fix looks like a bug at first read.
+
+**Other paths to the same identification were considered and rejected.** A
+sideloaded Android app running on the Controller itself cannot do this: DJI's
+own Mobile SDK compatibility page lists the Mini 5 Pro as unsupported, so MSDK
+cannot address this aircraft at all, and Android 11's scoped storage excludes
+`Android/data` from `MANAGE_EXTERNAL_STORAGE`, so an on-device app could not
+even read DJI Fly's mission files — a PC on USB MTP has strictly more reach
+into this Controller than any app installed on it could. An accessibility
+service driving the DJI Fly UI directly remains unverified and would be fragile
+against firmware updates. A USB HID dongle — a Raspberry Pi Zero acting as a
+keyboard or mouse, roughly $30-40, and viable in principle since the RC2's
+USB-C port does act as a host and accepts a plain USB mouse — is unnecessary
+now that the name is computable without touching the UI at all.

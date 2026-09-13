@@ -47,3 +47,20 @@
   color: var(--danger);
   font-size: 12px;
 }
+
+.passphrase {
+  width: 140px;
+}
+
+.dispatchOk {
+  margin-top: 8px;
+  color: var(--accent);
+  font-size: 12px;
+  font-family: var(--mono);
+}
+
+.dispatchError {
+  margin-top: 8px;
+  color: var(--danger);
+  font-size: 12px;
+}

@@ -88,6 +88,44 @@ export interface MissionSpec {
   };
 }
 
+/** A [lat, lon] pair, not just a 2-element array — the writer reads these by
+ *  index, so an out-of-range or non-finite value builds a KMZ silently wrong
+ *  rather than failing loudly. */
+function isLatLon(v: unknown): v is [number, number] {
+  return (
+    Array.isArray(v) &&
+    v.length === 2 &&
+    v.every((n) => typeof n === "number" && Number.isFinite(n)) &&
+    v[0] >= -90 &&
+    v[0] <= 90 &&
+    v[1] >= -180 &&
+    v[1] <= 180
+  );
+}
+
+/** What must hold before a Spec is worth Dispatching. Shared by the API route
+ *  (so the store never accumulates junk the Collector has to skip) and the
+ *  planner (so an operator is told locally instead of by a 400). */
+export function dispatchProblem(spec: MissionSpec): string | null {
+  if (!spec || typeof spec !== "object") return "not an object";
+  if (spec.version !== 1) return "wrong Spec version";
+  if (!spec.site?.trim()) return "no Site named";
+  if (!spec.date?.trim()) return "no date";
+  if (typeof spec.flight?.altitude_m !== "number" || !Number.isFinite(spec.flight.altitude_m)) {
+    return "no flight altitude";
+  }
+  if (spec.mission_type === "orbit") {
+    if (!isLatLon(spec.orbit?.center)) return "an orbit needs a subject";
+  } else if (!Array.isArray(spec.aoi) || spec.aoi.length < 3) {
+    return "an area needs at least three corners";
+  } else if (!spec.aoi.every(isLatLon)) {
+    // Too few corners and a corner off the globe are different mistakes, and
+    // telling someone to add corners they already drew sends them the wrong way.
+    return "a corner is not a position on Earth";
+  }
+  return null;
+}
+
 export const DEFAULT_SPEC: MissionSpec = {
   version: 1,
   mission_type: "grid",

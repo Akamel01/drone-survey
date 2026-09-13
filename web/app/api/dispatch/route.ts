@@ -1,5 +1,5 @@
 import { createHash, timingSafeEqual } from "node:crypto";
-import type { MissionSpec } from "@/lib/spec";
+import { dispatchProblem, type MissionSpec } from "@/lib/spec";
 
 // The storage credential lives here and never reaches the browser, which is the
 // whole reason this route exists (ADR 0017). Node, not edge: the B2 upload needs
@@ -29,21 +29,6 @@ function siteSlug(site: string): string {
     .slice(0, 60);
 }
 
-/** What must hold before a Spec is worth storing. The loader gates far more
- *  thoroughly before anything flies; this only refuses what is obviously not a
- *  Spec, so the store never accumulates junk the Collector has to skip. */
-function rejectionReason(spec: MissionSpec): string | null {
-  if (!spec || typeof spec !== "object") return "not an object";
-  if (!spec.site?.trim()) return "no Site named";
-  if (!spec.date?.trim()) return "no date";
-  if (spec.mission_type === "orbit") {
-    if (!spec.orbit?.center) return "an orbit needs a subject";
-  } else if (!Array.isArray(spec.aoi) || spec.aoi.length < 3) {
-    return "an area needs at least three corners";
-  }
-  return null;
-}
-
 export async function POST(request: Request) {
   const expected = process.env.DISPATCH_SECRET;
   if (!expected) {
@@ -61,7 +46,7 @@ export async function POST(request: Request) {
     return Response.json({ error: "Body is not JSON" }, { status: 400 });
   }
 
-  const bad = rejectionReason(spec);
+  const bad = dispatchProblem(spec);
   if (bad) return Response.json({ error: bad }, { status: 400 });
 
   const keyId = process.env.B2_KEY_ID;

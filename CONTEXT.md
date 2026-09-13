@@ -98,7 +98,9 @@ _Avoid_: RC, remote, smart controller
 
 **Placeholder Mission**:
 A Mission created by hand on the Controller once, so that a slot exists for a
-generated Mission to replace. Its own contents never fly.
+generated Mission to replace. Its own contents never fly. Identified on the
+Controller by its creation timestamp, which outlives whatever Mission is
+currently Loaded into it.
 _Avoid_: dummy mission, dummy file, template
 
 **Load**:
