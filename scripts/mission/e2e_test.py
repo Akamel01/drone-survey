@@ -79,7 +79,8 @@ def distance_outside_m(pt, poly):
 def spec_for(aoi, **flight):
     """A Spec shaped exactly as web/lib/spec.ts writes one."""
     f = {"altitude_m": 90, "forward_overlap_pct": 85, "side_overlap_pct": 75,
-         "gimbal_pitch_deg": -80, "speed_ms": 5, "turn": "through", "margin_passes": 1}
+         "gimbal_pitch_deg": -80, "speed_ms": 5, "turn": "through", "margin_passes": 1,
+         "battery_minutes": 16}
     f.update(flight)
     return {
         "version": 1, "site": "Test Site", "date": "2026-09-12", "aoi": aoi,
@@ -157,6 +158,19 @@ def case(title, spec, expect_parts=None):
               f"{plan['parts']} vs {report['parts']}")
         if expect_parts is not None:
             check(f"splits into {expect_parts} parts", report["parts"] == expect_parts, str(report["parts"]))
+
+        # A part that outlasts the battery cannot be flown, and the operator
+        # would only find out in the air.
+        agree = (len(plan["part_minutes"]) == len(report["part_minutes"])
+                 and all(abs(a - b) < 0.01 for a, b in zip(plan["part_minutes"], report["part_minutes"])))
+        check("part durations agree", agree,
+              f"{[round(x, 2) for x in plan['part_minutes']]} vs "
+              f"{[round(x, 2) for x in report['part_minutes']]}")
+        battery = spec["flight"]["battery_minutes"]
+        if battery > 0 and report["part_minutes"]:
+            worst = max(report["part_minutes"])
+            check("every part fits one battery", worst <= battery + 1e-6,
+                  f"worst part {worst:.1f} min against a {battery} min battery")
 
         missions = report["missions"]
         seams = len(missions) - 1
@@ -275,6 +289,16 @@ def orbit_case(title, spec):
         close(plan["capped_speed_ms"], report["speed_ms"], 1e-6, "shutter-capped speed agrees", " m/s")
         check("part count agrees", plan["parts"] == report["parts"],
               f"{plan['parts']} vs {report['parts']}")
+        agree = (len(plan["part_minutes"]) == len(report["part_minutes"])
+                 and all(abs(a - b) < 0.01 for a, b in zip(plan["part_minutes"], report["part_minutes"])))
+        check("part durations agree", agree,
+              f"{[round(x, 2) for x in plan['part_minutes']]} vs "
+              f"{[round(x, 2) for x in report['part_minutes']]}")
+        battery = spec["flight"]["battery_minutes"]
+        if battery > 0 and report["part_minutes"]:
+            worst = max(report["part_minutes"])
+            check("every part fits one battery", worst <= battery + 1e-6,
+                  f"worst part {worst:.1f} min against a {battery} min battery")
         check("writer exited clean", code == 0, f"exit {code}")
         check("the planner reported no problems", not plan["problems"], str(plan["problems"]))
 

@@ -61,6 +61,17 @@ export interface MissionSpec {
     speed_ms: number;
     turn: TurnMode;
     margin_passes: number;
+    /**
+     * Usable flying minutes on one battery, which decides how a Site is split.
+     *
+     * Resuming a waypoint mission after a battery change is not available on
+     * this aircraft (ADR 0016), so a Site bigger than one battery is flown as
+     * several Missions rather than one interrupted Mission. Each part finishes
+     * by returning home; the operator swaps the battery and selects the next
+     * part by hand. Consecutive parts share a waypoint, so nothing is missed
+     * where one battery ends and the next begins.
+     */
+    battery_minutes: number;
   };
   orbit: OrbitSpec;
   // Recorded, not flown. The mission file carries no camera settings beyond the
@@ -97,6 +108,9 @@ export const DEFAULT_SPEC: MissionSpec = {
     speed_ms: 5,
     turn: "through",
     margin_passes: 1,
+    // The Mini 5 Pro's standard battery, kept conservative: the figure that
+    // matters is time in the air on a Site, not the headline endurance.
+    battery_minutes: 16,
   },
   orbit: {
     center: null,

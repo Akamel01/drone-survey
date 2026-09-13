@@ -34,6 +34,7 @@ interface MapPaneProps {
   onAoiChange: (aoi: [number, number][], shape?: CircleShape | null) => void;
   onHomeChange: (home: [number, number]) => void;
   onPoiChange: (center: [number, number]) => void;
+  onOrbitRadiusChange: (radiusM: number) => void;
   onModeChange: (mode: DrawMode) => void;
 }
 
@@ -43,20 +44,20 @@ type LL = [number, number];
 // GeoJSON is [lon, lat]; the spec/contract is [lat, lon]. Convert at the edges only.
 const toLngLat = (p: LL): [number, number] => [p[1], p[0]];
 
+const mPerLon = (lat: number) => 111320 * Math.cos((lat * Math.PI) / 180);
+
 /** Due east of a point, used to give a circle one radius handle to drag. */
-function eastOf(center: LL, radiusM: number): LL {
-  return [center[0], center[1] + radiusM / (111320 * Math.cos((center[0] * Math.PI) / 180))];
-}
+const eastOf = (center: LL, radiusM: number): LL => [center[0], center[1] + radiusM / mPerLon(center[0])];
 
 function fc(features: GeoJSON.Feature[]): GeoJSON.FeatureCollection {
   return { type: "FeatureCollection", features };
 }
 
-function aoiPolygonGeoJSON(aoi: LL[]): GeoJSON.FeatureCollection {
-  if (aoi.length < 3) return fc([]);
-  const ring = aoi.map(toLngLat);
-  ring.push(ring[0]);
-  return fc([{ type: "Feature", properties: {}, geometry: { type: "Polygon", coordinates: [ring] } }]);
+function polygonGeoJSON(ring: LL[]): GeoJSON.FeatureCollection {
+  if (ring.length < 3) return fc([]);
+  const coords = ring.map(toLngLat);
+  coords.push(coords[0]);
+  return fc([{ type: "Feature", properties: {}, geometry: { type: "Polygon", coordinates: [coords] } }]);
 }
 
 function pointsGeoJSON(points: LL[], props: (i: number) => object = () => ({})) {
@@ -84,14 +85,28 @@ function midpointsGeoJSON(aoi: LL[], shape: CircleShape | null | undefined) {
   );
 }
 
-function linesGeoJSON(lines: LL[][]) {
-  return fc(
-    lines.map((line) => ({
+function lineGeoJSON(points: LL[]) {
+  if (points.length < 2) return fc([]);
+  return fc([
+    {
       type: "Feature" as const,
       properties: {},
-      geometry: { type: "LineString" as const, coordinates: line.map(toLngLat) },
-    })),
-  );
+      geometry: { type: "LineString" as const, coordinates: points.map(toLngLat) },
+    },
+  ]);
+}
+
+/** What one photograph covers on the ground, drawn where the map is looking. */
+function footprintGeoJSON(center: LL, acrossM: number, alongM: number) {
+  if (!acrossM || !alongM) return fc([]);
+  const dLat = alongM / 2 / 111132;
+  const dLon = acrossM / 2 / mPerLon(center[0]);
+  return polygonGeoJSON([
+    [center[0] - dLat, center[1] - dLon],
+    [center[0] - dLat, center[1] + dLon],
+    [center[0] + dLat, center[1] + dLon],
+    [center[0] + dLat, center[1] - dLon],
+  ]);
 }
 
 /**
@@ -126,21 +141,32 @@ function addLayers(map: MaplibreMap) {
   if (map.getSource("aoi")) return; // already added for this style
   if (!map.hasImage("flight-arrow")) map.addImage("flight-arrow", arrowImage());
 
-  map.addSource("aoi", { type: "geojson", data: aoiPolygonGeoJSON([]) });
+  map.addSource("aoi", { type: "geojson", data: fc([]) });
   map.addLayer({ id: "aoi-fill", type: "fill", source: "aoi", paint: { "fill-color": "#4fb8a8", "fill-opacity": 0.18 } });
   map.addLayer({ id: "aoi-outline", type: "line", source: "aoi", paint: { "line-color": "#4fb8a8", "line-width": 2 } });
 
-  map.addSource("flight-lines", { type: "geojson", data: linesGeoJSON([]) });
+  map.addSource("footprint", { type: "geojson", data: fc([]) });
   map.addLayer({
-    id: "flight-lines",
+    id: "footprint",
     type: "line",
-    source: "flight-lines",
+    source: "footprint",
+    paint: { "line-color": "#e0a94f", "line-width": 1.5, "line-dasharray": [3, 2] },
+  });
+
+  // One continuous line through every photo position in flight order, so the
+  // turn from the end of one pass to the start of the next is visible and can
+  // be judged. Drawing each pass separately hid exactly that.
+  map.addSource("flight-path", { type: "geojson", data: fc([]) });
+  map.addLayer({
+    id: "flight-path",
+    type: "line",
+    source: "flight-path",
     paint: { "line-color": "#d8dcdf", "line-width": 1.5, "line-opacity": 0.8 },
   });
   map.addLayer({
     id: "flight-arrows",
     type: "symbol",
-    source: "flight-lines",
+    source: "flight-path",
     layout: {
       "symbol-placement": "line",
       "symbol-spacing": 110,
@@ -152,7 +178,7 @@ function addLayers(map: MaplibreMap) {
     },
   });
 
-  map.addSource("flight-points", { type: "geojson", data: pointsGeoJSON([]) });
+  map.addSource("flight-points", { type: "geojson", data: fc([]) });
   map.addLayer({
     id: "flight-points",
     type: "circle",
@@ -160,7 +186,7 @@ function addLayers(map: MaplibreMap) {
     paint: { "circle-radius": 2.5, "circle-color": "#e0704f" },
   });
 
-  map.addSource("aoi-vertices", { type: "geojson", data: pointsGeoJSON([]) });
+  map.addSource("aoi-vertices", { type: "geojson", data: fc([]) });
   map.addLayer({
     id: "aoi-vertices",
     type: "circle",
@@ -169,7 +195,7 @@ function addLayers(map: MaplibreMap) {
   });
 
   // Smaller, amber handles distinct from the teal vertices: click to insert.
-  map.addSource("aoi-midpoints", { type: "geojson", data: pointsGeoJSON([]) });
+  map.addSource("aoi-midpoints", { type: "geojson", data: fc([]) });
   map.addLayer({
     id: "aoi-midpoints",
     type: "circle",
@@ -183,8 +209,8 @@ function addLayers(map: MaplibreMap) {
     },
   });
 
-  // A circle is edited as a centre and a radius, not as sixty-four vertices.
-  map.addSource("circle-handles", { type: "geojson", data: pointsGeoJSON([]) });
+  // A circle — and an orbit — is edited as a centre and a radius.
+  map.addSource("circle-handles", { type: "geojson", data: fc([]) });
   map.addLayer({
     id: "circle-handles",
     type: "circle",
@@ -193,10 +219,10 @@ function addLayers(map: MaplibreMap) {
   });
 }
 
-function labelMarker(text: string, background: string, color: string): HTMLElement {
+function labelMarker(text: string, background: string): HTMLElement {
   const el = document.createElement("div");
   el.textContent = text;
-  el.style.cssText = `background:${background};color:${color};font:600 10px/1 var(--mono, monospace);
+  el.style.cssText = `background:${background};color:#06110f;font:600 10px/1 var(--mono, monospace);
     letter-spacing:0.06em;padding:4px 6px;border-radius:4px;border:1px solid #06110f;white-space:nowrap;
     transform:translateY(-14px);pointer-events:none`;
   return el;
@@ -211,6 +237,7 @@ export default function MapPane({
   onAoiChange,
   onHomeChange,
   onPoiChange,
+  onOrbitRadiusChange,
   onModeChange,
 }: MapPaneProps) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -220,19 +247,24 @@ export default function MapPane({
   const endMarkersRef = useRef<Marker[]>([]);
   const numberMarkersRef = useRef<Marker[]>([]);
   const [basemap, setBasemap] = useState<"esri" | "osm">("esri");
-  const [pendingRadius, setPendingRadius] = useState<number | null>(null);
+  const [showFootprint, setShowFootprint] = useState(false);
+  const [drawHint, setDrawHint] = useState<string | null>(null);
 
   const dragIndexRef = useRef<number | null>(null);
   const circleDragRef = useRef<null | "center" | "radius">(null);
   const circleCenterRef = useRef<LL | null>(null);
+  const shapeDragRef = useRef<null | { start: LL; aoi: LL[]; shape: CircleShape | null }>(null);
+  // True while a shape is being rubber-banded, so the data push below leaves the
+  // live preview alone instead of overwriting it from the committed spec.
+  const drawingRef = useRef(false);
 
-  // Leaving circle mode with a centre placed but no radius must not leave that
-  // half-drawn circle behind, so every mode change discards it. Doing this in an
-  // effect on `mode` instead would cost a second render on every mode change.
+  // Leaving a draw mode half-finished must not leave the shape behind, so every
+  // mode change discards it. An effect on `mode` would cost a second render.
   const changeMode = (next: DrawMode) => {
     if (next !== "draw-circle") {
       circleCenterRef.current = null;
-      setPendingRadius(null);
+      drawingRef.current = false;
+      setDrawHint(null);
     }
     onModeChange(next);
   };
@@ -240,9 +272,10 @@ export default function MapPane({
   // Latest props, readable from map handlers registered once on init. This must
   // be refreshed on every render: without it the handlers keep reading the spec
   // as it was at mount, and every click would see an empty area.
-  const stateRef = useRef({ spec, mode, onAoiChange, onHomeChange, onPoiChange, onModeChange: changeMode });
+  const latest = { spec, mode, onAoiChange, onHomeChange, onPoiChange, onOrbitRadiusChange, onModeChange: changeMode };
+  const stateRef = useRef(latest);
   useEffect(() => {
-    stateRef.current = { spec, mode, onAoiChange, onHomeChange, onPoiChange, onModeChange: changeMode };
+    stateRef.current = latest;
   });
 
   useEffect(() => {
@@ -287,8 +320,11 @@ export default function MapPane({
       if (mode === "draw-rectangle") {
         if (spec.aoi.length === 0) {
           onAoiChange([p]);
+          setDrawHint("Drag out the opposite corner");
         } else {
           const [a] = spec.aoi;
+          drawingRef.current = false;
+          setDrawHint(null);
           onAoiChange([[a[0], a[1]], [a[0], p[1]], [p[0], p[1]], [p[0], a[1]]]);
           onModeChange("idle");
         }
@@ -297,12 +333,13 @@ export default function MapPane({
       if (mode === "draw-circle") {
         if (!circleCenterRef.current) {
           circleCenterRef.current = p;
-          setPendingRadius(0);
+          setDrawHint("Drag out the radius");
         } else {
           const center = circleCenterRef.current;
           const radius_m = Math.max(1, geodesicM(center, p));
           circleCenterRef.current = null;
-          setPendingRadius(null);
+          drawingRef.current = false;
+          setDrawHint(null);
           onAoiChange(circlePolygon(center, radius_m), { kind: "circle", center, radius_m });
           onModeChange("idle");
         }
@@ -354,6 +391,25 @@ export default function MapPane({
       map.getCanvas().style.cursor = "grabbing";
     });
 
+    // Dragging inside the shape moves the whole thing. The handles sit on top of
+    // the fill, so a press on one of them must not also start a move.
+    map.on("mousedown", "aoi-fill", (e: MapLayerMouseEvent) => {
+      const { mode, spec } = stateRef.current;
+      if (mode !== "idle" || spec.mission_type === "orbit" || spec.aoi.length < 3) return;
+      const onHandle = map.queryRenderedFeatures(e.point, {
+        layers: ["aoi-vertices", "aoi-midpoints", "circle-handles"],
+      });
+      if (onHandle.length) return;
+      e.preventDefault();
+      shapeDragRef.current = {
+        start: [e.lngLat.lat, e.lngLat.lng],
+        aoi: spec.aoi,
+        shape: spec.shape ?? null,
+      };
+      map.dragPan.disable();
+      map.getCanvas().style.cursor = "grabbing";
+    });
+
     map.on("contextmenu", "aoi-vertices", (e: MapLayerMouseEvent) => {
       const { spec, onAoiChange } = stateRef.current;
       if (!e.features?.length || spec.shape) return;
@@ -365,27 +421,56 @@ export default function MapPane({
     });
 
     map.on("mousemove", (e: MapMouseEvent) => {
-      const { spec, onAoiChange, mode } = stateRef.current;
+      const { spec, mode, onAoiChange, onPoiChange, onOrbitRadiusChange } = stateRef.current;
       const p: LL = [e.lngLat.lat, e.lngLat.lng];
+      const src = (id: string) => map.getSource(id) as GeoJSONSource | undefined;
 
-      // Live circle while it is being drawn, painted straight into the source:
-      // committing to state on every mouse move would be a render per pixel.
+      // Rubber-band while a shape is being drawn, painted straight into the
+      // source: committing to state on every mouse move would be a render per
+      // pixel, and without it there is no sign anything is being drawn at all.
+      if (mode === "draw-rectangle" && spec.aoi.length === 1) {
+        const a = spec.aoi[0];
+        const rect: LL[] = [[a[0], a[1]], [a[0], p[1]], [p[0], p[1]], [p[0], a[1]]];
+        drawingRef.current = true;
+        src("aoi")?.setData(polygonGeoJSON(rect));
+        setDrawHint(
+          `${Math.round(geodesicM(rect[0], rect[1]))} × ${Math.round(geodesicM(rect[1], rect[2]))} m — click to finish`,
+        );
+        return;
+      }
       if (mode === "draw-circle" && circleCenterRef.current) {
         const r = Math.max(1, geodesicM(circleCenterRef.current, p));
-        const src = map.getSource("aoi") as GeoJSONSource | undefined;
-        if (src) src.setData(aoiPolygonGeoJSON(circlePolygon(circleCenterRef.current, r)));
-        setPendingRadius(r);
+        drawingRef.current = true;
+        src("aoi")?.setData(polygonGeoJSON(circlePolygon(circleCenterRef.current, r)));
+        setDrawHint(`Radius ${Math.round(r)} m — click to finish`);
         return;
       }
 
-      if (circleDragRef.current && spec.shape) {
-        const s = spec.shape;
-        if (circleDragRef.current === "center") {
-          onAoiChange(circlePolygon(p, s.radius_m), { ...s, center: p });
-        } else {
-          const radius_m = Math.max(1, geodesicM(s.center, p));
-          onAoiChange(circlePolygon(s.center, radius_m), { ...s, radius_m });
+      if (circleDragRef.current) {
+        if (spec.mission_type === "orbit" && spec.orbit.center) {
+          if (circleDragRef.current === "center") onPoiChange(p);
+          else onOrbitRadiusChange(Math.max(5, Math.round(geodesicM(spec.orbit.center, p))));
+        } else if (spec.shape) {
+          const s = spec.shape;
+          if (circleDragRef.current === "center") {
+            onAoiChange(circlePolygon(p, s.radius_m), { ...s, center: p });
+          } else {
+            const radius_m = Math.max(1, geodesicM(s.center, p));
+            onAoiChange(circlePolygon(s.center, radius_m), { ...s, radius_m });
+          }
         }
+        return;
+      }
+
+      if (shapeDragRef.current) {
+        const d = shapeDragRef.current;
+        const dLat = p[0] - d.start[0];
+        const dLon = p[1] - d.start[1];
+        const moved = d.aoi.map(([la, lo]) => [la + dLat, lo + dLon] as LL);
+        onAoiChange(
+          moved,
+          d.shape ? { ...d.shape, center: [d.shape.center[0] + dLat, d.shape.center[1] + dLon] } : null,
+        );
         return;
       }
 
@@ -396,9 +481,12 @@ export default function MapPane({
     });
 
     const endDrag = () => {
-      if (dragIndexRef.current === null && circleDragRef.current === null) return;
+      if (dragIndexRef.current === null && circleDragRef.current === null && shapeDragRef.current === null) {
+        return;
+      }
       dragIndexRef.current = null;
       circleDragRef.current = null;
+      shapeDragRef.current = null;
       map.dragPan.enable();
       map.getCanvas().style.cursor = "";
     };
@@ -413,12 +501,20 @@ export default function MapPane({
         }
       });
     }
+    map.on("mouseenter", "aoi-fill", () => {
+      const { mode, spec } = stateRef.current;
+      if (mode === "idle" && spec.mission_type !== "orbit") map.getCanvas().style.cursor = "move";
+    });
+    map.on("mouseleave", "aoi-fill", () => {
+      if (shapeDragRef.current === null) map.getCanvas().style.cursor = "";
+    });
 
     const onKeydown = (e: KeyboardEvent) => {
       const { mode, spec, onAoiChange, onModeChange } = stateRef.current;
       if (e.key === "Escape") {
         circleCenterRef.current = null;
-        setPendingRadius(null);
+        drawingRef.current = false;
+        setDrawHint(null);
         onModeChange("idle");
         return;
       }
@@ -444,29 +540,54 @@ export default function MapPane({
     const set = (id: string, data: GeoJSON.FeatureCollection) =>
       (map.getSource(id) as GeoJSONSource).setData(data);
 
-    set("aoi", isOrbit ? fc([]) : aoiPolygonGeoJSON(spec.aoi));
+    if (!drawingRef.current) set("aoi", isOrbit ? fc([]) : polygonGeoJSON(spec.aoi));
     set("aoi-vertices", isOrbit || spec.shape ? fc([]) : pointsGeoJSON(spec.aoi, (i) => ({ index: i })));
     set("aoi-midpoints", isOrbit || mode !== "idle" ? fc([]) : midpointsGeoJSON(spec.aoi, spec.shape));
-    set(
-      "circle-handles",
-      !isOrbit && spec.shape
-        ? fc([
-            {
-              type: "Feature",
-              properties: { kind: "center" },
-              geometry: { type: "Point", coordinates: toLngLat(spec.shape.center) },
-            },
-            {
-              type: "Feature",
-              properties: { kind: "radius" },
-              geometry: { type: "Point", coordinates: toLngLat(eastOf(spec.shape.center, spec.shape.radius_m)) },
-            },
-          ])
-        : fc([]),
-    );
-    set("flight-lines", linesGeoJSON(preview.lines));
+
+    const handles: GeoJSON.Feature[] = [];
+    const circle = isOrbit
+      ? spec.orbit.center
+        ? { center: spec.orbit.center, radius_m: spec.orbit.radius_m }
+        : null
+      : spec.shape;
+    if (circle) {
+      handles.push({
+        type: "Feature",
+        properties: { kind: "center" },
+        geometry: { type: "Point", coordinates: toLngLat(circle.center) },
+      });
+      handles.push({
+        type: "Feature",
+        properties: { kind: "radius" },
+        geometry: { type: "Point", coordinates: toLngLat(eastOf(circle.center, circle.radius_m)) },
+      });
+    }
+    set("circle-handles", fc(handles));
+
+    set("flight-path", lineGeoJSON(preview.points));
     set("flight-points", pointsGeoJSON(preview.points));
   });
+
+  // What one photograph covers at this altitude, against what the map is showing.
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+    const paint = () => {
+      const src = map.getSource("footprint") as GeoJSONSource | undefined;
+      if (!src) return;
+      const c = map.getCenter();
+      src.setData(
+        showFootprint
+          ? footprintGeoJSON([c.lat, c.lng], preview.footprint_across_m, preview.footprint_along_m)
+          : fc([]),
+      );
+    };
+    paint();
+    map.on("move", paint);
+    return () => {
+      map.off("move", paint);
+    };
+  }, [showFootprint, preview.footprint_across_m, preview.footprint_along_m]);
 
   // Where the path begins and where it ends, so a wasteful route is obvious.
   useEffect(() => {
@@ -474,13 +595,11 @@ export default function MapPane({
     endMarkersRef.current.forEach((m) => m.remove());
     endMarkersRef.current = [];
     if (!map || preview.points.length < 2) return;
-    const first = preview.points[0];
-    const last = preview.points[preview.points.length - 1];
-    const start = new Marker({ element: labelMarker("START", "#4fb8a8", "#06110f"), anchor: "bottom" })
-      .setLngLat(toLngLat(first))
+    const start = new Marker({ element: labelMarker("START", "#4fb8a8"), anchor: "bottom" })
+      .setLngLat(toLngLat(preview.points[0]))
       .addTo(map);
-    const end = new Marker({ element: labelMarker("END", "#e0704f", "#06110f"), anchor: "bottom" })
-      .setLngLat(toLngLat(last))
+    const end = new Marker({ element: labelMarker("END", "#e0704f"), anchor: "bottom" })
+      .setLngLat(toLngLat(preview.points[preview.points.length - 1]))
       .addTo(map);
     endMarkersRef.current = [start, end];
   }, [preview.points]);
@@ -534,10 +653,6 @@ export default function MapPane({
     poiMarkerRef.current.setLngLat(toLngLat(center)).addTo(map);
   }, [spec.mission_type, spec.orbit.center]);
 
-  // Only the cursor belongs here: it is an external system being synchronised
-  // with React state. The half-drawn circle is cleared where the mode actually
-  // changes instead, because reacting to the change afterwards means a second
-  // render every time the mode moves.
   useEffect(() => {
     const map = mapRef.current;
     if (map) map.getCanvas().style.cursor = mode === "idle" ? "" : "crosshair";
@@ -547,6 +662,10 @@ export default function MapPane({
     setBasemap(next);
     mapRef.current?.setStyle(next === "esri" ? BASEMAP : BASEMAP_OSM);
   }
+
+  const footprintLabel = preview.footprint_across_m
+    ? `${Math.round(preview.footprint_across_m)} × ${Math.round(preview.footprint_along_m)} m`
+    : "";
 
   return (
     <div className={styles.wrap}>
@@ -558,7 +677,7 @@ export default function MapPane({
         <button className={basemap === "osm" ? "active" : ""} onClick={() => toggleBasemap("osm")}>
           OSM
         </button>
-        {/* Near what it affects: a display option for the map lives on the map. */}
+        {/* Near what it affects: display options for the map live on the map. */}
         <button
           className={showNumbers ? "active" : ""}
           onClick={() => onShowNumbersChange(!showNumbers)}
@@ -566,16 +685,17 @@ export default function MapPane({
         >
           Numbers
         </button>
+        <button
+          className={showFootprint ? "active" : ""}
+          onClick={() => setShowFootprint(!showFootprint)}
+          title={`What one photograph covers at this altitude${footprintLabel ? `: ${footprintLabel}` : ""}`}
+        >
+          {showFootprint && footprintLabel ? footprintLabel : "Footprint"}
+        </button>
       </div>
-      {mode === "draw-circle" && (
+      {drawHint && (
         <div className={styles.homeControl}>
-          {/* Driven by state, not by the ref: a ref read during render is not
-              guaranteed to be the value React rendered with. */}
-          <button disabled>
-            {pendingRadius === null
-              ? "Click the centre"
-              : `Radius ${Math.round(pendingRadius)} m — click to finish`}
-          </button>
+          <button disabled>{drawHint}</button>
         </div>
       )}
     </div>

@@ -54,6 +54,9 @@ export default function PlanPage() {
           onAoiChange={setAoi}
           onHomeChange={setHome}
           onPoiChange={setPoi}
+          onOrbitRadiusChange={(radius_m) =>
+            setSpecState((s) => ({ ...s, orbit: { ...s.orbit, radius_m } }))
+          }
           onModeChange={setMode}
         />
         <Sidebar

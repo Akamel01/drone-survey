@@ -100,25 +100,39 @@ def poly_distance(pt, poly):
     return best
 
 
-def split_rows(rows, ceiling):
+def split_rows(rows, ceiling, speed=0.0, stop_per_point=0.0, battery_seconds=0.0):
     """Cut at the end of a flight line, never mid-line, sharing a waypoint at each seam.
 
-    Parts are balanced rather than packed to the ceiling: packing greedily gives a
-    long leg followed by a stub, which is a poor sequence in the field. Rows are no
-    longer all the same length once the grid is clipped to the area, so this counts
-    waypoints instead of lines.
+    The battery decides this before the waypoint ceiling does. Mirrors splitPlan()
+    in web/lib/mission.ts. Each part finishes by returning home, so the operator
+    swaps the battery and selects the next part by hand — resuming a Mission across
+    a power cycle is not available on this aircraft (ADR 0016), and the shared seam
+    waypoint is what makes continuing exact.
     """
-    total = sum(len(r) for r in rows)
-    n_parts = max(1, math.ceil(total / ceiling))
-    target = total / n_parts
-    parts, cur = [], []
-    for row in rows:
-        if cur and (len(cur) + len(row) > ceiling or len(cur) >= target):
+    def cost(i):
+        row = rows[i]
+        d = sum(geodesic_m(row[j][:2], row[j + 1][:2]) for j in range(len(row) - 1))
+        # The leg from the end of the previous pass to the start of this one is
+        # flown too, and on a long Site it is not a rounding error.
+        if i > 0:
+            d += geodesic_m(rows[i - 1][-1][:2], row[0][:2])
+        return (d / speed + len(row) * stop_per_point) if speed > 0 else 0.0
+
+    parts, minutes, cur, cur_seconds = [], [], [], 0.0
+    for i, row in enumerate(rows):
+        c = cost(i)
+        too_many = cur and len(cur) + len(row) > ceiling
+        too_long = cur and battery_seconds > 0 and cur_seconds + c > battery_seconds
+        if too_many or too_long:
             parts.append(cur)
+            minutes.append(cur_seconds / 60)
             cur = [cur[-1]]
+            cur_seconds = 0.0
         cur.extend(row)
+        cur_seconds += c
     parts.append(cur)
-    return parts
+    minutes.append(cur_seconds / 60)
+    return parts, minutes
 
 
 def plan_grid(aoi_ll, alt, fwd_overlap, side_overlap, margin_passes):
@@ -412,6 +426,8 @@ def load_spec(path, args):
     args.speed = f["speed_ms"]
     args.turn = f["turn"]
     args.margin_passes = f["margin_passes"]
+    # A Spec written before battery splitting existed keeps the flag's default.
+    args.battery = f.get("battery_minutes", args.battery)
     args.interval = cam["interval_s"]
     if not args.name:
         args.name = f"{spec['site']} {spec['date']}".strip()
@@ -442,7 +458,9 @@ def run_orbit(args):
             f"one ring holds {longest} waypoints, more than DJI Fly's {LIMITS['max_waypoints']}"
         ]}, indent=2))
         return 1
-    parts = split_rows(rings, LIMITS["max_waypoints"])
+    stop_per_point = speed / STOP_ACCEL_MS2 if args.turn == "stop" else 0.0
+    parts, part_minutes = split_rows(rings, LIMITS["max_waypoints"], speed,
+                                     stop_per_point, args.battery * 60)
 
     out = Path(args.out)
     results, failed = [], False
@@ -473,7 +491,9 @@ def run_orbit(args):
         })
 
     print(json.dumps({"mission_type": "orbit", "turn": args.turn, "parts": len(parts),
-                      "speed_ms": speed, **plan, "missions": results}, indent=2))
+                      "speed_ms": speed, "battery_minutes": args.battery,
+                      "part_minutes": [round(m, 4) for m in part_minutes],
+                      **plan, "missions": results}, indent=2))
     return 1 if failed else 0
 
 
@@ -490,6 +510,9 @@ def main():
     ap.add_argument("--gimbal", type=float, default=-80.0)
     ap.add_argument("--speed", type=float, default=5.0)
     ap.add_argument("--margin-passes", type=float, default=1.0)
+    ap.add_argument("--battery", type=float, default=16.0,
+                    help="usable flying minutes on one battery; splits the Mission so each "
+                         "part can be flown on a fresh one. 0 disables the limit")
     ap.add_argument("--turn", choices=["through", "stop"], default="through",
                     help="fly through each photo point, or stop at it")
     ap.add_argument("--interval", type=float, default=0.0,
@@ -546,7 +569,9 @@ def main():
             f"{LIMITS['max_waypoints']}; the area is too long to split at a line boundary"
         ]}, indent=2))
         return 1
-    parts = split_rows(rows, LIMITS["max_waypoints"])
+    stop_per_point = args.speed / STOP_ACCEL_MS2 if args.turn == "stop" else 0.0
+    parts, part_minutes = split_rows(rows, LIMITS["max_waypoints"], args.speed,
+                                     stop_per_point, args.battery * 60)
 
     out = Path(args.out)
     results, failed = [], False
@@ -558,7 +583,10 @@ def main():
         failed = failed or bool(report["problems"])
         results.append({"out": str(path), "name": name, "waypoints": len(part), **report})
 
-    print(json.dumps({"turn": args.turn, "parts": len(parts), **plan, "missions": results}, indent=2))
+    print(json.dumps({"turn": args.turn, "parts": len(parts),
+                      "battery_minutes": args.battery,
+                      "part_minutes": [round(m, 4) for m in part_minutes],
+                      **plan, "missions": results}, indent=2))
     return 1 if failed else 0
 
 

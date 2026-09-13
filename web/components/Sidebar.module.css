@@ -19,11 +19,80 @@
 }
 
 .section h2 {
+  display: flex;
+  align-items: center;
   font-size: 12px;
   text-transform: uppercase;
   letter-spacing: 0.08em;
   color: var(--text-dim);
   margin: 0 0 12px;
+}
+
+/* Explanation on demand: worth reading once, not worth occupying the panel
+   permanently. Keyboard focus reveals it as well as hover. */
+.info {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  flex: none;
+  width: 15px;
+  height: 15px;
+  margin-left: 6px;
+  border: 1px solid var(--border);
+  border-radius: 50%;
+  color: var(--text-dim);
+  font-size: 10px;
+  font-style: italic;
+  text-transform: none;
+  letter-spacing: 0;
+  cursor: help;
+}
+
+.info:hover,
+.info:focus-visible {
+  border-color: var(--warn);
+  color: var(--warn);
+  outline: none;
+}
+
+.infoBubble {
+  position: absolute;
+  top: 20px;
+  right: 0;
+  z-index: 5;
+  width: 262px;
+  padding: 9px 11px;
+  background: var(--panel-raised);
+  border: 1px solid var(--warn);
+  border-radius: 5px;
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.45);
+  color: var(--text);
+  font: 400 12px/1.55 var(--sans);
+  font-style: normal;
+  text-transform: none;
+  letter-spacing: 0;
+  text-align: left;
+  opacity: 0;
+  visibility: hidden;
+  transform: translateY(-4px);
+  transition: opacity 120ms ease-out, transform 120ms ease-out, visibility 120ms;
+  pointer-events: none;
+}
+
+.info:hover .infoBubble,
+.info:focus .infoBubble,
+.info:focus-within .infoBubble {
+  opacity: 1;
+  visibility: visible;
+  transform: translateY(0);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .infoBubble {
+    transition: opacity 120ms ease, visibility 120ms;
+    transform: none;
+  }
 }
 
 .field {

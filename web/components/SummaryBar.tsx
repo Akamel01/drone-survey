@@ -55,7 +55,18 @@ export default function SummaryBar({ spec, preview, onSaveMission }: SummaryBarP
           warn={preview.capped_speed_ms < spec.flight.speed_ms}
         />
         <Stat label="Flight time" value={preview.flight_time_min.toFixed(1)} unit="min" />
-        <Stat label="Parts" value={String(preview.parts)} warn={preview.parts > 1} />
+        <Stat
+          label={preview.parts > 1 ? "Batteries" : "Parts"}
+          value={String(preview.parts)}
+          warn={preview.parts > 1}
+          title={
+            preview.part_minutes.length > 1
+              ? `Each part returns home so the battery can be swapped: ${preview.part_minutes
+                  .map((m) => `${m.toFixed(1)} min`)
+                  .join(", ")}`
+              : undefined
+          }
+        />
         <div className={styles.actions}>
           <button onClick={copy}>{copied ? "Copied" : "Copy spec"}</button>
           <button onClick={save}>{saved ? "Saved" : "Save mission"}</button>
@@ -75,9 +86,21 @@ export default function SummaryBar({ spec, preview, onSaveMission }: SummaryBarP
   );
 }
 
-function Stat({ label, value, unit, warn }: { label: string; value: string; unit?: string; warn?: boolean }) {
+function Stat({
+  label,
+  value,
+  unit,
+  warn,
+  title,
+}: {
+  label: string;
+  value: string;
+  unit?: string;
+  warn?: boolean;
+  title?: string;
+}) {
   return (
-    <div className={styles.stat}>
+    <div className={styles.stat} title={title}>
       <span className={styles.label}>{label}</span>
       <span className={`mono ${styles.statValue} ${warn ? styles.warn : ""}`}>
         {value}

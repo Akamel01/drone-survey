@@ -29,10 +29,28 @@ function formatArea(areaHa: number): string {
 
 const coord = (p: [number, number] | null) => (p ? `${p[0].toFixed(5)}, ${p[1].toFixed(5)}` : "—");
 
-function Section({ title, children }: { title: string; children: ReactNode }) {
+/**
+ * Explanation on demand.
+ *
+ * These notes are worth reading once and then only when wondered about, so they
+ * sit behind an icon rather than occupying the panel permanently. Hover or
+ * keyboard focus reveals them, so the keyboard route works as well as the mouse.
+ */
+function Info({ children }: { children: ReactNode }) {
+  return (
+    <span className={styles.info} tabIndex={0} role="note">
+      i<span className={styles.infoBubble}>{children}</span>
+    </span>
+  );
+}
+
+function Section({ title, info, children }: { title: string; info?: ReactNode; children: ReactNode }) {
   return (
     <section className={styles.section}>
-      <h2>{title}</h2>
+      <h2>
+        {title}
+        {info ? <Info>{info}</Info> : null}
+      </h2>
       {children}
     </section>
   );
@@ -69,17 +87,22 @@ function Field({
   label,
   value,
   unit,
+  info,
   children,
 }: {
   label: string;
   value: string;
   unit?: string;
+  info?: ReactNode;
   children: ReactNode;
 }) {
   return (
     <div className={styles.field}>
       <div className={styles.fieldHead}>
-        <label>{label}</label>
+        <label>
+          {label}
+          {info ? <Info>{info}</Info> : null}
+        </label>
         <span className={`mono ${styles.value}`}>
           {value}
           {unit ? ` ${unit}` : ""}
@@ -135,8 +158,8 @@ export default function Sidebar({
         />
         <p className={styles.hint}>
           {isOrbit
-            ? "Rings around a subject, the camera aimed at it. What splatting needs, and the oblique pass a grid cannot give."
-            : "Parallel passes over an area, camera down. The capture an orthomosaic is built from."}
+            ? "Rings around a subject, the camera aimed at it."
+            : "Parallel passes over an area, camera down."}
         </p>
       </Section>
 
@@ -148,6 +171,12 @@ export default function Sidebar({
               onClick={() => onModeChange(mode === "set-poi" ? "idle" : "set-poi")}
             >
               {mode === "set-poi" ? "Click the map…" : "Set point of interest"}
+            </button>
+            <button
+              disabled={!orbit.center}
+              onClick={() => setSpec((s) => ({ ...s, orbit: { ...s.orbit, center: null } }))}
+            >
+              Clear subject
             </button>
           </div>
           <div className={styles.readout}>
@@ -167,7 +196,12 @@ export default function Sidebar({
             <div className={styles.hint}>how tall it is, above where you take off</div>
           </Field>
 
-          <Field label="Radius" value={String(orbit.radius_m)} unit="m">
+          <Field
+            label="Radius"
+            value={String(orbit.radius_m)}
+            unit="m"
+            info="Drag the handle on the map to change this without leaving the map."
+          >
             <input
               type="range"
               min={5}
@@ -239,9 +273,8 @@ export default function Sidebar({
           <div className={styles.groupLabel}>Shape</div>
           {/* While drawing, the selector shows the tool in use; once idle it shows
               what the area actually is, so a finished circle does not read as a
-              polygon. An area with corners but no circle hint is a polygon or a
-              rectangle, and those are indistinguishable once drawn — a rectangle
-              is just four corners — so it settles on Polygon. */}
+              polygon. A rectangle is four corners once drawn and indistinguishable
+              from a polygon, so it settles on Polygon. */}
           <Segmented<DrawMode>
             value={
               mode === "draw-rectangle" || mode === "draw-circle" || mode === "draw-polygon"
@@ -274,6 +307,10 @@ export default function Sidebar({
               Clear area
             </button>
           </div>
+          <div className={styles.hint}>
+            Drag inside the shape to move it whole. Drag a corner to reshape it, or an amber
+            midpoint to add one; right-click a corner to remove it.
+          </div>
 
           <div className={styles.readout}>
             <span>Area</span>
@@ -288,7 +325,10 @@ export default function Sidebar({
         </Section>
       )}
 
-      <Section title="Take-off">
+      <Section
+        title="Take-off"
+        info="DJI Fly measures its maximum-distance limit from the take-off point and suspends the flight in the air if the mission exceeds it. That limit lives in the app and cannot be read from here, so check it against the furthest-waypoint figure before you fly."
+      >
         <div className={styles.group}>
           <button
             className={mode === "set-home" ? "active" : ""}
@@ -307,14 +347,16 @@ export default function Sidebar({
             {spec.home && preview.photo_count ? `${Math.round(preview.home_distance_m)} m` : "—"}
           </span>
         </div>
-        <p className={styles.note}>
-          DJI Fly measures its maximum-distance limit from the take-off point, and refuses the
-          flight in the air if the mission exceeds it. That limit lives in the app and cannot be
-          read from here — check it against the figure above before you fly.
-        </p>
       </Section>
 
-      <Section title="Flight">
+      <Section
+        title="Flight"
+        info={
+          isOrbit
+            ? "An orbit is framed by its subject: the tilt is computed for each ring from the radius and the height, so the camera looks at what you are photographing. A heading aimed at a point of interest cancels a fixed gimbal angle, so there is nothing to set."
+            : undefined
+        }
+      >
         {!isOrbit && (
           <>
             <Field label="Altitude" value={String(flight.altitude_m)} unit="m">
@@ -326,6 +368,10 @@ export default function Sidebar({
                 value={flight.altitude_m}
                 onChange={(e) => setFlight("altitude_m", Number(e.target.value))}
               />
+              <div className={styles.hint}>
+                one photograph covers {Math.round(preview.footprint_across_m)} ×{" "}
+                {Math.round(preview.footprint_along_m)} m
+              </div>
             </Field>
 
             <Field label="Forward overlap" value={String(flight.forward_overlap_pct)} unit="%">
@@ -366,14 +412,6 @@ export default function Sidebar({
           </>
         )}
 
-        {isOrbit && (
-          <p className={styles.note}>
-            An orbit is framed by its subject: the tilt is computed for each ring from the radius
-            and the height, so the camera looks at what you are photographing. A heading aimed at a
-            point of interest cancels a fixed gimbal angle, so there is nothing to set here.
-          </p>
-        )}
-
         <Field
           label="Speed"
           value={overridden ? preview.capped_speed_ms.toFixed(1) : flight.speed_ms.toFixed(1)}
@@ -404,6 +442,32 @@ export default function Sidebar({
           </select>
         </Field>
 
+        <Field
+          label="Battery"
+          value={flight.battery_minutes ? String(flight.battery_minutes) : "no limit"}
+          unit={flight.battery_minutes ? "min" : undefined}
+          info="Resuming a waypoint mission after a battery change is not possible on this aircraft, so a Site bigger than one battery is flown as several Missions. Each part ends by returning home; swap the battery and select the next part on the Controller. Consecutive parts share a waypoint, so nothing is missed at the seam."
+        >
+          <input
+            type="range"
+            min={0}
+            max={30}
+            step={1}
+            value={flight.battery_minutes}
+            onChange={(e) => setFlight("battery_minutes", Number(e.target.value))}
+          />
+          <div className={styles.hint}>usable flying minutes on one battery</div>
+        </Field>
+
+        {preview.parts > 1 && (
+          <div className={styles.readout}>
+            <span>Parts</span>
+            <span className="mono">
+              {preview.part_minutes.map((m) => m.toFixed(1)).join(" · ")} min
+            </span>
+          </div>
+        )}
+
         {!isOrbit && (
           <Field label="Margin passes" value={String(flight.margin_passes)}>
             <input
@@ -419,7 +483,10 @@ export default function Sidebar({
         )}
       </Section>
 
-      <Section title="Camera">
+      <Section
+        title="Camera"
+        info="Camera settings are set by hand on the Controller before flight. They are recorded here so the flight is reproducible; they are not written into the mission file."
+      >
         <Field label="Shutter interval" value={camera.interval_s.toFixed(1)} unit="s">
           <input
             type="range"
@@ -486,11 +553,6 @@ export default function Sidebar({
             <option value="JPEG+RAW">JPEG+RAW</option>
           </select>
         </Field>
-
-        <p className={styles.note}>
-          Camera settings are set by hand on the Controller before flight. They are recorded here so
-          the flight is reproducible; they are not written into the mission file.
-        </p>
       </Section>
 
       <Section title="Identification">
