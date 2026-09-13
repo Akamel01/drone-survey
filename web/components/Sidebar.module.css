@@ -8,7 +8,10 @@
   padding: 16px;
 }
 
+/* The panel scrolls, so it clips sideways too. Anything that pops out has to be
+   measured from a box as wide as the panel, never from the 15px icon. */
 .section {
+  position: relative;
   margin-bottom: 24px;
   padding-bottom: 20px;
   border-bottom: 1px solid var(--border);
@@ -34,7 +37,6 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  position: relative;
   flex: none;
   width: 15px;
   height: 15px;
@@ -58,10 +60,10 @@
 
 .infoBubble {
   position: absolute;
-  top: 20px;
+  top: 22px;
+  left: 0;
   right: 0;
   z-index: 5;
-  width: 262px;
   padding: 9px 11px;
   background: var(--panel-raised);
   border: 1px solid var(--warn);
@@ -96,6 +98,7 @@
 }
 
 .field {
+  position: relative;
   margin-bottom: 14px;
 }
 
