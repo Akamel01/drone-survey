@@ -147,6 +147,26 @@ during an exposure, capped by the Controller's stated 15 m/s and held below the
 ~12 m/s point where the RC2 is reported to drop Missions to 2.5 m/s. The proving
 flight measures whether the computed speed holds in the air.
 
+**The camera's own capture interval caps speed above everything else.** A photo
+is due at every waypoint, so the aircraft cannot outrun the shutter: flying
+faster than spacing ÷ interval drops photographs, and drops them silently. At
+50 MP the Mini 5 Pro's interval is reported as 5 seconds, which at the capture
+standard's spacing allows **2.65 m/s** — roughly half what a blur budget alone
+would have chosen. The generator takes the interval as an input and caps speed
+from it.
+
+This is the constraint that decides how long a Capture takes, so it also decides
+how many batteries a Site needs. It is reported rather than measured, and the
+proving flight should establish the real interval: the cheaper the camera's
+interval, the faster every future Capture.
+
+**Two otherwise identical Missions are told apart by running their lines from
+opposite ends.** DJI Fly's mission names live in its own database and cannot be
+written by us — confirmed by searching the Controller's whole accessible storage
+— so a Mission must identify itself by its shape. Reversing the running order
+changes which corner the path starts at, which is visible on the Controller,
+while leaving coverage identical.
+
 **Resuming a Mission after a battery change is not available on this aircraft**
 ([research](../research/battery-swap-resume-2026.md)). DJI Fly's pause and
 continue survives an interruption in the air only, not powering down to swap a
