@@ -3,6 +3,11 @@
     "target": "ES2017",
     "lib": ["dom", "dom.iterable", "esnext"],
     "allowJs": true,
+    // Node's built-in test runner resolves relative TS imports by their real
+    // extension (no bundler step in front of it); this just lets tsc accept
+    // that in lib/spec.test.ts too. noEmit is already on, which is this
+    // option's one prerequisite.
+    "allowImportingTsExtensions": true,
     "skipLibCheck": true,
     "strict": true,
     "noEmit": true,

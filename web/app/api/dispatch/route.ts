@@ -1,5 +1,5 @@
 import { createHash, timingSafeEqual } from "node:crypto";
-import { dispatchProblem, type MissionSpec } from "@/lib/spec";
+import { dispatchProblem, isValidSiteId, type MissionSpec } from "@/lib/spec";
 
 // The storage credential lives here and never reaches the browser, which is the
 // whole reason this route exists (ADR 0017). Node, not edge: the B2 upload needs
@@ -17,10 +17,10 @@ function secretMatches(given: string, expected: string): boolean {
   return timingSafeEqual(a, b);
 }
 
-/** A Site has no assigned identifier yet, so its name is slugged for the key.
- *  Replace this with the identifier from the Site registry when that exists:
- *  a renamed Site currently orphans the Specs already Dispatched under the old
- *  name, which is exactly what the registry is meant to stop. */
+/** Fallback for a Spec dispatched without a `site_id` — a saved Mission from
+ *  before issue #39, or one never re-saved since. Slugging the name is the
+ *  behaviour this replaces: renaming such a Site still orphans its old Specs,
+ *  which is why every other Spec should carry an id instead (ADR 0017). */
 function siteSlug(site: string): string {
   return site
     .toLowerCase()
@@ -61,7 +61,11 @@ export async function POST(request: Request) {
   // newest without parsing anything. Parts are build output, produced on the
   // host by the writer, so they do not appear here.
   const stamp = new Date().toISOString().replace(/[-:]/g, "").replace(/\.\d+Z$/, "Z");
-  const key = `specs/${siteSlug(spec.site)}/${spec.date}/${stamp}.json`;
+  // dispatchProblem already rejected a malformed site_id, so an id that is
+  // present here is safe to use as-is; a Spec dispatched without one falls
+  // back to the old slug-of-the-name behaviour (issue #39).
+  const siteKey = isValidSiteId(spec.site_id) ? spec.site_id : siteSlug(spec.site);
+  const key = `specs/${siteKey}/${spec.date}/${stamp}.json`;
   const body = Buffer.from(JSON.stringify(spec, null, 2));
 
   try {

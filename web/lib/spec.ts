@@ -49,6 +49,14 @@ export interface MissionSpec {
   version: 1;
   mission_type: MissionType;
   site: string;
+  /**
+   * A stable identifier for the Site, assigned once by the planner and kept
+   * for its life — renaming `site` never changes this (issue #39, ADR 0017).
+   * Optional so a Spec or saved Mission from before this field existed keeps
+   * working: `dispatchProblem`'s caller falls back to slugging `site` when
+   * this is absent.
+   */
+  site_id?: string;
   date: string; // YYYY-MM-DD
   aoi: [number, number][]; // [lat, lon] corners, not closed. Grid missions only.
   shape?: CircleShape | null; // an editing hint, never an input to the geometry
@@ -103,6 +111,35 @@ function isLatLon(v: unknown): v is [number, number] {
   );
 }
 
+// A single safe storage-path segment: no `/`, no `.`/`..`, no empty string.
+// Matches what `newSiteId` generates, but this is also the server's trust
+// boundary (issue #39) — a client-supplied id must be checked against it
+// before it ever reaches a B2 key, not just produced by it.
+const SITE_ID_RE = /^[a-z0-9][a-z0-9_-]{0,63}$/i;
+
+export function isValidSiteId(id: unknown): id is string {
+  return typeof id === "string" && SITE_ID_RE.test(id);
+}
+
+/** A short, readable Site id: the first word of its name plus a random
+ *  suffix, so two Sites sharing a first word do not collide. Chosen over a
+ *  UUID to keep storage keys legible (issue #39). */
+export function newSiteId(name: string): string {
+  const base = (name.trim().split(/\s+/)[0] ?? "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, "")
+    .slice(0, 20);
+  const suffix = Math.random().toString(36).slice(2, 8);
+  return `${base || "site"}-${suffix}`;
+}
+
+/** Assigns a Site id the first time a Site gets a name, and never again — a
+ *  renamed Site keeps the id it already has (issue #39, ADR 0017). */
+export function ensureSiteId(spec: MissionSpec): MissionSpec {
+  if (spec.site_id || !spec.site.trim()) return spec;
+  return { ...spec, site_id: newSiteId(spec.site) };
+}
+
 /** What must hold before a Spec is worth Dispatching. Shared by the API route
  *  (so the store never accumulates junk the Collector has to skip) and the
  *  planner (so an operator is told locally instead of by a 400). */
@@ -110,6 +147,7 @@ export function dispatchProblem(spec: MissionSpec): string | null {
   if (!spec || typeof spec !== "object") return "not an object";
   if (spec.version !== 1) return "wrong Spec version";
   if (!spec.site?.trim()) return "no Site named";
+  if (spec.site_id != null && !isValidSiteId(spec.site_id)) return "Site id is not a safe identifier";
   if (!spec.date?.trim()) return "no date";
   if (typeof spec.flight?.altitude_m !== "number" || !Number.isFinite(spec.flight.altitude_m)) {
     return "no flight altitude";

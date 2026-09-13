@@ -19,6 +19,9 @@ function normalizeSpec(raw: Partial<MissionSpec> | null | undefined): MissionSpe
     // A Spec saved before orbits existed has no mission_type, and is a grid.
     mission_type: r.mission_type === "orbit" ? "orbit" : "grid",
     site: r.site ?? DEFAULT_SPEC.site,
+    // Absent on anything saved before issue #39 — left absent rather than
+    // backfilled, so an old entry keeps falling back to slugging its name.
+    site_id: typeof r.site_id === "string" ? r.site_id : undefined,
     date: r.date ?? DEFAULT_SPEC.date,
     aoi: Array.isArray(r.aoi) ? r.aoi : DEFAULT_SPEC.aoi,
     shape: r.shape ?? null,
@@ -35,6 +38,7 @@ export function toMissionSpec(entry: SavedMission): MissionSpec {
     version: entry.version,
     mission_type: entry.mission_type,
     site: entry.site,
+    site_id: entry.site_id,
     date: entry.date,
     aoi: entry.aoi,
     shape: entry.shape ?? null,

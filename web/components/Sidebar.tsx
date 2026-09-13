@@ -1,7 +1,7 @@
 "use client";
 
 import type { ReactNode } from "react";
-import type { MissionSpec, MissionType, TurnMode } from "@/lib/spec";
+import { ensureSiteId, type MissionSpec, type MissionType, type TurnMode } from "@/lib/spec";
 import type { Preview } from "@/lib/mission";
 import type { SavedMission } from "@/lib/savedMissions";
 import type { DrawMode } from "./MapPane";
@@ -557,7 +557,11 @@ export default function Sidebar({
 
       <Section title="Identification">
         <Field label="Site name" value={spec.site || "—"}>
-          <input type="text" value={spec.site} onChange={(e) => setSpec((s) => ({ ...s, site: e.target.value }))} />
+          <input
+            type="text"
+            value={spec.site}
+            onChange={(e) => setSpec((s) => ensureSiteId({ ...s, site: e.target.value }))}
+          />
         </Field>
         <Field label="Date" value={spec.date || "—"}>
           <input type="date" value={spec.date} onChange={(e) => setSpec((s) => ({ ...s, date: e.target.value }))} />
