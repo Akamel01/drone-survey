@@ -1,4 +1,4 @@
-# Generate missions with drone-flightplan in waypoints mode and load them onto the RC2 over USB
+# Generate missions in DJI Fly's own dialect and load them onto the RC2 over USB
 
 ADR 0015 makes mission planning and controller preparation part of the automated
 system. The operator's hardware fixes most of the choice. The RC2 runs only DJI
@@ -77,6 +77,47 @@ Settled in a later grilling session, and binding on the loader:
   RC2, runs the loader, and reports that the Missions are on board or that it
   refused. The operator plugs in before leaving rather than remembering a command
   at the Site.
+
+## Revision, 2026-09-12 — we write the mission file ourselves
+
+**This supersedes the generator decision above.** `drone-flightplan` is no longer
+the thing that writes the Mission; it is at most a source of grid geometry.
+
+Reading a Mission that DJI Fly itself wrote on this Controller
+([evidence](../research/rc2-native-mission-2026-09-12.md)) showed that none of
+the three candidate generators produces that file:
+
+| | Namespace | Files in the KMZ | Action groups | On signal loss |
+|---|---|---|---|---|
+| **DJI Fly on the RC2** | `uav.com` | two | parallel | return home |
+| `drone-flightplan` | `dji.com` | one | sequence | keep flying |
+| Waypoint OS | `dji.com` | two | sequence | keep flying |
+| FlyPath | `uav.com` | two | — | configurable |
+
+Adapting `drone-flightplan` would mean changing its namespace, its file count,
+its action group mode, its signal-loss default and its latitude bug. That is a
+fork maintained by us, not a patch.
+
+**The Node writes the KMZ itself.** The file is roughly 19 KB of plain XML and
+every field in it has now been observed on our own hardware. We take the grid
+spacing mathematics from `drone-flightplan` and read FlyPath's consumer writer as
+a reference for the dialect, since FlyPath verified its output against a real
+Mini and RC2. Both are copyleft — AGPL-3.0 and GPL-3.0 — which constrains
+distribution, not internal use; we distribute nothing.
+
+**A Mission is validated against the Controller's own capability files** before
+it is loaded: gimbal within −90° to +55°, speed within 0.1 to 15 m/s, a permitted
+signal-loss action. Our own rules sit on top: at most 200 waypoints, an altitude
+within the legal ceiling, photo spacing measured geodesically against the
+requested Overlap, and a split that fits the battery. The aircraft publishes its
+limits, so we believe it rather than a third-party library that assumes a 11.5
+m/s ceiling the Controller says is 15.
+
+**The master copy of a Mission is our own format** — a map file holding the area,
+obstacles and points of interest, plus a short settings file, both schema-checked
+and version-controlled. The KMZ is build output, never hand-edited. Flying a Site
+again regenerates it from the same inputs, so repeat visits produce identical
+waypoints, which is what makes two Captures comparable.
 
 ## Considered and rejected
 
