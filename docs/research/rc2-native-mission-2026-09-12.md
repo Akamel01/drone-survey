@@ -123,29 +123,47 @@ photos.
 **`waypointHeadingPathMode` is `followBadArc`** on every waypoint — the literal
 string DJI uses, and a reminder that this dialect is not a cleaned-up spec.
 
-### The gimbal angle is not in the file
+### Where the gimbal angle lives, and what cancels it
 
-Every gimbal field is zero:
+The first mission read off the controller recorded **no gimbal angle at all** —
+every field zero — even though the operator had set −90°. A second reading, after
+the operator re-applied the tilt and set headings to manual, resolved it.
 
-- `waypointGimbalPitchAngle` — 0 on all six waypoints
-- `gimbalPitchRotateAngle` — 0 in all six gimbal actions
-- `gimbalPitchRotateEnable` — 0 in the only `gimbalRotate` action
-- `template.kml` — no gimbal data at all
+| Field | First reading | Second reading |
+|---|---|---|
+| `gimbalPitchRotateAngle`, inside gimbal actions | 0 × 6 | **−90 × 6** |
+| `gimbalPitchRotateEnable`, in the explicit `gimbalRotate` | 0 | **1** |
+| `waypointGimbalPitchAngle`, per waypoint | 0 | 0 |
+| `waypointHeadingMode` | `towardPOI` × 5 | `manually` × 1, `followWayline` × 5 |
 
-The operator set −90° when building this mission, and **the saved file records
-none of it**. The per-waypoint field that should hold it,
-`waypointGimbalHeadingParam` / `waypointGimbalPitchAngle`, exists in the file and
-is present on every waypoint — written as 0.
+**Tilt is carried by the gimbal *actions*, not by the per-waypoint gimbal field.**
+`waypointGimbalHeadingParam` / `waypointGimbalPitchAngle` is present on every
+waypoint and stays 0 whether or not a tilt is set, so it is not where the angle
+belongs. A generator must write `gimbalRotate` and `gimbalEvenlyRotate` actions
+with `gimbalPitchRotateAngle`, and set `gimbalPitchRotateEnable` on the explicit
+one.
 
-This is unresolved and it matters more than anything else here. Either the tilt
-is an app-level camera setting that lives outside the mission, in which case **a
-generated mission cannot set the camera angle** and the capture standard's −80°
-becomes a manual pre-flight step, contradicting
-[ADR 0015](../adr/0015-automation-is-the-primary-goal.md); or it is stored
-somewhere not yet found; or it was not applied when the mission was saved.
+**Pointing at a point of interest cancels the tilt.** In the first mission the
+operator set −90° and then chose a point of interest; DJI Fly aimed the camera at
+that point and wrote the tilt out as zero. The two controls are mutually
+exclusive in the app, and the point of interest wins.
 
-Until it is answered, no conclusion about generated missions controlling the
-camera is safe.
+That interaction constrains the capture standard directly:
+
+- **Grid Missions** fly with `followWayline` or `manually` heading, so their
+  −80° tilt can be written into the mission and will hold.
+- **Orbits around a structure**, which the Gaussian Splatting capture wants, use
+  `towardPOI` — and there the point of interest sets the camera angle. A fixed
+  tilt cannot be combined with it, so an orbit's framing has to be arranged
+  through the point of interest's own altitude rather than through a tilt value.
+
+### The file is live, not a stale export
+
+Editing the mission in DJI Fly and saving rewrites this KMZ immediately:
+`executeHeight` went 41 → 48, the file's checksum changed, and its timestamp
+advanced. An earlier concern — that the app might keep the authoritative mission
+in a private database and leave this file behind as a partial export — does not
+hold. What the app saves is what sits here.
 
 ## Consequences for what we build
 

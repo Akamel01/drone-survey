@@ -19,7 +19,14 @@ overwrites the KMZ file inside a placeholder mission's folder on the controller.
   DJI Fly executes those actions in an imported mission. Photos are then taken by
   the mission at computed positions, so nobody arms interval shooting and Overlap
   does not depend on speed multiplied by a timer.
-- **Gimbal at −80°**, set explicitly.
+- **Gimbal at −80°**, written as `gimbalPitchRotateAngle` inside `gimbalRotate`
+  and `gimbalEvenlyRotate` actions, with `gimbalPitchRotateEnable` set. Reading a
+  mission built by DJI Fly itself confirmed that is where the angle lives; the
+  per-waypoint `waypointGimbalPitchAngle` field stays zero and is not used
+  ([evidence](../research/rc2-native-mission-2026-09-12.md)). **A heading aimed
+  at a point of interest cancels the tilt**, so a fixed angle and a point of
+  interest cannot be combined — which separates Grid Missions, where the tilt
+  holds, from orbits, where the point of interest dictates the framing.
 - **Altitude, never GSD.** The library models the Mini 5 Pro's camera as 12 MP,
   so planning from a GSD target would fly far too low for 50 MP stills.
 - **The Node corrects the library's latitude bug.** The grid is laid out in Web
@@ -78,9 +85,20 @@ Settled in a later grilling session, and binding on the loader:
 - **Waypoints mode stops at every photo position**, so it covers less ground per
   battery than continuous flight. Missions must be split per battery, and real
   coverage per battery is still unmeasured (#10).
-- **The photo-trigger evidence is second-hand**: the operator's review of other
-  pilots' flights, not ours. The first proving flight (#10) verifies it on this
-  aircraft and controller.
+- **The photo-trigger evidence is now first-hand from the controller, though not
+  yet from a flight.** A mission built in DJI Fly on this RC2 and read back over
+  USB contains `takePhoto` actions on `reachPoint` triggers, alongside `hover`
+  and `towardPOI` headings. What remains unproven is that the aircraft executes
+  them in the air, which the first proving flight (#10) settles.
+- **Our generated file must match the dialect DJI Fly writes**: a KMZ holding
+  both `wpmz/template.kml` and `wpmz/waylines.wpml`, in the
+  `http://www.uav.com/wpmz/1.0.2` namespace, with `parallel` action groups.
+  `drone-flightplan` writes a single file in the `dji.com` namespace with
+  `sequence` groups, so it cannot be used unmodified
+  ([evidence](../research/rc2-native-mission-2026-09-12.md)).
+- **On losing the controller's signal, DJI Fly's own missions return home**
+  (`exitOnRCLost` = `executeLostAction`, `executeRCLostAction` = `goBack`). Both
+  candidate generators hard-code "keep flying". We follow the app's default.
 - **Creating the placeholder missions is a one-time manual step** in DJI Fly.
 - **The generator covers nadir grids only.** Oblique passes, which the capture
   standard requires, need geometry of our own (#30).
