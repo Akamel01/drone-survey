@@ -414,3 +414,42 @@ against firmware updates. A USB HID dongle — a Raspberry Pi Zero acting as a
 keyboard or mouse, roughly $30-40, and viable in principle since the RC2's
 USB-C port does act as a host and accepts a plain USB mouse — is unnecessary
 now that the name is computable without touching the UI at all.
+
+## Revision, 2026-09-13 (later) — `createTime` drifts, so the card is found by a stored, confirmed mapping
+
+The previous revision overstates `createTime`. It is not a stable identifier,
+and the name it predicts can stop matching the screen without anything of ours
+touching the slot.
+
+**DJI Fly rewrote a `createTime` on its own.** Slot `7D8B82DC` changed from
+`11:15:00` to `12:29:54` between two reads. Nobody Loaded that slot, and its
+`<wpml:author>` was still `fly`, so this was the app restamping its own field.
+The name on screen is held in DJI Fly's database and did not follow. The file
+and the display can therefore diverge silently, and a name recomputed from the
+file on the day of a flight may point the pilot at the wrong card. The earlier
+claims that the name is computed "with no calibration pass" and that "a
+timestamp read off the file is simpler than both" are withdrawn.
+
+**Renaming a card is also invisible to the filesystem.** The operator renamed
+five slots to `WAYFINDER 1` through `WAYFINDER 5` in DJI Fly. Nothing on disk
+changed, so which GUIDs carry those names cannot be recovered from files or
+from history.
+
+**Decision: identify cards by a mapping the operator confirms once, and store
+it.** Every slot is overwritten with a throwaway marker Mission whose waypoint
+count is unique to that slot (11 to 47). The card face still shows stale
+figures, but opening a card shows the real waypoint count, so the operator
+reads five numbers off the five `WAYFINDER` cards and the name-to-GUID mapping
+follows from them. That mapping is committed to the repository and the planner
+refers to cards by those names from then on. A stored mapping cannot be
+changed underneath us by the app; a derived one can. The calibration is a
+one-time cost per Controller and has to be repeated only if Placeholders are
+recreated or renamed. Markers are not flyable plans: real content is Loaded
+into whichever named slots are used, and every slot's previous KMZ is kept in a
+backup on the Linux host before the markers are written.
+
+**What still stands from the previous revision.** The loader still preserves
+each slot's existing `createTime` when it writes, because the cost is nothing
+and it keeps the file as close to DJI Fly's own view as we can. The JPEG mtime
+rule for recovering a clobbered name is still correct as a measurement, and is
+now only a diagnostic, not the way a card is chosen.
