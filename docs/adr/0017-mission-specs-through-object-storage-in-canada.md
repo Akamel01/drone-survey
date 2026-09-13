@@ -18,9 +18,19 @@ transport one, as ADR 0016 already records.
   that no key can reach both and retention can differ without a prefix rule to
   get wrong.
 - **Two application keys, least privilege.** The planner's key writes only. The
-  host's key lists and reads only. Neither can delete; deletion belongs to the
-  retention job with its own credential. Both are scoped to the Specs bucket and
-  its prefix.
+  host's key lists and reads only. Both are scoped to the Specs bucket and to the
+  `specs/` prefix, so neither can reach anything else the account holds.
+
+  **Deviation, recorded rather than hidden:** the intent was that neither key can
+  delete, with deletion left to the retention job under its own credential. The
+  provider's write-only preset includes `deleteFiles` and offers no way to drop
+  it, confirmed across three separately generated keys. It is accepted because a
+  Spec is immutable and superseded rather than edited, so nothing in this design
+  ever calls delete; because the key can neither read nor list, so it cannot be
+  used to find what it might destroy; because a lost Spec is regenerable from the
+  planner, unlike a Capture; and because the endpoint holding it is gated. The
+  capability exists and is never exercised. If the provider later allows a
+  narrower preset, take it.
 - **Specs are keyed `specs/<site-id>/<date>/<part>-<dispatch-timestamp>.json`.**
   ADR 0016 names a Spec by Site and date; part separates the legs of a Site too
   large for one battery, and the timestamp makes supersession explicit and
