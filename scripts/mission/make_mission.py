@@ -84,6 +84,43 @@ def inside(pt, poly):
     return hit
 
 
+def poly_distance(pt, poly):
+    """0 if the point is inside the polygon, otherwise the distance to its nearest edge."""
+    if inside(pt, poly):
+        return 0.0
+    x, y = pt
+    best = float("inf")
+    for i in range(len(poly)):
+        x1, y1 = poly[i]
+        x2, y2 = poly[(i + 1) % len(poly)]
+        dx, dy = x2 - x1, y2 - y1
+        length2 = dx * dx + dy * dy
+        t = 0.0 if length2 == 0 else max(0.0, min(1.0, ((x - x1) * dx + (y - y1) * dy) / length2))
+        best = min(best, math.hypot(x - (x1 + t * dx), y - (y1 + t * dy)))
+    return best
+
+
+def split_rows(rows, ceiling):
+    """Cut at the end of a flight line, never mid-line, sharing a waypoint at each seam.
+
+    Parts are balanced rather than packed to the ceiling: packing greedily gives a
+    long leg followed by a stub, which is a poor sequence in the field. Rows are no
+    longer all the same length once the grid is clipped to the area, so this counts
+    waypoints instead of lines.
+    """
+    total = sum(len(r) for r in rows)
+    n_parts = max(1, math.ceil(total / ceiling))
+    target = total / n_parts
+    parts, cur = [], []
+    for row in rows:
+        if cur and (len(cur) + len(row) > ceiling or len(cur) >= target):
+            parts.append(cur)
+            cur = [cur[-1]]
+        cur.extend(row)
+    parts.append(cur)
+    return parts
+
+
 def plan_grid(aoi_ll, alt, fwd_overlap, side_overlap, margin_passes):
     """Photo positions covering the area, on lines along its longest edge."""
     to_xy, to_ll = local_frame(aoi_ll)
@@ -113,6 +150,19 @@ def plan_grid(aoi_ll, alt, fwd_overlap, side_overlap, margin_passes):
         lines.append(row[::-1] if flip else row)
         flip = not flip
         y += side_spacing
+
+    # Keep only the positions that serve the area: inside it, or within the margin
+    # of passes beyond its boundary. Without this the grid covers the area's
+    # bounding box, which for any shape but a rectangle is mostly photographs of
+    # somewhere else — a triangle came out 87 of 102 positions outside it.
+    #
+    # The distance is measured in passes rather than metres. One pass along a line
+    # and one pass across are different distances, and the margin has to mean the
+    # same thing in both directions.
+    norm = lambda p: (p[0] / fwd_spacing, p[1] / side_spacing)
+    npoly = [norm(p) for p in rot]
+    lines = [[p for p in row if poly_distance(norm(p), npoly) <= margin_passes + 1e-9] for row in lines]
+    lines = [row for row in lines if row]
 
     rows_ll = [[to_ll(*unrot(x, y)) for x, y in row] for row in lines]
     pts = [p for row in rows_ll for p in row]
@@ -364,25 +414,14 @@ def main():
     # share a waypoint so no coverage is lost at the seam (ADR 0016).
     # Balance the parts rather than filling each to the ceiling: packing greedily
     # gives a long leg followed by a stub, which is a poor sequence in the field.
-    per_line = len(rows[0])
-    if per_line > LIMITS["max_waypoints"]:
+    longest = max(len(r) for r in rows)
+    if longest > LIMITS["max_waypoints"]:
         print(json.dumps({"problems": [
-            f"one flight line holds {per_line} waypoints, more than DJI Fly's "
+            f"one flight line holds {longest} waypoints, more than DJI Fly's "
             f"{LIMITS['max_waypoints']}; the area is too long to split at a line boundary"
         ]}, indent=2))
         return 1
-    n_parts = max(1, math.ceil(len(pts) / LIMITS["max_waypoints"]))
-    lines_per_part = math.ceil(len(rows) / n_parts)
-    while lines_per_part * per_line > LIMITS["max_waypoints"]:
-        lines_per_part -= 1
-
-    parts, cur = [], []
-    for row in rows:
-        if cur and len(cur) // per_line >= lines_per_part:
-            parts.append(cur)
-            cur = [cur[-1]]
-        cur.extend(row)
-    parts.append(cur)
+    parts = split_rows(rows, LIMITS["max_waypoints"])
 
     out = Path(args.out)
     results, failed = [], False

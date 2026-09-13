@@ -96,6 +96,51 @@ function longestEdgeAngle(xy: XY[]): number {
   return ang;
 }
 
+function inside(pt: XY, poly: XY[]): boolean {
+  const [x, y] = pt;
+  let hit = false;
+  for (let i = 0; i < poly.length; i++) {
+    const [x1, y1] = poly[i];
+    const [x2, y2] = poly[(i + 1) % poly.length];
+    if (y1 > y !== y2 > y && x < ((x2 - x1) * (y - y1)) / (y2 - y1) + x1) hit = !hit;
+  }
+  return hit;
+}
+
+/** 0 if the point is inside the polygon, otherwise the distance to its nearest edge. */
+function polyDistance(pt: XY, poly: XY[]): number {
+  if (inside(pt, poly)) return 0;
+  const [x, y] = pt;
+  let best = Infinity;
+  for (let i = 0; i < poly.length; i++) {
+    const [x1, y1] = poly[i];
+    const [x2, y2] = poly[(i + 1) % poly.length];
+    const dx = x2 - x1;
+    const dy = y2 - y1;
+    const length2 = dx * dx + dy * dy;
+    const t = length2 === 0 ? 0 : Math.max(0, Math.min(1, ((x - x1) * dx + (y - y1) * dy) / length2));
+    best = Math.min(best, Math.hypot(x - (x1 + t * dx), y - (y1 + t * dy)));
+  }
+  return best;
+}
+
+/** How many parts the writer will cut this into: balanced, and always at a line end. */
+function partCount(rows: LL[][], ceiling: number): number {
+  const total = rows.reduce((a, r) => a + r.length, 0);
+  const nParts = Math.max(1, Math.ceil(total / ceiling));
+  const target = total / nParts;
+  let parts = 1;
+  let cur = 0;
+  for (const row of rows) {
+    if (cur > 0 && (cur + row.length > ceiling || cur >= target)) {
+      parts++;
+      cur = 1; // the seam waypoint the next part starts on
+    }
+    cur += row.length;
+  }
+  return parts;
+}
+
 export function areaHectares(aoi: LL[]): number {
   if (aoi.length < 3) return 0;
   const { toXY } = localFrame(aoi);
@@ -163,7 +208,18 @@ export function preview(spec: MissionSpec): Preview {
     y += sideSpacing;
   }
 
-  const rows: LL[][] = rowsXY.map((row) => row.map(([x, yy]) => toLL(...unrot(x, yy))));
+  // Keep only the positions that serve the area: inside it, or within the margin
+  // of passes beyond its boundary. Without this the grid covers the area's
+  // bounding box, which for any shape but a rectangle is mostly photographs of
+  // somewhere else. Measured in passes, not metres, so the margin means the same
+  // thing along a line as it does across one.
+  const norm = (p: XY): XY => [p[0] / fwdSpacing, p[1] / sideSpacing];
+  const npoly = rot.map(norm);
+  const clipped = rowsXY
+    .map((row) => row.filter((p) => polyDistance(norm(p), npoly) <= f.margin_passes + 1e-9))
+    .filter((row) => row.length > 0);
+
+  const rows: LL[][] = clipped.map((row) => row.map(([x, yy]) => toLL(...unrot(x, yy))));
   const points: LL[] = rows.flat();
 
   const problems: string[] = [];
@@ -175,9 +231,10 @@ export function preview(spec: MissionSpec): Preview {
     problems.push(`speed ${speed} outside the aircraft's ${sLo}..${sHi}`);
   if (f.altitude_m > ALTITUDE_CEILING_M)
     problems.push(`altitude ${f.altitude_m} m is above the ${ALTITUDE_CEILING_M} m ceiling`);
-  if (n > MAX_WAYPOINTS)
+  const longest = rows.reduce((a, r) => Math.max(a, r.length), 0);
+  if (longest > MAX_WAYPOINTS)
     problems.push(
-      `one flight line holds ${n} waypoints, more than DJI Fly's ${MAX_WAYPOINTS}; ` +
+      `one flight line holds ${longest} waypoints, more than DJI Fly's ${MAX_WAYPOINTS}; ` +
         `the area is too long to split at a line boundary`,
     );
 
@@ -204,13 +261,9 @@ export function preview(spec: MissionSpec): Preview {
     f.turn === "stop" ? (points.length * speed) / STOP_ACCEL_MS2 : 0;
   const flightTime = (pathLength / speed + stopPenalty) / 60;
 
-  // Missions are cut at the end of a flight line, never mid-line, and the parts
-  // are balanced rather than packed to the ceiling — so the count is not simply
-  // photos over 200. This mirrors the writer's own splitting; dividing naively
+  // Mirrors the writer's own splitting. Dividing photos by the ceiling instead
   // under-reports the parts, which the end-to-end test caught.
-  let linesPerPart = Math.ceil(rows.length / Math.max(1, Math.ceil(points.length / MAX_WAYPOINTS)));
-  while (linesPerPart * n > MAX_WAYPOINTS && linesPerPart > 1) linesPerPart--;
-  const parts = Math.ceil(rows.length / linesPerPart);
+  const parts = rows.length ? partCount(rows, MAX_WAYPOINTS) : 0;
 
   let homeDistance = 0;
   if (spec.home) for (const p of points) homeDistance = Math.max(homeDistance, geodesicM(spec.home, p));

@@ -45,6 +45,37 @@ def geodesic_m(a, b):
     return 2 * 6371008.8 * math.asin(math.sqrt(h))
 
 
+def local_xy(points):
+    """Equirectangular metres about the centroid, for measuring what was produced."""
+    lat0 = sum(p[0] for p in points) / len(points)
+    lon0 = sum(p[1] for p in points) / len(points)
+    m_lat = 111132.92 - 559.82 * math.cos(2 * math.radians(lat0)) + 1.175 * math.cos(4 * math.radians(lat0))
+    m_lon = 111412.84 * math.cos(math.radians(lat0)) - 93.5 * math.cos(3 * math.radians(lat0))
+    return lambda lat, lon: ((lon - lon0) * m_lon, (lat - lat0) * m_lat)
+
+
+def distance_outside_m(pt, poly):
+    """Metres from the point to the area, measuring 0 anywhere inside it."""
+    x, y = pt
+    hit = False
+    for i in range(len(poly)):
+        x1, y1 = poly[i]
+        x2, y2 = poly[(i + 1) % len(poly)]
+        if (y1 > y) != (y2 > y) and x < (x2 - x1) * (y - y1) / (y2 - y1) + x1:
+            hit = not hit
+    if hit:
+        return 0.0
+    best = float("inf")
+    for i in range(len(poly)):
+        x1, y1 = poly[i]
+        x2, y2 = poly[(i + 1) % len(poly)]
+        dx, dy = x2 - x1, y2 - y1
+        length2 = dx * dx + dy * dy
+        t = 0.0 if length2 == 0 else max(0.0, min(1.0, ((x - x1) * dx + (y - y1) * dy) / length2))
+        best = min(best, math.hypot(x - (x1 + t * dx), y - (y1 + t * dy)))
+    return best
+
+
 def spec_for(aoi, **flight):
     """A Spec shaped exactly as web/lib/spec.ts writes one."""
     f = {"altitude_m": 90, "forward_overlap_pct": 85, "side_overlap_pct": 75,
@@ -189,6 +220,17 @@ def case(title, spec, expect_parts=None):
             worst = max(geodesic_m(a, b) for a, b in zip(stitched, plan["points"]))
             check("every waypoint sits where the map drew it", worst < 0.05, f"worst {worst:.4f} m")
 
+        # Nothing may be photographed that the area did not ask for. The grid is
+        # allowed to run the margin beyond the boundary and no further — which is
+        # what stops a triangle being flown as its bounding box.
+        to_xy = local_xy(spec["aoi"])
+        poly_xy = [to_xy(lat, lon) for lat, lon in spec["aoi"]]
+        margin = spec["flight"]["margin_passes"]
+        allowed = margin * max(plan["fwd_spacing_m"], plan["side_spacing_m"]) + 0.01
+        outside = [distance_outside_m(to_xy(lat, lon), poly_xy) for lat, lon in stitched]
+        check("no waypoint lies further outside the area than the margin allows",
+              max(outside) <= allowed, f"worst {max(outside):.1f} m, allowed {allowed:.1f} m")
+
         # The Controller cannot show our names, so the path must identify itself.
         first = plan["points"][0]
         lat0 = sum(p[0] for p in plan["points"]) / len(plan["points"])
@@ -206,7 +248,13 @@ def main():
     large = [[49.1935, -122.8460], [49.1880, -122.8460],
              [49.1880, -122.8360], [49.1935, -122.8360]]
 
+    # A shape that is not a rectangle. Before the grid was clipped to the area,
+    # this planned 102 positions with 87 of them outside the triangle entirely.
+    triangle = [[49.1896507, -122.8402975], [49.1885718, -122.8402975],
+                [49.1885718, -122.8389242]]
+
     case("the rehearsal area, flown through each point", spec_for(small), expect_parts=1)
+    case("a triangle, which must not be flown as its bounding box", spec_for(triangle), expect_parts=1)
     case("the same area, stopping at each point", spec_for(small, turn="stop"), expect_parts=1)
     case("an area too big for one Mission", spec_for(large))
 
