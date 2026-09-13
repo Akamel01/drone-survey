@@ -453,3 +453,45 @@ each slot's existing `createTime` when it writes, because the cost is nothing
 and it keeps the file as close to DJI Fly's own view as we can. The JPEG mtime
 rule for recovering a clobbered name is still correct as a measurement, and is
 now only a diagnostic, not the way a card is chosen.
+
+## Revision, 2026-09-13 (evening) — the calibrated cards, the Loader, and the phone
+
+**Calibration result.** The operator read the counts 43, 14, 40, 27 and 19 inside
+`WAYFINDER 1` to `5`. The resulting names and GUIDs are in
+`scripts/mission/wayfinder_slots.json`. This is a one-time step. It is repeated
+only if those cards are deleted, recreated or renamed in DJI Fly, or when more
+cards are added.
+
+**A Load writes one Spec, part i into card `WAYFINDER i`.** Because the rule is
+fixed, the planner names the card as soon as Dispatch succeeds, before the
+Controller is plugged in. A Spec with more parts than there are calibrated cards
+is refused rather than truncated. This was decided without the operator as a
+reversible default. Loading several Sites into one visit would need a different
+assignment rule, and nothing in it is hard to change.
+
+**The Loader is `scripts/mission/load.py`, over `jmtpfs`, as this ADR already
+specified.** It builds with the one writer, keeps each slot's own `createTime`,
+backs up every card it will touch, writes, remounts, and compares hashes. Any
+mismatch restores every card. `--newest` loads the most recently Dispatched Spec
+once, which is what a plugged-in trigger should run. It was proven on the
+Controller by loading Rehearsal Field (69 waypoints) into `WAYFINDER 1`. The
+per-minute trigger on the Linux host is written but not yet installed.
+
+**Loading from the operator's Android phone did not work, and the reason is
+measured.** Cabled directly USB-C to USB-C, and again through a USB-C OTG adapter
+and a USB-A to USB-C data cable, the RC2 kept the USB host role and only charged
+the phone. The phone offered no way to take the role. Android can act as an MTP
+initiator in principle, but only if it is the host, and on this pairing it is
+not.
+
+**A small Linux board cabled to the Controller is the mobile path to pursue.**
+It is the Linux host in miniature: a USB-A host port leaves no role to negotiate,
+and the Loader is stdlib Python over `jmtpfs`, so it runs there unchanged. It
+needs internet access for Collecting, from a phone hotspot or site Wi-Fi, and its
+own power so the Controller's battery is not drained. Buying it is the operator's
+decision. The Controller still has to be unlocked, and the pilot still opens the
+card, as before.
+
+**Loading over Wi-Fi alone is not possible**, which corrects an expectation that
+cloud storage would provide it. Cloud storage serves the planner on any device,
+and whatever sits cabled to the Controller Collects from it.
