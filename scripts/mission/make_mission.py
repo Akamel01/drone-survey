@@ -20,6 +20,7 @@ import sys
 import time
 import zipfile
 from pathlib import Path
+from xml.sax.saxutils import escape
 
 # DJI Mini 5 Pro. Sensor and lens are as DJI publishes them; the pixel count is the
 # real 50 MP one, not the 12 MP figure drone-flightplan and Waypoint OS both assume.
@@ -343,7 +344,7 @@ def write_kmz(path, name, pts, alt, speed, pitch, turn_mode, poi=None):
     template = f"""<?xml version="1.0" encoding="UTF-8"?>
 <kml xmlns="http://www.opengis.net/kml/2.2" xmlns:wpml="{NS}">
   <Document>
-    <wpml:author>{name}</wpml:author>
+    <wpml:author>wayfinder: {escape(name)}</wpml:author>
     <wpml:createTime>{now}</wpml:createTime>
     <wpml:updateTime>{now}</wpml:updateTime>
 {cfg}
