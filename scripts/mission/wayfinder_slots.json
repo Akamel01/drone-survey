@@ -1,0 +1,12 @@
+{
+  "controller": "RC2 serial 6UZTP6R001S5XA",
+  "calibrated": "2026-09-13",
+  "method": "marker Missions with unique waypoint counts; operator read the count inside each named card (ADR 0016)",
+  "slots": {
+    "WAYFINDER 1": "D9957576-7D8F-4C38-9882-3FFC9854129E",
+    "WAYFINDER 2": "0CD0E688-977B-4E4B-AACE-79A8A6C27B13",
+    "WAYFINDER 3": "D5003FED-E9C0-45EA-86A9-A9B10C42AC29",
+    "WAYFINDER 4": "7D8B82DC-0D70-453B-9A15-F7E44CB1FFA7",
+    "WAYFINDER 5": "464EA04B-9985-49E5-92F0-B4940B7E4ABB"
+  }
+}
