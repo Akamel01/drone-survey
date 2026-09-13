@@ -248,6 +248,7 @@ def push(kmz: Path, guid: str) -> None:
         mtp(f"cd {target}", f"put {staged}")
 
         back = tmp / "readback"
+        back.mkdir(parents=True, exist_ok=True)
         mtp(f"cd {target}", f"get {guid}.kmz", cwd=back)
         returned = back / f"{guid}.kmz"
         if not returned.exists():
