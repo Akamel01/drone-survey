@@ -63,6 +63,20 @@ Settled in a later grilling session, and binding on the loader:
   Controller's recorded profile says. It never tries an alternative route. When
   it fails, loading by hand with a third-party tool is a logged exception, not a
   routine step.
+- **Loading runs on the Linux host only.** That is where Missions are generated,
+  where every other Node runs, and where reading the Controller is proven to
+  work. macOS is a terminal into that host, never a loading path: Homebrew
+  disabled its maintained MTP command-line tool on 2026-09-01 and the
+  alternative is deprecated.
+- **The loader mounts with `jmtpfs`, copies, unmounts, then re-mounts and reads
+  back.** Success is the read-back comparison, never the copy command's exit
+  status — the same lesson as ODM's clean exit over a collapsed mesh. Note that
+  libmtp does not recognise this Controller (`2ca3:1021`) and falls back to
+  generic Android handling; reads are proven, writes are not.
+- **Plugging the Controller in starts the load.** A rule on the host notices the
+  RC2, runs the loader, and reports that the Missions are on board or that it
+  refused. The operator plugs in before leaving rather than remembering a command
+  at the Site.
 
 ## Considered and rejected
 
