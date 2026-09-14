@@ -45,6 +45,12 @@ import subprocess
 import sys
 from pathlib import Path
 
+# ADR 0018's raster check: ODM has delivered a mostly-empty orthophoto with a
+# zero exit, and the first golden run did it again (0.28% valid pixels).
+# ponytail: one conservative floor for every Site; a rotated grid in its
+# bounding box is typically 40-70% valid. Tune per Site if one trips it honestly.
+MIN_VALID_FRACTION = 0.25
+
 COG_CREATION_OPTIONS = [
     "-co", "COMPRESS=DEFLATE",
     "-co", "PREDICTOR=2",
@@ -118,6 +124,33 @@ def validate_with_gdalinfo(path: Path) -> tuple[bool, str]:
     return (len(errors) == 0), ("looks like a COG (gdalinfo layout check)" if not errors else "; ".join(errors))
 
 
+def alpha_mean(info: dict) -> float | None:
+    """Mean of the alpha band from gdalinfo JSON statistics, or None without one."""
+    for band in info.get("bands", []):
+        if band.get("colorInterpretation") == "Alpha":
+            mean = band.get("mean", band.get("metadata", {}).get("", {}).get("STATISTICS_MEAN"))
+            return None if mean is None else float(mean)
+    return None
+
+
+def valid_fraction(path: Path) -> float:
+    """Share of pixels the alpha band marks as data (ODM writes alpha 0 or 255)."""
+    try:
+        from osgeo import gdal
+        info = gdal.Info(str(path), options=gdal.InfoOptions(format="json", approxStats=True))
+    except ImportError:
+        if shutil.which("gdalinfo") is None:
+            sys.exit("export-cog: neither osgeo nor gdalinfo available to measure valid pixels")
+        result = subprocess.run(["gdalinfo", "-json", "-approx_stats", str(path)], capture_output=True, text=True)
+        if result.returncode != 0:
+            sys.exit(f"export-cog: gdalinfo failed: {result.stderr}")
+        info = json.loads(result.stdout)
+    mean = alpha_mean(info)
+    if mean is None:
+        sys.exit("export-cog: output has no alpha band, so empty areas cannot be measured")
+    return mean / 255
+
+
 def validate(path: Path) -> tuple[bool, str]:
     ok, detail = validate_with_osgeo(path)
     if ok is not None:
@@ -145,10 +178,14 @@ def main() -> None:
     print(f"export-cog: {args.src.name} ({before} bytes) -> {dst.name} ({after} bytes)")
 
     ok, detail = validate(dst)
-    (args.out / "validator_output.txt").write_text(f"ok={ok}\n{detail}\n")
-    print(f"export-cog: {detail}")
+    fraction = valid_fraction(dst)
+    (args.out / "validator_output.txt").write_text(f"ok={ok}\n{detail}\nvalid_pixel_fraction={fraction:.4f}\n")
+    print(f"export-cog: {detail}; valid pixels {fraction:.1%}")
     if not ok:
         sys.exit(f"export-cog: output failed COG validation -- {detail}")
+    if fraction < MIN_VALID_FRACTION:
+        sys.exit(f"export-cog: only {fraction:.1%} of the Orthomosaic holds data, below the "
+                 f"{MIN_VALID_FRACTION:.0%} floor -- the reconstruction is mostly empty (ADR 0018)")
 
 
 if __name__ == "__main__":

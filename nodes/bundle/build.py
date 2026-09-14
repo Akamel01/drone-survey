@@ -207,18 +207,27 @@ def render_ortho_html() -> str:
 <body>
 <div id="map"></div>
 <script>
-maplibregl.addProtocol('cog', new MaplibreCOGProtocol.CogProtocol().handleRequest);
+maplibregl.addProtocol('cog', MaplibreCOGProtocol.cogProtocol);
 const map = new maplibregl.Map({{
   container: 'map',
   style: {{
     version: 8,
     sources: {{
-      ortho: {{type: 'raster', tiles: ['cog://' + new URL('ortho/orthomosaic.tif', location.href).href], tileSize: 256}}
+      ortho: {{type: 'raster', url: 'cog://' + new URL('ortho/orthomosaic.tif', location.href).href, tileSize: 256}}
     }},
     layers: [{{id: 'ortho', type: 'raster', source: 'ortho'}}]
   }},
   center: [0, 0],
   zoom: 1
+}});
+// The COG's own bounds arrive with its metadata; frame the Orthomosaic once they do.
+let framed = false;
+map.on('sourcedata', (e) => {{
+  const bounds = e.sourceId === 'ortho' && map.getSource('ortho').bounds;
+  if (bounds && !framed) {{
+    framed = true;
+    map.fitBounds(bounds, {{padding: 20, animate: false}});
+  }}
 }});
 </script>
 </body>

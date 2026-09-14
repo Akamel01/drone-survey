@@ -29,6 +29,21 @@ docker rm -f "$name" >/dev/null 2>&1
 docker run -d --rm --name "$name" --memory 32g --memory-swap 32g \
   -p "127.0.0.1:$port:3000" "$@" "$img" >/dev/null || exit 1
 
+# Resource sampler: container RAM (docker stats) and host disk consumed (df),
+# so peak RAM / peak disk can be reported alongside wall clock. Mirrors the
+# GPU sampler in opensplat-fit.sh.
+disk_baseline=$(df -B1 --output=used / | tail -1 | tr -d ' ')
+(
+  while :; do
+    mem=$(docker stats --no-stream --format '{{.MemUsage}}' "$name" 2>/dev/null | awk -F/ '{print $1}')
+    used=$(df -B1 --output=used / | tail -1 | tr -d ' ')
+    echo "$(date +%H:%M:%S) mem=$mem disk_used=$used" >>"$out/resource.log"
+    sleep 5
+  done
+) &
+sampler=$!
+trap 'kill "$sampler" 2>/dev/null' EXIT
+
 for _ in $(seq 60); do
   curl -sf "http://127.0.0.1:$port/info" >"$out/info.json" && break
   sleep 2
@@ -66,9 +81,20 @@ fi
 curl -s -X POST -d "uuid=$uuid" "http://127.0.0.1:$port/task/remove" >/dev/null
 docker logs "$name" >"$out/service.log" 2>&1
 docker rm -f "$name" >/dev/null
+kill "$sampler" 2>/dev/null
+
+peak_mem_mib=$(awk -F'mem=' '{print $2}' "$out/resource.log" 2>/dev/null | awk '{
+  v=$1; if (v=="") next
+  n=v+0
+  if (v ~ /GiB/) n*=1024
+  if (n>m) m=n
+} END{print m+0}')
+peak_disk_used=$(awk -F'disk_used=' '{print $2}' "$out/resource.log" 2>/dev/null | sort -n | tail -1)
+peak_disk_job_bytes=$(( ${peak_disk_used:-$disk_baseline} - disk_baseline ))
 
 {
   echo "run=$run image=$img version=$version images=$count"
   echo "status=$status wall_s=$wall processing_s=$(( ${proc:-0} / 1000 ))"
   echo "all_zip_bytes=$zip_bytes"
+  echo "peak_ram_mib=${peak_mem_mib:-unknown} peak_disk_job_bytes=$peak_disk_job_bytes disk_baseline_bytes=$disk_baseline"
 } | tee "$out/summary.txt"

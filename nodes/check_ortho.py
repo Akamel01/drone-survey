@@ -237,11 +237,15 @@ def check_cog_validator():
         # actually has room to build an overview -- a 64px image is smaller
         # than one output tile and legitimately gets none, which isn't a
         # useful test of the "with overviews" requirement.
-        result = subprocess.run(
-            ["gdal_create", "-outsize", "2048", "2048", "-bands", "4", "-ot", "Byte",
-             "-a_srs", "EPSG:4326", "-a_ullr", "-1", "1", "1", "-1", str(src)],
-            capture_output=True, text=True,
-        )
+        def create(path, alpha):
+            return subprocess.run(
+                ["gdal_create", "-outsize", "2048", "2048", "-bands", "4", "-ot", "Byte",
+                 "-burn", "128", "-burn", "128", "-burn", "128", "-burn", str(alpha),
+                 "-co", "PHOTOMETRIC=RGB", "-co", "ALPHA=YES",
+                 "-a_srs", "EPSG:4326", "-a_ullr", "-1", "1", "1", "-1", str(path)],
+                capture_output=True, text=True,
+            )
+        result = create(src, 255)
         if result.returncode != 0:
             print(f"[skip] export-cog COG check -- gdal_create failed: {result.stderr}")
             return
@@ -260,6 +264,18 @@ def check_cog_validator():
 
         ok, detail = export_cog.validate(dst)
         check(f"export-cog: output passes COG validation ({detail})", ok, detail)
+        check("export-cog: a fully valid raster measures ~100% valid pixels",
+              export_cog.valid_fraction(dst) > 0.99)
+
+        # The failure ADR 0018 names: a valid COG that holds almost nothing.
+        empty = tmp / "empty.tif"
+        create(empty, 0)
+        r = subprocess.run(
+            [PY, str(REPO_ROOT / "nodes" / "export-cog" / "export_cog.py"),
+             "--in", str(empty), "--out", str(tmp / "out-empty")],
+            capture_output=True, text=True,
+        )
+        check("export-cog: refuses a mostly-empty Orthomosaic", r.returncode != 0 and "floor" in r.stderr, r.stderr)
 
 
 def main() -> None:
