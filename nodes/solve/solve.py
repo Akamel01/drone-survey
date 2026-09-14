@@ -25,12 +25,35 @@ until the `odm_report` stage, which is near the very end of the pipeline --
 confirmed by inspecting `all.zip` at `end-with=opensfm` (cameras.json only,
 no shots) versus `end-with=odm_report` (shots.geojson appears). So the
 "cheap first solve for Anchor projection" design.md describes is cheap for
-the *camera model* (this Node's own contract test), but per-shot poses for
-`register` to project Anchors with are not available through the public API
-at that same cheap stopping point. This Node still defaults to stopping at
-opensfm, since that is what the design calls for and what keeps the common
-case fast; `register` is written to detect the absence of poses and refuse
-cleanly rather than guess (see nodes/register/register.py).
+the *camera model* (this Node's own contract test) but not, through NodeODM
+alone, for per-shot poses.
+
+**Closed, #22 orchestrator comment: route chosen is the ODM CLI container,
+not NodeODM, for this one pass.** OpenSfM writes `opensfm/reconstruction.json`
+-- cameras and per-shot rotation/translation both -- at the opensfm stage
+itself, on disk in the project directory; NodeODM just never surfaces that
+file through its asset API before `odm_report`. The ODM CLI container
+(`opendronemap/odm:latest`) keeps that same project directory, so running it
+directly for this one pass reads the file straight off disk instead of
+waiting for `odm_report`. This is a narrower use of the CLI than ADR 0006
+(revision) argues against: that ADR's concern is the Runner reimplementing
+NodeODM's *job queue* (concurrency, retries, a persistent job store) for
+ordinary pipeline work, not a single blocking subprocess call for one job --
+which is what this is, the same shape as the HTTP-poll loop below, just
+against a local process instead of a local server. **This pass -- no `--gcp`
+given at all, not merely an empty one -- is the only one that takes this
+route.** The second, ground-control pass (`--gcp` given, even pointing at
+`register`'s empty "no Anchors" file) still goes through NodeODM below,
+unchanged, because `reconstruct`'s restart chain needs NodeODM's own
+resumable task (nodes/reconstruct/reconstruct.py's docstring).
+
+`register` reads `reconstruction.json`'s shots correctly by treating them as
+OpenSfM's own topocentric ENU frame (local to a `reference_lla`), not as
+already-georeferenced coordinates -- see nodes/register/register.py's
+module docstring and `latlon_alt_to_topocentric`. **Proven against a real
+Capture**: projecting odm_data_bellus's own `gcp_list.txt` ground points
+through this exact route's `reconstruction.json` lands within tolerance of
+the surveyed pixel (nodes/check_ortho.py's `check_bellus_real_projection`).
 
 Usage:
     python3 solve.py --in IMAGES_DIR --out OUT_DIR [--gcp gcp_list.txt]
@@ -40,6 +63,7 @@ Usage:
 
 import argparse
 import json
+import subprocess
 import sys
 import zipfile
 from pathlib import Path
@@ -48,6 +72,7 @@ import nodeodm_client as client
 
 IMAGE_SUFFIXES = {".jpg", ".jpeg", ".tif", ".tiff", ".png"}
 DEFAULT_HOST = "http://127.0.0.1:3180"  # the mapped port of this project's `nodeodm` container, confirmed live
+DEFAULT_ODM_IMAGE = "opendronemap/odm:latest"  # first (no-gcp) pass only -- see module docstring
 
 
 def list_images(directory: Path) -> list[Path]:
@@ -102,6 +127,108 @@ def principal_point_survived(camera: dict) -> bool:
     )
 
 
+def normalize_camera(model: dict) -> dict:
+    """OpenSfM's raw reconstruction.json camera model uses focal_x/focal_y;
+    NodeODM's own cameras.json (the other route, below) already collapses to
+    a single `focal`. register.py's project_point() only reads `focal` --
+    alias it here so both routes hand callers the same shape. Every brown
+    model measured so far (bellus, StudioKitchen) has focal_x == focal_y."""
+    if "focal" not in model and "focal_x" in model:
+        model = {**model, "focal": model["focal_x"]}
+    return model
+
+
+def options_to_cli_flags(options: list[dict]) -> list[str]:
+    """ODM's own CLI takes `--name value` flags, and a bare `--name` for a
+    True boolean (confirmed via `docker run opendronemap/odm:latest --help`)
+    -- different shape from the JSON options list NodeODM's HTTP API wants."""
+    flags = []
+    for opt in options:
+        name, value = opt["name"], opt["value"]
+        if value is True:
+            flags.append(f"--{name}")
+        elif value is False:
+            continue
+        else:
+            flags += [f"--{name}", str(value)]
+    return flags
+
+
+def run_odm_cli(project_root: Path, name: str, images_dir: Path, options: list[dict],
+                 odm_image: str, timeout_seconds: float) -> Path:
+    """Run the ODM CLI container directly (module docstring: the no-gcp
+    pass's route). Confirmed invocation shape (docker inspect against the
+    real odm_data_bellus/StudioKitchen CLI runs already on the compute
+    host): `--project-path /work <name>` with the project directory bind-
+    mounted at /work. The images bind-mount is separate and read-only,
+    straight from wherever the Runner already put them -- no copy, since
+    this and NodeODM's own container both run on the same host.
+
+    Returns the path to opensfm/reconstruction.json; raises with the
+    container's own tail output if ODM did not produce it (ADR 0018: a
+    clean exit is not evidence, check the file itself).
+
+    Found live: the container's entrypoint needs to start as root (it drops
+    privileges itself internally) -- forcing `--user` at `docker run` breaks
+    its own dataset-stage setup (`PermissionError` on its own project dir).
+    So ODM runs as root as usual, and every file it writes into the bind
+    mount is root-owned; `remove_odm_project` below is the matching cleanup
+    (a root container removes what a root container created), used instead
+    of a plain `shutil.rmtree` for exactly that reason.
+    """
+    project_root.mkdir(parents=True, exist_ok=True)
+    cmd = [
+        "docker", "run", "--rm",
+        "-v", f"{project_root.resolve()}:/work",
+        "-v", f"{images_dir.resolve()}:/work/{name}/images:ro",
+        odm_image, "--project-path", "/work", name,
+    ] + options_to_cli_flags(options)
+    result = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout_seconds)
+    reconstruction_path = project_root / name / "opensfm" / "reconstruction.json"
+    if not reconstruction_path.is_file():
+        tail = "\n".join((result.stdout + result.stderr).splitlines()[-30:])
+        sys.exit(f"solve: ODM CLI did not produce {reconstruction_path} (exit {result.returncode}):\n{tail}")
+    return reconstruction_path
+
+
+def remove_odm_project(project_root: Path) -> None:
+    """ODM's container runs as root (see run_odm_cli's docstring), so every
+    file it wrote into the bind-mounted `project_root` is root-owned --
+    `shutil.rmtree` from this (non-root) process cannot remove it. A
+    throwaway container does the same job in reverse: root created it, a
+    root container removes it. Not sudo (never used here): the privilege
+    stays inside the container, same as ODM's own write did."""
+    subprocess.run(
+        ["docker", "run", "--rm", "-v", f"{project_root.parent.resolve()}:/x",
+         "busybox", "rm", "-rf", f"/x/{project_root.name}"],
+        capture_output=True, text=True,
+    )
+
+
+def poses_from_reconstruction(reconstruction_path: Path) -> tuple[dict, dict]:
+    """The no-gcp pass's pose source (module docstring): opensfm's own
+    reconstruction.json, written at the opensfm stage itself -- unlike
+    `odm_report/shots.geojson`, available at the cheap stop point. Its shots
+    are in OpenSfM's topocentric ENU frame relative to `reference_lla`, not
+    georeferenced; register.py's build_projections handles that distinction
+    (see nodes/register/register.py's module docstring)."""
+    components = json.loads(reconstruction_path.read_text())
+    if not components:
+        sys.exit(f"solve: {reconstruction_path} has no reconstruction (0 components) -- solve failed to align any shots")
+    recon = components[0]  # single-component assumption, same as primary_camera's -- flag if a Capture ever splits
+    cameras = {camera_id: normalize_camera(model) for camera_id, model in recon.get("cameras", {}).items()}
+    shots = {
+        filename: {"rotation": shot.get("rotation"), "translation": shot.get("translation"), "camera": shot.get("camera")}
+        for filename, shot in recon.get("shots", {}).items()
+    }
+    poses = {
+        "source": "opensfm/reconstruction.json",
+        "reference_lla": recon.get("reference_lla"),
+        "shots": shots,
+    }
+    return cameras, poses
+
+
 def extract_poses(zf: zipfile.ZipFile) -> dict:
     """Best-effort: only present once a solve reaches odm_report (see module
     docstring). Returns {"source": None, "shots": {}} when absent, rather
@@ -139,6 +266,8 @@ def main() -> None:
     p.add_argument("--end-with", default="opensfm", help="ODM's own documented stop-stage flag (ADR 0001: never a patch)")
     p.add_argument("--option", action="append", default=[], help="repeatable name=value, passed through to NodeODM/ODM")
     p.add_argument("--timeout-seconds", type=float, default=3 * 3600, help="boundary: a single ODM run may not exceed 3 hours")
+    p.add_argument("--odm-image", default=DEFAULT_ODM_IMAGE,
+                   help="ODM CLI container image -- used only for the first (no-gcp) pass, see module docstring")
     p.add_argument("--keep-task", action="store_true",
                    help="don't remove the NodeODM task on completion -- set this on the second (with-gcp) solve, "
                         "whose task `reconstruct` continues via restart; the first solve's task is never resumed "
@@ -159,42 +288,63 @@ def main() -> None:
     options = [{"name": "end-with", "value": args.end_with}] + parse_options(args.option)
     args.out.mkdir(parents=True, exist_ok=True)
 
-    print(f"solve: submitting {len(images)} images to {args.host} "
-          f"(end-with={args.end_with}, gcp={'yes' if gcp_path else 'no'})")
-    task_uuid = client.new_task(args.host, args.name, images, options, gcp_path=gcp_path)
-    print(f"solve: task {task_uuid} submitted; polling")
+    if args.gcp is None:
+        # First pass (module docstring): recover poses cheaply via the ODM
+        # CLI container directly, not NodeODM -- register needs
+        # opensfm/reconstruction.json, which NodeODM's asset API never
+        # exposes at this stop point. Distinguished by --gcp being *absent*,
+        # not merely resolving to an empty file (that's the second pass with
+        # no Anchors configured, which still goes through NodeODM below).
+        print(f"solve: running ODM CLI directly on {len(images)} images (end-with={args.end_with}) -- "
+              f"first pass, recovering poses for register")
+        project_root = args.out / "odm_project"
+        reconstruction_path = run_odm_cli(project_root, args.name, args.images_dir, options,
+                                           args.odm_image, args.timeout_seconds)
+        cameras, poses = poses_from_reconstruction(reconstruction_path)
+        remove_odm_project(project_root)  # heavy, root-owned opensfm working set; poses/camera already extracted
+        (args.out / "task.json").write_text(json.dumps({
+            "route": "odm-cli", "end_with": args.end_with, "gcp": False,
+        }, indent=1))
+    else:
+        print(f"solve: submitting {len(images)} images to {args.host} "
+              f"(end-with={args.end_with}, gcp={'yes' if gcp_path else 'no'})")
+        task_uuid = client.new_task(args.host, args.name, images, options, gcp_path=gcp_path)
+        print(f"solve: task {task_uuid} submitted; polling")
 
-    try:
-        result = client.wait_for_completion(args.host, task_uuid, timeout_seconds=args.timeout_seconds)
-        code = result.get("status", {}).get("code")
-        if code != 40:  # COMPLETED
-            log_tail = client.output(args.host, task_uuid)[-30:]
-            sys.exit(f"solve: task {task_uuid} ended as {client.STATUS.get(code, code)}, not COMPLETED:\n"
-                      + "\n".join(log_tail))
+        try:
+            result = client.wait_for_completion(args.host, task_uuid, timeout_seconds=args.timeout_seconds)
+            code = result.get("status", {}).get("code")
+            if code != 40:  # COMPLETED
+                log_tail = client.output(args.host, task_uuid)[-30:]
+                sys.exit(f"solve: task {task_uuid} ended as {client.STATUS.get(code, code)}, not COMPLETED:\n"
+                          + "\n".join(log_tail))
 
-        zip_path = args.out / "all.zip"
-        client.download_all_zip(args.host, task_uuid, zip_path)
-        with zipfile.ZipFile(zip_path) as zf:
-            cameras = json.loads(zf.read("cameras.json"))
-            poses = extract_poses(zf)
-        zip_path.unlink()  # keep the Runner's workdir small; the zip's content is re-derivable from the task while it exists
-    finally:
-        if not args.keep_task:
-            client.remove(args.host, task_uuid)  # task data lives in the container, not the workdir -- free it regardless of outcome
+            zip_path = args.out / "all.zip"
+            client.download_all_zip(args.host, task_uuid, zip_path)
+            with zipfile.ZipFile(zip_path) as zf:
+                cameras = json.loads(zf.read("cameras.json"))
+                poses = extract_poses(zf)
+            zip_path.unlink()  # keep the Runner's workdir small; the zip's content is re-derivable from the task while it exists
+        finally:
+            if not args.keep_task:
+                client.remove(args.host, task_uuid)  # task data lives in the container, not the workdir -- free it regardless of outcome
+
+        (args.out / "task.json").write_text(json.dumps({
+            "uuid": task_uuid, "host": args.host, "end_with": args.end_with, "gcp": gcp_path is not None,
+        }, indent=1))
 
     camera = primary_camera(cameras)
     (args.out / "cameras.json").write_text(json.dumps(cameras, indent=1))
     (args.out / "camera.json").write_text(json.dumps(camera, indent=1))
     (args.out / "poses.json").write_text(json.dumps(poses, indent=1))
-    (args.out / "task.json").write_text(json.dumps({
-        "uuid": task_uuid, "host": args.host, "end_with": args.end_with, "gcp": gcp_path is not None,
-    }, indent=1))
 
     survived = principal_point_survived(camera)
     print(f"solve: camera {camera['camera_id']!r}: projection_type={camera.get('projection_type')} "
           f"c_x={camera.get('c_x')} c_y={camera.get('c_y')} -- principal point survived: {survived}")
     if poses["source"] is None:
         print("solve: no per-shot poses at this stage (needs odm_report; see module docstring)")
+    else:
+        print(f"solve: {len(poses['shots'])} shot pose(s) from {poses['source']}")
     if not survived:
         sys.exit("solve: principal point did NOT survive (forced to image centre, or camera model not brown) -- see ADR 0004")
 

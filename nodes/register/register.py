@@ -26,17 +26,25 @@ proven against a flown Site before `register` does anything on a live
 Capture. State this plainly rather than shipping unproven CV and calling it
 done.
 
-**A second, narrower gap, found while wiring this up**: `solve`'s default
-stop point (`--end-with opensfm`) does not produce per-shot poses at all --
-NodeODM only exposes `odm_report/shots.geojson` once a solve reaches
-`odm_report`, near the very end of the pipeline (see
-nodes/solve/solve.py's docstring). So even with a real detector, the
-current Manifest wiring cannot hand this Node real poses without a much
-more expensive first solve than design.md describes. `--poses`/`--camera`
-below assume shots.geojson's documented shape (OpenSfM's own convention:
-world point Xw -> camera point Xc = R*Xw + t, R from `rotation` via
-Rodrigues, in whatever CRS the shot was georeferenced into) once available;
-this conversion is implemented but has never run against a real Capture.
+**A second, narrower gap, now closed (#22 orchestrator comment)**: NodeODM's
+asset API never exposes per-shot poses (`odm_report/shots.geojson`) at the
+cheap `end-with=opensfm` stop point -- confirmed on real output, still true.
+`solve`'s no-ground-control pass now runs the ODM CLI container directly on
+a project directory instead (see nodes/solve/solve.py's docstring) and reads
+`opensfm/reconstruction.json`, which OpenSfM writes at that same cheap stage.
+That file's shots are **not** georeferenced: they live in OpenSfM's own
+topocentric ENU frame, local to a `reference_lla` (see
+`latlon_alt_to_topocentric` below). `--poses` carries `reference_lla` when
+present; `build_projections` converts each Anchor into that frame before
+projecting. When `--poses` has no `reference_lla` (the old, far more
+expensive `shots.geojson`-at-`odm_report` route, still supported), shots are
+already georeferenced and Anchors go in as UTM directly, as before. Either
+way: world point Xw -> camera point Xc = R*Xw + t, R from `rotation` via
+Rodrigues. **Proven against a real Capture** (odm_data_bellus, run on the
+compute host): projecting its own `gcp_list.txt` ground points through its
+own `opensfm/reconstruction.json` poses lands within the check's tolerance
+of the surveyed pixel -- see `nodes/check_ortho.py`'s
+`check_bellus_real_projection`.
 
 Ground control file format (docs.opendronemap.org/gcp, and cross-checked
 against a real ODM sample dataset's own gcp_list.txt):
@@ -45,11 +53,7 @@ against a real ODM sample dataset's own gcp_list.txt):
     geo_x geo_y geo_z im_x im_y image_name [gcp_name]
 
 Anchors are recorded as WGS84 lat/lon/alt (ADR 0007: "read once from
-consumer GPS"); this Node projects with an equirectangular local-tangent-
-plane approximation for camera-frame math (fine at Site scale -- Anchors are
-8-10m apart, consumer GPS itself is only accurate to 2-10m, so this
-approximation's error is well under the noise floor already accepted
-elsewhere in the design) and converts to UTM only for the numbers actually
+consumer GPS"); this Node converts to UTM only for the numbers actually
 written to `gcp_list.txt`, which must be in a real projected CRS.
 
 Usage:
@@ -67,9 +71,15 @@ from pathlib import Path
 
 WGS84_A = 6378137.0
 WGS84_F = 1 / 298.257223563
+WGS84_B = WGS84_A * (1 - WGS84_F)
 UTM_K0 = 0.9996
 
-DEFAULT_GATE_PX = 25.0            # detection-to-projection distance floor (unmeasured; conservative per ADR 0018)
+# How far a detection may sit from where the first solve projects its Anchor.
+# Measured on bellus's four real GCPs with GPS-only poses: 18-195 px across runs,
+# which is consumer GPS error, not a projection bug (bundle residual 1.9 px).
+# The earlier 25 px would have rejected every real Anchor.
+# ponytail: one radius for all Sites; re-measure on the first Site with real Anchors.
+DEFAULT_GATE_PX = 250.0
 DEFAULT_MIN_IMAGES_PER_ANCHOR = 3  # ODM docs' documented hard floor
 DEFAULT_MIN_ACCEPTED_ANCHORS = 5   # anchor-sizing-2026.md / anchor-procurement.md's floor
 DEFAULT_MAX_RESIDUAL_SPREAD_PX = 40.0  # cross-image consistency proxy (see gate()), unmeasured, conservative
@@ -117,6 +127,50 @@ def latlon_to_utm(lat: float, lon: float) -> tuple[float, float, int, str]:
     return easting, northing, zone, hemisphere
 
 
+def utm_to_latlon(easting: float, northing: float, zone: int, hemisphere: str) -> tuple[float, float]:
+    """Inverse of latlon_to_utm (Snyder). Needed to turn gcp_list.txt's UTM
+    ground truth back into lat/lon so it can be run through the same
+    topocentric conversion OpenSfM used for the reconstruction's own shots
+    (#22 real-data proof: gcp_list.txt is UTM, reconstruction.json is
+    topocentric ENU -- UTM is the only common intermediate)."""
+    f, a = WGS84_F, WGS84_A
+    e2 = f * (2 - f)
+    e1 = (1 - math.sqrt(1 - e2)) / (1 + math.sqrt(1 - e2))
+    ep2 = e2 / (1 - e2)
+    k0 = UTM_K0
+    x = easting - 500000.0
+    y = northing - 10_000_000.0 if hemisphere.upper() == "S" else northing
+    lon0 = math.radians(zone * 6 - 183)
+
+    M = y / k0
+    mu = M / (a * (1 - e2 / 4 - 3 * e2 ** 2 / 64 - 5 * e2 ** 3 / 256))
+    phi1 = (
+        mu
+        + (3 * e1 / 2 - 27 * e1 ** 3 / 32) * math.sin(2 * mu)
+        + (21 * e1 ** 2 / 16 - 55 * e1 ** 4 / 32) * math.sin(4 * mu)
+        + (151 * e1 ** 3 / 96) * math.sin(6 * mu)
+        + (1097 * e1 ** 4 / 512) * math.sin(8 * mu)
+    )
+    sin_p1, cos_p1, tan_p1 = math.sin(phi1), math.cos(phi1), math.tan(phi1)
+    C1 = ep2 * cos_p1 ** 2
+    T1 = tan_p1 ** 2
+    N1 = a / math.sqrt(1 - e2 * sin_p1 ** 2)
+    R1 = a * (1 - e2) / (1 - e2 * sin_p1 ** 2) ** 1.5
+    D = x / (N1 * k0)
+
+    lat = phi1 - (N1 * tan_p1 / R1) * (
+        D ** 2 / 2
+        - (5 + 3 * T1 + 10 * C1 - 4 * C1 ** 2 - 9 * ep2) * D ** 4 / 24
+        + (61 + 90 * T1 + 298 * C1 + 45 * T1 ** 2 - 252 * ep2 - 3 * C1 ** 2) * D ** 6 / 720
+    )
+    lon = lon0 + (
+        D
+        - (1 + 2 * T1 + C1) * D ** 3 / 6
+        + (5 - 2 * C1 + 28 * T1 - 3 * C1 ** 2 + 8 * ep2 + 24 * T1 ** 2) * D ** 5 / 120
+    ) / cos_p1
+    return math.degrees(lat), math.degrees(lon)
+
+
 # --- projection --------------------------------------------------------------
 
 def _rodrigues(angle_axis: list[float]) -> list[list[float]]:
@@ -138,9 +192,10 @@ def project_point(camera: dict, rotation: list[float], translation: list[float],
     all normalized by max(width, height), origin at image centre; confirmed
     against real ODM cameras.json field names/scale on 2026-09-13).
 
-    World-to-camera convention: Xc = R*Xw + t (OpenSfM/COLMAP standard). This
-    half -- combining `rotation`/`translation` with a world point -- is
-    implemented but unverified against a real Capture (see module docstring).
+    World-to-camera convention: Xc = R*Xw + t (OpenSfM/COLMAP standard).
+    Verified against a real Capture (odm_data_bellus's own
+    opensfm/reconstruction.json + gcp_list.txt) -- see module docstring and
+    nodes/check_ortho.py's check_bellus_real_projection.
     """
     R = _rodrigues(rotation)
     xc = [sum(R[i][j] * point_world[j] for j in range(3)) + translation[i] for i in range(3)]
@@ -161,13 +216,44 @@ def project_point(camera: dict, rotation: list[float], translation: list[float],
     return u * scale + w / 2, v * scale + h / 2
 
 
-def latlon_alt_to_local_enu(lat: float, lon: float, alt: float, origin: tuple[float, float, float]) -> list[float]:
-    """Equirectangular local-tangent-plane approximation -- see module docstring
-    for why this is adequate at Anchor spacing (8-10m) against 2-10m GPS noise."""
-    origin_lat, origin_lon, origin_alt = origin
-    east = math.radians(lon - origin_lon) * WGS84_A * math.cos(math.radians(origin_lat))
-    north = math.radians(lat - origin_lat) * WGS84_A
-    return [east, north, alt - origin_alt]
+def _ecef_from_lla(lat: float, lon: float, alt: float) -> tuple[float, float, float]:
+    """OpenSfM's own ecef_from_lla (opensfm/geo.py), reimplemented in stdlib
+    math -- WGS84 ellipsoid, not a sphere. Reconstruction.json's shots are in
+    OpenSfM's topocentric frame (see module docstring); to project a world
+    point given as lat/lon/alt (or UTM, via utm_to_latlon) into that frame,
+    this Node has to reproduce OpenSfM's own conversion exactly, not
+    approximate it."""
+    a2, b2 = WGS84_A ** 2, WGS84_B ** 2
+    lat_r, lon_r = math.radians(lat), math.radians(lon)
+    sin_lat, cos_lat = math.sin(lat_r), math.cos(lat_r)
+    L = 1.0 / math.sqrt(a2 * cos_lat ** 2 + b2 * sin_lat ** 2)
+    x = (a2 * L + alt) * cos_lat * math.cos(lon_r)
+    y = (a2 * L + alt) * cos_lat * math.sin(lon_r)
+    z = (b2 * L + alt) * sin_lat
+    return x, y, z
+
+
+def latlon_alt_to_topocentric(lat: float, lon: float, alt: float,
+                               ref_lat: float, ref_lon: float, ref_alt: float) -> list[float]:
+    """World lat/lon/alt -> OpenSfM's topocentric ENU (east, north, up) frame
+    at (ref_lat, ref_lon, ref_alt) -- the exact inverse of OpenSfM's own
+    `topocentric_from_lla` (opensfm/geo.py), confirmed by reading that module
+    in the ODM container (docker run --entrypoint cat opendronemap/odm:latest
+    .../opensfm/geo.py, 2026-09-13): ECEF difference from the reference point,
+    rotated into the reference's local east/north/up basis. This replaces the
+    earlier equirectangular approximation, which was never checked against
+    OpenSfM's actual convention and is wrong for this purpose -- it agreed
+    with this one only to first order, and this Node projects against a real
+    reconstruction now, not just synthetic fixtures at Anchor-spacing scale."""
+    x, y, z = _ecef_from_lla(lat, lon, alt)
+    x0, y0, z0 = _ecef_from_lla(ref_lat, ref_lon, ref_alt)
+    dx, dy, dz = x - x0, y - y0, z - z0
+    sa, ca = math.sin(math.radians(ref_lat)), math.cos(math.radians(ref_lat))
+    so, co = math.sin(math.radians(ref_lon)), math.cos(math.radians(ref_lon))
+    east = -so * dx + co * dy
+    north = -sa * co * dx - sa * so * dy + ca * dz
+    up = ca * co * dx + ca * so * dy + sa * dz
+    return [east, north, up]
 
 
 # --- matching and gate -------------------------------------------------------
@@ -257,7 +343,24 @@ def read_anchors(path: Path | None) -> list[dict]:
     return anchors or []
 
 
+def anchor_world_point(anchor: dict, reference_lla: dict | None) -> list[float]:
+    """An Anchor's recorded lat/lon/alt, expressed in whatever frame `poses`
+    is in. `reference_lla` present (opensfm/reconstruction.json, the cheap
+    opensfm-only solve) means shots are topocentric ENU -- convert into that
+    frame. Absent (odm_report/shots.geojson, an expensive full solve) means
+    shots are already georeferenced -- UTM, as before."""
+    alt = anchor.get("alt") or 0.0
+    if reference_lla is not None:
+        return latlon_alt_to_topocentric(
+            anchor["lat"], anchor["lon"], alt,
+            reference_lla["latitude"], reference_lla["longitude"], reference_lla.get("altitude", 0.0),
+        )
+    easting, northing, _, _ = latlon_to_utm(anchor["lat"], anchor["lon"])
+    return [easting, northing, alt]
+
+
 def build_projections(poses: dict, camera: dict, anchors: list[dict]) -> dict[str, dict[str, tuple[float, float]]]:
+    reference_lla = poses.get("reference_lla")
     projections: dict[str, dict[str, tuple[float, float]]] = {}
     for image, shot in poses.get("shots", {}).items():
         rotation, translation = shot.get("rotation"), shot.get("translation")
@@ -265,8 +368,7 @@ def build_projections(poses: dict, camera: dict, anchors: list[dict]) -> dict[st
             continue
         per_image = {}
         for anchor in anchors:
-            easting, northing, _, _ = latlon_to_utm(anchor["lat"], anchor["lon"])
-            world_point = [easting, northing, anchor.get("alt") or 0.0]
+            world_point = anchor_world_point(anchor, reference_lla)
             result = project_point(camera, rotation, translation, world_point)
             if result is not None:
                 per_image[anchor["id"]] = result

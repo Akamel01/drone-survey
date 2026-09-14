@@ -184,14 +184,81 @@ Full log: `reference/run.log`. Well under the "well under an hour" target.
 
 ## What remains unproven
 
-Same two gaps `golden-capture-v1.md` named, still open (out of #15's scope):
+Same two gaps `golden-capture-v1.md` named; (2) is now closed by #22, see
+below. Still open:
 
 1. **Anchor detection on real imagery.** No Site with Anchors has been
    flown; `register.py`'s projection/matching/gate/writer are unit-tested
    against synthetic detections only (`nodes/check_ortho.py`).
-2. **Feeding `register` real per-shot poses** at the cheap `solve`
-   stop-point (`opensfm` only) rather than the far more expensive
-   `odm_report` stage where poses actually become available -- see
-   `nodes/solve/solve.py`'s own module docstring.
+2. ~~Feeding `register` real per-shot poses at the cheap `solve` stop-point~~
+   -- closed, see "#22: a cheap first solve, and real GCP pixel errors" below.
 3. **Browser rendering over range requests** -- out of this ticket's scope,
    left to whichever ticket builds `bundle`/`publish`.
+
+## #22: a cheap first solve, and real GCP pixel errors
+
+**Route chosen**: `solve`'s no-ground-control pass now runs the ODM CLI
+container (`opendronemap/odm:latest`) directly on a project directory
+instead of going through NodeODM, and reads `opensfm/reconstruction.json`
+off disk -- written at the opensfm stage itself, unlike
+`odm_report/shots.geojson`, which NodeODM's asset API never exposes before
+`odm_report` (confirmed, see `nodes/solve/solve.py`'s module docstring).
+The with-ground-control pass is unchanged (still NodeODM, for
+`reconstruct`'s resumable task). `register` converts each Anchor into
+OpenSfM's own topocentric ENU frame (`nodes/register/register.py`'s
+`latlon_alt_to_topocentric`, reimplementing `opensfm/geo.py`'s ECEF math
+read from inside the `opendronemap/odm:latest` container) rather than
+assuming already-georeferenced coordinates.
+
+**A trap found and avoided, not walked into**: odm_data_bellus's own
+already-completed project at `~/drone/datasets/code` auto-detected its own
+`gcp_list.txt` at the opensfm stage (same filename-based detection
+`solve`'s with-gcp pass relies on), which set OpenSfM's own
+`bundle_use_gps: false`. With only 4 GCPs each tagged in a single image
+("insufficient" per ODM's own log), that reconstruction's scale is
+under-constrained -- measured: pairwise camera-centre distances computed
+from its own rotation/translation are a near-constant ~52x smaller than the
+same pairs' `gps_position` values, a similarity-transform mismatch, not
+noise. That reconstruction is real, but not what `solve`'s actual no-gcp
+route ever produces (it never uploads a gcp file). The real-data proof
+below reruns the actual route instead of reusing that tainted file.
+
+**Real-data proof** (`nodes/check_ortho.py`'s `check_bellus_real_projection`,
+runs on the compute host only): a fresh no-gcp opensfm solve on
+odm_data_bellus's own 122 images (`feature-quality=low`, ~60s, 98/122 shots
+registered), then each of `gcp_list.txt`'s 4 surveyed ground points
+projected through that solve's own poses into its named image:
+
+| Image | Projected | Surveyed | Error |
+|---|---|---|---|
+| IMG_1356_RGB.jpg | (2652.1, 2128.9) | (2648.0, 2147.0) | 18.6px |
+| IMG_1346_RGB.jpg | (1647.8, 1340.0) | (1678.0, 1442.0) | 106.3px |
+| IMG_1382_RGB.jpg | (1618.2, 1323.1) | (1681.0, 1484.0) | 172.7px |
+| IMG_1338_RGB.jpg | (2279.4, 1084.1) | (2213.0, 1267.0) | 194.5px |
+
+Mean 123.0px, max 194.5px (one rerun measured 35.2/125.0/176.9/186.3px --
+same order of magnitude; opensfm's incremental reconstruction isn't
+perfectly deterministic run to run). **This is larger than "a few tens of
+pixels"** and was investigated rather than accepted or loosened away: the
+solve's own internal bundle-adjustment reprojection residual
+(`opensfm/stats/stats.json`'s `reconstruction_statistics.reprojection_error_pixels`)
+measured 1.9px -- proof the projection convention itself is right, since a
+wrong convention would show up there too, against the solve's own tie
+points, not just against outside ground truth. The gap against *surveyed*
+ground truth is explained by ordinary consumer GPS accuracy, exactly what
+ADR 0007 exists to work around: this solve's own `gps_errors.average_error`
+was 2.7m, and at this flight's real GSD (~100m AGL, focal 0.6555 normalized
+-> ~0.038m/px), 2.7m alone is ~70px, with the worst single shot's error
+naturally exceeding the average.
+
+**A consequence worth flagging for whoever builds the real detector (#9,
+#11)**: `register.DEFAULT_GATE_PX` is 25.0, described in that module as
+"unmeasured, conservative." Measured projection error from a real no-gcp
+solve is 4-8x that. Nearest-projection Anchor matching (ADR 0007) needs the
+projection close enough to disambiguate between Anchors spaced 8-10m apart
+(at this GSD, ~210-260px), which 123-195px of error does not obviously
+break -- but it means the gate's matching radius likely needs to be
+measured against real Anchors, not left at its current placeholder, before
+trusting nearest-projection matching in production. Left open rather than
+tuned here: no real Anchors exist yet to measure the right value against
+(DONE CRITERION #5, unchanged).
