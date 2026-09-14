@@ -1,0 +1,112 @@
+{
+  "pipeline": "orthomosaic",
+  "nodes": [
+    {
+      "name": "ingest",
+      "command": ["python3", "nodes/ingest/ingest.py", "--out", "{out.images}"],
+      "outputs": {"images": "images"}
+    },
+    {
+      "name": "exif-audit",
+      "command": ["python3", "nodes/exif-audit/exif_audit.py", "--in", "{in.images}", "--out", "{out.report}"],
+      "inputs": {"images": {"node": "ingest", "output": "images"}},
+      "outputs": {"report": "audit.json"}
+    },
+    {
+      "name": "filter",
+      "command": ["python3", "nodes/filter/filter.py", "--in", "{in.images}", "--out-images", "{out.images}", "--out-report", "{out.report}"],
+      "inputs": {"images": {"node": "ingest", "output": "images"}},
+      "outputs": {"images": "images", "report": "filter.json"}
+    },
+    {
+      "name": "correct",
+      "command": ["python3", "nodes/correct/correct.py", "--in", "{in.images}", "--out", "{out.images}"],
+      "inputs": {"images": {"node": "filter", "output": "images"}},
+      "outputs": {"images": "images"}
+    },
+    {
+      "name": "solve-initial",
+      "command": [
+        "python3", "nodes/solve/solve.py",
+        "--in", "{in.images}", "--out", "{out.solved}",
+        "--option", "feature-quality=low"
+      ],
+      "inputs": {"images": {"node": "correct", "output": "images"}},
+      "outputs": {"solved": "solved"}
+    },
+    {
+      "name": "register",
+      "command": [
+        "python3", "nodes/register/register.py",
+        "--poses", "{in.solved}/poses.json", "--camera", "{in.solved}/camera.json",
+        "--out", "{out.registered}"
+      ],
+      "inputs": {"solved": {"node": "solve-initial", "output": "solved"}},
+      "outputs": {"registered": "registered"}
+    },
+    {
+      "name": "solve-final",
+      "command": [
+        "python3", "nodes/solve/solve.py",
+        "--in", "{in.images}", "--gcp", "{in.registered}/gcp_list.txt", "--out", "{out.solved}",
+        "--option", "feature-quality=low", "--keep-task"
+      ],
+      "inputs": {
+        "images": {"node": "correct", "output": "images"},
+        "registered": {"node": "register", "output": "registered"}
+      },
+      "outputs": {"solved": "solved"}
+    },
+    {
+      "name": "reconstruct-dense",
+      "command": [
+        "python3", "nodes/reconstruct/reconstruct.py",
+        "--in", "{in.solved}", "--out", "{out.reconstructed}",
+        "--rerun-from", "opensfm", "--end-with", "odm_filterpoints",
+        "--option", "pc-quality=low"
+      ],
+      "inputs": {"solved": {"node": "solve-final", "output": "solved"}},
+      "outputs": {"reconstructed": "reconstructed"}
+    },
+    {
+      "name": "reconstruct-mesh",
+      "command": [
+        "python3", "nodes/reconstruct/reconstruct.py",
+        "--in", "{in.reconstructed}", "--out", "{out.reconstructed}",
+        "--rerun-from", "odm_meshing", "--end-with", "mvs_texturing"
+      ],
+      "inputs": {"reconstructed": {"node": "reconstruct-dense", "output": "reconstructed"}},
+      "outputs": {"reconstructed": "reconstructed"}
+    },
+    {
+      "name": "reconstruct-georef",
+      "command": [
+        "python3", "nodes/reconstruct/reconstruct.py",
+        "--in", "{in.reconstructed}", "--out", "{out.reconstructed}",
+        "--rerun-from", "odm_georeferencing", "--end-with", "odm_orthophoto"
+      ],
+      "inputs": {"reconstructed": {"node": "reconstruct-mesh", "output": "reconstructed"}},
+      "outputs": {"reconstructed": "reconstructed"}
+    },
+    {
+      "name": "reconstruct-report",
+      "command": [
+        "python3", "nodes/reconstruct/reconstruct.py",
+        "--in", "{in.reconstructed}", "--out", "{out.reconstructed}",
+        "--rerun-from", "odm_report", "--end-with", "odm_postprocess", "--remove-task"
+      ],
+      "inputs": {"reconstructed": {"node": "reconstruct-georef", "output": "reconstructed"}},
+      "outputs": {"reconstructed": "reconstructed"}
+    },
+    {
+      "name": "export-cog",
+      "image": "drone-export-cog",
+      "command": [
+        "python3", "nodes/export-cog/export_cog.py",
+        "--in", "{in.reconstructed}/odm_orthophoto.tif", "--out", "{out.cog}"
+      ],
+      "inputs": {"reconstructed": {"node": "reconstruct-report", "output": "reconstructed"}},
+      "outputs": {"cog": "cog"}
+    }
+  ]
+}
