@@ -91,10 +91,15 @@ required by law.
 
 | Item | Fee (CAD, excl. tax) |
 |---|---|
-| [Deliverable / visit] | [ ] |
+| Orthomosaic, single visit | $550 |
+| Gaussian Splatting Reconstruction, added to the same flight | $300 |
+| Gaussian Splatting Reconstruction, flown standalone | $600 |
+| Orthomosaic and Gaussian Splatting Reconstruction, one visit | $800 |
+| Recurring Cadence visit, three or more committed, both deliverables | $600 per visit |
 
-Invoices are payable within [30] days. [Recurring engagements are invoiced
-[monthly / per visit].]
+Launch prices adopted from `docs/business/pricing.md` (2026-09-13); revisit
+after the prospect conversations (#16). Invoices are payable within [30] days.
+Recurring engagements are invoiced per visit.
 
 ## 9. Liability and insurance
 
