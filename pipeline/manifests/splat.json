@@ -1,0 +1,32 @@
+{
+  "pipeline": "splat",
+  "nodes": [
+    {
+      "name": "solve",
+      "command": ["python3", "nodes/solve/solve.py", "--in", "{in.images}", "--out", "{out.project}"],
+      "outputs": {"project": "project"},
+      "notes": "Built concurrently under nodes/solve/ (ticket #24 does not create or edit it). Referenced by name only; 'outputs' here declares the contract fit-splat needs (an ODM project directory) so the Manifest validates and wires -- it is not a claim about solve.py's actual implementation."
+    },
+    {
+      "name": "fit-splat",
+      "command": ["python3", "nodes/fit-splat/fit_splat.py", "--in", "{in.project}", "--out-splat", "{out.splat}", "--out-report", "{out.report}"],
+      "inputs": {"project": {"node": "solve", "output": "project"}},
+      "outputs": {"splat": "splat.ply", "report": "fit-report.json"}
+    },
+    {
+      "name": "clean-splat",
+      "command": ["python3", "nodes/clean-splat/clean_splat.py", "--in", "{in.splat}", "--fit-report", "{in.report}", "--out", "{out.splat}", "--out-report", "{out.report}"],
+      "inputs": {
+        "splat": {"node": "fit-splat", "output": "splat"},
+        "report": {"node": "fit-splat", "output": "report"}
+      },
+      "outputs": {"splat": "cleaned.ply", "report": "clean-report.json"}
+    },
+    {
+      "name": "compress-splat",
+      "command": ["python3", "nodes/compress-splat/compress_splat.py", "--in", "{in.splat}", "--out-scene", "{out.scene}", "--out-meta", "{out.meta}", "--out-report", "{out.report}"],
+      "inputs": {"splat": {"node": "clean-splat", "output": "splat"}},
+      "outputs": {"scene": "scene.sog", "meta": "meta.json", "report": "compress-report.json"}
+    }
+  ]
+}
