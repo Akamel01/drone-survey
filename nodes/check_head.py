@@ -160,10 +160,28 @@ def check_exif_audit(tmp: Path):
         img = inconsistent_dir / name
         make_image(img)
         tag(img, GPSLatitude="41.3", GPSLatitudeRef="N", GPSLongitude="-81.7", GPSLongitudeRef="W",
-            Make="DJI", Model="FC7303", ISO=("100" if i == 0 else "800"),
-            ExposureTime="0.004", FNumber="2.8", FocalLength="4.5")
+            Make="DJI", Model="FC7303", ISO="100",
+            ExposureTime="0.004", FNumber=("2.8" if i == 0 else "5.6"), FocalLength="4.5")
     r = run([PY, str(NODES / "exif-audit" / "exif_audit.py"), "--in", str(inconsistent_dir), "--out", str(tmp / "ic.json")])
     check("exif-audit: fails loudly (non-zero) on inconsistent camera settings", r.returncode != 0, f"exit {r.returncode}")
+
+    # bellus-v1 (#15): a real auto-ISO Capture varies ISO frame-to-frame while
+    # ExposureTime/FNumber/FocalLength stay locked -- must NOT fail. ISO is
+    # sensor gain, not a locked exposure/geometry field; `correct` normalizes
+    # it downstream. This is what keeps the LOCKED_FIELDS change from being a
+    # silent weakening: the check above still fails on a genuinely locked
+    # field (FNumber) drifting, only ISO drift is now tolerated.
+    auto_iso_dir = tmp / "audit_auto_iso"
+    auto_iso_dir.mkdir()
+    for i, name in enumerate(("a.jpg", "b.jpg", "c.jpg")):
+        img = auto_iso_dir / name
+        make_image(img)
+        tag(img, GPSLatitude="41.3", GPSLatitudeRef="N", GPSLongitude="-81.7", GPSLongitudeRef="W",
+            Make="Canon", Model="Canon PowerShot S110", ISO=str(100 * (i + 1)),
+            ExposureTime="0.0005", FNumber="2", FocalLength="5.2")
+    r = run([PY, str(NODES / "exif-audit" / "exif_audit.py"), "--in", str(auto_iso_dir), "--out", str(tmp / "auto_iso.json")])
+    check("exif-audit: passes a real auto-ISO Capture (ISO varies, exposure/geometry fields locked)",
+          r.returncode == 0, r.stderr)
 
 
 def check_filter(tmp: Path):
