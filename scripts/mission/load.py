@@ -89,11 +89,19 @@ def md5(path: Path) -> str:
     return hashlib.md5(path.read_bytes()).hexdigest()
 
 
+def mounted(mount: Path) -> bool:
+    """A stale jmtpfs mount (after a Controller reboot or replug) raises EIO rather than returning False."""
+    try:
+        return (mount / STORAGE).is_dir()
+    except OSError:
+        return False
+
+
 def remount(mount: Path) -> None:
     """A fresh mount, so the read-back is what the Controller holds, not a cache."""
     subprocess.run(["fusermount", "-uz", str(mount)], capture_output=True)
     done = subprocess.run(["jmtpfs", str(mount)], capture_output=True, text=True)
-    if not (mount / STORAGE).exists():
+    if not mounted(mount):
         sys.exit(f"could not remount the Controller: {done.stderr.strip()}")
 
 
@@ -197,6 +205,13 @@ def _selftest() -> None:
         newer.write_text("{}")
         assert newest_unloaded(specs, record) == newer
 
+        # A stale mount reads as not mounted instead of crashing the Load.
+        class Stale(type(tmp)):
+            def is_dir(self):
+                raise OSError(5, "Input/output error")
+        assert mounted(tmp) is False  # no STORAGE directory
+        assert mounted(Stale(tmp)) is False
+
         # More parts than cards is refused, never truncated.
         try:
             assign([{}] * (len(cards()) + 1), cards())
@@ -226,7 +241,7 @@ def main() -> None:
         sys.exit("name a Mission Spec file to Load")
     if not args.yes:
         sys.exit("this replaces the Missions in the WAYFINDER cards on the Controller; pass --yes")
-    if not (MOUNT / STORAGE).exists():
+    if not mounted(MOUNT):
         remount(MOUNT)
 
     stamp = time.strftime("%Y%m%dT%H%M%S")
