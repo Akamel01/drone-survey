@@ -23,6 +23,38 @@ gate on every automated step.
   Orthomosaic, Gaussian Splatting, bundle/publish, retention.
 - Every Node carries a verification bar; the seams carry end-to-end tests.
 
+## How it works
+
+Mission path, planner to flight:
+
+```mermaid
+flowchart LR
+    A[Draw Grid Mission in planner] --> B[Dispatch to object storage]
+    B --> C[Collect onto field host]
+    C --> D[Load into Controller cards]
+    D --> E[Fly and photograph]
+    E --> F[Gate the imagery]
+```
+
+Capture to client delivery:
+
+```mermaid
+flowchart LR
+    A[Capture stills] --> B[Correct images]
+    B --> C[Structure from Motion]
+    C --> D[Photogrammetry]
+    C --> E[Gaussian Splatting fit]
+    D --> F[Orthomosaic]
+    E --> G[3D scene]
+    F --> H[Grade and bundle]
+    G --> H
+    H --> I[Deliver from object storage]
+```
+
+Each arrow is a Node with declared inputs and outputs; each box carries a
+quality gate. A Manifest wires Nodes into one Pipeline per deliverable, and
+the Runner executes it. Detail lives in [`docs/design.md`](docs/design.md).
+
 ## Installation
 
 Prerequisites: Python 3.11, Node 24, `jmtpfs` (field host only).
