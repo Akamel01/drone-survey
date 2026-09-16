@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "skills": {
+    "github-readme": {
+      "source": "nateberkopec/dotfiles",
+      "sourceType": "github",
+      "skillPath": "files/home/.claude/skills/github-readme/SKILL.md",
+      "computedHash": "c30dc3307257b917301517ec7945573c3f494da33c083ac48d9a05226193de29"
+    }
+  }
+}
