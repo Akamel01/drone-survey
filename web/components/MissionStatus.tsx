@@ -159,9 +159,14 @@ export default function MissionStatus({ spec, onLoadMission }: MissionStatusProp
               <span className={`mono ${styles[state]}`}>{stateLabel(row, state)}</span>
             </div>
             <div className={styles.savedAt}>
-              {row.kind === "draft" ? "Draft" : "Spec"} · {row.date}
+              {row.kind === "draft" ? "Draft" : "Spec"} · {row.date} · updated {age(row.updated)}
               {row.queue ? ` · #${row.queue} in line` : ""}
             </div>
+            {(row.state === "dispatched" || row.state === "queued") && waitingLong(row.updated) && (
+              <div className={styles.meta}>
+                Waiting {age(row.updated)} — plug in the Controller or check the host.
+              </div>
+            )}
             {row.cards.length > 0 && (
               <div className={styles.meta}>
                 {row.cards.map((c) => `${c.card}: ${c.name} (${c.waypoints})`).join(" · ")}
@@ -198,6 +203,27 @@ function stateLabel(row: StatusRow, state: StatusRow["state"]): string {
 function shortKey(key: string): string {
   const parts = key.split("/");
   return parts.length >= 4 ? `${parts[1]}/${parts[2]}/${parts[3]}` : key;
+}
+
+// A waiting mission the host has not picked up in 15 minutes is worth a nudge:
+// cron runs every minute, so anything older means the Controller is unplugged
+// or the host is quiet — both are the operator's call, hence a hint, not an alarm.
+const WAITING_WARN_MS = 15 * 60 * 1000;
+
+function age(iso: string): string {
+  const ms = Date.now() - Date.parse(iso);
+  if (!Number.isFinite(ms) || ms < 0) return "just now";
+  const min = Math.floor(ms / 60000);
+  if (min < 1) return "just now";
+  if (min < 60) return `${min} min ago`;
+  const h = Math.floor(min / 60);
+  if (h < 48) return `${h} h ago`;
+  return `${Math.floor(h / 24)} d ago`;
+}
+
+function waitingLong(iso: string): boolean {
+  const ms = Date.now() - Date.parse(iso);
+  return Number.isFinite(ms) && ms > WAITING_WARN_MS;
 }
 
 /** A draft may predate fields the live editor requires; fill from defaults. */

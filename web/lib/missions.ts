@@ -51,6 +51,15 @@ export interface StatusRow {
   queue: number | null;
   /** The draft body, on draft rows only — the tab Dispatches and edits from it. */
   spec?: MissionSpec;
+  /** ISO instant this row's information is as of: draft update, dispatch stamp,
+   *  collect stamp, or load stamp, whichever is newest. */
+  updated: string;
+}
+
+/** Dispatch stamps sort lexically; this turns one back into an instant. */
+export function stampToIso(stamp: string): string {
+  const m = /^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})Z$/.exec(stamp);
+  return m ? `${m[1]}-${m[2]}-${m[3]}T${m[4]}:${m[5]}:${m[6]}Z` : stamp;
 }
 
 /** Parse specs/<site>/<date>/<stamp>.json; null for anything else. */
@@ -78,6 +87,7 @@ export function joinStatus(
     cards: [],
     queue: null,
     spec: d.spec,
+    updated: d.updated_at,
   }));
 
   const specs = specKeys
@@ -104,6 +114,7 @@ export function joinStatus(
       loaded_at: entry.loaded_at ?? null,
       cards: entry.cards ?? [],
       queue: waitIndex < 0 ? null : waitIndex + 1,
+      updated: entry.loaded_at ?? entry.collected_at ?? stampToIso(parsed!.stamp),
     });
   }
   // Newest first: the mission the operator cares about is on top.

@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import {
   joinStatus,
   parseSpecKey,
+  stampToIso,
   type DraftRecord,
   type Manifest,
 } from "./missions.ts";
@@ -73,4 +74,18 @@ test("manifest moves rows to collected and loaded with cards", () => {
 test("unknown manifest keys and non-spec keys never surface", () => {
   const rows = joinStatus([], ["specs/_drafts/a.json"], { "specs/gone/x/y.json": {} });
   assert.equal(rows.length, 0);
+});
+
+test("every row carries the instant its information is as of", () => {
+  assert.equal(stampToIso("20260917T004057Z"), "2026-09-17T00:40:57Z");
+  const rows = joinStatus(
+    [draft("a")],
+    ["specs/f/2026-09-17/20260917T000002Z.json"],
+    { "specs/f/2026-09-17/20260917T000002Z.json": { collected_at: "2026-09-17T01:00:00Z" } },
+  );
+  const byId = Object.fromEntries(rows.map((r) => [r.id, r]));
+  assert.equal(byId["a"].updated, "2026-09-17T00:00:00Z");
+  assert.equal(byId["specs/f/2026-09-17/20260917T000002Z.json"].updated, "2026-09-17T01:00:00Z");
+  const waiting = joinStatus([], ["specs/f/2026-09-17/20260917T000002Z.json"], {});
+  assert.equal(waiting[0].updated, "2026-09-17T00:00:02Z");
 });
