@@ -37,18 +37,21 @@ export async function GET(request: Request) {
   try {
     const session = await authorize(env);
     const files = await listFiles(session, DRAFTS_PREFIX);
-    const drafts: DraftRecord[] = [];
-    for (const f of files) {
-      if (!f.fileName.endsWith(".json")) continue;
-      const raw = await downloadFile(session, env.bucket, f.fileName);
-      if (!raw) continue;
+    const drafts: DraftRecord[] = (
+      await Promise.all(
+        files
+          .filter((f) => f.fileName.endsWith(".json"))
+          .map((f) => downloadFile(session, env.bucket, f.fileName)),
+      )
+    ).flatMap((raw) => {
+      if (!raw) return [];
       try {
-        drafts.push(JSON.parse(raw.toString()) as DraftRecord);
+        return [JSON.parse(raw.toString()) as DraftRecord];
       } catch {
         // A hand-edited file that stopped parsing must not hide every draft.
-        continue;
+        return [];
       }
-    }
+    });
     drafts.sort((a, b) => (a.updated_at < b.updated_at ? 1 : -1));
     return Response.json({ drafts });
   } catch (err) {

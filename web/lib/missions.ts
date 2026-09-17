@@ -1,5 +1,4 @@
 import type { MissionSpec } from "./spec";
-
 // Server-side mission records. Drafts live under specs/_drafts/<id>.json in
 // the same bucket as Specs; Dispatched Specs stay immutable under specs/ and
 // are only ever superseded, never edited or deleted (ADR 0016).
@@ -50,6 +49,8 @@ export interface StatusRow {
   cards: LoadedCard[];
   /** 1-based position among missions still waiting on the host, if waiting. */
   queue: number | null;
+  /** The draft body, on draft rows only — the tab Dispatches and edits from it. */
+  spec?: MissionSpec;
 }
 
 /** Parse specs/<site>/<date>/<stamp>.json; null for anything else. */
@@ -76,6 +77,7 @@ export function joinStatus(
     loaded_at: null,
     cards: [],
     queue: null,
+    spec: d.spec,
   }));
 
   const specs = specKeys

@@ -27,17 +27,21 @@ export async function GET(request: Request) {
       listFiles(session, DRAFTS_PREFIX),
       downloadFile(session, env.bucket, STATUS_KEY),
     ]);
-    const drafts: DraftRecord[] = [];
-    for (const f of draftFiles) {
-      if (!f.fileName.endsWith(".json")) continue;
-      const raw = await downloadFile(session, env.bucket, f.fileName);
-      if (!raw) continue;
+    const drafts: DraftRecord[] = (
+      await Promise.all(
+        draftFiles
+          .filter((f) => f.fileName.endsWith(".json"))
+          .map((f) => downloadFile(session, env.bucket, f.fileName)),
+      )
+    ).flatMap((raw) => {
+      if (!raw) return [];
       try {
-        drafts.push(JSON.parse(raw.toString()) as DraftRecord);
+        return [JSON.parse(raw.toString()) as DraftRecord];
       } catch {
-        continue;
+        // A hand-edited file that stopped parsing must not hide every draft.
+        return [];
       }
-    }
+    });
     let manifest: Manifest = {};
     if (manifestRaw) {
       try {

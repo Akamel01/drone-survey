@@ -6,6 +6,7 @@ import type { Preview } from "@/lib/mission";
 import type { SavedMission } from "@/lib/savedMissions";
 import type { DrawMode } from "./MapPane";
 import SavedMissions from "./SavedMissions";
+import MissionStatus from "./MissionStatus";
 import styles from "./Sidebar.module.css";
 
 interface SidebarProps {
@@ -574,6 +575,10 @@ export default function Sidebar({
 
       <Section title="Saved missions">
         <SavedMissions missions={savedMissions} onLoad={onLoadMission} onDelete={onDeleteMission} />
+      </Section>
+
+      <Section title="Mission status">
+        <MissionStatus spec={spec} onLoadMission={onLoadMission} />
       </Section>
     </aside>
   );

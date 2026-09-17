@@ -1,0 +1,198 @@
+"use client";
+
+import { useCallback, useEffect, useState } from "react";
+import { DEFAULT_SPEC, type MissionSpec } from "@/lib/spec";
+import type { StatusRow } from "@/lib/missions";
+import styles from "./MissionStatus.module.css";
+
+// The mission console: every mission from the server store and every
+// Dispatched Spec from the cloud, actionable and identical after a refresh, a
+// closed browser, or a second browser. Same passphrase the Dispatch button
+// uses, read from the same browser storage.
+const PASSPHRASE_KEY = "drone-planner.wayfinder-key";
+
+interface MissionStatusProps {
+  spec: MissionSpec;
+  onLoadMission: (spec: MissionSpec) => void;
+}
+
+type FetchState =
+  | { kind: "loading" }
+  | { kind: "ok"; rows: StatusRow[]; hostReported: boolean }
+  | { kind: "error"; message: string };
+
+export default function MissionStatus({ spec, onLoadMission }: MissionStatusProps) {
+  const [passphrase, setPassphrase] = useState<string | null>(null);
+  const [status, setStatus] = useState<FetchState>({ kind: "loading" });
+  const [busy, setBusy] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+
+  const load = useCallback(async (key: string) => {
+    try {
+      const res = await fetch("/api/status", { headers: { "x-wayfinder-key": key } });
+      const body = await res.json();
+      if (res.ok && Array.isArray(body.rows)) {
+        setStatus({ kind: "ok", rows: body.rows, hostReported: body.host_reported === true });
+      } else {
+        setStatus({ kind: "error", message: body.error ?? `Status failed (${res.status})` });
+      }
+    } catch (err) {
+      setStatus({ kind: "error", message: err instanceof Error ? err.message : "Status failed" });
+    }
+  }, []);
+
+  useEffect(() => {
+    const key = localStorage.getItem(PASSPHRASE_KEY) ?? "";
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- one-time client-only read of localStorage
+    setPassphrase(key);
+    if (!key) return;
+    load(key);
+    const t = setInterval(() => load(key), 30000);
+    return () => clearInterval(t);
+  }, [load]);
+
+  async function act(label: string, fn: () => Promise<Response>) {
+    if (!passphrase) return;
+    setBusy(label);
+    setNotice(null);
+    try {
+      const res = await fn();
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setNotice(`${label} failed: ${body.error ?? res.status}`);
+      } else if (body.key) {
+        setNotice(`${label}: ${body.key}`);
+      } else if (body.deleted) {
+        setNotice(`${label}: draft removed (its Dispatched Spec, if any, stays in the store)`);
+      } else if (body.draft) {
+        setNotice(`${label}: draft saved`);
+      }
+      await load(passphrase);
+    } catch (err) {
+      setNotice(`${label} failed: ${err instanceof Error ? err.message : "unknown"}`);
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  const saveDraft = () =>
+    act("Save draft", () =>
+      fetch("/api/drafts", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "x-wayfinder-key": passphrase! },
+        body: JSON.stringify({ spec }),
+      }),
+    );
+
+  const dispatchDraft = (id: string, draftSpec: MissionSpec) =>
+    act("Dispatch", () =>
+      fetch("/api/dispatch", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "x-wayfinder-key": passphrase! },
+        body: JSON.stringify({ ...draftSpec, draft_id: id }),
+      }),
+    );
+
+  const deleteDraft = (id: string, site: string) => {
+    if (!window.confirm(`Delete the draft "${site}"? A Dispatched Spec from it stays in the store.`)) return;
+    act("Delete", () =>
+      fetch(`/api/drafts?id=${encodeURIComponent(id)}`, {
+        method: "DELETE",
+        headers: { "x-wayfinder-key": passphrase! },
+      }),
+    );
+  };
+
+  // Before the client-only read lands there is nothing to show yet; an empty
+  // passphrase afterwards means the operator never typed one.
+  if (passphrase === null) {
+    return <p className={styles.empty}>Loading status…</p>;
+  }
+  if (passphrase === "") {
+    return <p className={styles.empty}>Type the dispatch passphrase below the map to see mission status.</p>;
+  }
+  if (status.kind === "loading") return <p className={styles.empty}>Loading status…</p>;
+  if (status.kind === "error") {
+    return (
+      <div>
+        <p className={styles.error}>{status.message}</p>
+        <button onClick={() => passphrase && load(passphrase)}>Retry</button>
+      </div>
+    );
+  }
+
+  const specsByKey = new Map(status.rows.filter((r) => r.kind === "spec").map((r) => [r.id, r]));
+  return (
+    <div>
+      <div className={styles.entryActions}>
+        <button onClick={saveDraft} disabled={busy !== null}>
+          {busy === "Save draft" ? "Saving…" : "Save current as draft"}
+        </button>
+      </div>
+      {notice && <p className={styles.notice}>{notice}</p>}
+      {!status.hostReported && (
+        <p className={styles.empty}>The host has not reported yet — states stop at Dispatched.</p>
+      )}
+      {status.rows.length === 0 && <p className={styles.empty}>No drafts, no Dispatched missions yet.</p>}
+      {status.rows.map((row) => {
+        const live = row.kind === "draft" && row.dispatched_key ? specsByKey.get(row.dispatched_key) : null;
+        const state = live?.state ?? row.state;
+        return (
+          <div key={`${row.kind}:${row.id}`} className={styles.entry}>
+            <div className={styles.entryHead}>
+              <strong>{row.site || "Untitled"}</strong>
+              <span className={`mono ${styles[state]}`}>{stateLabel(row, state)}</span>
+            </div>
+            <div className={styles.savedAt}>
+              {row.kind === "draft" ? "Draft" : "Spec"} · {row.date}
+              {row.queue ? ` · #${row.queue} in line` : ""}
+            </div>
+            {row.cards.length > 0 && (
+              <div className={styles.meta}>
+                {row.cards.map((c) => `${c.card}: ${c.name} (${c.waypoints})`).join(" · ")}
+              </div>
+            )}
+            {row.dispatched_key && row.kind === "draft" && (
+              <div className={`${styles.meta} mono`}>{shortKey(row.dispatched_key)}</div>
+            )}
+            {row.kind === "draft" && (
+              <div className={styles.entryActions}>
+                {!row.dispatched_key && (
+                  <button onClick={() => dispatchDraft(row.id, draftSpec(row))} disabled={busy !== null}>
+                    {busy === "Dispatch" ? "Dispatching…" : "Dispatch"}
+                  </button>
+                )}
+                <button onClick={() => onLoadMission(draftSpec(row))}>Edit</button>
+                <button onClick={() => deleteDraft(row.id, row.site)} disabled={busy !== null}>
+                  Delete
+                </button>
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function stateLabel(row: StatusRow, state: StatusRow["state"]): string {
+  if (row.kind === "draft" && !row.dispatched_key) return "draft";
+  return state;
+}
+
+function shortKey(key: string): string {
+  const parts = key.split("/");
+  return parts.length >= 4 ? `${parts[1]}/${parts[2]}/${parts[3]}` : key;
+}
+
+/** A draft may predate fields the live editor requires; fill from defaults. */
+function draftSpec(row: StatusRow): MissionSpec {
+  const full = (row.spec ?? { site: row.site, date: row.date }) as MissionSpec;
+  return {
+    ...DEFAULT_SPEC,
+    ...full,
+    flight: { ...DEFAULT_SPEC.flight, ...(full.flight ?? {}) },
+    orbit: { ...DEFAULT_SPEC.orbit, ...(full.orbit ?? {}) },
+    camera: { ...DEFAULT_SPEC.camera, ...(full.camera ?? {}) },
+  };
+}
