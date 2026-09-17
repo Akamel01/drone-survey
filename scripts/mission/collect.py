@@ -25,6 +25,10 @@ import urllib.parse
 import urllib.request
 from pathlib import Path
 
+HERE = Path(__file__).resolve().parent
+sys.path.insert(0, str(HERE))
+import b2_status  # noqa: E402  (network to B2 only; no mount, no Controller)
+
 B2_AUTHORIZE_URL = "https://api.backblazeb2.com/b2api/v2/b2_authorize_account"
 
 
@@ -34,6 +38,7 @@ def _xdg(var: str, fallback: str) -> Path:
 
 
 DEFAULT_CONFIG = _xdg("XDG_CONFIG_HOME", ".config") / "wayfinder" / "b2-read.env"
+DEFAULT_STATUS_CONFIG = _xdg("XDG_CONFIG_HOME", ".config") / "wayfinder" / "b2-status.env"
 DEFAULT_RECORD = _xdg("XDG_DATA_HOME", ".local/share") / "wayfinder" / "collected.json"
 DEFAULT_DEST = Path.home() / "wayfinder" / "specs"
 
@@ -146,6 +151,27 @@ def save_record(path: Path, collected: set[str]) -> None:
     path.write_text(json.dumps(sorted(collected), indent=2))
 
 
+def report_collected(status_config: Path, keys: list[str]) -> None:
+    """Stamp the cloud manifest so the planner shows Collected. Bookkeeping,
+    not the Collect: without status credentials the Specs are still Collected
+    and the run still succeeds — it just says so loudly."""
+    if not status_config.exists():
+        print(f"no status credentials at {status_config}; manifest not updated")
+        return
+    try:
+        senv = load_env(status_config)
+        sauth = authorize(senv["B2_KEY_ID"], senv["B2_APP_KEY"])
+        sallowed = sauth["allowed"]
+        manifest = b2_status.download_manifest(
+            sauth["apiUrl"], sauth["downloadUrl"], sallowed["bucketName"], sauth["authorizationToken"])
+        b2_status.merge_collected(manifest, keys, b2_status.utcnow())
+        b2_status.upload_manifest(sauth["apiUrl"], sauth["authorizationToken"], sallowed["bucketId"], manifest)
+    except SystemExit as e:
+        print(f"manifest update failed ({e}); the Collect itself succeeded")
+        return
+    print(f"Reported {len(keys)} Collected to the manifest")
+
+
 def _selftest() -> None:
     """Offline proof: supersession picks the lexically-newest key per Site/date,
     and sha1 verification rejects a mismatched download. No network, no
@@ -169,6 +195,9 @@ def _selftest() -> None:
 
     # 2. Anything not shaped like a Spec key (eg. the Site registry) is ignored.
     assert pattern.match("sites/rehearsal-field.json") is None
+    # 2b. Planner bookkeeping under the same prefix is invisible to Collect.
+    assert pattern.match("specs/_drafts/0193abcd.json") is None
+    assert pattern.match("specs/_status/missions.json") is None
 
     # 3. sha1 verification: correct hash passes, wrong hash is refused.
     data = b'{"site": "rehearsal-field"}'
@@ -190,6 +219,8 @@ def main() -> None:
     p.add_argument("--dest", type=Path, default=DEFAULT_DEST, help="where Collected Specs are written")
     p.add_argument("--list", action="store_true", help="show what's Dispatched and what's new, without downloading")
     p.add_argument("--dry-run", action="store_true", help="show what would be Collected, without downloading")
+    p.add_argument("--status-config", type=Path, default=DEFAULT_STATUS_CONFIG,
+                   help="B2 status credentials env file (read specs/, write status/*)")
     p.add_argument("--selftest", action="store_true", help="run the offline self-check and exit")
     args = p.parse_args()
 
@@ -236,6 +267,9 @@ def main() -> None:
         collected.add(name)
         save_record(args.record, collected)
         print(f"Collected {site} {date}: {name}")
+
+    if not args.dry_run and new:
+        report_collected(args.status_config, sorted(new))
 
 
 if __name__ == "__main__":

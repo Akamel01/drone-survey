@@ -49,7 +49,9 @@
 }
 
 .passphrase {
-  width: 140px;
+  /* Wide enough for the whole placeholder: at 140px the text was trimmed. */
+  width: 13rem;
+  max-width: 40vw;
 }
 
 .dispatchOk {
