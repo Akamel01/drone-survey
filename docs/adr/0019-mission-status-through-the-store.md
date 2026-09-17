@@ -30,8 +30,10 @@ store; this records what else lives in it and the one behaviour it changed.
   fit the cards is refused before any card is touched, and the refusal is
   written into the manifest so the tab shows it. A successful Load retires any
   past refusal.
-- **Key scopes, amended.** The planner's key additionally needs `listFiles`
-  and `readFiles`: drafts list, status join, and draft stamping all read.
+- **Key scopes, amended.** The planner reads through the existing list-and-read
+  pair and writes through the existing write-only pair (`B2_READ_KEY_ID` /
+  `B2_READ_APP_KEY` beside `B2_KEY_ID` / `B2_APP_KEY` in Vercel envs) — no key
+  was widened; the write key never learned to list.
   The host's status key carries `listFiles`, `readFiles`, `writeFiles` on the
   Specs bucket. B2 allows one name prefix per key, so its write scope covers
   `specs/` rather than just the manifest path — accepted because exactly one
