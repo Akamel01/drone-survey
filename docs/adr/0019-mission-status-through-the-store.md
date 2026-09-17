@@ -42,3 +42,13 @@ store; this records what else lives in it and the one behaviour it changed.
   minute while operating), so tab information lags reality by ~1–2 minutes.
   Waiting rows older than 15 minutes hint at an unplugged Controller or a
   quiet host; that is a hint, not an alarm.
+
+## Rotation
+
+Every key is replaceable without a code change: mint the replacement in the B2
+console, overwrite the one file that holds it (`~/.config/wayfinder/*.env` on
+the host, Vercel envs for the planner), delete the old key. Proven 2026-09-17
+for the host status key: allowed reads plus a byte-identical manifest
+round-trip succeed; out-of-prefix list and delivery-bucket read are refused
+(#48). If a key is ever suspected leaked, rotate first and investigate second —
+nothing caches credentials past one process run.
