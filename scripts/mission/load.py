@@ -42,12 +42,12 @@ DEFAULT_STATUS_CONFIG = Path.home() / ".config" / "wayfinder" / "b2-status.env"
 
 
 def unloaded_queue(specs: Path, record: Path) -> list[Path]:
-    """Every Collected Spec not yet Loaded, oldest first.
+    """Every Collected Spec not yet Loaded, oldest first — newest per Site/date.
 
-    Supersession is the planner's job (newest-wins per Site/date at Dispatch
-    time is visible in the Status tab); the host Loads what is waiting rather
-    than guessing which Dispatch the pilot meant. An older Spec is never
-    silently skipped.
+    Supersession is newest-wins per (Site, date): an older Dispatch the pilot
+    replaced is never Loaded behind its replacement's back — the Status tab
+    shows it as superseded once the newer one Loads. Dispatch timestamps are
+    the file names and sort lexically (ADR 0017).
     """
     found = sorted(specs.glob("*/*/*.json"), key=lambda f: f.relative_to(specs).as_posix())
     if not found:
@@ -61,7 +61,21 @@ def unloaded_queue(specs: Path, record: Path) -> list[Path]:
         print(f"no record of past Loads; adopted {len(found)} Specs as already Loaded, Loaded nothing")
         return []
     done = set(json.loads(record.read_text()))
-    return [f for f in found if str(f) not in done]
+    waiting = [f for f in found if str(f) not in done]
+    # Per group, only the newest Dispatch is ever loadable: an older one stays
+    # unloaded while its replacement waits, and stays unloaded forever after
+    # its replacement has Loaded. Its state is visible in the Status tab.
+    newest: dict[tuple[str, str], Path] = {}
+    for f in found:
+        rel = f.relative_to(specs).parts
+        if len(rel) == 3:
+            newest[(rel[0], rel[1])] = f  # sorted oldest-first: last write wins
+    queue = sorted((f for f in newest.values() if str(f) not in done),
+                   key=lambda f: f.relative_to(specs).as_posix())
+    skipped = len(waiting) - len(queue)
+    if skipped:
+        print(f"{skipped} superseded Specs stay unloaded (a newer Dispatch of their Site/date goes first)")
+    return queue
 
 
 def cards() -> list[tuple[str, str]]:
@@ -223,7 +237,7 @@ def _selftest() -> None:
             raise AssertionError("a mismatched read-back was accepted")
         assert md5(live) == md5(tmp / "backup2" / f"{first_guid}.kmz")
 
-        # The queue: every unloaded Spec, oldest first — never only the newest.
+        # The queue: newest unloaded per Site/date, oldest group first.
         specs, record = tmp / "specs", tmp / "loaded.json"
         for stamp in ("20260913T090000Z", "20260913T140000Z"):
             f = specs / "site" / "2026-09-13" / f"{stamp}.json"
@@ -238,8 +252,12 @@ def _selftest() -> None:
         newer.parent.mkdir(parents=True)
         newer.write_text("{}")
         assert unloaded_queue(specs, record) == [newer]
+        # A superseded Dispatch in the same group never jumps the queue.
+        older = specs / "site" / "2026-09-14" / "20260914T070000Z.json"
+        older.write_text("{}")
+        assert unloaded_queue(specs, record) == [newer]
         record.write_text(json.dumps(json.loads(record.read_text()) + [str(newer)]))
-        assert unloaded_queue(specs, record) == []
+        assert unloaded_queue(specs, record) == []  # replacement Loaded: the older one never follows
 
         # Sequential card assignment across missions, oldest first.
         fake = [
