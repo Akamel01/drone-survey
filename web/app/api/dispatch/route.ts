@@ -1,6 +1,6 @@
 import { dispatchProblem, isValidSiteId, type MissionSpec } from "@/lib/spec";
 import { authProblem } from "@/lib/auth";
-import { authorize, b2Env, downloadFile, uploadFile } from "@/lib/b2";
+import { authorize, b2Env, b2ReadEnv, downloadFile, uploadFile, type B2Session } from "@/lib/b2";
 import { DRAFTS_PREFIX, type DraftRecord } from "@/lib/missions";
 
 // The storage credential lives here and never reaches the browser, which is the
@@ -66,7 +66,7 @@ export async function POST(request: Request) {
     // must not pretend the upload did not happen.
     if (typeof draft_id === "string" && draft_id) {
       try {
-        await stampDraft(session, env.bucket, draft_id, key);
+        await stampDraft(env.bucket, draft_id, key);
       } catch (err) {
         console.error(`dispatch stamped ${key} but the draft update failed:`, err);
       }
@@ -81,18 +81,20 @@ export async function POST(request: Request) {
   }
 }
 
-async function stampDraft(
-  session: Parameters<typeof uploadFile>[0],
-  bucket: string,
-  draftId: string,
-  key: string,
-): Promise<void> {
+async function stampDraft(bucket: string, draftId: string, key: string): Promise<void> {
   if (draftId.includes("/") || draftId.includes("..")) return;
+  // The stamp reads through the list-and-read pair and writes through the
+  // write pair; either may be the same session when one key does both.
+  const env = b2Env();
+  const readEnv = b2ReadEnv();
+  if (!env || !readEnv) return;
+  const read: B2Session = await authorize(readEnv);
+  const write: B2Session = readEnv.keyId === env.keyId ? read : await authorize(env);
   const draftKey = `${DRAFTS_PREFIX}${draftId}.json`;
-  const raw = await downloadFile(session, bucket, draftKey);
+  const raw = await downloadFile(read, bucket, draftKey);
   if (!raw) return;
   const record = JSON.parse(raw.toString()) as DraftRecord;
   record.dispatched_key = key;
   record.updated_at = new Date().toISOString();
-  await uploadFile(session, draftKey, Buffer.from(JSON.stringify(record, null, 2)));
+  await uploadFile(write, draftKey, Buffer.from(JSON.stringify(record, null, 2)));
 }

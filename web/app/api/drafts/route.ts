@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { authProblem } from "@/lib/auth";
-import { authorize, b2Env, deleteFile, downloadFile, listFiles, uploadFile } from "@/lib/b2";
+import { authorize, b2Env, b2ReadEnv, deleteFile, downloadFile, listFiles, uploadFile } from "@/lib/b2";
 import { DRAFTS_PREFIX, type DraftRecord } from "@/lib/missions";
 import type { MissionSpec } from "@/lib/spec";
 
@@ -34,8 +34,10 @@ export async function GET(request: Request) {
   if (denied) return denied;
   const env = b2Env();
   if (!env) return Response.json({ error: "Storage is not configured" }, { status: 503 });
+  const readEnv = b2ReadEnv();
+  if (!readEnv) return Response.json({ error: "Storage is not configured" }, { status: 503 });
   try {
-    const session = await authorize(env);
+    const session = await authorize(readEnv);
     const files = await listFiles(session, DRAFTS_PREFIX);
     const drafts: DraftRecord[] = (
       await Promise.all(
@@ -74,8 +76,12 @@ export async function POST(request: Request) {
   const { id, spec } = (raw ?? {}) as { id?: unknown; spec?: unknown };
   const bad = draftProblem(spec);
   if (bad) return Response.json({ error: bad }, { status: 400 });
+  const readEnv = b2ReadEnv();
+  if (!readEnv) return Response.json({ error: "Storage is not configured" }, { status: 503 });
   try {
-    const session = await authorize(env);
+    // Reads go through the list-and-read pair, writes through the write pair.
+    const read = await authorize(readEnv);
+    const write = readEnv.keyId === env.keyId ? read : await authorize(env);
     const now = new Date().toISOString();
     let record: DraftRecord;
     if (id === undefined) {
@@ -91,7 +97,7 @@ export async function POST(request: Request) {
     } else {
       if (!draftIdOk(id)) return Response.json({ error: "Bad draft id" }, { status: 400 });
       const key = `${DRAFTS_PREFIX}${id}.json`;
-      const existing = await downloadFile(session, env.bucket, key);
+      const existing = await downloadFile(read, env.bucket, key);
       if (!existing) return Response.json({ error: "Draft not found" }, { status: 404 });
       const prev = JSON.parse(existing.toString()) as DraftRecord;
       record = {
@@ -101,7 +107,7 @@ export async function POST(request: Request) {
         spec: spec as MissionSpec,
       };
     }
-    await uploadFile(session, `${DRAFTS_PREFIX}${record.id}.json`, Buffer.from(JSON.stringify(record, null, 2)));
+    await uploadFile(write, `${DRAFTS_PREFIX}${record.id}.json`, Buffer.from(JSON.stringify(record, null, 2)));
     return Response.json({ draft: record });
   } catch (err) {
     const detail = err instanceof Error ? err.message : "unknown";
@@ -116,15 +122,18 @@ export async function DELETE(request: Request) {
   if (!env) return Response.json({ error: "Storage is not configured" }, { status: 503 });
   const id = new URL(request.url).searchParams.get("id");
   if (!draftIdOk(id)) return Response.json({ error: "Bad draft id" }, { status: 400 });
+  const readEnv = b2ReadEnv();
+  if (!readEnv) return Response.json({ error: "Storage is not configured" }, { status: 503 });
   try {
-    const session = await authorize(env);
+    const read = await authorize(readEnv);
+    const write = readEnv.keyId === env.keyId ? read : await authorize(env);
     const key = `${DRAFTS_PREFIX}${id}.json`;
-    const files = await listFiles(session, DRAFTS_PREFIX);
+    const files = await listFiles(read, DRAFTS_PREFIX);
     const match = files.find((f) => f.fileName === key);
     if (!match) return Response.json({ error: "Draft not found" }, { status: 404 });
     // Deleting a draft never touches its Dispatched Spec: the Spec stays in
     // the store under specs/ and keeps its status. Only the draft goes.
-    await deleteFile(session, match.fileId, key);
+    await deleteFile(write, match.fileId, key);
     return Response.json({ deleted: id });
   } catch (err) {
     const detail = err instanceof Error ? err.message : "unknown";

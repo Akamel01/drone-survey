@@ -1,5 +1,5 @@
 import { authProblem } from "@/lib/auth";
-import { authorize, b2Env, downloadFile, listFiles } from "@/lib/b2";
+import { authorize, b2Env, b2ReadEnv, downloadFile, listFiles } from "@/lib/b2";
 import {
   DRAFTS_PREFIX,
   STATUS_KEY,
@@ -20,8 +20,11 @@ export async function GET(request: Request) {
   if (denied) return denied;
   const env = b2Env();
   if (!env) return Response.json({ error: "Storage is not configured" }, { status: 503 });
+  // This route only ever reads; the write pair is not touched.
+  const readEnv = b2ReadEnv();
+  if (!readEnv) return Response.json({ error: "Storage is not configured" }, { status: 503 });
   try {
-    const session = await authorize(env);
+    const session = await authorize(readEnv);
     const [specFiles, draftFiles, manifestRaw] = await Promise.all([
       listFiles(session, "specs/"),
       listFiles(session, DRAFTS_PREFIX),

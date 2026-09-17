@@ -20,6 +20,17 @@ export function b2Env(): B2Env | null {
   return keyId && appKey && bucket ? { keyId, appKey, bucket } : null;
 }
 
+/** The list-and-read pair. The write key cannot list, so reads go through
+ *  this key; when absent the write pair is tried, preserving single-key setups. */
+export function b2ReadEnv(): B2Env | null {
+  const bucket = process.env.B2_BUCKET;
+  if (!bucket) return null;
+  const keyId = process.env.B2_READ_KEY_ID;
+  const appKey = process.env.B2_READ_APP_KEY;
+  if (keyId && appKey) return { keyId, appKey, bucket };
+  return b2Env();
+}
+
 export interface B2Session {
   apiUrl: string;
   downloadUrl: string;

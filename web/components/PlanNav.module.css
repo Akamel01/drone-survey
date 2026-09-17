@@ -1,0 +1,27 @@
+.nav {
+  display: flex;
+  gap: 4px;
+  padding: 8px 16px 0;
+  background: var(--panel);
+  border-bottom: 1px solid var(--border);
+  flex: none;
+}
+
+.nav a {
+  font-size: 13px;
+  padding: 6px 12px;
+  border-radius: 4px 4px 0 0;
+  color: var(--text-dim);
+  text-decoration: none;
+}
+
+.nav a:hover {
+  color: var(--text);
+}
+
+.nav a.active {
+  background: var(--background);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-bottom: none;
+}

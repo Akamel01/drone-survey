@@ -7,6 +7,8 @@ import { loadSavedMissions, saveMission, deleteMission, type SavedMission } from
 import MapPane, { type DrawMode } from "@/components/MapPane";
 import Sidebar from "@/components/Sidebar";
 import SummaryBar from "@/components/SummaryBar";
+import PlanNav from "@/components/PlanNav";
+import { EDIT_HANDOFF_KEY } from "./mission_status/page";
 import styles from "./plan.module.css";
 
 export default function PlanPage() {
@@ -21,6 +23,17 @@ export default function PlanPage() {
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- one-time client-only read of localStorage
     setSavedMissions(loadSavedMissions());
+    // A draft sent over from the Mission status tab for editing.
+    try {
+      const handoff = localStorage.getItem(EDIT_HANDOFF_KEY);
+      if (handoff) {
+        localStorage.removeItem(EDIT_HANDOFF_KEY);
+        setSpecState(JSON.parse(handoff) as MissionSpec);
+        return;
+      }
+    } catch {
+      // A corrupt handoff is ignored; the planner opens as usual.
+    }
     // Today's date belongs to the client, never to the build: see DEFAULT_SPEC.
     setSpecState((s) => (s.date ? s : { ...s, date: new Date().toISOString().slice(0, 10) }));
   }, []);
@@ -44,6 +57,7 @@ export default function PlanPage() {
 
   return (
     <div className={styles.page}>
+      <PlanNav />
       <div className={styles.top}>
         <MapPane
           spec={spec}

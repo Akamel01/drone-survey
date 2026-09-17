@@ -14,6 +14,8 @@ const PASSPHRASE_KEY = "drone-planner.wayfinder-key";
 interface MissionStatusProps {
   spec: MissionSpec;
   onLoadMission: (spec: MissionSpec) => void;
+  /** The standalone status page has no planner Spec to save; it hides Save. */
+  allowSave?: boolean;
 }
 
 type FetchState =
@@ -30,7 +32,7 @@ interface HostNotice {
   action?: string;
 }
 
-export default function MissionStatus({ spec, onLoadMission }: MissionStatusProps) {
+export default function MissionStatus({ spec, onLoadMission, allowSave = true }: MissionStatusProps) {
   const [passphrase, setPassphrase] = useState<string | null>(null);
   const [status, setStatus] = useState<FetchState>({ kind: "loading" });
   const [busy, setBusy] = useState<string | null>(null);
@@ -134,9 +136,11 @@ export default function MissionStatus({ spec, onLoadMission }: MissionStatusProp
   return (
     <div>
       <div className={styles.entryActions}>
-        <button onClick={saveDraft} disabled={busy !== null}>
-          {busy === "Save draft" ? "Saving…" : "Save current as draft"}
-        </button>
+        {allowSave && (
+          <button onClick={saveDraft} disabled={busy !== null}>
+            {busy === "Save draft" ? "Saving…" : "Save current as draft"}
+          </button>
+        )}
       </div>
       {notice && <p className={styles.notice}>{notice}</p>}
       {status.kind === "ok" && status.notice && (
