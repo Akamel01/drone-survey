@@ -22,6 +22,12 @@ STATUS_KEY = "specs/_status/missions.json"
 # Underscore-prefixed inside specs/ on purpose: store keys are confined to the
 # specs/ prefix, and collect.py's Spec pattern only matches three-segment
 # site/date/file keys, so the manifest is invisible to Collect.
+NOTICE_KEY = "_notice"
+
+
+class QueueOverflowError(Exception):
+    """The waiting queue does not fit the WAYFINDER cards. Raised before any
+    card is touched so the caller can report it and refuse atomically."""
 
 
 def utcnow() -> str:
@@ -48,6 +54,26 @@ def merge_loaded(manifest: dict, entries: list[tuple[str, list[tuple[str, dict]]
                 ],
             }
         )
+    return manifest
+
+
+def merge_overflow(manifest: dict, keys: list[str], needed: int, have: int, at: str) -> dict:
+    """Record an atomic refusal: nothing was Loaded, the RC is as it was, and
+    the operator can see which missions did not fit and what to do."""
+    manifest[NOTICE_KEY] = {
+        "type": "overflow",
+        "at": at,
+        "waiting": keys,
+        "parts_needed": needed,
+        "cards_have": have,
+        "action": "Dispatch fewer missions or clear a card, then replug the Controller.",
+    }
+    return manifest
+
+
+def clear_notice(manifest: dict) -> dict:
+    """A successful Load retires any past refusal."""
+    manifest.pop(NOTICE_KEY, None)
     return manifest
 
 
@@ -122,6 +148,13 @@ def _selftest() -> None:
     m = {"k": {"collected_at": "t0"}}
     merge_loaded(m, [("k", [])], "t2")
     assert m["k"]["collected_at"] == "t0", m
+
+    # 4. Overflow records the refusal; a later success clears it.
+    m = {}
+    merge_overflow(m, ["a", "b"], 7, 5, "t3")
+    assert m["_notice"]["type"] == "overflow" and m["_notice"]["waiting"] == ["a", "b"], m
+    clear_notice(m)
+    assert "_notice" not in m, m
 
     print("b2_status self-check: ok")
 

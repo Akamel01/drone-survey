@@ -54,6 +54,9 @@ export async function GET(request: Request) {
     return Response.json({
       rows: joinStatus(drafts, specFiles.map((f) => f.fileName), manifest),
       host_reported: manifestRaw !== null,
+      // An atomic refusal (eg. the queue did not fit the cards): the host
+      // reports it here so the tab shows it against the waiting missions.
+      notice: (manifest as Record<string, unknown>)._notice ?? null,
     });
   } catch (err) {
     const detail = err instanceof Error ? err.message : "unknown";

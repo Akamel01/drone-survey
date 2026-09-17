@@ -123,8 +123,9 @@ def load_all(entries: list[tuple[Path, list[dict]]], root: Path, backups: Path,
     total = sum(len(parts) for _, parts in entries)
     if total > len(cards()):
         waiting = ", ".join(spec.name for spec, _ in entries)
-        sys.exit(f"{total} parts waiting ({waiting}) but only {len(cards())} WAYFINDER cards; "
-                 f"nothing was touched. Dispatch fewer missions or clear a card, then replug.")
+        raise b2_status.QueueOverflowError(
+            f"{total} parts waiting ({waiting}) but only {len(cards())} WAYFINDER cards; "
+            f"nothing was touched. Dispatch fewer missions or clear a card, then replug.")
     # Assign sequentially: mission i's parts take the next free cards in order.
     plan: list[tuple[Path, str, str, dict]] = []
     free = cards()
@@ -253,11 +254,11 @@ def _selftest() -> None:
             free = free[len(chunk):]
         assert got_cards == ["WAYFINDER 1", "WAYFINDER 2", "WAYFINDER 3"], got_cards
 
-        # A queue that does not fit is refused before anything is staged.
+        # A queue that does not fit raises before anything is staged.
         try:
             load_all([(specs / "big.json", [{"name": "x", "waypoints": 1}] * (len(cards()) + 1))],
                      root, tmp / "backup3")
-        except SystemExit as e:
+        except b2_status.QueueOverflowError as e:
             assert "only" in str(e) and "WAYFINDER" in str(e), e
         else:
             raise AssertionError("an overfull queue was accepted")
@@ -305,7 +306,11 @@ def main() -> None:
             remount(MOUNT)
         with tempfile.TemporaryDirectory() as tmp:
             entries = [(spec, build(spec, Path(tmp) / spec.stem)) for spec in queue]
-            loaded = load_all(entries, MOUNT / STORAGE, backups, fresh_mount=lambda: remount(MOUNT))
+            try:
+                loaded = load_all(entries, MOUNT / STORAGE, backups, fresh_mount=lambda: remount(MOUNT))
+            except b2_status.QueueOverflowError as e:
+                report_overflow(args.status_config, queue, sum(len(p) for _, p in entries))
+                sys.exit(str(e))
         sheet = "\n".join(f"Open {card}: {part['name']} ({part['waypoints']} waypoints) [{spec.name}]"
                           for spec, card, part in loaded)
         (backups / "cards.txt").write_text(sheet + "\n")
@@ -354,6 +359,30 @@ def _group_by_spec(loaded: list[tuple[Path, str, dict]]) -> list[tuple[Path, lis
     return groups
 
 
+def report_overflow(status_config: Path, queue: list[Path], needed: int) -> None:
+    """Write the atomic refusal into the manifest so the Status tab shows it
+    against the waiting missions. Like every report: loud when missing, never
+    fatal to anything (there is nothing to roll back — nothing was touched)."""
+    if not status_config.exists():
+        print(f"no status credentials at {status_config}; overflow not reported")
+        return
+    try:
+        from collect import load_env, authorize
+        senv = load_env(status_config)
+        sauth = authorize(senv["B2_KEY_ID"], senv["B2_APP_KEY"])
+        sallowed = sauth["allowed"]
+        manifest = b2_status.download_manifest(
+            sauth["apiUrl"], sauth["downloadUrl"], sallowed["bucketName"], sauth["authorizationToken"])
+        b2_status.merge_overflow(
+            manifest, [spec_key(s) for s in queue],
+            needed, len(cards()), b2_status.utcnow())
+        b2_status.upload_manifest(sauth["apiUrl"], sauth["authorizationToken"], sallowed["bucketId"], manifest)
+    except SystemExit as e:
+        print(f"overflow report failed ({e})")
+        return
+    print("Reported the overflow refusal to the manifest")
+
+
 def report_loaded(status_config: Path, entries: list[tuple[str, list[tuple[str, dict]]]]) -> None:
     """Stamp the cloud manifest so the planner shows Loaded with card names.
     Bookkeeping, not the Load: without status credentials the cards are still
@@ -368,6 +397,7 @@ def report_loaded(status_config: Path, entries: list[tuple[str, list[tuple[str, 
         sallowed = sauth["allowed"]
         manifest = b2_status.download_manifest(
             sauth["apiUrl"], sauth["downloadUrl"], sallowed["bucketName"], sauth["authorizationToken"])
+        b2_status.clear_notice(manifest)
         b2_status.merge_loaded(manifest, entries, b2_status.utcnow())
         b2_status.upload_manifest(sauth["apiUrl"], sauth["authorizationToken"], sallowed["bucketId"], manifest)
     except SystemExit as e:

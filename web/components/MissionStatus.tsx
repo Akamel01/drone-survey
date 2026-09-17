@@ -18,8 +18,17 @@ interface MissionStatusProps {
 
 type FetchState =
   | { kind: "loading" }
-  | { kind: "ok"; rows: StatusRow[]; hostReported: boolean }
+  | { kind: "ok"; rows: StatusRow[]; hostReported: boolean; notice: HostNotice | null }
   | { kind: "error"; message: string };
+
+interface HostNotice {
+  type: string;
+  at: string;
+  waiting?: string[];
+  parts_needed?: number;
+  cards_have?: number;
+  action?: string;
+}
 
 export default function MissionStatus({ spec, onLoadMission }: MissionStatusProps) {
   const [passphrase, setPassphrase] = useState<string | null>(null);
@@ -32,7 +41,7 @@ export default function MissionStatus({ spec, onLoadMission }: MissionStatusProp
       const res = await fetch("/api/status", { headers: { "x-wayfinder-key": key } });
       const body = await res.json();
       if (res.ok && Array.isArray(body.rows)) {
-        setStatus({ kind: "ok", rows: body.rows, hostReported: body.host_reported === true });
+        setStatus({ kind: "ok", rows: body.rows, hostReported: body.host_reported === true, notice: body.notice ?? null });
       } else {
         setStatus({ kind: "error", message: body.error ?? `Status failed (${res.status})` });
       }
@@ -130,6 +139,12 @@ export default function MissionStatus({ spec, onLoadMission }: MissionStatusProp
         </button>
       </div>
       {notice && <p className={styles.notice}>{notice}</p>}
+      {status.kind === "ok" && status.notice && (
+        <p className={styles.error}>
+          The host refused a Load ({status.notice.at}): {status.notice.parts_needed} parts waiting,{" "}
+          {status.notice.cards_have} cards. Nothing was written. {status.notice.action}
+        </p>
+      )}
       {!status.hostReported && (
         <p className={styles.empty}>The host has not reported yet — states stop at Dispatched.</p>
       )}
