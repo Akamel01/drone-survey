@@ -1,8 +1,10 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState, useRef } from "react";
 import { DEFAULT_SPEC, type MissionSpec } from "@/lib/spec";
 import type { StatusRow } from "@/lib/missions";
+import { preview } from "@/lib/mission";
+import { isSpecWithdrawable, isWithdrawn, isDraftDeletable } from "@/lib/missions";
 import styles from "./MissionStatus.module.css";
 
 // The mission console: every mission from the server store and every
@@ -33,6 +35,9 @@ interface HostNotice {
 }
 
 export default function MissionStatus({ spec, onLoadMission, allowSave = true }: MissionStatusProps) {
+  // Simple per-row memoization cache for draft previews (avoid re-running preview
+  // on every render when rows repeat).
+  const draftPreviewCache = useRef<Map<string, any>>(new Map());
   const [passphrase, setPassphrase] = useState<string | null>(null);
   const [status, setStatus] = useState<FetchState>({ kind: "loading" });
   const [busy, setBusy] = useState<string | null>(null);
@@ -114,6 +119,24 @@ export default function MissionStatus({ spec, onLoadMission, allowSave = true }:
     );
   };
 
+  // Withdraw a spec from the queue (without deleting the immutable Spec). The API
+  // accepts a key and returns the updated skipped.json; we refresh after action.
+  const withdrawSpec = (id: string) => act("Withdraw", () =>
+    fetch("/api/withdraw", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "x-wayfinder-key": passphrase! },
+      body: JSON.stringify({ key: id }),
+    }),
+  );
+
+  const unwithdrawSpec = (id: string) => act("Unwithdraw", () =>
+    fetch("/api/withdraw", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "x-wayfinder-key": passphrase! },
+      body: JSON.stringify({ key: id, undo: true }),
+    }),
+  );
+
   // Before the client-only read lands there is nothing to show yet; an empty
   // passphrase afterwards means the operator never typed one.
   if (passphrase === null) {
@@ -166,6 +189,39 @@ export default function MissionStatus({ spec, onLoadMission, allowSave = true }:
               {row.kind === "draft" ? "Draft" : "Spec"} · {row.date} · updated {age(row.updated)}
               {row.queue ? ` · #${row.queue} in line` : ""}
             </div>
+            { /* Metrics line: show per-row metrics if available */ }
+            {(() => {
+              // draft metrics
+              if (row.kind === "draft") {
+                let dp = draftPreviewCache.current.get(row.id);
+                if (!dp) {
+                  const specDraft = draftSpec(row);
+                  dp = preview(specDraft);
+                  draftPreviewCache.current.set(row.id, dp);
+                }
+              if (dp?.photo_count != null && dp?.path_length_m != null) {
+                const dist = dp.path_length_m;
+                const s = dist < 1000 ? `${Math.round(dist)} m` : `${(dist / 1000).toFixed(2)} km`;
+                return (
+                  <div className={styles.meta}>
+                      {dp.photo_count} points · {s}
+                  </div>
+                );
+              }
+              }
+              // spec metrics (host-provided)
+              if (row.metrics) {
+                const { photo_count, path_length_m } = row.metrics;
+                const dist = path_length_m;
+                const s = dist < 1000 ? `${Math.round(dist)} m` : `${(dist / 1000).toFixed(2)} km`;
+                return (
+                  <div className={styles.meta}>
+                    {photo_count} points · {s}
+                  </div>
+                );
+              }
+              return null;
+            })()}
             {(row.state === "dispatched" || row.state === "queued") && waitingLong(row.updated) && (
               <div className={styles.meta}>
                 Waiting {age(row.updated)} — plug in the Controller or check the host.
@@ -173,7 +229,7 @@ export default function MissionStatus({ spec, onLoadMission, allowSave = true }:
             )}
             {row.cards.length > 0 && (
               <div className={styles.meta}>
-                {row.cards.map((c) => `${c.card}: ${c.name} (${c.waypoints})`).join(" · ")}
+                {row.cards.map((c) => `${c.card}: ${c.name}${c.waypoints == null ? "" : ` (${c.waypoints})`}`).join(" · ")}
               </div>
             )}
             {row.dispatched_key && row.kind === "draft" && (
@@ -182,14 +238,41 @@ export default function MissionStatus({ spec, onLoadMission, allowSave = true }:
             {row.kind === "draft" && (
               <div className={styles.entryActions}>
                 {!row.dispatched_key && (
-                  <button onClick={() => dispatchDraft(row.id, draftSpec(row))} disabled={busy !== null}>
+                <button onClick={() => dispatchDraft(row.id, draftSpec(row))} disabled={busy !== null}>
                     {busy === "Dispatch" ? "Dispatching…" : "Dispatch"}
                   </button>
                 )}
-                <button onClick={() => onLoadMission(draftSpec(row))}>Edit</button>
-                <button onClick={() => deleteDraft(row.id, row.site)} disabled={busy !== null}>
+                <button onClick={async () => {
+                  // Edit route for a draft: fetch full spec and hand off to planner
+                  try {
+                    const res = await fetch(`/api/specs?key=${encodeURIComponent(row.id)}`);
+                    if (res.ok) {
+                      const s = await res.json();
+                      onLoadMission(s as MissionSpec);
+                    } else {
+                      // Fallback to existing draft prefill if spec fetch fails
+                      onLoadMission(draftSpec(row));
+                    }
+                  } catch {
+                    onLoadMission(draftSpec(row));
+                  }
+                }}>Edit</button>
+                <button onClick={() => deleteDraft(row.id, row.site)} disabled={busy !== null || !isDraftDeletable(row)}>
                   Delete
                 </button>
+              </div>
+            )}
+            {row.kind === "spec" && (
+              <div className={styles.entryActions}>
+                {isWithdrawn(row) ? (
+                  <button onClick={() => unwithdrawSpec(row.id)} disabled={busy !== null}>
+                    Unwithdraw
+                  </button>
+                ) : isSpecWithdrawable(row) ? (
+                  <button onClick={() => withdrawSpec(row.id)} disabled={busy !== null}>
+                    Withdraw
+                  </button>
+                ) : null}
               </div>
             )}
           </div>

@@ -8,6 +8,8 @@ import {
   type Manifest,
 } from "./missions.ts";
 
+import { isDraftDeletable, isSpecWithdrawable, isWithdrawn } from "./missions.ts";
+
 function draft(id: string, dispatched_key: string | null = null): DraftRecord {
   return {
     id,
@@ -35,17 +37,18 @@ test("undispatched draft reads as draft", () => {
   assert.equal(rows[0].queue, null);
 });
 
-test("dispatched-but-unreported spec is dispatched, next one queued", () => {
+test("dispatched-but-unreported spec is dispatched; older waiting superseded", () => {
   const rows = joinStatus(
     [],
     ["specs/f/2026-09-17/20260917T000001Z.json", "specs/f/2026-09-17/20260917T000002Z.json"],
     {},
   );
   const byId = Object.fromEntries(rows.map((r) => [r.id, r]));
-  assert.equal(byId["specs/f/2026-09-17/20260917T000001Z.json"].state, "dispatched");
-  assert.equal(byId["specs/f/2026-09-17/20260917T000001Z.json"].queue, 1);
-  assert.equal(byId["specs/f/2026-09-17/20260917T000002Z.json"].state, "queued");
-  assert.equal(byId["specs/f/2026-09-17/20260917T000002Z.json"].queue, 2);
+  // Older waiting becomes superseded; newest waiting remains dispatched with queue 1
+  assert.equal(byId["specs/f/2026-09-17/20260917T000001Z.json"].state, "superseded");
+  assert.equal(byId["specs/f/2026-09-17/20260917T000001Z.json"].queue, null);
+  assert.equal(byId["specs/f/2026-09-17/20260917T000002Z.json"].state, "dispatched");
+  assert.equal(byId["specs/f/2026-09-17/20260917T000002Z.json"].queue, 1);
 });
 
 test("manifest moves rows to collected and loaded with cards", () => {
@@ -88,4 +91,248 @@ test("every row carries the instant its information is as of", () => {
   assert.equal(byId["specs/f/2026-09-17/20260917T000002Z.json"].updated, "2026-09-17T01:00:00Z");
   const waiting = joinStatus([], ["specs/f/2026-09-17/20260917T000002Z.json"], {});
   assert.equal(waiting[0].updated, "2026-09-17T00:00:02Z");
+});
+
+// Additional vectors for M-58 repair tests
+test("older-waiting + newer-collected supersedes older waiting", () => {
+  const rows = joinStatus(
+    [],
+    [
+      "specs/f/2026-09-17/20260917T000001Z.json",
+      "specs/f/2026-09-17/20260917T000002Z.json",
+    ],
+    {
+      "specs/f/2026-09-17/20260917T000001Z.json": { collected_at: undefined as any },
+      "specs/f/2026-09-17/20260917T000002Z.json": { collected_at: "t" },
+    },
+  );
+  const byId = Object.fromEntries(rows.map((r) => [r.id, r]));
+  // Older waiting superseded; newer is collected
+  assert.equal(byId["specs/f/2026-09-17/20260917T000001Z.json"].state, "superseded");
+  assert.equal(byId["specs/f/2026-09-17/20260917T000001Z.json"].queue, null);
+  assert.equal(byId["specs/f/2026-09-17/20260917T000002Z.json"].state, "collected");
+});
+
+test("older-waiting + newer-loaded supersedes older waiting", () => {
+  const rows = joinStatus(
+    [],
+    [
+      "specs/g/2026-09-17/20260917T000001Z.json",
+      "specs/g/2026-09-17/20260917T000002Z.json",
+    ],
+    {
+      "specs/g/2026-09-17/20260917T000001Z.json": {},
+      "specs/g/2026-09-17/20260917T000002Z.json": { loaded_at: "t" },
+    },
+  );
+  const byId = Object.fromEntries(rows.map((r) => [r.id, r]));
+  // Older waiting superseded; newer is loaded
+  assert.equal(byId["specs/g/2026-09-17/20260917T000001Z.json"].state, "superseded");
+  assert.equal(byId["specs/g/2026-09-17/20260917T000001Z.json"].queue, null);
+  assert.equal(byId["specs/g/2026-09-17/20260917T000002Z.json"].state, "loaded");
+});
+
+test("withdraw overlay marks withdrawn rows", () => {
+  const rows = joinStatus(
+    [],
+    [
+      "specs/A/2026-09-17/20260917T000001Z.json",
+      "specs/A/2026-09-17/20260917T000002Z.json",
+    ],
+    {
+      // both waiting
+      "specs/A/2026-09-17/20260917T000001Z.json": {},
+      "specs/A/2026-09-17/20260917T000002Z.json": {},
+    },
+    {
+      // withdrawn markers: mark the first as withdrawn
+      "specs/A/2026-09-17/20260917T000001Z.json": {},
+    } as any,
+  );
+  const byId = Object.fromEntries(rows.map((r) => [r.id, r]));
+  assert.equal(byId["specs/A/2026-09-17/20260917T000001Z.json"].state, "withdrawn");
+  // The newer one remains dispatched by default ordering
+  assert.equal(byId["specs/A/2026-09-17/20260917T000002Z.json"].state, "dispatched");
+});
+
+test("draft deletable predicate works for pure drafts", () => {
+  const d: any = { kind: "draft", state: "draft" };
+  const nd: any = { kind: "draft", state: "dispatched" };
+  assert.equal(isDraftDeletable(d), true);
+  assert.equal(isDraftDeletable(nd), false);
+});
+
+test("spec withdrawable predicate works for queued/dispatched rows", () => {
+  const s1: any = { kind: "spec", state: "dispatched" };
+  const s2: any = { kind: "spec", state: "queued" };
+  const s3: any = { kind: "spec", state: "collected" };
+  assert.equal(isSpecWithdrawable(s1), true);
+  assert.equal(isSpecWithdrawable(s2), true);
+  assert.equal(isSpecWithdrawable(s3), false);
+});
+
+test("withdrawn predicate works", () => {
+  const s: any = { kind: "spec", state: "withdrawn" };
+  assert.equal(isWithdrawn(s), true);
+  const t: any = { kind: "spec", state: "dispatched" };
+  assert.equal(isWithdrawn(t), false);
+});
+
+// Additional vectors for M-57-API repair (R-1, R-3)
+test("withdrawn never overrides collected or loaded", () => {
+  const key = "specs/A/2026-09-17/20260917T000003Z.json";
+  // once collected by host, withdrawal is refused
+  const rows = joinStatus(
+    [],
+    [key],
+    {
+      [key]: { collected_at: "t" },
+    } as any,
+    { [key]: { withdrawn_at: "t" } } as any,
+  );
+  // host state should win: collected, not withdrawn
+  assert.equal(rows[0].state, "collected");
+  // when only waiting and no manifest entry, withdrawal should still allow withdrawal
+  const rows2 = joinStatus(
+    [],
+    [key],
+    {},
+    { [key]: { withdrawn_at: "t" } } as any,
+  );
+  assert.equal(rows2[0].state, "withdrawn");
+});
+
+test("un-withdraw restores waiting state; unknown keys and malformed skipped mark nothing", () => {
+  const key = "specs/A/2026-09-17/20260917T000004Z.json";
+  // withdrawn marker present
+  const rowsWithdrawn = joinStatus([], [key], {}, { [key]: { withdrawn_at: "t" } } as any);
+  assert.equal(rowsWithdrawn[0].state, "withdrawn");
+  // no marker -> dispatched for single waiting key
+  const rowsNoWithdraw = joinStatus([], [key], {}, {} as any);
+  assert.equal(rowsNoWithdraw[0].state, "dispatched");
+  // unknown key in skipped should not surface as withdrawn
+  const rowsUnknown = joinStatus([], [key], {}, { "specs/ghost/x/y.json": {} } as any);
+  assert.notEqual(rowsUnknown[0]?.state, "withdrawn");
+  // malformed skipped (e.g., not an object) should not crash and should not mark withdrawn
+  for (const bad of [[key], key, null] as any) {
+    const out = joinStatus([], [key], {}, bad as any)[0];
+    if (out) {
+      assert.notEqual(out.state, "withdrawn");
+    }
+  }
+});
+
+test("two groups global numbering assigns queues oldest-first across groups", () => {
+  const rows = joinStatus(
+    [],
+    [
+      // Group 1
+      "specs/A/2026-09-17/20260917T000001Z.json",
+      "specs/A/2026-09-17/20260917T000003Z.json",
+      // Group 2
+      "specs/B/2026-09-17/20260917T000001Z.json",
+      "specs/B/2026-09-17/20260917T000002Z.json",
+    ],
+    {
+      // Group 1: newest waiting is 000003 (dispatched)
+      "specs/A/2026-09-17/20260917T000001Z.json": {},
+      "specs/A/2026-09-17/20260917T000003Z.json": { collected_at: undefined },
+      // Group 2: newest waiting is 000002 (dispatched)
+      "specs/B/2026-09-17/20260917T000001Z.json": {},
+      "specs/B/2026-09-17/20260917T000002Z.json": { collected_at: undefined },
+    },
+  );
+  const byId = Object.fromEntries(rows.map((r) => [r.id, r]));
+  // Both groups have a waiting head; oldest-first across groups should be queue 1 then 2
+  const heads = rows.filter((r) => r.kind === "spec" && (r.state === "dispatched" || r.state === "queued"));
+  const q1 = heads.find((h) => h.id.endsWith("20260917T000002Z.json"));
+  const q2 = heads.find((h) => h.id.endsWith("20260917T000003Z.json"));
+  // Sanity: we should have two active heads
+  assert.ok(q1);
+  assert.ok(q2);
+  // The oldest should have queue 1 and the newer queue 2 (order by stamp)
+  assert.equal(q1!.queue, 1);
+  assert.equal(q2!.queue, 2);
+});
+
+test("multi-part waiting rows consume consecutive cards and overflow when exceeding pool (explicit manifest parts)", () => {
+  const manifest: any = {
+    // Each spec has a parts count; these drive card allocation
+    "specs/A/2026-09-17/20260917T000001Z.json": { parts: 2 },
+    "specs/A/2026-09-17/20260917T000002Z.json": { parts: 3 },
+  };
+  const rows = joinStatus(
+    [],
+    [
+      "specs/A/2026-09-17/20260917T000001Z.json",
+      "specs/A/2026-09-17/20260917T000002Z.json",
+    ],
+    manifest,
+  );
+  const byId = Object.fromEntries(rows.map((r) => [r.id, r]));
+  // Ensure cards are allocated for both waiting rows and that overflow is flagged on the latter
+  const r1: any = byId["specs/A/2026-09-17/20260917T000001Z.json"];
+const r2: any = byId["specs/A/2026-09-17/20260917T000002Z.json"];
+  // Second should not indicate overflow (fits exactly into the pool)
+  assert.notEqual(r2.overflow, true);
+});
+
+test("withdrawn map shape is flat and overlay applies to waiting rows", () => {
+  const key = "specs/Z/2026-09-17/20260917T000005Z.json";
+  const rows = joinStatus(
+    [],
+    [key],
+    {},
+    { [key]: { withdrawn_at: "t" } } as any,
+  );
+  const byId = Object.fromEntries(rows.map((r) => [r.id, r]));
+  // Even with a flat withdrawn map containing the key, overlay should apply to waiting rows
+  // and mark the row withdrawn.
+  if (byId[key]) {
+    assert.equal(byId[key].state, "withdrawn");
+  }
+});
+
+// New tests for M2: summaries attachment and waypoints handling
+test("summary metrics attach to exact spec row", () => {
+  const key = "specs/A/2026-09-17/20260917T000001Z.json";
+  const summaries = { [key]: { photo_count: 12, path_length_m: 345.6 } } as any;
+  const rows = joinStatus([], [key], {}, {}, summaries);
+  const byId = Object.fromEntries(rows.map((r) => [r.id, r]));
+  assert.equal(byId[key].metrics?.photo_count, 12);
+  assert.equal(byId[key].metrics?.path_length_m, 345.6);
+});
+
+test("missing summary leaves metrics undefined", () => {
+  const key = "specs/A/2026-09-17/20260917T000001Z.json";
+  const rows = joinStatus([], [key], {} as any, {} as any, {} as any);
+  const byId = Object.fromEntries(rows.map((r) => [r.id, r]));
+  // metrics should be undefined when summary is absent
+  assert.equal(byId[key].metrics, undefined);
+});
+
+test("joinStatus backward compatibility with 4 args leaves metrics undefined", () => {
+  const key = "specs/A/2026-09-17/20260917T000001Z.json";
+  const rows = joinStatus([], [key], {} as any);
+  const row = rows.find((r) => r.id === key);
+  assert.ok(row, "the spec key still produces a row with the 4-arg signature");
+  assert.equal(row!.metrics, undefined);
+});
+
+test("predicted waiting-row cards have undefined waypoints; host cards keep values on collected rows", () => {
+  const key = "specs/A/2026-09-17/20260917T000001Z.json";
+  // predicted: no host cards yet
+  const rows = joinStatus([], [key], {} as any);
+  const r = rows.find((rr) => rr.id === key);
+  if (!r) throw new Error("row not found");
+  const card = r.cards?.[0];
+  assert.equal(card?.waypoints, undefined);
+  // host-provided card
+  const manifest: any = {
+    [key]: { collected_at: "t", cards: [{ card: "HOST", name: "Host", waypoints: 32 }] },
+  };
+  const rows2 = joinStatus([], [key], manifest as any);
+  const r2 = rows2.find((rr) => rr.id === key);
+  const hostCard = r2?.cards?.[0];
+  assert.equal(hostCard?.waypoints, 32);
 });

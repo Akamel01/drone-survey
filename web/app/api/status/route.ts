@@ -1,17 +1,7 @@
 import { authProblem } from "@/lib/auth";
 import { authorize, b2Env, b2ReadEnv, downloadFile, listFiles } from "@/lib/b2";
-import {
-  DRAFTS_PREFIX,
-  STATUS_KEY,
-  joinStatus,
-  type DraftRecord,
-  type Manifest,
-} from "@/lib/missions";
+import { SUMMARIES_KEY, DRAFTS_PREFIX, STATUS_KEY, joinStatus, type DraftRecord, type Manifest, SpecSummary } from "@/lib/missions";
 
-// One row per mission: drafts from the server store, Dispatched Specs from
-// the store's specs/ tree, Collected/Loaded from the host's manifest. Keyed
-// by cloud identity, so any browser sees the same tab. A missing manifest is
-// "the host has not reported yet", never an error.
 export const runtime = "nodejs";
 export const preferredRegion = "yyz1";
 
@@ -25,10 +15,12 @@ export async function GET(request: Request) {
   if (!readEnv) return Response.json({ error: "Storage is not configured" }, { status: 503 });
   try {
     const session = await authorize(readEnv);
-    const [specFiles, draftFiles, manifestRaw] = await Promise.all([
+    const [specFiles, draftFiles, manifestRaw, skippedRaw, summariesRaw] = await Promise.all([
       listFiles(session, "specs/"),
       listFiles(session, DRAFTS_PREFIX),
       downloadFile(session, env.bucket, STATUS_KEY),
+      downloadFile(session, env.bucket, "specs/_status/skipped.json"),
+      downloadFile(session, env.bucket, SUMMARIES_KEY),
     ]);
     const drafts: DraftRecord[] = (
       await Promise.all(
@@ -54,12 +46,29 @@ export async function GET(request: Request) {
         manifest = {};
       }
     }
+    // Read skipped map (withdrawn markers) for UI overlay
+    let skipped: Record<string, unknown> = {};
+    if (skippedRaw) {
+      try {
+        skipped = JSON.parse(skippedRaw.toString()) as Record<string, unknown>;
+      } catch {
+        skipped = {};
+      }
+    }
+    // Summaries (metrics) attached to SPECs
+    let summaries: Record<string, SpecSummary> = {};
+    if (summariesRaw) {
+      try {
+        summaries = JSON.parse(summariesRaw.toString()) as Record<string, SpecSummary>;
+      } catch {
+        summaries = {};
+      }
+    }
     return Response.json({
-      rows: joinStatus(drafts, specFiles.map((f) => f.fileName), manifest),
+      rows: joinStatus(drafts, specFiles.map((f) => f.fileName), manifest, skipped, summaries),
       host_reported: manifestRaw !== null,
-      // An atomic refusal (eg. the queue did not fit the cards): the host
-      // reports it here so the tab shows it against the waiting missions.
       notice: (manifest as Record<string, unknown>)._notice ?? null,
+      skipped: skipped ?? {},
     });
   } catch (err) {
     const detail = err instanceof Error ? err.message : "unknown";
