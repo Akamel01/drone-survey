@@ -27,7 +27,8 @@
     "specs/a/b.json",
     "specs/field/2026-09-17/20260917T000000Z.json.bak",
     "other/field/2026-09-17/20260917T000000Z.json",
-    ""
+    "",
+    "specs/foo/bar/2026-09-17/20260917T000000Z.json"
   ],
   "drafts_prefix": "specs/_drafts/",
   "draft_key": {

@@ -70,21 +70,28 @@ test("a draft may be an unfinished plan that Dispatch refuses", () => {
   assert.notEqual(dispatchProblem(halfDrawn), null, "the same plan is not dispatchable");
 });
 
-test("both gates refuse what neither could act on", () => {
+test("a draft may be blank where Dispatch requires a value", () => {
+  // The drafts route has always judged shape, not readiness: an operator saves a
+  // Mission before it has a name or a date, and Dispatch is where blanks are fatal.
   for (const spec of [
-    { ...DEFAULT_SPEC, site: "", date: "2026-01-01" },
+    { ...DEFAULT_SPEC, site: "" },
     { ...DEFAULT_SPEC, site: "Field", date: "" },
-    { ...DEFAULT_SPEC, site: "Field", date: "2026-01-01", version: 2 },
   ] as MissionSpec[]) {
-    assert.notEqual(draftProblem(spec), null, JSON.stringify(spec));
-    assert.notEqual(dispatchProblem(spec), null, JSON.stringify(spec));
+    assert.equal(draftProblem(spec), null, `savable as a draft: ${JSON.stringify(spec.site)}`);
+    assert.notEqual(dispatchProblem(spec), null, `not dispatchable: ${JSON.stringify(spec.site)}`);
   }
 });
 
-test("the shared field rules are the same at both stages", () => {
+test("a version neither gate knows is refused by both", () => {
+  const wrong = { ...DEFAULT_SPEC, site: "Field", date: "2026-01-01", version: 2 } as unknown as MissionSpec;
+  assert.notEqual(draftProblem(wrong), null);
+  assert.notEqual(dispatchProblem(wrong), null);
+});
+
+test("the Site id is Dispatch's trust boundary, not the draft's", () => {
   const badId = { ...DEFAULT_SPEC, site: "Field", date: "2026-01-01", site_id: "../etc/passwd" } as MissionSpec;
-  assert.notEqual(draftProblem(badId), null);
-  assert.notEqual(dispatchProblem(badId), null);
+  assert.equal(draftProblem(badId), null, "a draft has no storage key yet, so an id is not judged");
+  assert.notEqual(dispatchProblem(badId), null, "the id becomes a storage path at Dispatch");
 });
 
 test("slugSegment always yields something the server would accept as a Site id", () => {
@@ -106,4 +113,16 @@ test("slugSegment always yields something the server would accept as a Site id",
   }
   assert.equal(slugSegment("Rehearsal Field", 60), "rehearsal-field");
   assert.equal(slugSegment("A-1 Site", 60).slice(0, 3), "a-1");
+});
+
+test("the draft gate keeps the verdicts it replaced", () => {
+  const base = { ...DEFAULT_SPEC, site: "Field", date: "2026-01-01" };
+  // Blank fields are a draft in progress: the old route accepted them.
+  assert.equal(draftProblem({ ...base, site: "", date: "" }), null, "a blank draft is still a draft");
+  assert.equal(draftProblem({ ...base, site_id: "not a legal id" }), null, "a draft needs no storage-safe id");
+  // Shape rules it did enforce, and still does.
+  assert.notEqual(draftProblem({ ...base, version: 2 }), null);
+  assert.notEqual(draftProblem({ ...base, mission_type: "circus" }), null);
+  assert.notEqual(draftProblem({ ...base, site: 7 }), null, "a non-string site must be refused, not thrown over");
+  assert.notEqual(draftProblem({ ...base, date: 7 }), null, "a non-string date must be refused, not thrown over");
 });
