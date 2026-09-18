@@ -28,7 +28,7 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
-from push_to_rc import WAYPOINT_DIR, read_create_time, with_create_time  # noqa: E402
+from kmz import WAYPOINT_DIR, read_create_time, with_create_time  # noqa: E402
 import b2_status  # noqa: E402  (network to B2 only; no mount, no Controller)
 
 MOUNT = Path.home() / "rc2"

@@ -1,14 +1,11 @@
 import type { MissionSpec } from "./spec";
+import { parseSpecKey, stampToIso } from "./keys.ts";
 // Server-side mission records. Drafts live under specs/_drafts/<id>.json in
 // the same bucket as Specs; Dispatched Specs stay immutable under specs/ and
 // are only ever superseded, never edited or deleted (ADR 0016).
 
-export const DRAFTS_PREFIX = "specs/_drafts/";
-export const STATUS_KEY = "specs/_status/missions.json";
-export const SUMMARIES_KEY = "specs/_status/summaries.json";
-// Underscore-prefixed inside specs/ on purpose: the server key is confined to
-// the specs/ prefix, and collect.py's Spec pattern only matches three-segment
-// site/date/file keys, so drafts and the manifest are invisible to Collect.
+// Store keys live in ./keys — one home for the layout, imported here and by
+// every route, so a producer and a consumer cannot drift apart.
 
 export interface DraftRecord {
   id: string;
@@ -89,23 +86,11 @@ export interface StatusRow {
   overflow?: boolean;
 }
 
-/** Dispatch stamps sort lexically; this turns one back into an instant. */
-export function stampToIso(stamp: string): string {
-  const m = /^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})Z$/.exec(stamp);
-  return m ? `${m[1]}-${m[2]}-${m[3]}T${m[4]}:${m[5]}:${m[6]}Z` : stamp;
-}
-
 // Lightweight per-spec metrics summary shape stored in summaries.json, to be
 // consumed by the UI without re-computing on polls.
 export interface SpecSummary {
   photo_count: number;
   path_length_m: number;
-}
-
-/** Parse specs/<site>/<date>/<stamp>.json; null for anything else. */
-export function parseSpecKey(key: string): { site: string; date: string; stamp: string } | null {
-  const m = /^specs\/([^/]+)\/([^/]+)\/([^/]+)\.json$/.exec(key);
-  return m ? { site: m[1], date: m[2], stamp: m[3] } : null;
 }
 
 /** Pure join of drafts + Dispatched keys + host manifest into status rows. */

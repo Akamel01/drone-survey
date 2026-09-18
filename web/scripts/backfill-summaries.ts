@@ -8,7 +8,8 @@
 // Reads Specs; writes only specs/_status/summaries.json. Safe to re-run: it
 // skips keys that already have a summary.
 import { authorize, b2Env, b2ReadEnv, downloadFile, listFiles, uploadFile } from "../lib/b2.ts";
-import { parseSpecKey, SUMMARIES_KEY, type SpecSummary } from "../lib/missions.ts";
+import { SPECS_PREFIX, SUMMARIES_KEY, parseSpecKey } from "../lib/keys.ts";
+import type { SpecSummary } from "../lib/missions.ts";
 import { preview } from "../lib/mission.ts";
 import type { MissionSpec } from "../lib/spec.ts";
 
@@ -28,7 +29,7 @@ async function main(): Promise<void> {
     ? (JSON.parse(existingRaw.toString()) as Record<string, SpecSummary>)
     : {};
 
-  const files = await listFiles(read, "specs/");
+  const files = await listFiles(read, SPECS_PREFIX);
   let added = 0;
   for (const f of files) {
     const key = f.fileName;

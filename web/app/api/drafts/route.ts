@@ -1,7 +1,8 @@
 import { randomUUID } from "node:crypto";
 import { authProblem } from "@/lib/auth";
 import { authorize, b2Env, b2ReadEnv, deleteFile, downloadFile, listFiles, uploadFile } from "@/lib/b2";
-import { DRAFTS_PREFIX, type DraftRecord } from "@/lib/missions";
+import { DRAFTS_PREFIX, draftKey } from "@/lib/keys";
+import type { DraftRecord } from "@/lib/missions";
 import type { MissionSpec } from "@/lib/spec";
 
 // Server-side drafts: the mission list that survives a refresh, a closed
@@ -96,7 +97,7 @@ export async function POST(request: Request) {
       };
     } else {
       if (!draftIdOk(id)) return Response.json({ error: "Bad draft id" }, { status: 400 });
-      const key = `${DRAFTS_PREFIX}${id}.json`;
+      const key = draftKey(id);
       const existing = await downloadFile(read, env.bucket, key);
       if (!existing) return Response.json({ error: "Draft not found" }, { status: 404 });
       const prev = JSON.parse(existing.toString()) as DraftRecord;
@@ -107,7 +108,7 @@ export async function POST(request: Request) {
         spec: spec as MissionSpec,
       };
     }
-    await uploadFile(write, `${DRAFTS_PREFIX}${record.id}.json`, Buffer.from(JSON.stringify(record, null, 2)));
+    await uploadFile(write, draftKey(record.id), Buffer.from(JSON.stringify(record, null, 2)));
     return Response.json({ draft: record });
   } catch (err) {
     const detail = err instanceof Error ? err.message : "unknown";
@@ -127,7 +128,7 @@ export async function DELETE(request: Request) {
   try {
     const read = await authorize(readEnv);
     const write = readEnv.keyId === env.keyId ? read : await authorize(env);
-    const key = `${DRAFTS_PREFIX}${id}.json`;
+    const key = draftKey(id);
     const files = await listFiles(read, DRAFTS_PREFIX);
     const match = files.find((f) => f.fileName === key);
     if (!match) return Response.json({ error: "Draft not found" }, { status: 404 });

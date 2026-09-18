@@ -2,8 +2,6 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
   joinStatus,
-  parseSpecKey,
-  stampToIso,
   type DraftRecord,
   type Manifest,
   type StatusRow,
@@ -20,16 +18,6 @@ function draft(id: string, dispatched_key: string | null = null): DraftRecord {
     spec: { site: "Field", date: "2026-09-17" } as DraftRecord["spec"],
   };
 }
-
-test("parseSpecKey accepts Spec keys and rejects everything else", () => {
-  assert.deepEqual(parseSpecKey("specs/field/2026-09-17/20260917T000000Z.json"), {
-    site: "field",
-    date: "2026-09-17",
-    stamp: "20260917T000000Z",
-  });
-  assert.equal(parseSpecKey("specs/_drafts/abc.json"), null);
-  assert.equal(parseSpecKey("specs/_status/missions.json"), null);
-});
 
 test("undispatched draft reads as draft", () => {
   const rows = joinStatus([draft("a")], [], {});
@@ -81,7 +69,6 @@ test("unknown manifest keys and non-spec keys never surface", () => {
 });
 
 test("every row carries the instant its information is as of", () => {
-  assert.equal(stampToIso("20260917T004057Z"), "2026-09-17T00:40:57Z");
   const rows = joinStatus(
     [draft("a")],
     ["specs/f/2026-09-17/20260917T000002Z.json"],

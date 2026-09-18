@@ -2,7 +2,8 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { DEFAULT_SPEC, type MissionSpec } from "@/lib/spec";
-import { stampToIso, type MissionState, type StatusRow } from "@/lib/missions";
+import { stampToIso } from "@/lib/keys";
+import type { MissionState, StatusRow } from "@/lib/missions";
 import { preview } from "@/lib/mission";
 import { isSpecWithdrawable, isWithdrawn, isDraftDeletable } from "@/lib/missions";
 import styles from "./MissionStatus.module.css";
