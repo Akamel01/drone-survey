@@ -33,6 +33,19 @@ RUNNER = REPO_ROOT / "pipeline" / "runner.py"
 HTML_REF = re.compile(r'(?:src|href)="([^"]+)"')
 
 
+def check_readme_example() -> None:
+    """The README's Manifest example must be the real Manifest, not a memory of it."""
+    import json
+
+    readme = REPO_ROOT / "pipeline" / "README.md"
+    ortho = json.loads((REPO_ROOT / "pipeline" / "manifests" / "orthomosaic.json").read_text())
+    expected = json.dumps({"pipeline": ortho["pipeline"], "nodes": ortho["nodes"][:2]}, indent=2)
+    body = readme.read_text()
+    fenced = body[body.index("```json") + len("```json\n"):body.index("```", body.index("```json") + 7)]
+    assert fenced.strip() == expected.strip(), "the README's example has drifted from orthomosaic.json"
+    print("[ok] README: manifest example matches the real Manifest")
+
+
 def make_synthetic_ortho(fixtures: Path) -> Path:
     """A tiny valid GeoTIFF if rasterio/gdal are importable, else a clearly-named placeholder."""
     try:
@@ -265,6 +278,7 @@ def main() -> None:
         check_publish_refuses_without_credentials(bundle_dir)
         check_runner_end_to_end(ortho, scene, meta)
 
+    check_readme_example()
     print("check_deliver: all checks passed")
 
 

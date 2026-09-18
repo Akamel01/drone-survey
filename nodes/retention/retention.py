@@ -52,8 +52,9 @@ def size(path: Path) -> int:
     return sum(f.stat().st_size for f in path.rglob("*") if f.is_file())
 
 
-def expire(roots: list[Path], log: Path, today: date, delete: bool) -> int:
+def expire(roots: list[Path], log: Path, today: date, delete: bool, out_report: Path | None = None) -> int:
     captures = due(roots, today)
+    scanned = sum(1 for r in roots for _ in r.glob("*/*"))
     for capture, site, flown in captures:
         entry = {"site": site, "flown": flown.isoformat(), "path": str(capture), "bytes": size(capture)}
         if not delete:
@@ -69,6 +70,8 @@ def expire(roots: list[Path], log: Path, today: date, delete: bool) -> int:
     if delete:
         with log.open("a") as f:
             f.write(json.dumps({"run": today.isoformat(), "deleted": len(captures)}) + "\n")
+    if out_report is not None:
+        emit(out_report, [str(c) for c, _, _ in captures], scanned, expiry(today).isoformat(), not delete)
     return len(captures)
 
 
@@ -95,12 +98,26 @@ def _selftest() -> None:
     print("expire_captures self-check: ok")
 
 
+def emit(out_report: Path, deleted: list[str], scanned: int, cutoff: str, dry_run: bool) -> None:
+    """The Node contract: a report saying what this run found and did."""
+    import json as _json
+
+    out_report.parent.mkdir(parents=True, exist_ok=True)
+    out_report.write_text(_json.dumps({
+        "scanned": scanned,
+        "deleted": sorted(deleted),
+        "cutoff": cutoff,
+        "dry_run": dry_run,
+    }, indent=1, sort_keys=True) + "\n")
+
+
 def main() -> None:
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("--root", type=Path, action="append", default=[], help="a directory of <site-id>/<date> Captures")
     p.add_argument("--log", type=Path, default=DEFAULT_LOG, help="append-only deletion log")
     p.add_argument("--delete", action="store_true", help="actually delete; without it this is a dry run")
     p.add_argument("--selftest", action="store_true")
+    p.add_argument("--out-report", type=Path, help="where to write this run's report (the Node contract)")
     args = p.parse_args()
     if args.selftest:
         _selftest()
@@ -110,7 +127,7 @@ def main() -> None:
     missing = [r for r in args.root if not r.is_dir()]
     if missing:
         sys.exit(f"not a directory: {', '.join(map(str, missing))}")
-    expire(args.root, args.log, date.today(), args.delete)
+    expire(args.root, args.log, date.today(), args.delete, args.out_report)
 
 
 if __name__ == "__main__":

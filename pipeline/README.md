@@ -7,20 +7,45 @@ of later Nodes that reference them. See ADR 0006 and `docs/design.md` §4.
 
 ## Manifest example
 
+Two Nodes of `pipeline/manifests/orthomosaic.json`, unedited — a check fails if
+this drifts from the real Manifest, because a documented format is a second copy
+of the format.
+
 ```json
 {
   "pipeline": "orthomosaic",
   "nodes": [
     {
       "name": "ingest",
-      "command": ["python3", "nodes/ingest.py", "--out", "{out.images}"],
-      "outputs": {"images": "images"}
+      "command": [
+        "python3",
+        "nodes/ingest/ingest.py",
+        "--out",
+        "{out.images}"
+      ],
+      "outputs": {
+        "images": "images"
+      }
     },
     {
-      "name": "solve",
-      "command": ["python3", "nodes/solve.py", "--in", "{in.images}", "--out", "{out.poses}"],
-      "inputs": {"images": {"node": "ingest", "output": "images"}},
-      "outputs": {"poses": "poses.json"}
+      "name": "exif-audit",
+      "command": [
+        "python3",
+        "nodes/exif-audit/exif_audit.py",
+        "--in",
+        "{in.images}",
+        "--out",
+        "{out.report}"
+      ],
+      "inputs": {
+        "images": {
+          "node": "ingest",
+          "output": "images"
+        }
+      },
+      "outputs": {
+        "report": "audit.json"
+      }
     }
   ]
 }

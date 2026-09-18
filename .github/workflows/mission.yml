@@ -47,6 +47,7 @@ jobs:
           python3 nodes/check_ortho.py --allow-skips
           python3 nodes/check_splat.py
           python3 nodes/check_head.py
+          python3 nodes/check_retention.py
           python3 nodes/check_deliver.py
 
   # The status console's join, predicates and metrics are pure functions; they
