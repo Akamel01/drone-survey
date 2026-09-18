@@ -68,10 +68,9 @@ import json
 import math
 import sys
 from pathlib import Path
-import sys
-from pathlib import Path as _Path  # for type clarity if needed
+
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-from common import die, emit_report  # noqa: E402
+from common import emit_report  # noqa: E402
 
 WGS84_A = 6378137.0
 WGS84_F = 1 / 298.257223563

@@ -147,11 +147,22 @@ def validate(data: dict) -> list[str]:
                 if not isinstance(arg, str):
                     continue
                 for kind, key in PLACEHOLDER_RE.findall(arg):
-                    declared = {**pipeline_inputs, **inputs} if kind == "in" else outputs
-                    if isinstance(declared, dict) and key not in declared:
+                    if kind == "in":
+                        declared = {**(pipeline_inputs if isinstance(pipeline_inputs, dict) else {}),
+                                    **(inputs if isinstance(inputs, dict) else {})}
+                    else:
+                        declared = outputs if isinstance(outputs, dict) else {}
+                    if key not in declared:
                         errors.append(
                             f"{where} ('{name}'): placeholder '{{{kind}.{key}}}' names an undeclared "
                             f"{'input' if kind == 'in' else 'output'}"
+                        )
+                # A brace group the resolver would choke on: {in.} or {in.a.b}
+                for stray in re.findall(r"\{(?:in|out)\.[^}]*\}", arg):
+                    if not PLACEHOLDER_RE.fullmatch(stray):
+                        errors.append(
+                            f"{where} ('{name}'): malformed placeholder '{stray}' "
+                            f"(expected {{in.<name>}} or {{out.<name>}})"
                         )
 
     return errors

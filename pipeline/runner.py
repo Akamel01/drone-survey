@@ -176,6 +176,10 @@ def _selftest() -> None:
     assert validate({"nodes": [{"name": "a", "command": ["x"]}]}), "missing pipeline name should be rejected"
     assert validate({"pipeline": "x", "nodes": [{"name": "a", "command": ["x"]}, {"name": "a", "command": ["y"]}]}), "duplicate names should be rejected"
     assert validate({"pipeline": "x", "nodes": [{"name": "a", "command": ["x"], "inputs": {"z": {"node": "nope", "output": "o"}}}]}), "unknown input reference should be rejected"
+    assert validate({"pipeline": "x", "nodes": [{"name": "a", "command": ["x"], "typo": 1}]}), "an unknown node key should be rejected"
+    assert validate({"pipeline": "x", "extra": 1, "nodes": [{"name": "a", "command": ["x"]}]}), "an unknown top-level key should be rejected"
+    assert validate({"pipeline": "x", "nodes": [{"name": "a", "command": ["echo", "{in.nope}"]}]}), "an undeclared placeholder should be rejected"
+    assert validate({"pipeline": "x", "nodes": [{"name": "a", "command": ["echo", "{in.a.b}"]}]}), "a malformed placeholder should be rejected"
     assert not validate({"pipeline": "x", "nodes": [{"name": "a", "command": ["x"]}]}), "a well-formed Manifest should pass"
 
     with tempfile.TemporaryDirectory() as tmp:
@@ -228,6 +232,20 @@ def _selftest() -> None:
                 },
             ],
         })
+        # 3b. A Node that declares an output and writes nothing fails the stage.
+        quiet = _write(tmp / "quiet.json", {
+            "pipeline": "quiet-check",
+            "nodes": [{"name": "quiet", "command": [py, "-c", "pass"], "outputs": {"out": "never.txt"}}],
+        })
+        try:
+            run(quiet, tmp / "run-quiet")
+            raise AssertionError("a Node that never wrote its declared output should have failed")
+        except SystemExit as e:
+            assert e.code != 0, "missing declared output must exit non-zero"
+        state = json.loads((tmp / "run-quiet" / "state.json").read_text())
+        assert state["nodes"]["quiet"]["status"] == "failed", state
+        assert "missing_outputs" in state["nodes"]["quiet"], state
+
         run_dir = tmp / "run2"
         try:
             run(resumable, run_dir)
