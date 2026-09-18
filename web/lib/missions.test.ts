@@ -1,5 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import {
   joinStatus,
   type DraftRecord,
@@ -309,4 +310,27 @@ test("predicted waiting-row cards have undefined waypoints; host cards keep valu
   const r2 = rows2.find((rr) => rr.id === key);
   const hostCard = r2?.cards?.[0];
   assert.equal(hostCard?.waypoints, 32);
+});
+
+// The committed fixture is the cross-language contract for the record shapes:
+// scripts/mission/b2_status.py asserts the same file from the other side.
+test("the golden record fixture yields the rows the host's records describe", () => {
+  const fixture = JSON.parse(readFileSync(new URL("../../fixtures/store-records.json", import.meta.url), "utf8")) as {
+    manifest: Record<string, Manifest[string]>;
+    skip_list: Record<string, { withdrawn_at: string }>;
+    summary: { photo_count: number; path_length_m: number };
+  };
+  const key = Object.keys(fixture.manifest)[0];
+  const [site, date] = key.split("/").slice(1, 3);
+  const withdrawnKey = Object.keys(fixture.skip_list).find((k) => !(k in fixture.manifest))!;
+  const rows = joinStatus([], [key, withdrawnKey], fixture.manifest, fixture.skip_list, { [key]: fixture.summary }, Date.now());
+  assert.equal(rows.length, 2, JSON.stringify(rows.map((r) => r.state)));
+  const loaded = rows.find((r) => r.state === "loaded")!;
+  const skipped = rows.find((r) => r.state === "withdrawn")!;
+  assert.equal(loaded.site, site);
+  assert.equal(loaded.date, date);
+  assert.equal(loaded.state, "loaded", "the manifest's timestamps decide a loaded row");
+  assert.deepEqual(loaded.cards, fixture.manifest[key].cards, "the manifest's cards are the row's cards");
+  assert.deepEqual(loaded.metrics, fixture.summary, "the stored summary is the row's metrics");
+  assert.equal(skipped.state, "withdrawn", "a skip-list entry with no Load marks the row withdrawn");
 });

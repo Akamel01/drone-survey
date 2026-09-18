@@ -142,7 +142,26 @@ def _selftest() -> None:
     clear_notice(m)
     assert "_notice" not in m, m
 
+    _fixture_check()
     print("b2_status self-check: ok")
+
+
+def _fixture_check() -> None:
+    """The committed fixture is the cross-language contract for the record shapes:
+    if this side and the web side ever disagree, one of the two checks fails."""
+    import json
+    from pathlib import Path
+
+    fixture = json.loads((Path(__file__).resolve().parents[2] / "fixtures" / "store-records.json").read_text())
+    key = next(iter(fixture["manifest"]))
+    merged = merge_collected(json.loads(json.dumps(fixture["manifest"])),
+                             ["specs/new/2026-09-17/20260917T100000Z.json"], "2026-09-17T10:00:00Z")
+    assert merged["specs/new/2026-09-17/20260917T100000Z.json"]["collected_at"] == "2026-09-17T10:00:00Z"
+    merged = merge_loaded(merged, [(key, [("WAYFINDER 1", {"name": "Field north", "waypoints": 32})])],
+                          "2026-09-17T10:30:00Z")
+    assert merged[key]["cards"] == [{"card": "WAYFINDER 1", "name": "Field north", "waypoints": 32}]
+    assert all(isinstance(k, str) and "withdrawn_at" in v for k, v in fixture["skip_list"].items())
+    print("b2_status fixture: ok")
 
 
 if __name__ == "__main__":

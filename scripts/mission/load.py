@@ -74,14 +74,16 @@ def unloaded_queue(specs: Path, record: Path) -> list[Path]:
     queue = sorted((f for f in newest.values() if str(f) not in done),
                    key=lambda f: f.relative_to(specs).as_posix())
     # Apply per-run skip list if available locally (specs/_status/skipped.json).
-    def _load_local_skipped() -> set[str]:
+    def _load_local_skipped() -> dict:
         p = specs / "_status" / "skipped.json"
         if not p.exists():
-            return set()
+            return {}
         try:
-            return set(json.loads(p.read_text()))
+            obj = json.loads(p.read_text())
+            # The same shape the store uses: specKey -> {withdrawn_at}.
+            return obj if isinstance(obj, dict) else {}
         except Exception:
-            return set()
+            return {}
 
     skipped = _load_local_skipped()
     if skipped:
@@ -294,7 +296,7 @@ def _selftest() -> None:
         record.write_text(json.dumps(json.loads(record.read_text())[:-1]))  # newer waits again
         (specs / "_status").mkdir(parents=True, exist_ok=True)
         (specs / "_status" / "skipped.json").write_text(
-            json.dumps(["specs/site/2026-09-14/20260914T080000Z.json"]))
+            json.dumps({"specs/site/2026-09-14/20260914T080000Z.json": {"withdrawn_at": "2026-09-14T09:00:00Z"}}))
         assert unloaded_queue(specs, record) == []  # withdrawn newest: the older sibling stays unloaded
         (specs / "_status" / "skipped.json").unlink()
         assert unloaded_queue(specs, record) == [newer]  # un-withdrawn / missing file: full queue

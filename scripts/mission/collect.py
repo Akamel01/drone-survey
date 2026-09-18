@@ -85,19 +85,11 @@ def load_skipped(status_config: Path) -> set[str]:
         if not text:
             return set()
         obj = json.loads(text)
-        if isinstance(obj, list):
-            return set(obj)
-        if isinstance(obj, dict) and "skipped" in obj:
-            val = obj["skipped"]
-            if isinstance(val, list):
-                return set(val)
-            if isinstance(val, str):
-                return {val}
-            return set()
-        # Contract-1: payload may be a dict of specKey -> info; return its keys
+        # One shape, the one the withdraw route writes: specKey -> {withdrawn_at}.
+        # The list and {"skipped": ...} forms had no writer and are gone.
         if isinstance(obj, dict):
-            return set(map(str, obj.keys()))
-        return set()
+            return {str(k): v for k, v in obj.items()}
+        return {}
     except (Exception, SystemExit):
         # download()/load_env() sys.exit on 404/bad creds; the skip-list is best-effort
         return set()
@@ -267,8 +259,7 @@ def main() -> None:
     try:
         local_skip_path = DEFAULT_DEST / "_status" / "skipped.json"
         local_skip_path.parent.mkdir(parents=True, exist_ok=True)
-        # Persist as a JSON list of strings for compatibility with load.py's reader
-        local_skip_path.write_text(json.dumps(sorted(list(skipped)), indent=2))
+        local_skip_path.write_text(json.dumps(skipped, indent=2, sort_keys=True))
     except Exception:
         pass
     if skipped:
