@@ -1,6 +1,4 @@
 #!/usr/bin/env python3
-from __future__ import annotations
-
 """Delete Captures and their derived outputs twelve months after the date flown.
 
 ADR 0012 and the privacy policy (section 5): deletion is scheduled, executed
@@ -15,6 +13,8 @@ Dry run by default: it lists what is due and deletes nothing.
     python3 expire_captures.py --root ~/drone/captures --delete    # monthly job
     python3 expire_captures.py --selftest
 """
+
+from __future__ import annotations
 
 import argparse
 import json

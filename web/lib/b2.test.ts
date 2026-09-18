@@ -105,3 +105,47 @@ test("downloadFile still throws on any other failure", async () => {
     },
   );
 });
+
+// A cached token can be rejected before the cache lets it go. Until this, one
+// 401 broke every later call for twelve hours, because the same dead token was
+// handed out again.
+test("a rejected token is refreshed once, and the call succeeds on the new one", async () => {
+  const body = Buffer.from('{"rows":[]}');
+  const real = globalThis.fetch;
+  const seen: string[] = [];
+  let downloads = 0;
+  globalThis.fetch = (async (input: RequestInfo | URL) => {
+    const url = String(input);
+    seen.push(url);
+    if (url.includes("b2_authorize_account")) {
+      return new Response(
+        JSON.stringify({
+          apiUrl: "https://api.example",
+          downloadUrl: "https://dl.example",
+          authorizationToken: `tok-${seen.filter((u) => u.includes("authorize")).length}`,
+          allowed: { bucketId: "bucket" },
+        }),
+        { status: 200 },
+      );
+    }
+    downloads++;
+    // The first read is rejected as if the cached token had been invalidated.
+    return downloads === 1
+      ? new Response("", { status: 401 })
+      : new Response(body, { status: 200, headers: { "X-Bz-Content-Sha1": sha1(body) } });
+  }) as typeof fetch;
+  try {
+    const { authorize, downloadFile } = await import("./b2.ts");
+    const env = { keyId: "retry-key", appKey: "secret", bucket: "bucket" };
+    const cached = await authorize(env);
+    const got = await downloadFile(cached, "bucket", "specs/_status/missions.json");
+    assert.deepEqual(got, body, "the retry's payload is returned");
+    assert.equal(downloads, 2, "exactly one retry, not a loop");
+    assert.equal(seen.filter((u) => u.includes("authorize")).length, 2, "the retry authorizes again");
+    // The refreshed session replaces the dead one, so the next call is free.
+    const next = await authorize(env);
+    assert.equal(next.token, "tok-2");
+  } finally {
+    globalThis.fetch = real;
+  }
+});
