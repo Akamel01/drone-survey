@@ -234,7 +234,7 @@ export function joinStatus(
 // A waiting mission the host has not picked up in 15 minutes is worth a nudge:
 // cron runs every minute, so anything older means the Controller is unplugged
 // or the host is quiet — both are the operator's call, hence a hint, not an alarm.
-export const WAITING_WARN_MS = 15 * 60 * 1000;
+const WAITING_WARN_MS = 15 * 60 * 1000;
 
 /** Server-side derivation of status rows: the clock that decides age and the
  *  staleness nudge is the server's, so two browsers cannot disagree. */

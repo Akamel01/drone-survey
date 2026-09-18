@@ -238,9 +238,11 @@ test("two groups global numbering assigns queues oldest-first across groups", ()
   assert.equal(q2!.queue, 2);
 });
 
-test("multi-part waiting rows consume consecutive cards and overflow when exceeding pool (explicit manifest parts)", () => {
+test("a waiting row has no cards until the host manifest reports them", () => {
+  // The planner does not predict Controller cards: the host's calibrated slot
+  // file is the only authority, and it refuses overflow at Load time. So a
+  // waiting row is empty here rather than optimistically filled.
   const manifest: Manifest = {
-    // Each spec has a parts count; these drive card allocation
     "specs/A/2026-09-17/20260917T000001Z.json": { parts: 2 },
     "specs/A/2026-09-17/20260917T000002Z.json": { parts: 3 },
   };
@@ -252,20 +254,29 @@ test("multi-part waiting rows consume consecutive cards and overflow when exceed
     ],
     manifest,
   );
-  const heads = rows.filter((r) => r.kind === "spec" && (r.state === "dispatched" || r.state === "queued"));
-  const second = heads.find((h) => h.id.endsWith("20260917T000002Z.json"));
-  assert.notEqual(second?.overflow, true);
+  // Two Specs for one Site and date: the newer is current, the older superseded.
+  const waiting = rows.filter((r) => r.kind === "spec" && (r.state === "dispatched" || r.state === "queued"));
+  assert.equal(waiting.length, 1, "one Spec per Site and date is current");
+  for (const row of rows) {
+    assert.deepEqual(row.cards, [], `${row.id} must not carry invented cards`);
+    assert.equal(row.overflow, undefined, "overflow is the host's verdict, reported in the manifest notice");
+  }
+  // Once the host reports the cards it placed, the row carries exactly those.
+  const loaded: Manifest = {
+    "specs/A/2026-09-17/20260917T000001Z.json": {
+      parts: 2,
+      cards: [{ card: "WAYFINDER 1", name: "north", waypoints: 4 }],
+    },
+  };
+  const [row] = joinStatus([], ["specs/A/2026-09-17/20260917T000001Z.json"], loaded);
+  assert.deepEqual(row.cards, [{ card: "WAYFINDER 1", name: "north", waypoints: 4 }]);
 });
 
 test("withdrawn map shape is flat and overlay applies to waiting rows", () => {
   const key = "specs/Z/2026-09-17/20260917T000005Z.json";
   const rows = joinStatus([], [key], {} as Manifest, { [key]: { withdrawn_at: "t" } });
-  const byId = Object.fromEntries(rows.map((r) => [r.id, r]));
-  // Even with a flat withdrawn map containing the key, overlay should apply to waiting rows
-  // and mark the row withdrawn.
-  if (byId[key]) {
-    assert.equal(byId[key].state, "withdrawn");
-  }
+  assert.equal(rows.length, 1, "the key must produce a row for the overlay to mean anything");
+  assert.equal(rows[0].state, "withdrawn", "a withdrawn marker marks a waiting row withdrawn");
 });
 
 // New tests for M2: summaries attachment and waypoints handling
@@ -294,22 +305,16 @@ test("joinStatus backward compatibility with 4 args leaves metrics undefined", (
   assert.equal(row!.metrics, undefined);
 });
 
-test("predicted waiting-row cards have undefined waypoints; host cards keep values on collected rows", () => {
+test("host cards carry their waypoint counts; a row without them carries no cards", () => {
   const key = "specs/A/2026-09-17/20260917T000001Z.json";
-  // predicted: no host cards yet
-  const rows = joinStatus([], [key], {} as Manifest);
-  const r = rows.find((rr) => rr.id === key);
-  if (!r) throw new Error("row not found");
-  const card = r.cards?.[0];
-  assert.equal(card?.waypoints, undefined);
-  // host-provided card
+  const [empty] = joinStatus([], [key], {} as Manifest);
+  assert.deepEqual(empty.cards, [], "nothing is predicted before the host reports");
+
   const manifest: Manifest = {
-    [key]: { collected_at: "t", cards: [{ card: "HOST", name: "Host", waypoints: 32 }] },
+    [key]: { collected_at: "t", cards: [{ card: "WAYFINDER 1", name: "Host", waypoints: 32 }] },
   };
-  const rows2 = joinStatus([], [key], manifest);
-  const r2 = rows2.find((rr) => rr.id === key);
-  const hostCard = r2?.cards?.[0];
-  assert.equal(hostCard?.waypoints, 32);
+  const [reported] = joinStatus([], [key], manifest);
+  assert.equal(reported.cards?.[0]?.waypoints, 32, "the host's own numbers survive");
 });
 
 // The committed fixture is the cross-language contract for the record shapes:

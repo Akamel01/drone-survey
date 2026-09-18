@@ -14,7 +14,6 @@ without that design choice.
 """
 
 import argparse
-import base64
 import hashlib
 import json
 import os
@@ -32,7 +31,6 @@ HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 import b2_status  # noqa: E402  (network to B2 only; no mount, no Controller)
 
-B2_AUTHORIZE_URL = "https://api.backblazeb2.com/b2api/v2/b2_authorize_account"
 
 
 def _xdg(var: str, fallback: str) -> Path:
@@ -122,11 +120,6 @@ def verify_sha1(data: bytes, expected_hex: str) -> None:
 def authorize(key_id: str, app_key: str) -> dict:
     """One adapter for every storage call this script makes (see b2.py)."""
     return b2.authorize(key_id, app_key)
-
-
-def list_specs(api_url: str, token: str, bucket_id: str, prefix: str) -> list[str]:
-    """All file names under prefix (b2.list_names follows nextFileName)."""
-    return b2.list_names(api_url, token, bucket_id, prefix)
 
 
 def download(download_url: str, bucket_name: str, file_name: str, token: str) -> bytes:
@@ -247,7 +240,7 @@ def main() -> None:
     allowed = auth["allowed"]
     pattern = spec_key_pattern(env["B2_PREFIX"])
 
-    all_names = list_specs(auth["apiUrl"], auth["authorizationToken"], allowed["bucketId"], env["B2_PREFIX"])
+    all_names = b2.list_names(auth["apiUrl"], auth["authorizationToken"], allowed["bucketId"], env["B2_PREFIX"])
     specs = [n for n in all_names if pattern.match(n)]
     collected = load_record(args.record)
     # Apply the host-specific skip-list if available, after computing new candidates

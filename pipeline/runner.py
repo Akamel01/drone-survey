@@ -20,10 +20,13 @@ lock file rather than a queue -- there is no concurrency model to build.
     python3 runner.py --selftest
 """
 
+from __future__ import annotations
+
 import argparse
 import hashlib
 import json
 import os
+import shutil
 import subprocess
 import sys
 import types
@@ -130,6 +133,16 @@ def run(manifest_path: Path, workdir: Path) -> None:
                 for key in sorted(node_env):
                     docker_env += ["-e", f"{key}={node_env[key]}"]
                 command = ["docker", "run", "--rm", *docker_env, "-v", f"{workdir}:{workdir}", node["image"], *command]
+
+            # Remove this Node's declared outputs first, so "it exists" after the
+            # run means this run wrote it: a stale file from an earlier Manifest
+            # in the same workdir would otherwise let a silent Node pass.
+            for declared in out.__dict__.values():
+                stale = Path(declared)
+                if stale.is_dir():
+                    shutil.rmtree(stale)
+                elif stale.exists():
+                    stale.unlink()
 
             print(f"run {name}: {' '.join(command)}")
             env = {**os.environ, **node_env} if node_env else None

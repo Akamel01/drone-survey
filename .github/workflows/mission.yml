@@ -34,6 +34,15 @@ jobs:
           python-version: "3.11"
       - name: A Mission Spec becomes a Mission the aircraft can fly
         run: python3 scripts/mission/e2e_test.py
+      # The host-side self-checks assert against the same fixtures the web tests
+      # read, so the two languages are pinned in the gate, not only locally.
+      - name: The host self-checks
+        run: |
+          python3 scripts/mission/keys.py --selftest
+          python3 scripts/mission/b2.py --selftest
+          python3 scripts/mission/b2_status.py --selftest
+          python3 scripts/mission/collect.py --selftest
+          python3 scripts/mission/load.py --selftest
       # ADR 0018: every Node carries a check, and the seam between Nodes runs
       # too. They are offline by construction, so they run here on every change.
       # check_head inspects image metadata with exiftool; Pillow builds its fixtures.

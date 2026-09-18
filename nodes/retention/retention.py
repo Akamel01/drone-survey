@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+from __future__ import annotations
+
 """Delete Captures and their derived outputs twelve months after the date flown.
 
 ADR 0012 and the privacy policy (section 5): deletion is scheduled, executed
@@ -23,6 +25,9 @@ import tempfile
 from datetime import date, datetime, timezone
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+from common import emit_report  # noqa: E402
+
 DATE_DIR = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 DEFAULT_LOG = Path.home() / "drone" / "deletion-log.jsonl"
 
@@ -42,6 +47,13 @@ def due(roots: list[Path], today: date) -> list[tuple[Path, str, date]]:
         for capture in sorted(root.glob("*/*")):
             if not (capture.is_dir() and DATE_DIR.match(capture.name)):
                 continue
+            # A Capture holds images, not more date-named directories. Pointing
+            # --root one level too high makes a Site look like a Capture, and
+            # deleting it would take the fresh Captures inside it too.
+            if any(child.is_dir() and DATE_DIR.match(child.name) for child in capture.iterdir()):
+                print(f"refusing {capture}: it contains date-named directories, "
+                      f"so it is a container, not a Capture", file=sys.stderr)
+                continue
             flown = date.fromisoformat(capture.name)
             if expiry(flown) <= today:
                 found.append((capture, capture.parent.name, flown))
@@ -54,7 +66,6 @@ def size(path: Path) -> int:
 
 def expire(roots: list[Path], log: Path, today: date, delete: bool, out_report: Path | None = None) -> int:
     captures = due(roots, today)
-    scanned = sum(1 for r in roots for _ in r.glob("*/*"))
     for capture, site, flown in captures:
         entry = {"site": site, "flown": flown.isoformat(), "path": str(capture), "bytes": size(capture)}
         if not delete:
@@ -71,7 +82,11 @@ def expire(roots: list[Path], log: Path, today: date, delete: bool, out_report: 
         with log.open("a") as f:
             f.write(json.dumps({"run": today.isoformat(), "deleted": len(captures)}) + "\n")
     if out_report is not None:
-        emit(out_report, [str(c) for c, _, _ in captures], scanned, expiry(today).isoformat(), not delete)
+        emit_report(out_report, {
+            "deleted": sorted(str(c) for c, _, _ in captures),
+            "cutoff": expiry(today).isoformat(),
+            "dry_run": not delete,
+        })
     return len(captures)
 
 
@@ -96,19 +111,6 @@ def _selftest() -> None:
         assert [l.get("site") for l in lines[:2]] == ["site-a", "site-b"] and lines[0]["bytes"] == 10
         assert lines[-1] == {"run": "2026-09-13", "deleted": 2}
     print("expire_captures self-check: ok")
-
-
-def emit(out_report: Path, deleted: list[str], scanned: int, cutoff: str, dry_run: bool) -> None:
-    """The Node contract: a report saying what this run found and did."""
-    import json as _json
-
-    out_report.parent.mkdir(parents=True, exist_ok=True)
-    out_report.write_text(_json.dumps({
-        "scanned": scanned,
-        "deleted": sorted(deleted),
-        "cutoff": cutoff,
-        "dry_run": dry_run,
-    }, indent=1, sort_keys=True) + "\n")
 
 
 def main() -> None:

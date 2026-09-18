@@ -103,13 +103,24 @@ export interface MissionSpec {
 export type Gate = "draft" | "dispatch";
 
 export function specProblem(spec: unknown, gate: Gate): string | null {
-  if (!spec || typeof spec !== "object") return "not an object";
+  if (!spec || typeof spec !== "object") return gate === "draft" ? "Draft is not an object" : "not an object";
   const s = spec as MissionSpec;
-  if (s.version !== 1) return "wrong Spec version";
-  if (!s.site?.trim()) return "no Site named";
+  if (s.version !== 1) return gate === "draft" ? "Draft has no version" : "wrong Spec version";
+  if (gate === "draft") {
+    // A draft is judged on shape only: it may be blank and half-written, but it
+    // says what kind of Mission it is. These are the verdicts the drafts route
+    // gave before this module existed; they are pinned by tests, because
+    // changing them changes what an operator can save.
+    if (s.mission_type !== "grid" && s.mission_type !== "orbit") return "Draft has no mission type";
+    if (typeof s.site !== "string") return "Draft has no site name";
+    if (typeof s.date !== "string") return "Draft has no date";
+    return null;
+  }
+  // Dispatch additionally requires a flyable plan, and the site id that becomes
+  // a storage path segment is the server's trust boundary.
+  if (typeof s.site !== "string" || !s.site.trim()) return "no Site named";
   if (s.site_id != null && !isValidSiteId(s.site_id)) return "Site id is not a safe identifier";
-  if (!s.date?.trim()) return "no date";
-  if (gate === "draft") return null;
+  if (typeof s.date !== "string" || !s.date.trim()) return "no date";
 
   if (typeof s.flight?.altitude_m !== "number" || !Number.isFinite(s.flight.altitude_m)) {
     return "no flight altitude";

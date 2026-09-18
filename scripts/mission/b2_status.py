@@ -16,9 +16,6 @@ import sys
 
 import keys  # noqa: E402
 import b2  # noqa: E402  (one home for storage access)
-import urllib.error
-import urllib.parse
-import urllib.request
 from pathlib import Path
 
 STATUS_KEY = keys.STATUS_KEY
@@ -157,10 +154,16 @@ def _fixture_check() -> None:
     merged = merge_collected(json.loads(json.dumps(fixture["manifest"])),
                              ["specs/new/2026-09-17/20260917T100000Z.json"], "2026-09-17T10:00:00Z")
     assert merged["specs/new/2026-09-17/20260917T100000Z.json"]["collected_at"] == "2026-09-17T10:00:00Z"
-    merged = merge_loaded(merged, [(key, [("WAYFINDER 1", {"name": "Field north", "waypoints": 32})])],
-                          "2026-09-17T10:30:00Z")
-    assert merged[key]["cards"] == [{"card": "WAYFINDER 1", "name": "Field north", "waypoints": 32}]
-    assert all(isinstance(k, str) and "withdrawn_at" in v for k, v in fixture["skip_list"].items())
+    # The fixture's own values are the contract: merging must carry them through
+    # rather than replace them with something this test wrote itself.
+    original = fixture["manifest"][key]
+    assert merged[key]["cards"] == original["cards"], merged[key]["cards"]
+    assert merged[key]["parts"] == original["parts"]
+    assert original["collected_at"] and original["loaded_at"]
+    for k, v in fixture["skip_list"].items():
+        assert isinstance(k, str) and isinstance(v.get("withdrawn_at"), str)
+    draft = fixture["draft"]
+    assert draft["spec"]["site"] and draft["updated_at"]
     print("b2_status fixture: ok")
 
 
