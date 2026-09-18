@@ -3,7 +3,7 @@
 // blindly. Run with: node --test lib/spec.test.ts
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { DEFAULT_SPEC, dispatchProblem, ensureSiteId, isValidSiteId, newSiteId, slugSegment, type MissionSpec } from "./spec.ts";
+import { DEFAULT_SPEC, dispatchProblem, draftProblem, ensureSiteId, isValidSiteId, newSiteId, slugSegment, type MissionSpec } from "./spec.ts";
 
 // dispatchProblem also requires a flyable area; a small triangle is enough to
 // isolate what these tests are actually about, the site_id checks.
@@ -60,6 +60,31 @@ test("dispatchProblem rejects a site_id that is not a single safe path segment",
     const spec = { ...DEFAULT_SPEC, ...FLYABLE, site: "Rehearsal Field", site_id: bad, date: "2026-09-13" };
     assert.notEqual(dispatchProblem(spec), null, `${JSON.stringify(bad)} should be rejected`);
   }
+});
+
+// The two gates derive from one description, so the only thing that separates
+// them is what a stage requires — and the field rules cannot drift apart.
+test("a draft may be an unfinished plan that Dispatch refuses", () => {
+  const halfDrawn = { ...DEFAULT_SPEC, site: "Rehearsal Field", date: "2026-01-01", aoi: [] } as MissionSpec;
+  assert.equal(draftProblem(halfDrawn), null, "an unfinished plan is savable as a draft");
+  assert.notEqual(dispatchProblem(halfDrawn), null, "the same plan is not dispatchable");
+});
+
+test("both gates refuse what neither could act on", () => {
+  for (const spec of [
+    { ...DEFAULT_SPEC, site: "", date: "2026-01-01" },
+    { ...DEFAULT_SPEC, site: "Field", date: "" },
+    { ...DEFAULT_SPEC, site: "Field", date: "2026-01-01", version: 2 },
+  ] as MissionSpec[]) {
+    assert.notEqual(draftProblem(spec), null, JSON.stringify(spec));
+    assert.notEqual(dispatchProblem(spec), null, JSON.stringify(spec));
+  }
+});
+
+test("the shared field rules are the same at both stages", () => {
+  const badId = { ...DEFAULT_SPEC, site: "Field", date: "2026-01-01", site_id: "../etc/passwd" } as MissionSpec;
+  assert.notEqual(draftProblem(badId), null);
+  assert.notEqual(dispatchProblem(badId), null);
 });
 
 test("slugSegment always yields something the server would accept as a Site id", () => {

@@ -4,7 +4,6 @@ import { useCallback, useEffect, useState } from "react";
 import { DEFAULT_SPEC, type MissionSpec } from "@/lib/spec";
 import { stampToIso } from "@/lib/keys";
 import type { MissionState, StatusRow } from "@/lib/missions";
-import { preview } from "@/lib/mission";
 import { isSpecWithdrawable, isWithdrawn, isDraftDeletable } from "@/lib/missions";
 import styles from "./MissionStatus.module.css";
 
@@ -23,7 +22,7 @@ interface MissionStatusProps {
 
 type FetchState =
   | { kind: "loading" }
-  | { kind: "ok"; rows: StatusRow[]; hostReported: boolean; notice: HostNotice | null }
+  | { kind: "ok"; rows: StatusRow[]; hostReported: boolean; notice: HostNotice | null; now: number }
   | { kind: "error"; message: string };
 
 interface HostNotice {
@@ -51,7 +50,14 @@ export default function MissionStatus({ spec, onLoadMission, allowSave = true }:
       const res = await fetch("/api/status", { headers: { "x-wayfinder-key": key } });
       const body = await res.json();
       if (res.ok && Array.isArray(body.rows)) {
-        setStatus({ kind: "ok", rows: body.rows, hostReported: body.host_reported === true, notice: body.notice ?? null });
+        setStatus({
+          kind: "ok",
+          rows: body.rows,
+          hostReported: body.host_reported === true,
+          notice: body.notice ?? null,
+          // Fallback only for a response from before the server sent its clock.
+          now: Number.isFinite(body.now) ? body.now : Date.now(),
+        });
       } else {
         setStatus({ kind: "error", message: body.error ?? `Status failed (${res.status})` });
       }
@@ -278,25 +284,12 @@ export default function MissionStatus({ spec, onLoadMission, allowSave = true }:
               <span className={`mono ${styles[state]}`}>{stateLabel(row, state)}</span>
             </div>
             <div className={styles.savedAt}>
-              {row.kind === "draft" ? "Draft" : "Spec"} · {row.date} · updated {age(row.updated)}
+              {row.kind === "draft" ? "Draft" : "Spec"} · {row.date} · updated {row.age ?? age(row.updated, status.now)}
               {row.queue ? ` · #${row.queue} in line` : ""}
             </div>
-            { /* Metrics line: show per-row metrics if available */ }
+            { /* Metrics are the producer's, stored once at Dispatch: the browser
+                 *  does not re-derive geometry on every render. */ }
             {(() => {
-              // draft metrics (recomputed inline)
-              if (row.kind === "draft") {
-                const dp = preview(draftSpec(row));
-                if (dp?.photo_count != null && dp?.path_length_m != null) {
-                  const dist = dp.path_length_m;
-                  const s = dist < 1000 ? `${Math.round(dist)} m` : `${(dist / 1000).toFixed(2)} km`;
-                  return (
-                    <div className={styles.meta}>
-                      {dp.photo_count} points · {s}
-                    </div>
-                  );
-                }
-              }
-              // spec metrics (host-provided)
               if (row.metrics) {
                 const { photo_count, path_length_m } = row.metrics;
                 const dist = path_length_m;
@@ -309,9 +302,9 @@ export default function MissionStatus({ spec, onLoadMission, allowSave = true }:
               }
               return null;
             })()}
-            {(row.state === "dispatched" || row.state === "queued") && waitingLong(row.updated) && (
+            {(row.state === "dispatched" || row.state === "queued") && row.stale && (
               <div className={styles.meta}>
-                Waiting {age(row.updated)} — plug in the Controller or check the host.
+                Waiting {row.age ?? age(row.updated, status.now)} — plug in the Controller or check the host.
               </div>
             )}
             {row.cards.length > 0 && (
@@ -325,7 +318,7 @@ export default function MissionStatus({ spec, onLoadMission, allowSave = true }:
               {row.kind === "draft" && row.dispatched_key && (
                 <div className={`${styles.meta} mono`}>{shortKey(row.dispatched_key)}</div>
               )}
-              <Timeline row={row} state={state} />
+              <Timeline row={row} state={state} clock={status.now} />
               {row.queue ? <div className={styles.meta}>Queue position #{row.queue}</div> : null}
               {state === "superseded" && (
                 <div className={styles.meta}>
@@ -386,7 +379,7 @@ function stateLabel(row: StatusRow, state: StatusRow["state"]): string {
 }
 
 /** Draft → Dispatched → Collected → Loaded, with the stamps the store knows. */
-function Timeline({ row, state }: { row: StatusRow; state: MissionState }) {
+function Timeline({ row, state, clock }: { row: StatusRow; state: MissionState; clock: number }) {
   const dispatchedAt = row.kind === "spec" ? stampToIso(row.stamp) : null;
   const lines: { label: string; at: string | null; done: boolean }[] = [
     { label: "Draft", at: row.kind === "draft" ? row.updated : null, done: row.kind === "draft" },
@@ -400,7 +393,7 @@ function Timeline({ row, state }: { row: StatusRow; state: MissionState }) {
       {lines.map((l) => (
         <div key={l.label}>
           {l.done ? "●" : "○"} {l.label}
-          {l.at ? ` · ${age(l.at)}` : l.done ? "" : " — not yet"}
+          {l.at ? ` · ${age(l.at, clock)}` : l.done ? "" : " — not yet"}
         </div>
       ))}
     </div>
@@ -412,13 +405,10 @@ function shortKey(key: string): string {
   return parts.length >= 4 ? `${parts[1]}/${parts[2]}/${parts[3]}` : key;
 }
 
-// A waiting mission the host has not picked up in 15 minutes is worth a nudge:
-// cron runs every minute, so anything older means the Controller is unplugged
-// or the host is quiet — both are the operator's call, hence a hint, not an alarm.
-const WAITING_WARN_MS = 15 * 60 * 1000;
-
-function age(iso: string): string {
-  const ms = Date.now() - Date.parse(iso);
+// Formatted against the clock the server judged the rows with, never a second
+// clock of the browser's that could disagree with it.
+function age(iso: string, now: number): string {
+  const ms = now - Date.parse(iso);
   if (!Number.isFinite(ms) || ms < 0) return "just now";
   const min = Math.floor(ms / 60000);
   if (min < 1) return "just now";
@@ -426,11 +416,6 @@ function age(iso: string): string {
   const h = Math.floor(min / 60);
   if (h < 48) return `${h} h ago`;
   return `${Math.floor(h / 24)} d ago`;
-}
-
-function waitingLong(iso: string): boolean {
-  const ms = Date.now() - Date.parse(iso);
-  return Number.isFinite(ms) && ms > WAITING_WARN_MS;
 }
 
 /** A draft may predate fields the live editor requires; fill from defaults. */

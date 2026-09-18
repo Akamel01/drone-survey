@@ -1,7 +1,7 @@
 import { authProblem } from "@/lib/auth";
 import { authorize, b2Env, b2ReadEnv, downloadFile, listFiles } from "@/lib/b2";
 import { DRAFTS_PREFIX, SKIPPED_KEY, SPECS_PREFIX, STATUS_KEY, SUMMARIES_KEY } from "@/lib/keys";
-import { joinStatus, type DraftRecord, type Manifest, SpecSummary } from "@/lib/missions";
+import { deriveStatusRows, type DraftRecord, type Manifest, SpecSummary } from "@/lib/missions";
 
 export const runtime = "nodejs";
 export const preferredRegion = "yyz1";
@@ -67,8 +67,12 @@ export async function GET(request: Request) {
         summaries = {};
       }
     }
+    const now = Date.now();
     return Response.json({
-      rows: joinStatus(drafts, specFiles.map((f) => f.fileName), manifest, skipped, summaries),
+      rows: deriveStatusRows(drafts, specFiles.map((f) => f.fileName), manifest, skipped, summaries, now),
+      // The clock the rows were judged against, so the page can format the
+      // timeline without a second, disagreeing clock of its own.
+      now,
       host_reported: manifestRaw !== null,
       notice: (manifest as Record<string, unknown>)._notice ?? null,
       skipped: skipped ?? {},

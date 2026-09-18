@@ -4,6 +4,7 @@ import { authorize, b2Env, b2ReadEnv, deleteFile, downloadFile, listFiles, uploa
 import { DRAFTS_PREFIX, draftKey } from "@/lib/keys";
 import type { DraftRecord } from "@/lib/missions";
 import type { MissionSpec } from "@/lib/spec";
+import { draftProblem } from "@/lib/spec";
 
 // Server-side drafts: the mission list that survives a refresh, a closed
 // browser, and a second browser. One JSON file per draft under
@@ -13,18 +14,7 @@ import type { MissionSpec } from "@/lib/spec";
 export const runtime = "nodejs";
 export const preferredRegion = "yyz1";
 
-/** A draft may be an unfinished plan (no area yet), so this checks shape, not
- *  flyability: an object with the Spec's required top-level shape. The gate
- *  that refuses unflyable plans stays at Dispatch. */
-function draftProblem(spec: unknown): string | null {
-  if (typeof spec !== "object" || spec === null) return "Draft is not an object";
-  const s = spec as Record<string, unknown>;
-  if (s.version !== 1) return "Draft has no version";
-  if (s.mission_type !== "grid" && s.mission_type !== "orbit") return "Draft has no mission type";
-  if (typeof s.site !== "string") return "Draft has no site name";
-  if (typeof s.date !== "string") return "Draft has no date";
-  return null;
-}
+// Shape only: a draft is allowed to be an unfinished plan.
 
 function draftIdOk(id: unknown): id is string {
   return typeof id === "string" && id.length > 0 && !id.includes("/") && !id.includes("..");
