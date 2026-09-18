@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { DEFAULT_SPEC, type MissionSpec } from "@/lib/spec";
-import type { StatusRow } from "@/lib/missions";
+import { stampToIso, type MissionState, type StatusRow } from "@/lib/missions";
 import { preview } from "@/lib/mission";
 import { isSpecWithdrawable, isWithdrawn, isDraftDeletable } from "@/lib/missions";
 import styles from "./MissionStatus.module.css";
@@ -40,6 +40,10 @@ export default function MissionStatus({ spec, onLoadMission, allowSave = true }:
   const [status, setStatus] = useState<FetchState>({ kind: "loading" });
   const [busy, setBusy] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  // Console controls (ticket #60): all client-side over the joined rows.
+  const [query, setQuery] = useState("");
+  const [stateFilter, setStateFilter] = useState<string>("all");
+  const [sortBy, setSortBy] = useState<"newest" | "oldest" | "site">("newest");
 
   const load = useCallback(async (key: string) => {
     try {
@@ -169,6 +173,35 @@ export default function MissionStatus({ spec, onLoadMission, allowSave = true }:
   }
 
   const specsByKey = new Map(status.rows.filter((r) => r.kind === "spec").map((r) => [r.id, r]));
+  // Effective state per row: a draft that was dispatched follows its live Spec.
+  const decorated = status.rows.map((row) => {
+    const live = row.kind === "draft" && row.dispatched_key ? specsByKey.get(row.dispatched_key) : null;
+    return { row, state: live?.state ?? row.state };
+  });
+  const statesPresent = Array.from(new Set(decorated.map((d) => d.state))).sort();
+  const needle = query.trim().toLowerCase();
+  const filtering = needle !== "" || stateFilter !== "all";
+  const visible = decorated
+    .filter(({ row, state }) => {
+      if (stateFilter !== "all" && state !== stateFilter) return false;
+      if (!needle) return true;
+      return (
+        row.site.toLowerCase().includes(needle) ||
+        row.date.toLowerCase().includes(needle) ||
+        row.id.toLowerCase().includes(needle)
+      );
+    })
+    .sort((a, b) => {
+      if (sortBy === "site") {
+        const bySite = a.row.site.localeCompare(b.row.site);
+        if (bySite !== 0) return bySite;
+      }
+      // Equal stamps must compare 0: dispatch stamps are second-precision, so a
+      // non-zero tie-break would reorder equal rows away from joinStatus's order.
+      if (a.row.stamp === b.row.stamp) return 0;
+      if (sortBy === "oldest") return a.row.stamp < b.row.stamp ? -1 : 1;
+      return a.row.stamp < b.row.stamp ? 1 : -1;
+    });
   return (
     <div>
       <div className={styles.entryActions}>
@@ -189,9 +222,44 @@ export default function MissionStatus({ spec, onLoadMission, allowSave = true }:
         <p className={styles.empty}>The host has not reported yet — states stop at Dispatched.</p>
       )}
       {status.rows.length === 0 && <p className={styles.empty}>No drafts, no Dispatched missions yet.</p>}
-      {status.rows.map((row) => {
-        const live = row.kind === "draft" && row.dispatched_key ? specsByKey.get(row.dispatched_key) : null;
-        const state = live?.state ?? row.state;
+      {status.rows.length > 0 && (
+        <div className={styles.toolbar}>
+          <input
+            type="search"
+            className={styles.search}
+            placeholder="Search site, date or key"
+            aria-label="Search missions"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+          />
+          <label className={styles.control}>
+            <span>State</span>
+            <select value={stateFilter} onChange={(e) => setStateFilter(e.target.value)}>
+              <option value="all">All states</option>
+              {statesPresent.map((s) => (
+                <option key={s} value={s}>
+                  {s}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className={styles.control}>
+            <span>Sort</span>
+            <select value={sortBy} onChange={(e) => setSortBy(e.target.value as typeof sortBy)}>
+              <option value="newest">Newest first</option>
+              <option value="oldest">Oldest first</option>
+              <option value="site">Site A–Z</option>
+            </select>
+          </label>
+          {filtering && (
+            <span className={styles.count}>
+              {visible.length} of {decorated.length} missions
+            </span>
+          )}
+        </div>
+      )}
+      {filtering && visible.length === 0 && <p className={styles.empty}>Nothing matches that filter.</p>}
+      {visible.map(({ row, state }) => {
         return (
           <div key={`${row.kind}:${row.id}`} className={styles.entry}>
             <div className={styles.entryHead}>
@@ -240,13 +308,20 @@ export default function MissionStatus({ spec, onLoadMission, allowSave = true }:
                 {row.cards.map((c) => `${c.card}: ${c.name}${c.waypoints == null ? "" : ` (${c.waypoints})`}`).join(" · ")}
               </div>
             )}
-            {state === "superseded" && (
-              <details className={styles.meta}>
-                <summary>Superseded — show details</summary>
-                <div className={`${styles.meta} mono`}>{row.id}</div>
-                <div className={styles.meta}>Dispatched {age(row.updated)}; a newer Spec for this Site/date is the one that loads.</div>
-              </details>
-            )}
+            <details className={styles.detail}>
+              <summary>Details</summary>
+              <div className={`${styles.meta} mono`}>{row.id}</div>
+              {row.kind === "draft" && row.dispatched_key && (
+                <div className={`${styles.meta} mono`}>{shortKey(row.dispatched_key)}</div>
+              )}
+              <Timeline row={row} state={state} />
+              {row.queue ? <div className={styles.meta}>Queue position #{row.queue}</div> : null}
+              {state === "superseded" && (
+                <div className={styles.meta}>
+                  A newer Spec for this Site/date is the one that loads; this row is kept as history.
+                </div>
+              )}
+            </details>
             {row.dispatched_key && row.kind === "draft" && (
               <div className={`${styles.meta} mono`}>{shortKey(row.dispatched_key)}</div>
             )}
@@ -297,6 +372,28 @@ export default function MissionStatus({ spec, onLoadMission, allowSave = true }:
 function stateLabel(row: StatusRow, state: StatusRow["state"]): string {
   if (row.kind === "draft" && !row.dispatched_key) return "draft";
   return state;
+}
+
+/** Draft → Dispatched → Collected → Loaded, with the stamps the store knows. */
+function Timeline({ row, state }: { row: StatusRow; state: MissionState }) {
+  const dispatchedAt = row.kind === "spec" ? stampToIso(row.stamp) : null;
+  const lines: { label: string; at: string | null; done: boolean }[] = [
+    { label: "Draft", at: row.kind === "draft" ? row.updated : null, done: row.kind === "draft" },
+    { label: "Dispatched", at: dispatchedAt, done: row.kind === "spec" || !!row.dispatched_key },
+    { label: "Collected", at: row.collected_at, done: !!row.collected_at },
+    { label: "Loaded", at: row.loaded_at, done: !!row.loaded_at },
+  ];
+  if (state === "withdrawn") lines.push({ label: "Withdrawn", at: null, done: true });
+  return (
+    <div className={styles.meta}>
+      {lines.map((l) => (
+        <div key={l.label}>
+          {l.done ? "●" : "○"} {l.label}
+          {l.at ? ` · ${age(l.at)}` : l.done ? "" : " — not yet"}
+        </div>
+      ))}
+    </div>
+  );
 }
 
 function shortKey(key: string): string {
