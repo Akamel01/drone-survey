@@ -11,8 +11,10 @@ Checks (measured properties of output, not exit status alone -- ADR 0018):
   1. correct preserves EXIF and XMP, GPS in particular, input to output.
   2. correct is radiometric only: output dimensions == input dimensions
      (a lens/distortion pass would resize or crop; a pure gain never does).
-  3. exif-audit exits non-zero when an image is missing GPS, and again when
-     camera settings (ISO) are inconsistent across the set.
+  3. exif-audit exits non-zero when an image is missing GPS; an auto-ISO set
+     (which really is inconsistent) is accepted, because the Node deliberately
+     tolerates auto-ISO — the check asserts what the code does, not what an
+     older note claimed.
   4. filter rejects a blurred frame, an overexposed frame, and a
      near-duplicate frame, while keeping a normal one.
 """

@@ -1,14 +1,11 @@
 import type { MissionSpec } from "./spec";
+import { parseSpecKey, stampToIso } from "./keys.ts";
 // Server-side mission records. Drafts live under specs/_drafts/<id>.json in
 // the same bucket as Specs; Dispatched Specs stay immutable under specs/ and
 // are only ever superseded, never edited or deleted (ADR 0016).
 
-export const DRAFTS_PREFIX = "specs/_drafts/";
-export const STATUS_KEY = "specs/_status/missions.json";
-export const SUMMARIES_KEY = "specs/_status/summaries.json";
-// Underscore-prefixed inside specs/ on purpose: the server key is confined to
-// the specs/ prefix, and collect.py's Spec pattern only matches three-segment
-// site/date/file keys, so drafts and the manifest are invisible to Collect.
+// Store keys live in ./keys — one home for the layout, imported here and by
+// every route, so a producer and a consumer cannot drift apart.
 
 export interface DraftRecord {
   id: string;
@@ -87,12 +84,10 @@ export interface StatusRow {
   updated: string;
   /** Indicates that the assigned card set overflows the 5-card pool. */
   overflow?: boolean;
-}
-
-/** Dispatch stamps sort lexically; this turns one back into an instant. */
-export function stampToIso(stamp: string): string {
-  const m = /^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})Z$/.exec(stamp);
-  return m ? `${m[1]}-${m[2]}-${m[3]}T${m[4]}:${m[5]}:${m[6]}Z` : stamp;
+  /** Server-side computed human-friendly age from the row's timestamp. */
+  age?: string;
+  /** True when a waiting mission has sat longer than the 15-minute nudge. */
+  stale?: boolean;
 }
 
 // Lightweight per-spec metrics summary shape stored in summaries.json, to be
@@ -100,12 +95,6 @@ export function stampToIso(stamp: string): string {
 export interface SpecSummary {
   photo_count: number;
   path_length_m: number;
-}
-
-/** Parse specs/<site>/<date>/<stamp>.json; null for anything else. */
-export function parseSpecKey(key: string): { site: string; date: string; stamp: string } | null {
-  const m = /^specs\/([^/]+)\/([^/]+)\/([^/]+)\.json$/.exec(key);
-  return m ? { site: m[1], date: m[2], stamp: m[3] } : null;
 }
 
 /** Pure join of drafts + Dispatched keys + host manifest into status rows. */
@@ -230,56 +219,50 @@ export function joinStatus(
   sortedHeads.forEach((r, idx) => {
     r.queue = idx + 1;
   });
-  // After queue resorting, compute the expected WAYFINDER cards for waiting rows
-  // based on the queue order and per-spec-part counts. This mirrors the host's
-  // sequential assignment and allows the UI to reflect the intended cards for
-  // each waiting mission.
-  const CARD_POOL = 5;
-  // Build a list of waiting spec rows in queue order
+  // Cards are supplied by host manifest; do not fabricate WAYFINDER slots here.
+  // Just ensure cards array exists for each waiting row to keep UI stable.
   const waitingOrdered = rows
     .filter((r) => r.kind === "spec" && (r.state === "dispatched" || r.state === "queued") && r.queue !== null)
     .sort((a, b) => (a.queue! - b.queue!));
-  let nextCard = 1; // 1-based index into the card pool
-  for (const w of waitingOrdered) {
-    // Ensure the cards array exists
-    w.cards = [];
-    const parts = (w.parts ?? 0) || 0;
-    if (parts > 0 && nextCard <= CARD_POOL) {
-      const canTake = Math.min(parts, CARD_POOL - (nextCard - 1));
-      for (let i = 0; i < canTake; i++) {
-        const slot = nextCard + i;
-        w.cards.push({ card: `WAYFINDER ${slot}`, name: `Card ${slot}` });
-      }
-      if (canTake < parts) {
-        w.overflow = true;
-      }
-      nextCard += canTake;
-    } else if (parts === 0) {
-      // Unknown-parts: assign a single unassigned slot if possible
-      if (nextCard <= CARD_POOL) {
-        w.cards.push({ card: `UNASSIGNED`, name: `Unassigned` });
-        nextCard += 1;
-      } else {
-        w.overflow = true;
-      }
-    } else {
-      // No more cards left in pool
-      w.overflow = true;
-    }
-  }
-  // Fallback: if a waiting row somehow has no cards allocated, mark as unassigned
-  for (const w of waitingOrdered) {
-    if (!w.cards || w.cards.length === 0) {
-      w.cards = [{ card: "UNASSIGNED", name: "Unassigned" }];
-    }
-  }
-  // Extra guard: ensure the very first waiting row has at least one card for UI
-  if (waitingOrdered.length > 0) {
-    const first = waitingOrdered[0];
-    if (!first.cards || first.cards.length === 0) {
-      first.cards = [{ card: "WAYFINDER 1", name: "Card 1" }];
-    }
-  }
+  waitingOrdered.forEach((w) => {
+    if (!w.cards) w.cards = [];
+  });
   // Newest-first display order remains defined by stamp as before.
   return rows.sort((a, b) => (a.stamp < b.stamp ? 1 : -1));
+}
+
+// A waiting mission the host has not picked up in 15 minutes is worth a nudge:
+// cron runs every minute, so anything older means the Controller is unplugged
+// or the host is quiet — both are the operator's call, hence a hint, not an alarm.
+export const WAITING_WARN_MS = 15 * 60 * 1000;
+
+/** Server-side derivation of status rows: the clock that decides age and the
+ *  staleness nudge is the server's, so two browsers cannot disagree. */
+export function deriveStatusRows(
+  drafts: DraftRecord[],
+  specKeys: string[],
+  manifest: Manifest,
+  withdrawn: Record<string, unknown> = {},
+  summaries: Record<string, SpecSummary> = {},
+  clock?: number,
+): StatusRow[] {
+  const rows = joinStatus(drafts, specKeys, manifest, withdrawn, summaries);
+  const now = typeof clock === "number" ? clock : Date.now();
+  const toAge = (iso: string) => {
+    const ms = now - Date.parse(iso);
+    if (!Number.isFinite(ms) || ms < 0) return "just now";
+    const min = Math.floor(ms / 60000);
+    if (min < 1) return "just now";
+    if (min < 60) return `${min} min ago`;
+    const h = Math.floor(min / 60);
+    if (h < 48) return `${h} h ago`;
+    return `${Math.floor(h / 24)} d ago`;
+  };
+  rows.forEach((r) => {
+    const ms = now - Date.parse(r.updated);
+    r.age = toAge(r.updated);
+    // The 15-minute nudge is a decision, not a label, so the server makes it.
+    r.stale = Number.isFinite(ms) && ms > WAITING_WARN_MS;
+  });
+  return rows;
 }

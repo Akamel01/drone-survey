@@ -1,5 +1,5 @@
 import { authProblem } from "@/lib/auth";
-import { parseSpecKey } from "@/lib/missions";
+import { parseSpecKey } from "@/lib/keys";
 import { downloadFile, authorize, b2ReadEnv } from "@/lib/b2";
 
 // Read-only: serve immutable Spec body by key

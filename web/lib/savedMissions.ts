@@ -4,7 +4,7 @@
 // or preview values — because this file format is the master copy of a
 // Mission and is consumed by scripts/mission/make_mission.py.
 
-import { DEFAULT_SPEC, type MissionSpec } from "./spec";
+import { DEFAULT_SPEC, slugSegment, type MissionSpec } from "./spec.ts";
 
 const STORAGE_KEY = "drone-planner.saved-missions";
 
@@ -89,7 +89,7 @@ export function deleteMission(saved_at: string): SavedMission[] {
 }
 
 export function slug(s: string) {
-  return (s || "site").trim().replace(/[^a-z0-9]+/gi, "-").toLowerCase();
+  return slugSegment(s || "site", 60);
 }
 
 export function downloadMission(spec: MissionSpec) {

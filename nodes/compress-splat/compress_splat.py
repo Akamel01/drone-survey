@@ -37,7 +37,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-from common import die  # noqa: E402
+from common import die, emit_report  # noqa: E402
 
 SPLAT_TRANSFORM_IMAGE = "splat-transform:local"  # built from nodes/compress-splat/Dockerfile
 MIN_COMPRESSION_RATIO = 1.5  # a compressed file that isn't meaningfully smaller means something went wrong quietly
@@ -104,7 +104,7 @@ def main() -> None:
     args.out_meta.parent.mkdir(parents=True, exist_ok=True)
     args.out_meta.write_text(json.dumps({"source": args.in_ply.name, **report}, indent=1))
     args.out_report.parent.mkdir(parents=True, exist_ok=True)
-    args.out_report.write_text(json.dumps(report, indent=1))
+    emit_report(args.out_report, report)
     print(f"compress-splat: {json.dumps(report, indent=1)}")
 
     if not ok:

@@ -2,10 +2,10 @@
 """Fetch Dispatched Mission Specs from B2 onto this host, ready to be Loaded.
 
 Collecting and Loading are different moments (CONTEXT.md): this runs on its
-own schedule to gather what the planner Dispatched, and a Controller is only
-ever written by push_to_rc.py, by hand, when one is plugged in. This script
-has no MTP code path and no import of push_to_rc — there is no line in this
-file that could write to a Controller, so a lost or corrupted local record
+own schedule to gather what the planner Dispatched, and the Controller is only
+ever written by load.py, by hand, when one is plugged in. This script
+has no MTP code path at all — there is no line in this file that could write to
+a Controller, so a lost or corrupted local record
 (ADR 0017) can only ever cause a redundant download, never a bad Load.
 
 The B2 key read from credentials is confined server-side to specs/ and can
@@ -24,6 +24,9 @@ import urllib.error
 import urllib.parse
 import urllib.request
 from pathlib import Path
+
+from keys import SKIPPED_KEY, spec_key_pattern  # noqa: E402  (one home for the store key layout)
+import b2  # noqa: E402  (one home for storage access)
 
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
@@ -75,34 +78,21 @@ def load_skipped(status_config: Path) -> set[str]:
         sauth = authorize(senv["B2_KEY_ID"], senv["B2_APP_KEY"])
         sallowed = sauth["allowed"]
         data = download(
-            sauth["downloadUrl"], sallowed["bucketName"], "specs/_status/skipped.json",
+            sauth["downloadUrl"], sallowed["bucketName"], SKIPPED_KEY,
             sauth["authorizationToken"],
         )
         text = data.decode() if isinstance(data, (bytes, bytearray)) else str(data)
         if not text:
             return set()
         obj = json.loads(text)
-        if isinstance(obj, list):
-            return set(obj)
-        if isinstance(obj, dict) and "skipped" in obj:
-            val = obj["skipped"]
-            if isinstance(val, list):
-                return set(val)
-            if isinstance(val, str):
-                return {val}
-            return set()
-        # Contract-1: payload may be a dict of specKey -> info; return its keys
+        # One shape, the one the withdraw route writes: specKey -> {withdrawn_at}.
+        # The list and {"skipped": ...} forms had no writer and are gone.
         if isinstance(obj, dict):
-            return set(map(str, obj.keys()))
-        return set()
+            return {str(k): v for k, v in obj.items()}
+        return {}
     except (Exception, SystemExit):
         # download()/load_env() sys.exit on 404/bad creds; the skip-list is best-effort
         return set()
-
-
-def spec_key_pattern(prefix: str) -> re.Pattern:
-    """Specs are keyed <prefix><site-id>/<date>/<dispatch-timestamp>.json (ADR 0017)."""
-    return re.compile(rf"^{re.escape(prefix)}([^/]+)/([^/]+)/([^/]+)\.json$")
 
 
 def newest_per_site_date(file_names: list[str], pattern: re.Pattern) -> dict[tuple[str, str], str]:
@@ -130,54 +120,21 @@ def verify_sha1(data: bytes, expected_hex: str) -> None:
 
 
 def authorize(key_id: str, app_key: str) -> dict:
-    """v2 authorize only — v3 nests this same data under apiInfo and breaks every field access below."""
-    token = base64.b64encode(f"{key_id}:{app_key}".encode()).decode()
-    req = urllib.request.Request(B2_AUTHORIZE_URL, headers={"Authorization": f"Basic {token}"})
-    try:
-        with urllib.request.urlopen(req, timeout=30) as resp:
-            return json.load(resp)
-    except urllib.error.HTTPError as e:
-        sys.exit(f"authorize failed: {e.code} {e.reason}")
-    except urllib.error.URLError as e:
-        sys.exit(f"could not reach B2: {e.reason}")
+    """One adapter for every storage call this script makes (see b2.py)."""
+    return b2.authorize(key_id, app_key)
 
 
 def list_specs(api_url: str, token: str, bucket_id: str, prefix: str) -> list[str]:
-    """All file names under prefix, following nextFileName until B2 stops paging."""
-    names: list[str] = []
-    start = None
-    while True:
-        body: dict = {"bucketId": bucket_id, "prefix": prefix, "maxFileCount": 1000}
-        if start:
-            body["startFileName"] = start
-        req = urllib.request.Request(
-            f"{api_url}/b2api/v2/b2_list_file_names",
-            data=json.dumps(body).encode(),
-            headers={"Authorization": token, "Content-Type": "application/json"},
-        )
-        try:
-            with urllib.request.urlopen(req, timeout=30) as resp:
-                page = json.load(resp)
-        except urllib.error.HTTPError as e:
-            sys.exit(f"list failed: {e.code} {e.reason}")
-        names.extend(f["fileName"] for f in page["files"])
-        start = page.get("nextFileName")
-        if not start:
-            return names
+    """All file names under prefix (b2.list_names follows nextFileName)."""
+    return b2.list_names(api_url, token, bucket_id, prefix)
 
 
 def download(download_url: str, bucket_name: str, file_name: str, token: str) -> bytes:
-    """Fetch one Spec and verify it against B2's own X-Bz-Content-Sha1 before returning it."""
-    url = f"{download_url}/file/{bucket_name}/{urllib.parse.quote(file_name, safe='/')}"
-    req = urllib.request.Request(url, headers={"Authorization": token})
+    """Fetch one Spec; the adapter verifies B2's own checksum before returning it."""
     try:
-        with urllib.request.urlopen(req, timeout=60) as resp:
-            data = resp.read()
-            expected = resp.headers.get("X-Bz-Content-Sha1", "")
-    except urllib.error.HTTPError as e:
-        sys.exit(f"download of {file_name} failed: {e.code} {e.reason}")
-    verify_sha1(data, expected)
-    return data
+        return b2.download(download_url, bucket_name, file_name, token)
+    except FileNotFoundError:
+        sys.exit(f"download of {file_name} failed: not found")
 
 
 def load_record(path: Path) -> set[str]:
@@ -302,8 +259,7 @@ def main() -> None:
     try:
         local_skip_path = DEFAULT_DEST / "_status" / "skipped.json"
         local_skip_path.parent.mkdir(parents=True, exist_ok=True)
-        # Persist as a JSON list of strings for compatibility with load.py's reader
-        local_skip_path.write_text(json.dumps(sorted(list(skipped)), indent=2))
+        local_skip_path.write_text(json.dumps(skipped, indent=2, sort_keys=True))
     except Exception:
         pass
     if skipped:

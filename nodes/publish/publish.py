@@ -97,6 +97,12 @@ def b2_upload_file(upload_url: str, upload_auth_token: str, key: str, data: byte
     return b2_call(upload_url, headers, data=data)
 
 
+def bundle_key(bundle_id: str, path: str) -> str:
+    """Where one Bundle file lives in the delivery bucket. The dry run and the
+    real upload both go through here, so a change cannot make the rehearsal lie."""
+    return f"bundles/{bundle_id}/{path}"
+
+
 def dry_run(bundle_dir: Path, manifest: dict, bucket: str, creds_path: Path) -> None:
     bundle_id = manifest["bundle_id"]
     files = manifest["files"]
@@ -105,7 +111,7 @@ def dry_run(bundle_dir: Path, manifest: dict, bucket: str, creds_path: Path) -> 
     print(f"DRY RUN: would publish bundle {bundle_id} ({len(files)} files) to b2://{bucket}/bundles/{bundle_id}/")
     total = 0
     for f in files:
-        print(f"  would upload bundles/{bundle_id}/{f['path']}  {f['size']} bytes  sha256={f['sha256'][:12]}...")
+        print(f"  would upload {bundle_key(bundle_id, f['path'])}  {f['size']} bytes  sha256={f['sha256'][:12]}...")
         total += f["size"]
     print(f"DRY RUN: total {total} bytes across {len(files)} files; no network request made")
 
@@ -129,7 +135,7 @@ def publish(bundle_dir: Path, manifest: dict, bucket: str, creds_path: Path) -> 
         full = bundle_dir / f["path"]
         data = full.read_bytes()
         sha1_hex = hashlib.sha1(data).hexdigest()
-        key = f"bundles/{bundle_id}/{f['path']}"
+        key = bundle_key(bundle_id, f["path"])
         result = b2_upload_file(upload_info["uploadUrl"], upload_info["authorizationToken"], key, data, sha1_hex)
         # ADR 0018: a 200 isn't proof of a good upload — check what the provider says it stored.
         if result.get("contentSha1") != sha1_hex or result.get("contentLength") != len(data):

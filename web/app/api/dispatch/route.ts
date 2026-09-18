@@ -1,7 +1,8 @@
-import { dispatchProblem, isValidSiteId, type MissionSpec } from "@/lib/spec";
+import { dispatchProblem, isValidSiteId, slugSegment, type MissionSpec } from "@/lib/spec";
 import { authProblem } from "@/lib/auth";
 import { authorize, b2Env, b2ReadEnv, downloadFile, uploadFile, type B2Session } from "@/lib/b2";
-import { DRAFTS_PREFIX, type DraftRecord, SUMMARIES_KEY } from "@/lib/missions";
+import { SUMMARIES_KEY, draftKey, makeSpecKey } from "@/lib/keys";
+import type { DraftRecord } from "@/lib/missions";
 import { preview } from "@/lib/mission";
 
 // The storage credential lives here and never reaches the browser, which is the
@@ -16,11 +17,7 @@ export const preferredRegion = "yyz1";
  *  behaviour this replaces: renaming such a Site still orphans its old Specs,
  *  which is why every other Spec should carry an id instead (ADR 0017). */
 function siteSlug(site: string): string {
-  return site
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-|-$/g, "")
-    .slice(0, 60);
+  return slugSegment(site, 60);
 }
 
 export async function POST(request: Request) {
@@ -60,7 +57,7 @@ export async function POST(request: Request) {
   // present here is safe to use as-is; a Spec dispatched without one falls
   // back to the old slug-of-the-name behaviour (issue #39).
   const siteKey = isValidSiteId(spec.site_id) ? spec.site_id : siteSlug(spec.site);
-  const key = `specs/${siteKey}/${spec.date}/${stamp}.json`;
+  const key = makeSpecKey(siteKey, spec.date, stamp);
   const body = Buffer.from(JSON.stringify(spec, null, 2));
 
   try {
@@ -114,8 +111,8 @@ async function stampDraft(bucket: string, draftId: string, key: string, parts?: 
   if (!env || !readEnv) return;
   const read: B2Session = await authorize(readEnv);
   const write: B2Session = readEnv.keyId === env.keyId ? read : await authorize(env);
-  const draftKey = `${DRAFTS_PREFIX}${draftId}.json`;
-  const raw = await downloadFile(read, bucket, draftKey);
+  const draftSpecKey = draftKey(draftId);
+  const raw = await downloadFile(read, bucket, draftSpecKey);
   if (!raw) return;
   const record = JSON.parse(raw.toString()) as DraftRecord;
   record.dispatched_key = key;
@@ -123,5 +120,5 @@ async function stampDraft(bucket: string, draftId: string, key: string, parts?: 
     record.parts = parts;
   }
   record.updated_at = new Date().toISOString();
-  await uploadFile(write, draftKey, Buffer.from(JSON.stringify(record, null, 2)));
+  await uploadFile(write, draftSpecKey, Buffer.from(JSON.stringify(record, null, 2)));
 }

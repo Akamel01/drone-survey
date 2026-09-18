@@ -144,7 +144,8 @@ export default function SummaryBar({ spec, preview, onSaveMission }: SummaryBarP
       </div>
       {dispatch.kind === "ok" && (
         <div className={styles.dispatchOk}>
-          Dispatched: {dispatch.key}. On the Controller, open {cardsFor(dispatch.parts)} once it is Loaded.
+          Dispatched: {dispatch.key} ({dispatch.parts} part{dispatch.parts === 1 ? "" : "s"}). Controller cards
+          are assigned when the host Loads it and appear on the mission row once reported.
         </div>
       )}
       {dispatch.kind === "error" && <div className={styles.dispatchError}>{dispatch.message}</div>}
@@ -157,12 +158,6 @@ export default function SummaryBar({ spec, preview, onSaveMission }: SummaryBarP
       )}
     </div>
   );
-}
-
-// A Load puts part i into card WAYFINDER i (ADR 0016), so the card is known
-// before the Controller is plugged in.
-function cardsFor(parts: number): string {
-  return parts > 1 ? `WAYFINDER 1 to WAYFINDER ${parts}, one part each, in order` : "WAYFINDER 1";
 }
 
 function Stat({

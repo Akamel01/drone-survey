@@ -69,6 +69,9 @@ import math
 import sys
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+from common import emit_report  # noqa: E402
+
 WGS84_A = 6378137.0
 WGS84_F = 1 / 298.257223563
 WGS84_B = WGS84_A * (1 - WGS84_F)
@@ -425,7 +428,7 @@ def main() -> None:
         "rejected": rejected,
         "gate_passed": passed,
     }
-    (args.out / "report.json").write_text(json.dumps(report, indent=1))
+    emit_report(args.out / "report.json", report)
 
     if not passed:
         sys.exit(f"register: gate failed -- {rejected}")

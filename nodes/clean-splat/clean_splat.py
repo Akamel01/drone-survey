@@ -57,7 +57,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-from common import die  # noqa: E402
+from common import die, emit_report  # noqa: E402
 
 # --- calibration debt: first conservative cuts, unmeasured past this one project (see module docstring) ---
 OPACITY_MIN = 0.02
@@ -344,7 +344,7 @@ def main() -> None:
         "boundary_overlap_ok": boundary_overlap_ok, "gate": "pass" if passed else "fail", "reasons": reasons,
     }
     args.out_report.parent.mkdir(parents=True, exist_ok=True)
-    args.out_report.write_text(json.dumps(report, indent=1))
+    emit_report(args.out_report, report)
     print(f"clean-splat: {json.dumps(report, indent=1)}")
 
     if not passed:

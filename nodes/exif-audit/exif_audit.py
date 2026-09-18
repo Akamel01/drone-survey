@@ -33,7 +33,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-from common import die, list_images, read_exif_batch  # noqa: E402
+from common import die, list_images, read_exif_batch, emit_report  # noqa: E402
 
 LOCKED_FIELDS = ["Make", "Model", "ExposureTime", "FNumber", "FocalLength"]
 
@@ -79,7 +79,7 @@ def main() -> None:
     report = audit(images, exif)
 
     args.out.parent.mkdir(parents=True, exist_ok=True)
-    args.out.write_text(json.dumps(report, indent=1))
+    emit_report(args.out, report)
 
     if report["missing_gps"]:
         print(f"exif-audit: {len(report['missing_gps'])} image(s) missing GPS: {report['missing_gps']}",

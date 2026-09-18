@@ -1,0 +1,23 @@
+{
+  "pipeline": "retention",
+  "inputs": {
+    "root": "captures"
+  },
+  "nodes": [
+    {
+      "name": "expire",
+      "command": [
+        "python3",
+        "nodes/retention/retention.py",
+        "--root",
+        "{in.root}",
+        "--out-report",
+        "{out.report}"
+      ],
+      "outputs": {
+        "report": "report.json"
+      },
+      "notes": "Dry run by default: deleting Captures is the operator's call. Add --delete through the environment map when a real sweep is intended."
+    }
+  ]
+}

@@ -24,7 +24,7 @@ from pathlib import Path
 from PIL import Image, ImageFilter, ImageStat
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-from common import list_images  # noqa: E402
+from common import list_images, emit_report  # noqa: E402
 
 BLUR_VARIANCE_MIN = 20.0       # measured on 5 real DJI-style stills: sharp 59-105, blurred <1
 BRIGHTNESS_LOW = 25.0
@@ -110,7 +110,7 @@ def main() -> None:
 
     report = {"input_count": len(images), "kept": kept, "rejected": rejected}
     args.out_report.parent.mkdir(parents=True, exist_ok=True)
-    args.out_report.write_text(json.dumps(report, indent=1))
+    emit_report(args.out_report, report)
 
     print(f"filter: kept {len(kept)}/{len(images)}, rejected {len(rejected)} "
           f"({sum(1 for r in rejected.values() if any('blur' in x for x in r))} blurred, "

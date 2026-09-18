@@ -69,10 +69,16 @@ def node_dir(workdir: Path, name: str) -> Path:
     return workdir / "nodes" / name
 
 
-def resolve_paths(workdir: Path, node: dict, nodes_by_name: dict) -> tuple[types.SimpleNamespace, types.SimpleNamespace]:
-    """Absolute paths for {in.x} / {out.x}: deterministic from workdir + names, never stored."""
+def resolve_paths(
+    workdir: Path, node: dict, nodes_by_name: dict, pipeline_inputs: dict | None = None
+) -> tuple[types.SimpleNamespace, types.SimpleNamespace]:
+    """Absolute paths for {in.x} / {out.x}: deterministic from workdir + names, never stored.
+
+    A Pipeline's own inputs are workdir-relative (they come from outside the
+    graph); a Node's inputs resolve from the Node that produces them.
+    """
     out = {key: str(node_dir(workdir, node["name"]) / rel) for key, rel in node.get("outputs", {}).items()}
-    inp = {}
+    inp = {key: str(Path(workdir) / rel) for key, rel in (pipeline_inputs or {}).items()}
     for key, ref in node.get("inputs", {}).items():
         producer = nodes_by_name[ref["node"]]
         inp[key] = str(node_dir(workdir, producer["name"]) / producer["outputs"][ref["output"]])
@@ -114,19 +120,35 @@ def run(manifest_path: Path, workdir: Path) -> None:
                 continue
 
             node_dir(workdir, name).mkdir(parents=True, exist_ok=True)
-            inp, out = resolve_paths(workdir, node, nodes_by_name)
+            inp, out = resolve_paths(workdir, node, nodes_by_name, data.get("inputs"))
             command = [arg.format(**{"in": inp, "out": out}) for arg in node["command"]]
+            # A Manifest declares the environment a Node needs; the Runner puts it
+            # there rather than each Node inventing an environment variable name.
+            node_env = {k: str(v) for k, v in node.get("env", {}).items()}
             if "image" in node:
-                command = ["docker", "run", "--rm", "-v", f"{workdir}:{workdir}", node["image"], *command]
+                docker_env: list[str] = []
+                for key in sorted(node_env):
+                    docker_env += ["-e", f"{key}={node_env[key]}"]
+                command = ["docker", "run", "--rm", *docker_env, "-v", f"{workdir}:{workdir}", node["image"], *command]
 
             print(f"run {name}: {' '.join(command)}")
-            result = subprocess.run(command)
+            env = {**os.environ, **node_env} if node_env else None
+            result = subprocess.run(command, env=env)
 
             if result.returncode != 0:
                 state["nodes"][name] = {"status": "failed", "returncode": result.returncode}
                 save_state(workdir, state)
                 print(f"{name} failed (exit {result.returncode}); run stopped.", file=sys.stderr)
                 sys.exit(result.returncode)  # the exit code is final, never softened
+
+            # A Node that declares an output and writes nothing is a failure, not
+            # a success: the next Node would read a path that is not there.
+            missing = [key for key, path in out.__dict__.items() if not Path(path).exists()]
+            if missing:
+                state["nodes"][name] = {"status": "failed", "missing_outputs": sorted(missing)}
+                save_state(workdir, state)
+                print(f"{name} declared outputs it never wrote: {', '.join(sorted(missing))}; run stopped.", file=sys.stderr)
+                sys.exit(1)
 
             state["nodes"][name] = {"status": "done", "returncode": 0}
             save_state(workdir, state)
@@ -154,6 +176,10 @@ def _selftest() -> None:
     assert validate({"nodes": [{"name": "a", "command": ["x"]}]}), "missing pipeline name should be rejected"
     assert validate({"pipeline": "x", "nodes": [{"name": "a", "command": ["x"]}, {"name": "a", "command": ["y"]}]}), "duplicate names should be rejected"
     assert validate({"pipeline": "x", "nodes": [{"name": "a", "command": ["x"], "inputs": {"z": {"node": "nope", "output": "o"}}}]}), "unknown input reference should be rejected"
+    assert validate({"pipeline": "x", "nodes": [{"name": "a", "command": ["x"], "typo": 1}]}), "an unknown node key should be rejected"
+    assert validate({"pipeline": "x", "extra": 1, "nodes": [{"name": "a", "command": ["x"]}]}), "an unknown top-level key should be rejected"
+    assert validate({"pipeline": "x", "nodes": [{"name": "a", "command": ["echo", "{in.nope}"]}]}), "an undeclared placeholder should be rejected"
+    assert validate({"pipeline": "x", "nodes": [{"name": "a", "command": ["echo", "{in.a.b}"]}]}), "a malformed placeholder should be rejected"
     assert not validate({"pipeline": "x", "nodes": [{"name": "a", "command": ["x"]}]}), "a well-formed Manifest should pass"
 
     with tempfile.TemporaryDirectory() as tmp:
@@ -206,6 +232,20 @@ def _selftest() -> None:
                 },
             ],
         })
+        # 3b. A Node that declares an output and writes nothing fails the stage.
+        quiet = _write(tmp / "quiet.json", {
+            "pipeline": "quiet-check",
+            "nodes": [{"name": "quiet", "command": [py, "-c", "pass"], "outputs": {"out": "never.txt"}}],
+        })
+        try:
+            run(quiet, tmp / "run-quiet")
+            raise AssertionError("a Node that never wrote its declared output should have failed")
+        except SystemExit as e:
+            assert e.code != 0, "missing declared output must exit non-zero"
+        state = json.loads((tmp / "run-quiet" / "state.json").read_text())
+        assert state["nodes"]["quiet"]["status"] == "failed", state
+        assert "missing_outputs" in state["nodes"]["quiet"], state
+
         run_dir = tmp / "run2"
         try:
             run(resumable, run_dir)

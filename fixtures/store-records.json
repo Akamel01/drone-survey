@@ -1,0 +1,42 @@
+{
+  "skip_list": {
+    "specs/field/2026-09-17/20260917T000000Z.json": {
+      "withdrawn_at": "2026-09-17T12:00:00Z"
+    },
+    "specs/field/2026-09-18/20260918T000000Z.json": {
+      "withdrawn_at": "2026-09-18T07:00:00Z"
+    }
+  },
+  "manifest": {
+    "specs/field/2026-09-17/20260917T000000Z.json": {
+      "collected_at": "2026-09-17T09:00:00Z",
+      "loaded_at": "2026-09-17T09:30:00Z",
+      "parts": 2,
+      "cards": [
+        {
+          "card": "WAYFINDER 1",
+          "name": "Field north",
+          "waypoints": 32
+        },
+        {
+          "card": "WAYFINDER 2",
+          "name": "Field south",
+          "waypoints": 31
+        }
+      ]
+    }
+  },
+  "summary": {
+    "photo_count": 69,
+    "path_length_m": 828.0
+  },
+  "draft": {
+    "id": "0193abcd",
+    "spec": {
+      "version": 1,
+      "site": "Field",
+      "date": "2026-09-17"
+    },
+    "updated_at": "2026-09-17T08:00:00Z"
+  }
+}

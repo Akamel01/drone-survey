@@ -58,7 +58,7 @@ import time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-from common import die  # noqa: E402
+from common import die, emit_report  # noqa: E402
 
 ALLOC_CONF = "expandable_segments:True"
 NERFSTUDIO_IMAGE = "nerfstudio-splat:local"  # built from nerfstudio.Dockerfile, AlexNet baked in
@@ -420,7 +420,7 @@ def main() -> None:
         "solve_gate": detail, "val_image": val_image, "val_psnr": val_psnr,
         "output": str(args.out_splat) if args.out_splat.exists() else None,
     }
-    args.out_report.write_text(json.dumps(report, indent=1))
+    emit_report(args.out_report, report)
     print(f"fit-splat: {json.dumps(report, indent=1)}")
 
     if exit_code != 0:

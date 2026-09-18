@@ -70,13 +70,11 @@ from pathlib import Path
 
 import nodeodm_client as client
 
-IMAGE_SUFFIXES = {".jpg", ".jpeg", ".tif", ".tiff", ".png"}
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+from common import IMAGE_SUFFIXES, list_images  # noqa: E402
+
 DEFAULT_HOST = "http://127.0.0.1:3180"  # the mapped port of this project's `nodeodm` container, confirmed live
 DEFAULT_ODM_IMAGE = "opendronemap/odm:latest"  # first (no-gcp) pass only -- see module docstring
-
-
-def list_images(directory: Path) -> list[Path]:
-    return sorted(p for p in directory.iterdir() if p.suffix.lower() in IMAGE_SUFFIXES)
 
 
 def parse_options(pairs: list[str]) -> list[dict]:

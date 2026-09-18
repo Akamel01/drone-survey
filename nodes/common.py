@@ -7,18 +7,49 @@ standalone script invoked by the Runner.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import shutil
 import subprocess
 import sys
 from pathlib import Path
+from typing import Any
 
-IMAGE_SUFFIXES = {".jpg", ".jpeg"}
+# The extensions the photogrammetry stages treat as source imagery. They were
+# two sets that disagreed (ingest took .jpg/.jpeg only; solve and the ODM client
+# also take .tif/.png), which made "an image" change meaning along one Pipeline.
+# Widened to the union: ODM accepts these, and a Capture that produced TIFFs was
+# being silently dropped before solve ever saw it.
+IMAGE_SUFFIXES = {".jpg", ".jpeg", ".tif", ".tiff", ".png"}
+
+
+def sha256_file(path: Path) -> str:
+    """A file's sha256, read in chunks. The one checksum helper for every Node."""
+    h = hashlib.sha256()
+    with Path(path).open("rb") as f:
+        for chunk in iter(lambda: f.read(1 << 20), b""):
+            h.update(chunk)
+    return h.hexdigest()
 
 
 def die(msg: str) -> None:
     print(msg, file=sys.stderr)
     sys.exit(1)
+
+
+def emit_report(path: Path, payload: dict[str, Any]) -> None:
+    """Write a Node report JSON in a stable, easy-to-consume form.
+
+    - The JSON is UTF-8, with keys sorted to guarantee stable output for tests
+      and diffs.
+    - A trailing newline is appended for good Unix friendliness.
+    - Parent directories are created as needed.
+    - The function returns nothing and never prints.
+    """
+    p = Path(path)
+    p.parent.mkdir(parents=True, exist_ok=True)
+    text = json.dumps(payload, sort_keys=True, ensure_ascii=False) + "\n"
+    p.write_text(text, encoding="utf-8")
 
 
 def require_exiftool() -> None:
@@ -58,3 +89,27 @@ def copy_metadata(src: Path, dst: Path) -> None:
         ["exiftool", "-TagsFromFile", str(src), "-all:all", "-xmp", "-overwrite_original", str(dst)],
         capture_output=True, text=True, check=True,
     )
+
+
+def _selftest() -> None:
+    """Offline: image discovery picks exactly the images, and the checksum is stable."""
+    import tempfile
+    with tempfile.TemporaryDirectory() as tmp:
+        d = Path(tmp)
+        for name in ("b.JPG", "a.jpg", "c.tif", "d.png", "notes.txt", "clip.mp4"):
+            (d / name).write_bytes(b"x")
+        found = [p.name for p in list_images(d)]
+        assert found == ["a.jpg", "b.JPG", "c.tif", "d.png"], found
+        assert sha256_file(d / "a.jpg") == hashlib.sha256(b"x").hexdigest()
+        # emit_report round-trips, creates parents, and ends the file with a newline
+        payload = {"ok": True, "items": [1, 2, 3]}
+        out = Path(tmp) / "report" / "sample.json"
+        emit_report(out, payload)
+        loaded = json.loads(out.read_text())
+        assert loaded == payload
+        assert out.read_text().endswith("\n")
+    print("common self-check: ok")
+
+
+if __name__ == "__main__":
+    _selftest()

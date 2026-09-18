@@ -96,6 +96,41 @@ export interface MissionSpec {
   };
 }
 
+/** One description of the Mission Spec envelope, in two stages. A draft may be
+ *  an unfinished plan — no area drawn yet; Dispatch requires a flyable one. The
+ *  field rules that are the same at both stages live here once, so the two gates
+ *  cannot drift apart about them. What differs is only what a stage requires. */
+export type Gate = "draft" | "dispatch";
+
+export function specProblem(spec: unknown, gate: Gate): string | null {
+  if (!spec || typeof spec !== "object") return "not an object";
+  const s = spec as MissionSpec;
+  if (s.version !== 1) return "wrong Spec version";
+  if (!s.site?.trim()) return "no Site named";
+  if (s.site_id != null && !isValidSiteId(s.site_id)) return "Site id is not a safe identifier";
+  if (!s.date?.trim()) return "no date";
+  if (gate === "draft") return null;
+
+  if (typeof s.flight?.altitude_m !== "number" || !Number.isFinite(s.flight.altitude_m)) {
+    return "no flight altitude";
+  }
+  if (s.mission_type === "orbit") {
+    if (!isLatLon(s.orbit?.center)) return "an orbit needs a subject";
+  } else if (!Array.isArray(s.aoi) || s.aoi.length < 3) {
+    return "an area needs at least three corners";
+  } else if (!s.aoi.every(isLatLon)) {
+    // Too few corners and a corner off the globe are different mistakes, and
+    // telling someone to add corners they already drew sends them the wrong way.
+    return "a corner is not a position on Earth";
+  }
+  return null;
+}
+
+/** May this be saved as a draft? Shape only: an unfinished plan is allowed. */
+export function draftProblem(spec: unknown): string | null {
+  return specProblem(spec, "draft");
+}
+
 /** A [lat, lon] pair, not just a 2-element array — the writer reads these by
  *  index, so an out-of-range or non-finite value builds a KMZ silently wrong
  *  rather than failing loudly. */
@@ -121,14 +156,25 @@ export function isValidSiteId(id: unknown): id is string {
   return typeof id === "string" && SITE_ID_RE.test(id);
 }
 
+/** The one rule for turning a Site's name into a path segment: lowercase, runs
+ *  of anything else collapsed to a single "-", no leading or trailing "-", and
+ *  never longer than asked. Every Site-shaped string in the app comes from here
+ *  so a name can never produce a key the server would reject. */
+export function slugSegment(name: string, maxLength: number): string {
+  const collapsed = name
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+  // Cutting to length can leave the dash it cut through.
+  return collapsed.slice(0, maxLength).replace(/-+$/, "");
+}
+
 /** A short, readable Site id: the first word of its name plus a random
  *  suffix, so two Sites sharing a first word do not collide. Chosen over a
  *  UUID to keep storage keys legible (issue #39). */
 export function newSiteId(name: string): string {
-  const base = (name.trim().split(/\s+/)[0] ?? "")
-    .toLowerCase()
-    .replace(/[^a-z0-9]/g, "")
-    .slice(0, 20);
+  const base = slugSegment(name.trim().split(/\s+/)[0] ?? "", 20);
   const suffix = Math.random().toString(36).slice(2, 8);
   return `${base || "site"}-${suffix}`;
 }
@@ -144,24 +190,7 @@ export function ensureSiteId(spec: MissionSpec): MissionSpec {
  *  (so the store never accumulates junk the Collector has to skip) and the
  *  planner (so an operator is told locally instead of by a 400). */
 export function dispatchProblem(spec: MissionSpec): string | null {
-  if (!spec || typeof spec !== "object") return "not an object";
-  if (spec.version !== 1) return "wrong Spec version";
-  if (!spec.site?.trim()) return "no Site named";
-  if (spec.site_id != null && !isValidSiteId(spec.site_id)) return "Site id is not a safe identifier";
-  if (!spec.date?.trim()) return "no date";
-  if (typeof spec.flight?.altitude_m !== "number" || !Number.isFinite(spec.flight.altitude_m)) {
-    return "no flight altitude";
-  }
-  if (spec.mission_type === "orbit") {
-    if (!isLatLon(spec.orbit?.center)) return "an orbit needs a subject";
-  } else if (!Array.isArray(spec.aoi) || spec.aoi.length < 3) {
-    return "an area needs at least three corners";
-  } else if (!spec.aoi.every(isLatLon)) {
-    // Too few corners and a corner off the globe are different mistakes, and
-    // telling someone to add corners they already drew sends them the wrong way.
-    return "a corner is not a position on Earth";
-  }
-  return null;
+  return specProblem(spec, "dispatch");
 }
 
 export const DEFAULT_SPEC: MissionSpec = {

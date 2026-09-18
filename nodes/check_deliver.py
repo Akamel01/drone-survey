@@ -21,6 +21,9 @@ import sys
 import tempfile
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+from common import sha256_file  # noqa: E402
+
 REPO_ROOT = Path(__file__).resolve().parent.parent
 BUNDLE_BUILD = REPO_ROOT / "nodes" / "bundle" / "build.py"
 PUBLISH = REPO_ROOT / "nodes" / "publish" / "publish.py"
@@ -30,14 +33,17 @@ RUNNER = REPO_ROOT / "pipeline" / "runner.py"
 HTML_REF = re.compile(r'(?:src|href)="([^"]+)"')
 
 
-def sha256_of(path: Path) -> str:
-    import hashlib
+def check_readme_example() -> None:
+    """The README's Manifest example must be the real Manifest, not a memory of it."""
+    import json
 
-    h = hashlib.sha256()
-    with path.open("rb") as f:
-        for chunk in iter(lambda: f.read(1 << 20), b""):
-            h.update(chunk)
-    return h.hexdigest()
+    readme = REPO_ROOT / "pipeline" / "README.md"
+    ortho = json.loads((REPO_ROOT / "pipeline" / "manifests" / "orthomosaic.json").read_text())
+    expected = json.dumps({"pipeline": ortho["pipeline"], "nodes": ortho["nodes"][:2]}, indent=2)
+    body = readme.read_text()
+    fenced = body[body.index("```json") + len("```json\n"):body.index("```", body.index("```json") + 7)]
+    assert fenced.strip() == expected.strip(), "the README's example has drifted from orthomosaic.json"
+    print("[ok] README: manifest example matches the real Manifest")
 
 
 def make_synthetic_ortho(fixtures: Path) -> Path:
@@ -168,7 +174,7 @@ def check_bundle(bundle_dir: Path, ortho: Path, scene: Path, meta: Path) -> dict
     for f in manifest["files"]:
         full = bundle_dir / f["path"]
         assert full.stat().st_size == f["size"], f"size mismatch for {f['path']}"
-        assert sha256_of(full) == f["sha256"], f"hash mismatch for {f['path']}"
+        assert sha256_file(full) == f["sha256"], f"hash mismatch for {f['path']}"
 
     for expected_dir in ("ortho", "splat", "assets"):
         assert (bundle_dir / expected_dir).is_dir(), f"missing {expected_dir}/ per docs/business/object-storage-setup.md layout"
@@ -272,6 +278,7 @@ def main() -> None:
         check_publish_refuses_without_credentials(bundle_dir)
         check_runner_end_to_end(ortho, scene, meta)
 
+    check_readme_example()
     print("check_deliver: all checks passed")
 
 

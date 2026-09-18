@@ -1,6 +1,6 @@
 import { authProblem } from "@/lib/auth";
 import { b2Env, b2ReadEnv, uploadFile, downloadFile, authorize } from "@/lib/b2";
-import { parseSpecKey } from "@/lib/missions";
+import { SKIPPED_KEY, STATUS_KEY, parseSpecKey } from "@/lib/keys";
 import type { Manifest } from "@/lib/missions";
 
 // Withdraw API: mark a spec as withdrawn (skipped.json) or un-withdraw if requested later
@@ -28,8 +28,8 @@ export async function POST(request: Request) {
     return Response.json({ error: "Invalid spec key" }, { status: 400 });
   }
 
-  const statKey = `specs/_status/skipped.json`;
-  const manifestKey = `specs/_status/missions.json`;
+  const statKey = SKIPPED_KEY;
+  const manifestKey = STATUS_KEY;
   const env = b2Env();
   if (!env) {
     return Response.json({ error: "Storage is not configured" }, { status: 503 });

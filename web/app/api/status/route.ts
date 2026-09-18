@@ -1,6 +1,7 @@
 import { authProblem } from "@/lib/auth";
 import { authorize, b2Env, b2ReadEnv, downloadFile, listFiles } from "@/lib/b2";
-import { SUMMARIES_KEY, DRAFTS_PREFIX, STATUS_KEY, joinStatus, type DraftRecord, type Manifest, SpecSummary } from "@/lib/missions";
+import { DRAFTS_PREFIX, SKIPPED_KEY, SPECS_PREFIX, STATUS_KEY, SUMMARIES_KEY } from "@/lib/keys";
+import { deriveStatusRows, type DraftRecord, type Manifest, SpecSummary } from "@/lib/missions";
 
 export const runtime = "nodejs";
 export const preferredRegion = "yyz1";
@@ -18,9 +19,9 @@ export async function GET(request: Request) {
     // One listing covers both: drafts live under specs/ (ADR 0017), so the
     // drafts listing was a second Class C transaction on every poll.
     const [specFiles, manifestRaw, skippedRaw, summariesRaw] = await Promise.all([
-      listFiles(session, "specs/"),
+      listFiles(session, SPECS_PREFIX),
       downloadFile(session, env.bucket, STATUS_KEY),
-      downloadFile(session, env.bucket, "specs/_status/skipped.json"),
+      downloadFile(session, env.bucket, SKIPPED_KEY),
       downloadFile(session, env.bucket, SUMMARIES_KEY),
     ]);
     const draftFiles = specFiles.filter((f) => f.fileName.startsWith(DRAFTS_PREFIX));
@@ -66,8 +67,12 @@ export async function GET(request: Request) {
         summaries = {};
       }
     }
+    const now = Date.now();
     return Response.json({
-      rows: joinStatus(drafts, specFiles.map((f) => f.fileName), manifest, skipped, summaries),
+      rows: deriveStatusRows(drafts, specFiles.map((f) => f.fileName), manifest, skipped, summaries, now),
+      // The clock the rows were judged against, so the page can format the
+      // timeline without a second, disagreeing clock of its own.
+      now,
       host_reported: manifestRaw !== null,
       notice: (manifest as Record<string, unknown>)._notice ?? null,
       skipped: skipped ?? {},
