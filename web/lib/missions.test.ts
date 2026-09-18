@@ -323,7 +323,7 @@ test("the golden record fixture yields the rows the host's records describe", ()
   const key = Object.keys(fixture.manifest)[0];
   const [site, date] = key.split("/").slice(1, 3);
   const withdrawnKey = Object.keys(fixture.skip_list).find((k) => !(k in fixture.manifest))!;
-  const rows = joinStatus([], [key, withdrawnKey], fixture.manifest, fixture.skip_list, { [key]: fixture.summary }, Date.now());
+  const rows = joinStatus([], [key, withdrawnKey], fixture.manifest, fixture.skip_list, { [key]: fixture.summary });
   assert.equal(rows.length, 2, JSON.stringify(rows.map((r) => r.state)));
   const loaded = rows.find((r) => r.state === "loaded")!;
   const skipped = rows.find((r) => r.state === "withdrawn")!;
