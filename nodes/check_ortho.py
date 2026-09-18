@@ -343,11 +343,10 @@ def check_bellus_real_projection():
     images_dir = BELLUS_PROJECT / "images"
     gcp_path = BELLUS_PROJECT / "gcp_list.txt"
     if not images_dir.is_dir() or not gcp_path.is_file():
-        print(f"[skip] check_bellus_real_projection -- {BELLUS_PROJECT} not reachable "
-              f"(real dataset lives only on the compute host, see #22 BOUNDARIES)")
+        _skip("check_bellus_real_projection", f"{BELLUS_PROJECT} not reachable (real dataset lives only on the compute host, see #22 BOUNDARIES)")
         return
     if shutil.which("docker") is None:
-        print("[skip] check_bellus_real_projection -- docker not on PATH")
+        _skip("check_bellus_real_projection", "docker not on PATH")
         return
 
     scratch = REPO_ROOT / ".check_ortho_scratch"  # under the repo checkout -- on the host that's inside ~/drone/scratch (#22 BOUNDARIES)
@@ -403,7 +402,7 @@ def check_bellus_real_projection():
 
 def check_cog_validator():
     if shutil.which("gdal_create") is None or shutil.which("gdal_translate") is None:
-        print("[skip] export-cog COG check -- gdal_create/gdal_translate not on PATH")
+        _skip("export-cog COG check", "gdal_create/gdal_translate not on PATH")
         return
     with tempfile.TemporaryDirectory() as tmp:
         tmp = Path(tmp)
@@ -424,7 +423,7 @@ def check_cog_validator():
             )
         result = create(src, 255)
         if result.returncode != 0:
-            print(f"[skip] export-cog COG check -- gdal_create failed: {result.stderr}")
+            _skip("export-cog COG check", f"gdal_create failed: {result.stderr}")
             return
 
         out = tmp / "out"
@@ -455,6 +454,36 @@ def check_cog_validator():
         check("export-cog: refuses a mostly-empty Orthomosaic", r.returncode != 0 and "floor" in r.stderr, r.stderr)
 
 
+# A missing prerequisite must not read as a pass. The heavy evidence needs
+# docker, GDAL and a dataset that lives on the compute host; when any is absent
+# this check says so and fails, unless the operator marks the gap deliberate.
+ALLOW_SKIPS = "--allow-skips" in sys.argv
+
+
+def _skip(what: str, why: str) -> None:
+    if ALLOW_SKIPS:
+        print(f"[skip] {what} -- {why} (allowed by --allow-skips: this evidence did NOT run)")
+        return
+    FAILURES.append(f"{what}: {why}")
+    print(f"[fail] {what} -- {why} (pass --allow-skips if this gap is deliberate)", file=sys.stderr)
+
+
+def check_reconstruct_cli_refuses_a_missing_input() -> None:
+    """The reconstruct Nodes had no check at all. This drives the entry point --
+    not a helper -- so a broken CLI or a swallowed error fails here."""
+    with tempfile.TemporaryDirectory() as tmp:
+        tmp = Path(tmp)
+        r = subprocess.run(
+            [PY, str(REPO_ROOT / "nodes" / "reconstruct" / "reconstruct.py"),
+             "--in", str(tmp / "absent"), "--out", str(tmp / "out"),
+             "--rerun-from", "odm_georeferencing", "--end-with", "odm_georeferencing"],
+            capture_output=True, text=True, timeout=60,
+        )
+        assert r.returncode != 0, "reconstruct on a missing input must exit non-zero"
+        assert (r.stderr + r.stdout).strip(), "reconstruct must say why it refused"
+        print("[ok] reconstruct: entry point refuses a missing input and says so")
+
+
 def main() -> None:
     check_latlon_to_utm()
     check_utm_round_trip()
@@ -463,6 +492,7 @@ def main() -> None:
     check_gcp_writer(accepted)
     check_register_cli_no_anchors()
     check_register_cli_end_to_end(accepted)
+    check_reconstruct_cli_refuses_a_missing_input()
     check_bellus_real_projection()
     check_cog_validator()
 

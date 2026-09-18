@@ -41,7 +41,10 @@ jobs:
       - run: pip install pillow
       - name: The Nodes' own checks
         run: |
-          python3 nodes/check_ortho.py
+          # The heavy evidence needs docker/GDAL and a dataset that lives on the
+          # compute host; --allow-skips marks that gap deliberate and prints it, so a
+          # green run never silently means "nothing ran" (decision on #68).
+          python3 nodes/check_ortho.py --allow-skips
           python3 nodes/check_splat.py
           python3 nodes/check_head.py
           python3 nodes/check_deliver.py
