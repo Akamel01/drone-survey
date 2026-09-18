@@ -9,11 +9,13 @@ on:
   push:
     paths:
       - "scripts/mission/**"
+      - "nodes/**"
       - "web/**"
       - ".github/workflows/mission.yml"
   pull_request:
     paths:
       - "scripts/mission/**"
+      - "nodes/**"
       - "web/**"
   workflow_dispatch:
 
@@ -32,6 +34,17 @@ jobs:
           python-version: "3.11"
       - name: A Mission Spec becomes a Mission the aircraft can fly
         run: python3 scripts/mission/e2e_test.py
+      # ADR 0018: every Node carries a check, and the seam between Nodes runs
+      # too. They are offline by construction, so they run here on every change.
+      # check_head inspects image metadata with exiftool; Pillow builds its fixtures.
+      - run: sudo apt-get update && sudo apt-get install -y libimage-exiftool-perl
+      - run: pip install pillow
+      - name: The Nodes' own checks
+        run: |
+          python3 nodes/check_ortho.py
+          python3 nodes/check_splat.py
+          python3 nodes/check_head.py
+          python3 nodes/check_deliver.py
 
   # The status console's join, predicates and metrics are pure functions; they
   # run here so a broken row cannot reach the tab unnoticed. Build is the real

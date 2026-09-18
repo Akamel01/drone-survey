@@ -10,7 +10,11 @@ docs/business/object-storage-setup.md exactly:
     <out>/
       index.html            landing page, links to whichever viewer(s) exist
       ortho.html            MapLibre GL JS + maplibre-cog-protocol (if --ortho)
-      splat.html            PlayCanvas SuperSplat Viewer (if --splat-scene)
+      splat.html            the SuperSplat viewer's own page, vendored (if --splat-scene)
+      index.js, index.css   the SuperSplat viewer itself, beside its page — the
+                            upstream HTML imports ./index.js relatively, so the
+                            files sit next to it rather than in assets/
+      settings.json         the viewer's settings; empty means "use its defaults"
       ortho/orthomosaic.tif
       splat/scene.sog, splat/meta.json
       assets/               vendored viewer JS/CSS, pinned versions
@@ -36,22 +40,31 @@ import argparse
 import hashlib
 import json
 import os
+import re
 import secrets
 import shutil
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
-# ponytail: pinned versions asserted from research, not re-verified against
-# upstream tags on this offline box — confirm before a real delivery.
+# Pins verified against npm on 2026-09-18. The previous comment here said to
+# confirm them before a real delivery, and confirming found two that were wrong:
+# `maplibre-cog-protocol` is not a package at all (npm 404 — it is
+# @geomatico/maplibre-cog-protocol), and @playcanvas/supersplat-viewer has no
+# 2.3.0 release. Re-check these with `npm view <pkg> version` before a bump.
 ASSETS_FOR_ORTHO = [
     # (dest filename in assets/, project, version, license)
     ("maplibre-gl.js", "MapLibre GL JS", "4.7.1", "BSD-3-Clause"),
     ("maplibre-gl.css", "MapLibre GL JS", "4.7.1", "BSD-3-Clause"),
-    ("maplibre-cog-protocol.js", "maplibre-cog-protocol", "0.6.0", "MIT"),
+    ("maplibre-cog-protocol.js", "@geomatico/maplibre-cog-protocol", "0.9.3", "MIT"),
 ]
+# The SuperSplat viewer is a static web app, not a `load()` library: its
+# index.html builds `window.sse` and then imports ./index.js, which is why its
+# files are copied beside splat.html instead of into assets/ (see
+# write_splat_page). Its licence is MIT.
 ASSETS_FOR_SPLAT = [
-    ("supersplat-viewer.js", "@playcanvas/supersplat-viewer (PlayCanvas Engine)", "2.3.0", "MIT"),
+    ("index.js", "@playcanvas/supersplat-viewer", "1.31.2", "MIT"),
+    ("index.css", "@playcanvas/supersplat-viewer", "1.31.2", "MIT"),
 ]
 
 MIT_BODY = """MIT License
@@ -235,25 +248,74 @@ map.on('sourcedata', (e) => {{
 """
 
 
-def render_splat_html() -> str:
+def write_splat_page(out: Path, vendor_dir: Path | None) -> None:
+    """Write the vendored SuperSplat viewer into the Bundle.
+
+    Upstream (@playcanvas/supersplat-viewer 1.31.2) is a self-contained static
+    app: public/index.html builds `window.sse` from its query string and then
+    `import { main } from './index.js'`. We therefore copy its index.js and
+    index.css beside splat.html rather than rewriting a relative import, and
+    touch its HTML in exactly two places:
+
+      * the NOINDEX_META line, for ADR 0011's unlisted-URL mitigation;
+      * the documented injection seam `<script id="sse-bootstrap">`, which the
+        package itself says is the one place a page generator supplies asset
+        URLs and inline settings — so `content` points at this Bundle's own
+        scene and `settings` is supplied inline, which skips the viewer's
+        `fetch('./settings.json')` fallback entirely.
+
+    Without a vendor dir the viewer cannot work, so the page says so plainly
+    instead of pretending.
+    """
+    vendor = vendor_dir / "supersplat-viewer" if vendor_dir else None
+    src_html = vendor / "index.html" if vendor else None
+    if not (src_html and src_html.is_file()):
+        (out / "splat.html").write_text(placeholder_splat_html())
+        return
+
+    html = src_html.read_text()
+    if "<head>" not in html:
+        sys.exit(f"{src_html} has no <head> — upstream layout changed; review write_splat_page()")
+    html = html.replace("<head>", "<head>\n" + NOINDEX_META, 1)
+
+    bootstrap = json.dumps({"contentUrl": "splat/scene.sog", "settings": {}})
+    pattern = re.compile(
+        r'(<script type="application/json" id="sse-bootstrap">\s*)null(\s*</script>)'
+    )
+    html, hits = pattern.subn(lambda m: m.group(1) + bootstrap + m.group(2), html)
+    if hits != 1:
+        sys.exit(
+            f"{src_html}: the sse-bootstrap seam was not found exactly once (found {hits}) — "
+            "upstream layout changed; review write_splat_page()"
+        )
+
+    for filename, _project, _version, _license in ASSETS_FOR_SPLAT:
+        src = vendor / filename
+        if not src.is_file():
+            sys.exit(f"{src} is missing — the vendor dir needs the viewer's index.js and index.css")
+        shutil.copyfile(src, out / filename)
+    # Belt and braces for the fetch fallback: an empty settings file is a valid
+    # one, so even a client that strips the inline settings gets defaults, not a 404.
+    (out / "settings.json").write_text("{}\n")
+    (out / "splat.html").write_text(html)
+
+
+def placeholder_splat_html() -> str:
     return f"""<!doctype html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
 {NOINDEX_META}
-<title>3D reconstruction</title>
-<script src="assets/supersplat-viewer.js"></script>
-<style>html,body,#viewer{{height:100%;margin:0}}</style>
+<title>3D reconstruction — viewer not vendored</title>
 </head>
 <body>
-<div id="viewer"></div>
-<script>
-SupersplatViewer.load({{
-  container: document.getElementById('viewer'),
-  scene: 'splat/scene.sog',
-  meta: 'splat/meta.json'
-}});
-</script>
+<h1>The 3D viewer is not in this Bundle yet</h1>
+<p>
+This Bundle was assembled without <code>--vendor-dir</code>, so the pinned
+@playcanvas/supersplat-viewer build is missing. Re-build with a vendor dir
+holding <code>supersplat-viewer/</code> (index.html, index.js, index.css) —
+see docs/business/object-storage-setup.md.
+</p>
 </body>
 </html>
 """
@@ -290,10 +352,9 @@ def build(args: argparse.Namespace) -> Path:
         splat_dir.mkdir(exist_ok=True)
         shutil.copyfile(args.splat_scene, splat_dir / "scene.sog")
         shutil.copyfile(args.splat_meta, splat_dir / "meta.json")
-        for filename, project, version, license_id in ASSETS_FOR_SPLAT:
-            write_asset(assets_dir, vendor_dir, filename, project, version)
-            components.append((project, version, license_id))
-        (out / "splat.html").write_text(render_splat_html())
+        write_splat_page(out, vendor_dir)
+        # The viewer ships several files but is one component: notice it once.
+        components.append(ASSETS_FOR_SPLAT[0][1:])
 
     if args.report:
         report_dir = out / "report"
