@@ -1,0 +1,42 @@
+{
+  "spec_keys": [
+    {
+      "key": "specs/field/2026-09-17/20260917T000000Z.json",
+      "site": "field",
+      "date": "2026-09-17",
+      "stamp": "20260917T000000Z"
+    },
+    {
+      "key": "specs/rehearsal-field/2026-09-14/20260914T080000Z.json",
+      "site": "rehearsal-field",
+      "date": "2026-09-14",
+      "stamp": "20260914T080000Z"
+    },
+    {
+      "key": "specs/other_site/2026-01-02/20260102T235959Z.json",
+      "site": "other_site",
+      "date": "2026-01-02",
+      "stamp": "20260102T235959Z"
+    }
+  ],
+  "not_spec_keys": [
+    "specs/_drafts/0193abcd-0000-7000-8000-000000000000.json",
+    "specs/_status/missions.json",
+    "specs/_status/skipped.json",
+    "specs/_status/summaries.json",
+    "specs/a/b.json",
+    "specs/field/2026-09-17/20260917T000000Z.json.bak",
+    "other/field/2026-09-17/20260917T000000Z.json",
+    ""
+  ],
+  "drafts_prefix": "specs/_drafts/",
+  "draft_key": {
+    "id": "0193abcd",
+    "key": "specs/_drafts/0193abcd.json"
+  },
+  "status_keys": {
+    "missions": "specs/_status/missions.json",
+    "skipped": "specs/_status/skipped.json",
+    "summaries": "specs/_status/summaries.json"
+  }
+}

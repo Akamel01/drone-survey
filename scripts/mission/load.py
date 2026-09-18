@@ -30,6 +30,7 @@ HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 from kmz import WAYPOINT_DIR, read_create_time, with_create_time  # noqa: E402
 import b2_status  # noqa: E402  (network to B2 only; no mount, no Controller)
+import keys  # noqa: E402
 
 MOUNT = Path.home() / "rc2"
 STORAGE = "Internal shared storage"
@@ -89,16 +90,16 @@ def unloaded_queue(specs: Path, record: Path) -> list[Path]:
             try:
                 t = p.relative_to(specs.parent).as_posix()
                 # Normalize to drop the leading 'specs/' if present to compare with tails
-                if t.startswith("specs/"):
-                    return t[len("specs/") :]
+                if t.startswith(keys.SPEC_PREFIX):
+                    return t[len(keys.SPEC_PREFIX) :]
                 return t
             except Exception:
                 return str(p)
         # Build a set of tails that are skipped
         tails = set()
         for s in skipped:
-            if isinstance(s, str) and s.startswith("specs/"):
-                tails.add(s.split("specs/", 1)[-1])
+            if isinstance(s, str) and s.startswith(keys.SPEC_PREFIX):
+                tails.add(s.split(keys.SPEC_PREFIX, 1)[-1])
             else:
                 tails.add(str(s))
         queue = [f for f in queue if _tail(f) not in tails]
@@ -362,7 +363,7 @@ def main() -> None:
             _senv = load_env(args.status_config)
             _sauth = authorize(_senv["B2_KEY_ID"], _senv["B2_APP_KEY"])
             _data = download(_sauth["downloadUrl"], _sauth["allowed"]["bucketName"],
-                             "specs/_status/skipped.json", _sauth["authorizationToken"])
+                             keys.SKIPPED_KEY, _sauth["authorizationToken"])
             (SPECS / "_status").mkdir(parents=True, exist_ok=True)
             (SPECS / "_status" / "skipped.json").write_bytes(_data)
         except (Exception, SystemExit):
@@ -414,7 +415,7 @@ def main() -> None:
 def spec_key(spec: Path) -> str:
     """The cloud key for a Collected Spec: its path under ~/wayfinder/specs/."""
     try:
-        return "specs/" + spec.resolve().relative_to(SPECS.resolve()).as_posix()
+        return keys.SPEC_PREFIX + spec.resolve().relative_to(SPECS.resolve()).as_posix()
     except ValueError:
         return spec.name
 

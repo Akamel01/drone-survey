@@ -13,12 +13,15 @@ Network only, no Controller: importing this file cannot touch a mount.
 import datetime
 import json
 import sys
+
+import keys  # noqa: E402
+import b2  # noqa: E402  (one home for storage access)
 import urllib.error
 import urllib.parse
 import urllib.request
 from pathlib import Path
 
-STATUS_KEY = "specs/_status/missions.json"
+STATUS_KEY = keys.STATUS_KEY
 # Underscore-prefixed inside specs/ on purpose: store keys are confined to the
 # specs/ prefix, and collect.py's Spec pattern only matches three-segment
 # site/date/file keys, so the manifest is invisible to Collect.
@@ -90,48 +93,15 @@ def clear_notice(manifest: dict) -> dict:
 
 def download_manifest(api_url: str, download_url: str, bucket: str, token: str) -> dict:
     """The manifest so far; {} when the host has never reported (not an error)."""
-    url = f"{download_url}/file/{bucket}/{urllib.parse.quote(STATUS_KEY, safe='/')}"
-    req = urllib.request.Request(url, headers={"Authorization": token})
     try:
-        with urllib.request.urlopen(req, timeout=30) as resp:
-            return json.loads(resp.read())
-    except urllib.error.HTTPError as e:
-        if e.code == 404:
-            return {}
-        sys.exit(f"manifest download failed: {e.code} {e.reason}")
-    except urllib.error.URLError as e:
-        sys.exit(f"could not reach B2: {e.reason}")
+        return json.loads(b2.download(download_url, bucket, STATUS_KEY, token))
+    except FileNotFoundError:
+        return {}
 
 
 def upload_manifest(api_url: str, token: str, bucket_id: str, manifest: dict) -> None:
     body = json.dumps(manifest, indent=1, sort_keys=True).encode()
-    req = urllib.request.Request(
-        f"{api_url}/b2api/v2/b2_get_upload_url",
-        data=json.dumps({"bucketId": bucket_id}).encode(),
-        headers={"Authorization": token, "Content-Type": "application/json"},
-    )
-    try:
-        with urllib.request.urlopen(req, timeout=30) as resp:
-            up = json.load(resp)
-    except urllib.error.HTTPError as e:
-        sys.exit(f"manifest upload url failed: {e.code} {e.reason}")
-    import hashlib
-
-    req = urllib.request.Request(
-        up["uploadUrl"],
-        data=body,
-        headers={
-            "Authorization": up["authorizationToken"],
-            "X-Bz-File-Name": urllib.parse.quote(STATUS_KEY, safe="/"),
-            "Content-Type": "application/json",
-            "X-Bz-Content-Sha1": hashlib.sha1(body).hexdigest(),
-        },
-    )
-    try:
-        with urllib.request.urlopen(req, timeout=60):
-            pass
-    except urllib.error.HTTPError as e:
-        sys.exit(f"manifest upload failed: {e.code} {e.reason}")
+    b2.upload(api_url, token, bucket_id, STATUS_KEY, body)
 
 
 def _selftest() -> None:
