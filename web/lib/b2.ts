@@ -38,13 +38,24 @@ export interface B2Session {
   bucketId: string;
 }
 
+// b2_authorize_account is itself a Class C transaction, and its token is good
+// for 24 hours. Re-authorizing on every request was most of what exhausted the
+// daily Class C cap: the status page polling every 30s spent 2,880 a day on
+// authorize alone. One session per key id, renewed well inside the token's life.
+const SESSION_TTL_MS = 12 * 60 * 60 * 1000;
+const sessions = new Map<string, { session: B2Session; expires: number }>();
+
 export async function authorize(env: B2Env): Promise<B2Session> {
+  const cached = sessions.get(env.keyId);
+  if (cached && cached.expires > Date.now()) return cached.session;
   const res = await fetch(B2_AUTH, {
     headers: { Authorization: "Basic " + Buffer.from(`${env.keyId}:${env.appKey}`).toString("base64") },
   });
   if (!res.ok) throw new Error(`authorize failed: ${res.status}`);
   const { apiUrl, downloadUrl, authorizationToken, allowed } = await res.json();
-  return { apiUrl, downloadUrl, token: authorizationToken, bucketId: allowed.bucketId };
+  const session = { apiUrl, downloadUrl, token: authorizationToken, bucketId: allowed.bucketId };
+  sessions.set(env.keyId, { session, expires: Date.now() + SESSION_TTL_MS });
+  return session;
 }
 
 export interface B2File {

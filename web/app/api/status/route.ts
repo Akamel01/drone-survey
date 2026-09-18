@@ -15,13 +15,15 @@ export async function GET(request: Request) {
   if (!readEnv) return Response.json({ error: "Storage is not configured" }, { status: 503 });
   try {
     const session = await authorize(readEnv);
-    const [specFiles, draftFiles, manifestRaw, skippedRaw, summariesRaw] = await Promise.all([
+    // One listing covers both: drafts live under specs/ (ADR 0017), so the
+    // drafts listing was a second Class C transaction on every poll.
+    const [specFiles, manifestRaw, skippedRaw, summariesRaw] = await Promise.all([
       listFiles(session, "specs/"),
-      listFiles(session, DRAFTS_PREFIX),
       downloadFile(session, env.bucket, STATUS_KEY),
       downloadFile(session, env.bucket, "specs/_status/skipped.json"),
       downloadFile(session, env.bucket, SUMMARIES_KEY),
     ]);
+    const draftFiles = specFiles.filter((f) => f.fileName.startsWith(DRAFTS_PREFIX));
     const drafts: DraftRecord[] = (
       await Promise.all(
         draftFiles
