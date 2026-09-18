@@ -2,10 +2,10 @@
 """Fetch Dispatched Mission Specs from B2 onto this host, ready to be Loaded.
 
 Collecting and Loading are different moments (CONTEXT.md): this runs on its
-own schedule to gather what the planner Dispatched, and a Controller is only
-ever written by push_to_rc.py, by hand, when one is plugged in. This script
-has no MTP code path and no import of push_to_rc — there is no line in this
-file that could write to a Controller, so a lost or corrupted local record
+own schedule to gather what the planner Dispatched, and the Controller is only
+ever written by load.py, by hand, when one is plugged in. This script
+has no MTP code path at all — there is no line in this file that could write to
+a Controller, so a lost or corrupted local record
 (ADR 0017) can only ever cause a redundant download, never a bad Load.
 
 The B2 key read from credentials is confined server-side to specs/ and can
