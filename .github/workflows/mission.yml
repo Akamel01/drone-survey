@@ -50,6 +50,9 @@ jobs:
           cache: npm
           cache-dependency-path: web/package-lock.json
       - run: npm ci
+      # Next generates LayoutProps/PageProps into .next/types; without this,
+      # a bare `tsc --noEmit` fails on a clean checkout.
+      - run: npx next typegen
       - run: npx tsc --noEmit
       - run: npm test
       - run: npm run lint
