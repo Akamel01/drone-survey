@@ -35,9 +35,20 @@ def utcnow() -> str:
 
 
 def merge_collected(manifest: dict, keys: list[str], at: str) -> dict:
-    """Stamp collected_at on newly Collected keys; never touch existing entries."""
+    """Stamp collected_at on newly Collected keys; never touch existing entries.
+
+    Also ensure additive, forward-compatible metadata exists for future
+    host Web/JOIN logic: a Collected entry may carry `parts` and `cards` in
+    the manifest. These are currently populated at Load time, but we stamp
+    them here with sane defaults so the consumer can rely on their presence
+    even before any Load has occurred.
+    """
     for key in keys:
-        manifest.setdefault(key, {}).setdefault("collected_at", at)
+        ent = manifest.setdefault(key, {})
+        ent.setdefault("collected_at", at)
+        # Additive defaults for future host join logic (no impact if already set)
+        ent.setdefault("parts", 0)
+        ent.setdefault("cards", [])
     return manifest
 
 
@@ -127,7 +138,12 @@ def _selftest() -> None:
     # 1. Collect stamps only new keys; a re-collect changes nothing.
     m: dict = {"a": {"collected_at": "t0"}}
     merge_collected(m, ["a", "b"], "t1")
-    assert m == {"a": {"collected_at": "t0"}, "b": {"collected_at": "t1"}}, m
+    # New entries get defaults for additive metadata; existing entries retain their
+    # original collected_at timestamp.
+    assert m == {
+        "a": {"collected_at": "t0", "parts": 0, "cards": []},
+        "b": {"collected_at": "t1", "parts": 0, "cards": []},
+    }, m
 
     # 2. A Load records per-mission cards exactly.
     m = {}

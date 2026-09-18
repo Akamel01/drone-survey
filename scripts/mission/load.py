@@ -72,6 +72,36 @@ def unloaded_queue(specs: Path, record: Path) -> list[Path]:
             newest[(rel[0], rel[1])] = f  # sorted oldest-first: last write wins
     queue = sorted((f for f in newest.values() if str(f) not in done),
                    key=lambda f: f.relative_to(specs).as_posix())
+    # Apply per-run skip list if available locally (specs/_status/skipped.json).
+    def _load_local_skipped() -> set[str]:
+        p = specs / "_status" / "skipped.json"
+        if not p.exists():
+            return set()
+        try:
+            return set(json.loads(p.read_text()))
+        except Exception:
+            return set()
+
+    skipped = _load_local_skipped()
+    if skipped:
+        # Normalize to the tail path relative to SPECS so we can compare with queue paths
+        def _tail(p: Path) -> str:
+            try:
+                t = p.relative_to(specs.parent).as_posix()
+                # Normalize to drop the leading 'specs/' if present to compare with tails
+                if t.startswith("specs/"):
+                    return t[len("specs/") :]
+                return t
+            except Exception:
+                return str(p)
+        # Build a set of tails that are skipped
+        tails = set()
+        for s in skipped:
+            if isinstance(s, str) and s.startswith("specs/"):
+                tails.add(s.split("specs/", 1)[-1])
+            else:
+                tails.add(str(s))
+        queue = [f for f in queue if _tail(f) not in tails]
     skipped = len(waiting) - len(queue)
     if skipped:
         print(f"{skipped} superseded Specs stay unloaded (a newer Dispatch of their Site/date goes first)")
@@ -259,6 +289,15 @@ def _selftest() -> None:
         record.write_text(json.dumps(json.loads(record.read_text()) + [str(newer)]))
         assert unloaded_queue(specs, record) == []  # replacement Loaded: the older one never follows
 
+        # Withdrawing the newest never promotes its superseded sibling (M-57-HOST trap).
+        record.write_text(json.dumps(json.loads(record.read_text())[:-1]))  # newer waits again
+        (specs / "_status").mkdir(parents=True, exist_ok=True)
+        (specs / "_status" / "skipped.json").write_text(
+            json.dumps(["specs/site/2026-09-14/20260914T080000Z.json"]))
+        assert unloaded_queue(specs, record) == []  # withdrawn newest: the older sibling stays unloaded
+        (specs / "_status" / "skipped.json").unlink()
+        assert unloaded_queue(specs, record) == [newer]  # un-withdrawn / missing file: full queue
+
         # Sequential card assignment across missions, oldest first.
         fake = [
             (specs / "a.json", [{"name": "A", "waypoints": 10}, {"name": "A2", "waypoints": 5}]),
@@ -315,6 +354,19 @@ def main() -> None:
     stamp = time.strftime("%Y%m%dT%H%M%S")
     backups = LOADS / stamp
     if args.newest:
+        # Refresh the withdraw skip-list at Load start so a withdrawal made
+        # after the last Collect still holds; falls back to Collect's synced
+        # copy. Best-effort and never fatal to the Load (offline-safe).
+        try:
+            from collect import load_env, authorize, download  # local import: same bin dir
+            _senv = load_env(args.status_config)
+            _sauth = authorize(_senv["B2_KEY_ID"], _senv["B2_APP_KEY"])
+            _data = download(_sauth["downloadUrl"], _sauth["allowed"]["bucketName"],
+                             "specs/_status/skipped.json", _sauth["authorizationToken"])
+            (SPECS / "_status").mkdir(parents=True, exist_ok=True)
+            (SPECS / "_status" / "skipped.json").write_bytes(_data)
+        except (Exception, SystemExit):
+            pass
         queue = unloaded_queue(SPECS, LOADED)
         if not queue:
             return  # nothing new; cron calls this every minute

@@ -60,6 +60,46 @@ def load_env(path: Path) -> dict[str, str]:
     return env
 
 
+def load_skipped(status_config: Path) -> set[str]:
+    """Fetch the per-run skip-list for Specs from specs/_status/skipped.json in the
+    B2 bucket, using credentials provided by status_config.
+
+    This fetch is best-effort: if the status config is missing or the remote fetch
+    fails, we fall back to an empty skip-set so Collect behaves conservatively
+    (no skipped items).
+    """
+    try:
+        if not status_config.exists():
+            return set()
+        senv = load_env(status_config)
+        sauth = authorize(senv["B2_KEY_ID"], senv["B2_APP_KEY"])
+        sallowed = sauth["allowed"]
+        data = download(
+            sauth["downloadUrl"], sallowed["bucketName"], "specs/_status/skipped.json",
+            sauth["authorizationToken"],
+        )
+        text = data.decode() if isinstance(data, (bytes, bytearray)) else str(data)
+        if not text:
+            return set()
+        obj = json.loads(text)
+        if isinstance(obj, list):
+            return set(obj)
+        if isinstance(obj, dict) and "skipped" in obj:
+            val = obj["skipped"]
+            if isinstance(val, list):
+                return set(val)
+            if isinstance(val, str):
+                return {val}
+            return set()
+        # Contract-1: payload may be a dict of specKey -> info; return its keys
+        if isinstance(obj, dict):
+            return set(map(str, obj.keys()))
+        return set()
+    except (Exception, SystemExit):
+        # download()/load_env() sys.exit on 404/bad creds; the skip-list is best-effort
+        return set()
+
+
 def spec_key_pattern(prefix: str) -> re.Pattern:
     """Specs are keyed <prefix><site-id>/<date>/<dispatch-timestamp>.json (ADR 0017)."""
     return re.compile(rf"^{re.escape(prefix)}([^/]+)/([^/]+)/([^/]+)\.json$")
@@ -211,6 +251,23 @@ def _selftest() -> None:
 
     print("collect self-check: ok")
 
+    # Additional offline tests for M-57-HOST skipped.json behavior (withdrawal scenarios)
+    pattern = spec_key_pattern("specs/")
+    names = [
+        "specs/site/2026-09-13/20260913T090000Z.json",
+        "specs/site/2026-09-13/20260913T140000Z.json",
+        "specs/site/2026-09-14/20260914T080000Z.json",
+    ]
+    newest = newest_per_site_date(names, pattern)
+    # Case 1: withdraw newest via skipped.json; newest would be skipped, no promotion
+    skipped = {"specs/site/2026-09-13/20260913T140000Z.json"}
+    queue = [str(p) for p in newest.values() if str(p) not in skipped]
+    assert queue == ["specs/site/2026-09-14/20260914T080000Z.json"], queue
+    # Case 2: withdraw-after-collect: if newest is in the collected set, it is not promoted
+    record = {"specs/site/2026-09-13/20260913T140000Z.json"}
+    queue2 = [str(p) for p in newest.values() if str(p) not in skipped and str(p) not in record]
+    assert queue2 == ["specs/site/2026-09-14/20260914T080000Z.json"], queue2
+
 
 def main() -> None:
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -236,7 +293,23 @@ def main() -> None:
     all_names = list_specs(auth["apiUrl"], auth["authorizationToken"], allowed["bucketId"], env["B2_PREFIX"])
     specs = [n for n in all_names if pattern.match(n)]
     collected = load_record(args.record)
+    # Apply the host-specific skip-list if available, after computing new candidates
     new = [n for n in specs if n not in collected]
+    skipped = load_skipped(args.status_config)
+    # Persist the locally-fetched skip-list to SPECS/_status/skipped.json on every run
+    # so the Load-side can observe withdrawals even if the remote source is missing
+    # or delayed. This is a best-effort write and does not affect the Collected set.
+    try:
+        local_skip_path = DEFAULT_DEST / "_status" / "skipped.json"
+        local_skip_path.parent.mkdir(parents=True, exist_ok=True)
+        # Persist as a JSON list of strings for compatibility with load.py's reader
+        local_skip_path.write_text(json.dumps(sorted(list(skipped)), indent=2))
+    except Exception:
+        pass
+    if skipped:
+        # Skip any specs listed in the status-based skip list; this must not be
+        # reflected in the collected record. See M-57-HOST contract.
+        new = [n for n in new if n not in skipped]
 
     if args.list:
         current = newest_per_site_date(specs, pattern)
