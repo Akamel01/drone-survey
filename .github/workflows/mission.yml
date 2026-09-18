@@ -9,12 +9,12 @@ on:
   push:
     paths:
       - "scripts/mission/**"
-      - "web/lib/**"
+      - "web/**"
       - ".github/workflows/mission.yml"
   pull_request:
     paths:
       - "scripts/mission/**"
-      - "web/lib/**"
+      - "web/**"
   workflow_dispatch:
 
 jobs:
@@ -32,3 +32,35 @@ jobs:
           python-version: "3.11"
       - name: A Mission Spec becomes a Mission the aircraft can fly
         run: python3 scripts/mission/e2e_test.py
+
+  # The status console's join, predicates and metrics are pure functions; they
+  # run here so a broken row cannot reach the tab unnoticed. Build is the real
+  # deployment gate: the withdraw route shipped broken once precisely because
+  # nothing type-checked it.
+  web:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - run: npm ci
+      - run: npx tsc --noEmit
+      - run: npm test
+      - run: npm run lint
+      - run: npm run build
+        env:
+          # The build never talks to B2; placeholders keep the route modules
+          # from failing their configuration check at build time.
+          B2_BUCKET: ci
+          B2_KEY_ID: ci
+          B2_APP_KEY: ci
+          B2_READ_KEY_ID: ci
+          B2_READ_APP_KEY: ci
+          DISPATCH_SECRET: ci
+

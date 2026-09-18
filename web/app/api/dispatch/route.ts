@@ -86,9 +86,9 @@ export async function POST(request: Request) {
       const env2 = b2Env();
       if (readEnv2 && env2) {
         const readSession: B2Session = await authorize(readEnv2);
-        const writeSession: B2Session = readEnv2.keyId === (env2 as any).keyId ? readSession : await authorize(env2 as any);
-        const existingRaw = await downloadFile(readSession, (env2 as any).bucket, existingKey);
-        const parsed: Record<string, any> = existingRaw ? JSON.parse(existingRaw.toString()) : {};
+        const writeSession: B2Session = readEnv2.keyId === env2.keyId ? readSession : await authorize(env2);
+        const existingRaw = await downloadFile(readSession, env2.bucket, existingKey);
+        const parsed: Record<string, unknown> = existingRaw ? JSON.parse(existingRaw.toString()) : {};
         parsed[key] = { photo_count: summary.photo_count, path_length_m: summary.path_length_m };
         await uploadFile(writeSession, existingKey, Buffer.from(JSON.stringify(parsed, null, 2)));
       }

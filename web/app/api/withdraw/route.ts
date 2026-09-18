@@ -1,6 +1,7 @@
 import { authProblem } from "@/lib/auth";
 import { b2Env, b2ReadEnv, uploadFile, downloadFile, authorize } from "@/lib/b2";
 import { parseSpecKey } from "@/lib/missions";
+import type { Manifest } from "@/lib/missions";
 
 // Withdraw API: mark a spec as withdrawn (skipped.json) or un-withdraw if requested later
 export const runtime = "nodejs";
@@ -46,7 +47,7 @@ export async function POST(request: Request) {
     })();
     const manifestRaw = await downloadFile(sessionRead, readEnv.bucket, manifestKey);
     if (manifestRaw) {
-      const manifest = JSON.parse(manifestRaw.toString()) as any;
+      const manifest = JSON.parse(manifestRaw.toString()) as Manifest;
       if (manifest?.[key]?.collected_at || manifest?.[key]?.loaded_at) {
         return Response.json({ error: "Cannot withdraw/unwithdraw a spec that has been collected or loaded" }, { status: 403 });
       }

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState, useRef } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { DEFAULT_SPEC, type MissionSpec } from "@/lib/spec";
 import type { StatusRow } from "@/lib/missions";
 import { preview } from "@/lib/mission";
@@ -35,9 +35,7 @@ interface HostNotice {
 }
 
 export default function MissionStatus({ spec, onLoadMission, allowSave = true }: MissionStatusProps) {
-  // Simple per-row memoization cache for draft previews (avoid re-running preview
-  // on every render when rows repeat).
-  const draftPreviewCache = useRef<Map<string, any>>(new Map());
+  // Draft previews cache removed: compute inline previews during render.
   const [passphrase, setPassphrase] = useState<string | null>(null);
   const [status, setStatus] = useState<FetchState>({ kind: "loading" });
   const [busy, setBusy] = useState<string | null>(null);
@@ -137,6 +135,21 @@ export default function MissionStatus({ spec, onLoadMission, allowSave = true }:
     }),
   );
 
+  // Edit on a Spec row (#57): the full Spec body is served by /api/specs and
+  // handed to the planner as a new draft. The immutable Spec is never edited.
+  async function editSpec(key: string) {
+    try {
+      const res = await fetch(`/api/specs?key=${encodeURIComponent(key)}`);
+      if (!res.ok) {
+        setNotice(`Edit failed: ${res.status}`);
+        return;
+      }
+      onLoadMission((await res.json()) as MissionSpec);
+    } catch (err) {
+      setNotice(`Edit failed: ${err instanceof Error ? err.message : "unknown"}`);
+    }
+  }
+
   // Before the client-only read lands there is nothing to show yet; an empty
   // passphrase afterwards means the operator never typed one.
   if (passphrase === null) {
@@ -191,23 +204,18 @@ export default function MissionStatus({ spec, onLoadMission, allowSave = true }:
             </div>
             { /* Metrics line: show per-row metrics if available */ }
             {(() => {
-              // draft metrics
+              // draft metrics (recomputed inline)
               if (row.kind === "draft") {
-                let dp = draftPreviewCache.current.get(row.id);
-                if (!dp) {
-                  const specDraft = draftSpec(row);
-                  dp = preview(specDraft);
-                  draftPreviewCache.current.set(row.id, dp);
-                }
-              if (dp?.photo_count != null && dp?.path_length_m != null) {
-                const dist = dp.path_length_m;
-                const s = dist < 1000 ? `${Math.round(dist)} m` : `${(dist / 1000).toFixed(2)} km`;
-                return (
-                  <div className={styles.meta}>
+                const dp = preview(draftSpec(row));
+                if (dp?.photo_count != null && dp?.path_length_m != null) {
+                  const dist = dp.path_length_m;
+                  const s = dist < 1000 ? `${Math.round(dist)} m` : `${(dist / 1000).toFixed(2)} km`;
+                  return (
+                    <div className={styles.meta}>
                       {dp.photo_count} points · {s}
-                  </div>
-                );
-              }
+                    </div>
+                  );
+                }
               }
               // spec metrics (host-provided)
               if (row.metrics) {
@@ -232,6 +240,13 @@ export default function MissionStatus({ spec, onLoadMission, allowSave = true }:
                 {row.cards.map((c) => `${c.card}: ${c.name}${c.waypoints == null ? "" : ` (${c.waypoints})`}`).join(" · ")}
               </div>
             )}
+            {state === "superseded" && (
+              <details className={styles.meta}>
+                <summary>Superseded — show details</summary>
+                <div className={`${styles.meta} mono`}>{row.id}</div>
+                <div className={styles.meta}>Dispatched {age(row.updated)}; a newer Spec for this Site/date is the one that loads.</div>
+              </details>
+            )}
             {row.dispatched_key && row.kind === "draft" && (
               <div className={`${styles.meta} mono`}>{shortKey(row.dispatched_key)}</div>
             )}
@@ -242,22 +257,16 @@ export default function MissionStatus({ spec, onLoadMission, allowSave = true }:
                     {busy === "Dispatch" ? "Dispatching…" : "Dispatch"}
                   </button>
                 )}
-                <button onClick={async () => {
-                  // Edit route for a draft: fetch full spec and hand off to planner
-                  try {
-                    const res = await fetch(`/api/specs?key=${encodeURIComponent(row.id)}`);
-                    if (res.ok) {
-                      const s = await res.json();
-                      onLoadMission(s as MissionSpec);
-                    } else {
-                      // Fallback to existing draft prefill if spec fetch fails
-                      onLoadMission(draftSpec(row));
-                    }
-                  } catch {
-                    onLoadMission(draftSpec(row));
+                <button onClick={() => onLoadMission(draftSpec(row))}>Edit</button>
+                <button
+                  onClick={() => deleteDraft(row.id, row.site)}
+                  disabled={busy !== null || !isDraftDeletable(row)}
+                  title={
+                    isDraftDeletable(row)
+                      ? "Delete this draft"
+                      : "Dispatched Specs are immutable — they can only be superseded by a newer Dispatch"
                   }
-                }}>Edit</button>
-                <button onClick={() => deleteDraft(row.id, row.site)} disabled={busy !== null || !isDraftDeletable(row)}>
+                >
                   Delete
                 </button>
               </div>
@@ -273,6 +282,9 @@ export default function MissionStatus({ spec, onLoadMission, allowSave = true }:
                     Withdraw
                   </button>
                 ) : null}
+                <button onClick={() => editSpec(row.id)} disabled={busy !== null}>
+                  Edit as new draft
+                </button>
               </div>
             )}
           </div>

@@ -40,18 +40,18 @@ export type Manifest = Record<string, ManifestEntry>;
 // Small action helpers used by the UI to decide which actions to present in the
 // mission status console (M-57 UI). These are lightweight, testable predicates
 // that rely only on the in-memory StatusRow shape.
-export function isDraftDeletable(row: any): boolean {
+export function isDraftDeletable(row: StatusRow): boolean {
   // Drafts are deletable only if they have not been dispatched yet.
   // We keep the check minimal here and rely on server-side guards as well.
   return row.kind === "draft" && row.state === "draft";
 }
 
-export function isSpecWithdrawable(row: any): boolean {
+export function isSpecWithdrawable(row: StatusRow): boolean {
   // Only spec rows that are still in the host queue can be withdrawn.
   return row.kind === "spec" && (row.state === "dispatched" || row.state === "queued");
 }
 
-export function isWithdrawn(row: any): boolean {
+export function isWithdrawn(row: StatusRow): boolean {
   return row.kind === "spec" && row.state === "withdrawn";
 }
 
@@ -248,36 +248,36 @@ export function joinStatus(
       const canTake = Math.min(parts, CARD_POOL - (nextCard - 1));
       for (let i = 0; i < canTake; i++) {
         const slot = nextCard + i;
-        w.cards.push({ card: `WAYFINDER ${slot}`, name: `Card ${slot}` } as any);
+        w.cards.push({ card: `WAYFINDER ${slot}`, name: `Card ${slot}` });
       }
       if (canTake < parts) {
-        (w as any).overflow = true;
+        w.overflow = true;
       }
       nextCard += canTake;
     } else if (parts === 0) {
       // Unknown-parts: assign a single unassigned slot if possible
       if (nextCard <= CARD_POOL) {
-        w.cards.push({ card: `UNASSIGNED`, name: `Unassigned` } as any);
+        w.cards.push({ card: `UNASSIGNED`, name: `Unassigned` });
         nextCard += 1;
       } else {
-        (w as any).overflow = true;
+        w.overflow = true;
       }
     } else {
       // No more cards left in pool
-      (w as any).overflow = true;
+      w.overflow = true;
     }
   }
   // Fallback: if a waiting row somehow has no cards allocated, mark as unassigned
-    for (const w of waitingOrdered) {
-      if (!w.cards || w.cards.length === 0) {
+  for (const w of waitingOrdered) {
+    if (!w.cards || w.cards.length === 0) {
       w.cards = [{ card: "UNASSIGNED", name: "Unassigned" }];
-      }
     }
+  }
   // Extra guard: ensure the very first waiting row has at least one card for UI
   if (waitingOrdered.length > 0) {
     const first = waitingOrdered[0];
     if (!first.cards || first.cards.length === 0) {
-      first.cards = [{ card: "WAYFINDER 1", name: "Card 1" } as any];
+      first.cards = [{ card: "WAYFINDER 1", name: "Card 1" }];
     }
   }
   // Newest-first display order remains defined by stamp as before.
