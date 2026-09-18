@@ -65,8 +65,18 @@ export default function MissionStatus({ spec, onLoadMission, allowSave = true }:
     setPassphrase(key);
     if (!key) return;
     load(key);
-    const t = setInterval(() => load(key), 30000);
-    return () => clearInterval(t);
+    // Every poll costs a Class C transaction on the storage account, and this
+    // page is left open for hours. Five minutes is fresh enough for a pipeline
+    // whose steps are minutes apart, and a hidden tab costs nothing at all.
+    const refresh = () => {
+      if (!document.hidden) load(key);
+    };
+    document.addEventListener("visibilitychange", refresh);
+    const t = setInterval(refresh, 300000);
+    return () => {
+      clearInterval(t);
+      document.removeEventListener("visibilitychange", refresh);
+    };
   }, [load]);
 
   async function act(label: string, fn: () => Promise<Response>) {
