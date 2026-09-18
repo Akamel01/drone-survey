@@ -13,6 +13,7 @@ import shutil
 import subprocess
 import sys
 from pathlib import Path
+from typing import Any
 
 # The extensions the photogrammetry stages treat as source imagery. They were
 # two sets that disagreed (ingest took .jpg/.jpeg only; solve and the ODM client
@@ -34,6 +35,21 @@ def sha256_file(path: Path) -> str:
 def die(msg: str) -> None:
     print(msg, file=sys.stderr)
     sys.exit(1)
+
+
+def emit_report(path: Path, payload: dict[str, Any]) -> None:
+    """Write a Node report JSON in a stable, easy-to-consume form.
+
+    - The JSON is UTF-8, with keys sorted to guarantee stable output for tests
+      and diffs.
+    - A trailing newline is appended for good Unix friendliness.
+    - Parent directories are created as needed.
+    - The function returns nothing and never prints.
+    """
+    p = Path(path)
+    p.parent.mkdir(parents=True, exist_ok=True)
+    text = json.dumps(payload, sort_keys=True, ensure_ascii=False) + "\n"
+    p.write_text(text, encoding="utf-8")
 
 
 def require_exiftool() -> None:
@@ -78,7 +94,6 @@ def copy_metadata(src: Path, dst: Path) -> None:
 def _selftest() -> None:
     """Offline: image discovery picks exactly the images, and the checksum is stable."""
     import tempfile
-
     with tempfile.TemporaryDirectory() as tmp:
         d = Path(tmp)
         for name in ("b.JPG", "a.jpg", "c.tif", "d.png", "notes.txt", "clip.mp4"):
@@ -86,6 +101,13 @@ def _selftest() -> None:
         found = [p.name for p in list_images(d)]
         assert found == ["a.jpg", "b.JPG", "c.tif", "d.png"], found
         assert sha256_file(d / "a.jpg") == hashlib.sha256(b"x").hexdigest()
+        # emit_report round-trips, creates parents, and ends the file with a newline
+        payload = {"ok": True, "items": [1, 2, 3]}
+        out = Path(tmp) / "report" / "sample.json"
+        emit_report(out, payload)
+        loaded = json.loads(out.read_text())
+        assert loaded == payload
+        assert out.read_text().endswith("\n")
     print("common self-check: ok")
 
 
