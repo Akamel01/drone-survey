@@ -25,6 +25,10 @@ import urllib.parse
 import urllib.request
 from pathlib import Path
 
+HERE = Path(__file__).resolve().parent
+sys.path.insert(0, str(HERE))
+import b2_status  # noqa: E402  (network to B2 only; no mount, no Controller)
+
 B2_AUTHORIZE_URL = "https://api.backblazeb2.com/b2api/v2/b2_authorize_account"
 
 
@@ -34,6 +38,7 @@ def _xdg(var: str, fallback: str) -> Path:
 
 
 DEFAULT_CONFIG = _xdg("XDG_CONFIG_HOME", ".config") / "wayfinder" / "b2-read.env"
+DEFAULT_STATUS_CONFIG = _xdg("XDG_CONFIG_HOME", ".config") / "wayfinder" / "b2-status.env"
 DEFAULT_RECORD = _xdg("XDG_DATA_HOME", ".local/share") / "wayfinder" / "collected.json"
 DEFAULT_DEST = Path.home() / "wayfinder" / "specs"
 
@@ -53,6 +58,46 @@ def load_env(path: Path) -> dict[str, str]:
     if missing:
         sys.exit(f"{path} is missing {', '.join(missing)}")
     return env
+
+
+def load_skipped(status_config: Path) -> set[str]:
+    """Fetch the per-run skip-list for Specs from specs/_status/skipped.json in the
+    B2 bucket, using credentials provided by status_config.
+
+    This fetch is best-effort: if the status config is missing or the remote fetch
+    fails, we fall back to an empty skip-set so Collect behaves conservatively
+    (no skipped items).
+    """
+    try:
+        if not status_config.exists():
+            return set()
+        senv = load_env(status_config)
+        sauth = authorize(senv["B2_KEY_ID"], senv["B2_APP_KEY"])
+        sallowed = sauth["allowed"]
+        data = download(
+            sauth["downloadUrl"], sallowed["bucketName"], "specs/_status/skipped.json",
+            sauth["authorizationToken"],
+        )
+        text = data.decode() if isinstance(data, (bytes, bytearray)) else str(data)
+        if not text:
+            return set()
+        obj = json.loads(text)
+        if isinstance(obj, list):
+            return set(obj)
+        if isinstance(obj, dict) and "skipped" in obj:
+            val = obj["skipped"]
+            if isinstance(val, list):
+                return set(val)
+            if isinstance(val, str):
+                return {val}
+            return set()
+        # Contract-1: payload may be a dict of specKey -> info; return its keys
+        if isinstance(obj, dict):
+            return set(map(str, obj.keys()))
+        return set()
+    except (Exception, SystemExit):
+        # download()/load_env() sys.exit on 404/bad creds; the skip-list is best-effort
+        return set()
 
 
 def spec_key_pattern(prefix: str) -> re.Pattern:
@@ -146,6 +191,27 @@ def save_record(path: Path, collected: set[str]) -> None:
     path.write_text(json.dumps(sorted(collected), indent=2))
 
 
+def report_collected(status_config: Path, keys: list[str]) -> None:
+    """Stamp the cloud manifest so the planner shows Collected. Bookkeeping,
+    not the Collect: without status credentials the Specs are still Collected
+    and the run still succeeds — it just says so loudly."""
+    if not status_config.exists():
+        print(f"no status credentials at {status_config}; manifest not updated")
+        return
+    try:
+        senv = load_env(status_config)
+        sauth = authorize(senv["B2_KEY_ID"], senv["B2_APP_KEY"])
+        sallowed = sauth["allowed"]
+        manifest = b2_status.download_manifest(
+            sauth["apiUrl"], sauth["downloadUrl"], sallowed["bucketName"], sauth["authorizationToken"])
+        b2_status.merge_collected(manifest, keys, b2_status.utcnow())
+        b2_status.upload_manifest(sauth["apiUrl"], sauth["authorizationToken"], sallowed["bucketId"], manifest)
+    except SystemExit as e:
+        print(f"manifest update failed ({e}); the Collect itself succeeded")
+        return
+    print(f"Reported {len(keys)} Collected to the manifest")
+
+
 def _selftest() -> None:
     """Offline proof: supersession picks the lexically-newest key per Site/date,
     and sha1 verification rejects a mismatched download. No network, no
@@ -169,6 +235,9 @@ def _selftest() -> None:
 
     # 2. Anything not shaped like a Spec key (eg. the Site registry) is ignored.
     assert pattern.match("sites/rehearsal-field.json") is None
+    # 2b. Planner bookkeeping under the same prefix is invisible to Collect.
+    assert pattern.match("specs/_drafts/0193abcd.json") is None
+    assert pattern.match("specs/_status/missions.json") is None
 
     # 3. sha1 verification: correct hash passes, wrong hash is refused.
     data = b'{"site": "rehearsal-field"}'
@@ -182,6 +251,23 @@ def _selftest() -> None:
 
     print("collect self-check: ok")
 
+    # Additional offline tests for M-57-HOST skipped.json behavior (withdrawal scenarios)
+    pattern = spec_key_pattern("specs/")
+    names = [
+        "specs/site/2026-09-13/20260913T090000Z.json",
+        "specs/site/2026-09-13/20260913T140000Z.json",
+        "specs/site/2026-09-14/20260914T080000Z.json",
+    ]
+    newest = newest_per_site_date(names, pattern)
+    # Case 1: withdraw newest via skipped.json; newest would be skipped, no promotion
+    skipped = {"specs/site/2026-09-13/20260913T140000Z.json"}
+    queue = [str(p) for p in newest.values() if str(p) not in skipped]
+    assert queue == ["specs/site/2026-09-14/20260914T080000Z.json"], queue
+    # Case 2: withdraw-after-collect: if newest is in the collected set, it is not promoted
+    record = {"specs/site/2026-09-13/20260913T140000Z.json"}
+    queue2 = [str(p) for p in newest.values() if str(p) not in skipped and str(p) not in record]
+    assert queue2 == ["specs/site/2026-09-14/20260914T080000Z.json"], queue2
+
 
 def main() -> None:
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -190,6 +276,8 @@ def main() -> None:
     p.add_argument("--dest", type=Path, default=DEFAULT_DEST, help="where Collected Specs are written")
     p.add_argument("--list", action="store_true", help="show what's Dispatched and what's new, without downloading")
     p.add_argument("--dry-run", action="store_true", help="show what would be Collected, without downloading")
+    p.add_argument("--status-config", type=Path, default=DEFAULT_STATUS_CONFIG,
+                   help="B2 status credentials env file (read specs/, write status/*)")
     p.add_argument("--selftest", action="store_true", help="run the offline self-check and exit")
     args = p.parse_args()
 
@@ -205,7 +293,23 @@ def main() -> None:
     all_names = list_specs(auth["apiUrl"], auth["authorizationToken"], allowed["bucketId"], env["B2_PREFIX"])
     specs = [n for n in all_names if pattern.match(n)]
     collected = load_record(args.record)
+    # Apply the host-specific skip-list if available, after computing new candidates
     new = [n for n in specs if n not in collected]
+    skipped = load_skipped(args.status_config)
+    # Persist the locally-fetched skip-list to SPECS/_status/skipped.json on every run
+    # so the Load-side can observe withdrawals even if the remote source is missing
+    # or delayed. This is a best-effort write and does not affect the Collected set.
+    try:
+        local_skip_path = DEFAULT_DEST / "_status" / "skipped.json"
+        local_skip_path.parent.mkdir(parents=True, exist_ok=True)
+        # Persist as a JSON list of strings for compatibility with load.py's reader
+        local_skip_path.write_text(json.dumps(sorted(list(skipped)), indent=2))
+    except Exception:
+        pass
+    if skipped:
+        # Skip any specs listed in the status-based skip list; this must not be
+        # reflected in the collected record. See M-57-HOST contract.
+        new = [n for n in new if n not in skipped]
 
     if args.list:
         current = newest_per_site_date(specs, pattern)
@@ -236,6 +340,9 @@ def main() -> None:
         collected.add(name)
         save_record(args.record, collected)
         print(f"Collected {site} {date}: {name}")
+
+    if not args.dry_run and new:
+        report_collected(args.status_config, sorted(new))
 
 
 if __name__ == "__main__":

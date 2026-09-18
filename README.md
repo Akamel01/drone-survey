@@ -91,6 +91,26 @@ See what is Dispatched and waiting (needs B2 read credentials, below):
 python3 scripts/mission/collect.py --list
 ```
 
+## Mission status
+
+The **Mission status** section in the planner sidebar shows every mission and
+acts on it — from any browser, after a refresh or restart:
+
+- **The passphrase field** (below the map, next to Dispatch) holds the shared
+  dispatch secret, typed once per browser and stored only there. It is not a
+  DJI or Wayfinder account. Everything the tab does is gated by it.
+- **States:** Draft (unsent working copy) → Dispatched (in the store; the RC
+  need not be connected) → Queued (waiting behind an earlier dispatch) →
+  Collected (on the host) → Loaded (on the Controller, with the exact
+  WAYFINDER card names and waypoint counts).
+- **Actions:** save the current plan as a draft, Dispatch a draft (works with
+  the RC disconnected — the host picks it up on the next plug-in), delete a
+  draft (a Dispatched Spec is immutable and can only be superseded), edit a
+  draft back into the planner.
+- **Freshness:** information trails the host by ~1–2 minutes. Every row shows
+  how old its information is; a mission waiting over 15 minutes suggests the
+  Controller is unplugged or the host is quiet.
+
 ## Configuration
 
 Backblaze B2 credentials live in `~/.config/wayfinder/` (`b2-write`, `b2-read`,

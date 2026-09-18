@@ -120,6 +120,10 @@ export default function SummaryBar({ spec, preview, onSaveMission }: SummaryBarP
             type="password"
             className={styles.passphrase}
             placeholder="Wayfinder passphrase"
+            // The secret shared with the Dispatch endpoint, typed once per
+            // browser and held there — not a DJI or Wayfinder account.
+            aria-label="Dispatch passphrase"
+            title="Shared dispatch secret, typed once per browser and stored only here"
             value={passphrase}
             onChange={(e) => updatePassphrase(e.target.value)}
           />
