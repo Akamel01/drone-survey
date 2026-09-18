@@ -121,14 +121,25 @@ export function isValidSiteId(id: unknown): id is string {
   return typeof id === "string" && SITE_ID_RE.test(id);
 }
 
+/** The one rule for turning a Site's name into a path segment: lowercase, runs
+ *  of anything else collapsed to a single "-", no leading or trailing "-", and
+ *  never longer than asked. Every Site-shaped string in the app comes from here
+ *  so a name can never produce a key the server would reject. */
+export function slugSegment(name: string, maxLength: number): string {
+  const collapsed = name
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+  // Cutting to length can leave the dash it cut through.
+  return collapsed.slice(0, maxLength).replace(/-+$/, "");
+}
+
 /** A short, readable Site id: the first word of its name plus a random
  *  suffix, so two Sites sharing a first word do not collide. Chosen over a
  *  UUID to keep storage keys legible (issue #39). */
 export function newSiteId(name: string): string {
-  const base = (name.trim().split(/\s+/)[0] ?? "")
-    .toLowerCase()
-    .replace(/[^a-z0-9]/g, "")
-    .slice(0, 20);
+  const base = slugSegment(name.trim().split(/\s+/)[0] ?? "", 20);
   const suffix = Math.random().toString(36).slice(2, 8);
   return `${base || "site"}-${suffix}`;
 }

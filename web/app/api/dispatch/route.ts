@@ -1,4 +1,4 @@
-import { dispatchProblem, isValidSiteId, type MissionSpec } from "@/lib/spec";
+import { dispatchProblem, isValidSiteId, slugSegment, type MissionSpec } from "@/lib/spec";
 import { authProblem } from "@/lib/auth";
 import { authorize, b2Env, b2ReadEnv, downloadFile, uploadFile, type B2Session } from "@/lib/b2";
 import { SUMMARIES_KEY, draftKey, makeSpecKey } from "@/lib/keys";
@@ -17,11 +17,7 @@ export const preferredRegion = "yyz1";
  *  behaviour this replaces: renaming such a Site still orphans its old Specs,
  *  which is why every other Spec should carry an id instead (ADR 0017). */
 function siteSlug(site: string): string {
-  return site
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-|-$/g, "")
-    .slice(0, 60);
+  return slugSegment(site, 60);
 }
 
 export async function POST(request: Request) {

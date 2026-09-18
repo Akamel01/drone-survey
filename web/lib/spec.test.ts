@@ -3,7 +3,7 @@
 // blindly. Run with: node --test lib/spec.test.ts
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { DEFAULT_SPEC, dispatchProblem, ensureSiteId, isValidSiteId, newSiteId, type MissionSpec } from "./spec.ts";
+import { DEFAULT_SPEC, dispatchProblem, ensureSiteId, isValidSiteId, newSiteId, slugSegment, type MissionSpec } from "./spec.ts";
 
 // dispatchProblem also requires a flyable area; a small triangle is enough to
 // isolate what these tests are actually about, the site_id checks.
@@ -60,4 +60,25 @@ test("dispatchProblem rejects a site_id that is not a single safe path segment",
     const spec = { ...DEFAULT_SPEC, ...FLYABLE, site: "Rehearsal Field", site_id: bad, date: "2026-09-13" };
     assert.notEqual(dispatchProblem(spec), null, `${JSON.stringify(bad)} should be rejected`);
   }
+});
+
+test("slugSegment always yields something the server would accept as a Site id", () => {
+  const names = [
+    "Rehearsal Field",
+    "  spaced  out  ",
+    "A-1 Site",
+    "!!!",
+    "Ünïcôdé Fïeld",
+    "x".repeat(200),
+    "dash-".repeat(40),
+    "",
+  ];
+  for (const name of names) {
+    const slug = slugSegment(name, 60);
+    assert.ok(slug.length <= 60, `${name}: too long`);
+    assert.ok(!slug.startsWith("-") && !slug.endsWith("-"), `${name}: dangling dash in ${slug}`);
+    if (slug) assert.ok(isValidSiteId(slug), `${name}: ${slug} is not a valid Site id`);
+  }
+  assert.equal(slugSegment("Rehearsal Field", 60), "rehearsal-field");
+  assert.equal(slugSegment("A-1 Site", 60).slice(0, 3), "a-1");
 });
