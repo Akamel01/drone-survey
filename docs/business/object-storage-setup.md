@@ -73,21 +73,28 @@ noted here so it does not surprise the operator mid-setup
 
 ```
 bundles/<bundle-id>/
-  index.html          viewer shell page: MapLibre GL JS + maplibre-cog-protocol
-                       for the Orthomosaic, PlayCanvas SuperSplat Viewer for
-                       the splat, on one page or two linked pages
+  index.html          landing page, linking whichever viewer pages exist
+  ortho.html          MapLibre GL JS + @geomatico/maplibre-cog-protocol
+  splat.html          the @playcanvas/supersplat-viewer page, as published
+  index.js            ┐ the SuperSplat viewer itself, beside its own page,
+  index.css           │ because the published page imports `./index.js`
+  settings.json       ┘ relatively; empty means "use the viewer's defaults"
   ortho/
     orthomosaic.tif    the Cloud-Optimized GeoTIFF
   splat/
     scene.sog          SuperSplat Viewer's compressed splat format
     meta.json          SuperSplat Viewer's companion metadata file
-  assets/              viewer JS/CSS bundle (MapLibre GL JS, maplibre-cog-
-                       protocol, @playcanvas/supersplat-viewer build output) —
+  assets/              MapLibre GL JS and @geomatico/maplibre-cog-protocol,
                        vendored here so the Bundle stays self-contained per
                        ADR 0011, not fetched from a CDN at view time
   report/              optional PDF or summary, if one is produced
   NOTICES.txt          third-party licence notices — see below
 ```
+
+Pinned viewer versions, checked against the published packages on
+2026-09-18: MapLibre GL JS 4.7.1, @geomatico/maplibre-cog-protocol 0.9.3,
+@playcanvas/supersplat-viewer 1.31.2. `nodes/bundle/build.py` carries the same
+pins and `nodes/check_deliver.py` fails if `NOTICES.txt` stops naming them.
 
 Viewer and library choices above are carried from
 [docs/research/viewers-and-web-delivery-2026.md](../research/viewers-and-web-delivery-2026.md);
@@ -155,7 +162,7 @@ Recommended rule:
   is already public-read by design, but a fixed origin is strictly tighter.
 - `allowedHeaders: ["range"]` and the exposed `content-range` /
   `accept-ranges` headers are what a browser's range-request machinery — and
-  specifically `maplibre-cog-protocol` reading a Cloud-Optimized GeoTIFF —
+  specifically `@geomatico/maplibre-cog-protocol` reading a Cloud-Optimized GeoTIFF —
   actually depends on. Without `content-range` exposed, a cross-origin fetch
   can receive a partial response without JavaScript being able to read the
   header that says so.
@@ -182,7 +189,7 @@ libraries this project has already chosen
 `NOTICES.txt` needs at minimum:
 
 - **MapLibre GL JS** — BSD-3-Clause.
-- **maplibre-cog-protocol** — MIT.
+- **@geomatico/maplibre-cog-protocol** — MIT.
 - **PlayCanvas Engine / `@playcanvas/supersplat-viewer`** — MIT.
 
 Assembling this file automatically as part of building a Bundle is pipeline

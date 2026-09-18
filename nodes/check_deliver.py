@@ -72,6 +72,76 @@ def make_synthetic_splat(fixtures: Path) -> tuple[Path, Path]:
     return scene, meta
 
 
+def make_synthetic_vendor(vendor_root: Path) -> dict[str, Path]:
+    """A stand-in for a populated --vendor-dir, in the layout build.py expects.
+
+    A real one is assembled from `npm pack @playcanvas/supersplat-viewer`; this
+    reproduces only the parts write_splat_page() depends on — the documented
+    sse-bootstrap seam, and the two files the upstream page imports beside it —
+    so the transform is exercised without the network.
+    """
+    viewer = vendor_root / "supersplat-viewer"
+    viewer.mkdir(parents=True)
+    files = {
+        "index.html": (
+            '<!doctype html>\n<html lang="en">\n<head>\n<title>SuperSplat Viewer</title>\n'
+            '<link rel="stylesheet" href="./index.css" />\n'
+            '<script type="application/json" id="sse-bootstrap">\n            null\n        </script>\n'
+            "</head>\n<body>\n<canvas id=\"application-canvas\"></canvas>\n"
+            "<script type=\"module\">\nimport { main } from './index.js';\n</script>\n"
+            "</body>\n</html>\n"
+        ),
+        "index.js": "/* stand-in for the upstream viewer bundle */\n" + "x" * 200_000,
+        "index.css": ":root { --canvas-opacity: 1; }\n",
+    }
+    out = {}
+    for name, text in files.items():
+        path = viewer / name
+        path.write_text(text)
+        out[name] = path
+    return out
+
+
+def check_vendored_splat(tmp: Path, ortho: Path, scene: Path, meta: Path) -> None:
+    """Build a Bundle with a populated vendor dir and check the real transform."""
+    vendor_root = tmp / "vendor"
+    sources = make_synthetic_vendor(vendor_root)
+    out = tmp / "bundle-vendored"
+    result = run([
+        sys.executable, str(BUNDLE_BUILD),
+        "--out", str(out),
+        "--ortho", str(ortho),
+        "--splat-scene", str(scene),
+        "--splat-meta", str(meta),
+        "--vendor-dir", str(vendor_root),
+    ])
+    assert result.returncode == 0, f"vendored bundle build failed:\n{result.stderr}"
+
+    html = (out / "splat.html").read_text()
+    assert "noindex" in html, "vendored splat.html lost the noindex meta"
+    assert '"contentUrl": "splat/scene.sog"' in html, (
+        "the sse-bootstrap seam was not repointed at the Bundle's own scene — the viewer "
+        "would load the upstream demo scene"
+    )
+    assert '"settings": {}' in html, "the bootstrap must supply settings inline so no settings fetch is needed"
+
+    # A placeholder where the vendored file should be is the failure this catches.
+    for name in ("index.js", "index.css"):
+        got, src = out / name, sources[name]
+        assert got.is_file(), f"{name} was not copied beside splat.html (upstream imports it relatively)"
+        assert got.read_bytes() == src.read_bytes(), f"{name} is not the vendored file — a placeholder was written instead"
+
+    assert (out / "settings.json").is_file(), "settings.json must exist so a client that strips the inline settings still gets 200"
+
+    manifest = json.loads((out / "bundle-manifest.json").read_text())
+    listed = {f["path"] for f in manifest["files"]}
+    for name in ("splat.html", "index.js", "index.css", "settings.json"):
+        assert name in listed, f"{name} missing from the vendored Bundle manifest"
+
+    print("vendored splat transform check: ok")
+    check_publish_dry_run(out)
+
+
 def run(cmd: list[str], **kw) -> subprocess.CompletedProcess:
     return subprocess.run(cmd, cwd=REPO_ROOT, capture_output=True, text=True, **kw)
 
@@ -107,8 +177,18 @@ def check_bundle(bundle_dir: Path, ortho: Path, scene: Path, meta: Path) -> dict
     assert (bundle_dir / "splat" / "meta.json").is_file()
 
     notices = (bundle_dir / "NOTICES.txt").read_text()
-    for expected in ("MapLibre", "maplibre-cog-protocol", "PlayCanvas", "MIT License", "BSD 3-Clause"):
+    for expected in (
+        "MapLibre GL JS",
+        "@geomatico/maplibre-cog-protocol",
+        "@playcanvas/supersplat-viewer",
+        "MIT License",
+        "BSD 3-Clause",
+    ):
         assert expected in notices, f"NOTICES.txt missing expected text: {expected}"
+    # The pins name real packages: an unpublished name or version here makes the
+    # whole notices file fiction (the previous pins did exactly that).
+    for pinned in ("@geomatico/maplibre-cog-protocol 0.9.3", "@playcanvas/supersplat-viewer 1.31.2"):
+        assert pinned in notices, f"NOTICES.txt does not pin {pinned}"
 
     html_files = list(bundle_dir.glob("*.html"))
     assert html_files, "no viewer HTML pages generated"
@@ -187,6 +267,7 @@ def main() -> None:
 
         bundle_dir = Path(tmp) / "bundle"
         check_bundle(bundle_dir, ortho, scene, meta)
+        check_vendored_splat(Path(tmp), ortho, scene, meta)
         check_publish_dry_run(bundle_dir)
         check_publish_refuses_without_credentials(bundle_dir)
         check_runner_end_to_end(ortho, scene, meta)
