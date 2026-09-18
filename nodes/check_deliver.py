@@ -21,6 +21,9 @@ import sys
 import tempfile
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+from common import sha256_file  # noqa: E402
+
 REPO_ROOT = Path(__file__).resolve().parent.parent
 BUNDLE_BUILD = REPO_ROOT / "nodes" / "bundle" / "build.py"
 PUBLISH = REPO_ROOT / "nodes" / "publish" / "publish.py"
@@ -28,16 +31,6 @@ DELIVER_MANIFEST = REPO_ROOT / "pipeline" / "manifests" / "deliver.json"
 RUNNER = REPO_ROOT / "pipeline" / "runner.py"
 
 HTML_REF = re.compile(r'(?:src|href)="([^"]+)"')
-
-
-def sha256_of(path: Path) -> str:
-    import hashlib
-
-    h = hashlib.sha256()
-    with path.open("rb") as f:
-        for chunk in iter(lambda: f.read(1 << 20), b""):
-            h.update(chunk)
-    return h.hexdigest()
 
 
 def make_synthetic_ortho(fixtures: Path) -> Path:
@@ -168,7 +161,7 @@ def check_bundle(bundle_dir: Path, ortho: Path, scene: Path, meta: Path) -> dict
     for f in manifest["files"]:
         full = bundle_dir / f["path"]
         assert full.stat().st_size == f["size"], f"size mismatch for {f['path']}"
-        assert sha256_of(full) == f["sha256"], f"hash mismatch for {f['path']}"
+        assert sha256_file(full) == f["sha256"], f"hash mismatch for {f['path']}"
 
     for expected_dir in ("ortho", "splat", "assets"):
         assert (bundle_dir / expected_dir).is_dir(), f"missing {expected_dir}/ per docs/business/object-storage-setup.md layout"

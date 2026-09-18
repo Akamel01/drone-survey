@@ -90,7 +90,23 @@ export async function downloadFile(s: B2Session, bucket: string, key: string): P
   });
   if (res.status === 404) return null;
   if (!res.ok) throw new Error(`download failed: ${res.status}`);
-  return Buffer.from(await res.arrayBuffer());
+
+  // Read payload first so we can verify checksum header if provided.
+  const data = Buffer.from(await res.arrayBuffer());
+
+  // Validate content against B2's provided SHA1 header. This header is required
+  // for the web storage path to avoid silently accepting corrupted data.
+  const headerValue = res.headers.get("X-Bz-Content-Sha1") || res.headers.get("x-bz-content-sha1");
+  if (!headerValue) {
+    throw new Error("download checksum missing: X-Bz-Content-Sha1 header is required");
+  }
+
+  const computed = createHash("sha1").update(data).digest("hex");
+  if (computed !== headerValue) {
+    throw new Error(`download checksum mismatch: expected ${headerValue}, got ${computed}`);
+  }
+
+  return data;
 }
 
 export async function uploadFile(s: B2Session, key: string, body: Buffer): Promise<void> {

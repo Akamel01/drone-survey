@@ -47,6 +47,9 @@ import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+from common import sha256_file  # noqa: E402
+
 # Pins verified against npm on 2026-09-18. The previous comment here said to
 # confirm them before a real delivery, and confirming found two that were wrong:
 # `maplibre-cog-protocol` is not a package at all (npm 404 — it is
@@ -123,14 +126,6 @@ POSSIBILITY OF SUCH DAMAGE.
 LICENSE_BODIES = {"MIT": MIT_BODY, "BSD-3-Clause": BSD3_BODY}
 
 NOINDEX_META = '<meta name="robots" content="noindex, nofollow">'
-
-
-def sha256_of(path: Path) -> str:
-    h = hashlib.sha256()
-    with path.open("rb") as f:
-        for chunk in iter(lambda: f.read(1 << 20), b""):
-            h.update(chunk)
-    return h.hexdigest()
 
 
 def write_asset(assets_dir: Path, vendor_dir: Path | None, filename: str, project: str, version: str) -> None:
@@ -370,7 +365,7 @@ def build(args: argparse.Namespace) -> Path:
     for path in sorted(out.rglob("*")):
         if path.is_file():
             rel = path.relative_to(out).as_posix()
-            files.append({"path": rel, "size": path.stat().st_size, "sha256": sha256_of(path)})
+            files.append({"path": rel, "size": path.stat().st_size, "sha256": sha256_file(path)})
     manifest = {
         "bundle_id": bundle_id,
         "generated_at": datetime.now(timezone.utc).isoformat(),

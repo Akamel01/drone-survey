@@ -14,15 +14,11 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-from common import IMAGE_SUFFIXES, die, list_images  # noqa: E402
+from common import IMAGE_SUFFIXES, die, list_images, sha256_file  # noqa: E402
 
 
-def sha256(path: Path) -> str:
-    h = hashlib.sha256()
-    with path.open("rb") as f:
-        for chunk in iter(lambda: f.read(1 << 20), b""):
-            h.update(chunk)
-    return h.hexdigest()
+    # sha256_file() from common.py is the canonical checksum helper now.
+    # The private sha256() helper was removed in favour of a single source of truth.
 
 
 def main() -> None:
@@ -45,7 +41,7 @@ def main() -> None:
     for src in images:
         dst = args.out / src.name
         dst.write_bytes(src.read_bytes())
-        if sha256(dst) != sha256(src):
+        if sha256_file(dst) != sha256_file(src):
             die(f"copy verification failed for {src.name}: checksum mismatch after copy")
 
     copied = list_images(args.out)
