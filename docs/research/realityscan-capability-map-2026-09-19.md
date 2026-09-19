@@ -670,7 +670,9 @@ capability.
 | RealityScan's own distortion model is `sfmDistortionModel`, default **`Brown3`**, options `Division`, `Brown3`, `Brown4`, `Brown3WithTangential2`, `Brown4WithTangential2`, `KplusBrown3WithTangential2`, `KplusBrown4WithTangential2` | **VERIFIED** |
 | **`-exportRegistration` emits COLMAP format** | **SUPPORTED** — the CLI page says only "Export registration … using the current settings or the settings from the params.xml"; the format list is in the Export Registration dialog, which is not documented on any of the 82 pages |
 | The provisional distortion-model mapping (Brown3 → `SIMPLE_RADIAL`, Brown3+tangential2 → `OPENCV`, …) | **UNKNOWN** — no Epic page states it |
-| Authoritative source exists: *"On the Coordinate Systems Employed in the Import, Estimation, and Export of Camera Geometry by RealityScan"* (PDF, linked from the Camera Geometry reference page) | **VERIFIED that it exists**; its link is rendered client-side and was not retrieved. **Get this PDF — it is the single document that settles the mapping** |
+| RealityScan holds and exports a **genuine per-camera principal point** — normalized coordinates centred on the image centre, so zero means centre and non-zero means off-centre; `$px`/`$py` per camera in paRSer; `xcr:PrincipalPointU`/`V` in XMP, defaulting to centre only when *absent* | **VERIFIED** — [`camera-geometry-reference`](sources/camera-geometry-reference.md) |
+| **RealityScan's tangential coefficients `t1, t2` are OpenCV's `t2, t1`** — the orderings are swapped, while radial `k1..k4` match | **VERIFIED** — an importer passing them through unchanged is silently wrong |
+| The `sfmDistortionModel` → COLMAP model mapping | **UNKNOWN.** The authoritative PDF *"On the Coordinate Systems Employed in the Import, Estimation, and Export of Camera Geometry by RealityScan"* is now retrieved and saved, and it **never mentions COLMAP as an output format** — no `cameras.txt`, no COLMAP model names, and no `KplusBrown*` identifiers at all. Only a real `-exportRegistration` run settles this |
 
 **Why this matters, restated against the code.** ADR 0004 records a real defect in
 the current path: the ODM→nerfstudio conversion **forces the principal point to
@@ -681,12 +683,19 @@ that catches it is `principal_point_survived()` in
 `projection_type == "brown"` with `c_x`/`c_y` present and not both exactly `0.0`,
 enforced at `solve.py:339-347`.
 
-RealityScan's native model **is** Brown, by default. That is the encouraging
-half. The unresolved half is whether `-exportRegistration`'s COLMAP writer
-preserves a per-camera principal point or pins it to the image centre on the way
-out — which is the same defect, one tool along. **Do not adopt this path until
-the PDF or a real export answers that**, and when it is trialled, the existing
-guard is the acceptance test, unchanged.
+RealityScan's native model **is** Brown, by default, and the camera-geometry
+reference confirms the principal point is a first-class per-camera value rather
+than a centred constant — so the engine does not structurally reproduce ADR
+0004's defect. What is still unresolved is what the **COLMAP writer** does with
+it, because that document never mentions COLMAP as an output format. **Only a
+real `-exportRegistration` run answers that**, and when it is trialled the
+existing guard is the acceptance test, unchanged.
+
+Carry one more thing into that trial: the reference states that RealityScan's
+tangential coefficients `t1, t2` are OpenCV's `t2, t1`, swapped, while the radial
+coefficients match. An importer that passes them through unchanged produces a
+plausible-looking and wrong reconstruction, which is precisely the failure class
+this repo gates against. Assert the ordering; do not assume it.
 
 Note the direction of travel, from ADR 0005: there is no supported way to feed
 ODM an external camera solve, so a RealityScan pose provider serves the **splat
@@ -736,9 +745,10 @@ protecting against.
 
 Ordered by how much rests on it.
 
-1. **Does `-exportRegistration` preserve the principal point in its COLMAP
-   output?** The adoption case for splatting depends on it, and the answer is in
-   a PDF the docs link but render client-side. *(Domain 17.)*
+1. **What does `-exportRegistration`'s COLMAP writer emit?** The engine's own
+   principal point is per-camera and real (verified), but the authoritative
+   camera-geometry reference never mentions COLMAP as an output format, so the
+   model mapping is unknown and only a real export settles it. *(Domain 17.)*
 2. **Does headless reconstruction complete on Linux, repeatedly?** No Epic page
    addresses the reported hangs; Epic documents Docker + GPU passthrough as
    supported, which is evidence but not proof. **T1.2 stands unchanged.**

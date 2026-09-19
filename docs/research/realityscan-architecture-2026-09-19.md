@@ -353,14 +353,17 @@ appeared.
 5. **Whether output is deterministic.** Still no vendor statement — zero
    occurrences of "determinis", "reproducib" or "random seed" across all 82
    pages. The search is now exhaustive rather than incidental.
-6. **Whether `-exportRegistration`'s COLMAP output preserves the per-camera
-   principal point.** *New, and the deciding question for the splat adoption.*
-   RealityScan's own model is `sfmDistortionModel`, default `Brown3`, which is
-   what `principal_point_survived()` (`nodes/solve/solve.py:114`) requires — but
-   nothing documents what the COLMAP writer does with it. Epic publishes a PDF,
-   *"On the Coordinate Systems Employed in the Import, Estimation, and Export of
-   Camera Geometry by RealityScan"*, linked from the Camera Geometry reference
-   page and rendered client-side. **Fetch it.**
+6. **What `-exportRegistration`'s COLMAP writer emits.** *The deciding question
+   for the splat adoption.* Half of it is now answered: the camera-geometry
+   reference is retrieved and saved to
+   [`sources/camera-geometry-reference.md`](sources/camera-geometry-reference.md),
+   and it confirms RealityScan holds a **genuine per-camera principal point**,
+   so the engine does not structurally reproduce ADR 0004's defect. But that
+   document **never mentions COLMAP as an output format** — no `cameras.txt`, no
+   COLMAP model names — so the `sfmDistortionModel` mapping remains unknown and
+   only a real export settles it. It also surfaced a trap worth more than the
+   original question: **RealityScan's tangential coefficients `t1, t2` are
+   OpenCV's `t2, t1`**, swapped, while radial coefficients match.
 
 **Closed by re-verification** (was: "retrievable with working network access"):
 
