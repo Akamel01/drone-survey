@@ -609,7 +609,8 @@ and checkpoints catch it, and checkpoints are now available (D4).
 | Model-stage resume | yes; `-continueModelCalculation`, `-recoverAutosave` | VERIFIED |
 | Alignment-stage resume | no such command | UNKNOWN |
 | **Determinism** | **no statement in any of the 82 pages** | **UNKNOWN — T4.10** |
-| Free-tier CLI entitlement | not in the documentation pages; licensing lives at `realityscan.com/en-US/linux` | **UNKNOWN — T1.4** |
+| **Free-tier entitlement** | **Free under $1,000,000 USD gross revenue over the last 12 months, with "All RealityScan features"** — no capability gating between tiers; CA$1,697 per seat per year above it | **VERIFIED** — [`eula`](sources/eula.md) §2(b)(i), [`licensing-and-pricing`](sources/licensing-and-pricing.md) |
+| Whether the CLI, headless operation or the Remote Command Plugin are separately entitled | neither the EULA nor the licensing page mentions the CLI, "headless" or "automated" at all | **UNKNOWN — T1.4**; silence in the direction we want, but silence |
 
 **Read**: `appQuitOnError=true` is still the most important single string in this
 document, and the headless-mode page now backs it directly: interruptions "can be
@@ -756,9 +757,14 @@ Ordered by how much rests on it.
    container blocking on it looks exactly like a hang. Needs a tier-1 test of its
    own, including what happens when a licence token expires mid-run.
 4. **Determinism.** Zero mentions in 82 pages. *(T4.10.)*
-5. **Licensing and the free-tier CLI entitlement.** Not on the documentation
-   pages at all; lives behind `realityscan.com/en-US/linux` and the EULA.
-   *(T1.4.)*
+5. **Whether §1.2(d) permits this business.** The EULA is now read and saved.
+   The grant is "for any lawful purpose" and commercial use is plainly priced
+   rather than forbidden, but §1.2 prohibits making the Software "available to
+   third parties on a software-as-a-service, hosted service, time-sharing,
+   **service bureau** or similar basis". A pipeline that ingests a client's site
+   and returns a deliverable is not obviously that — the client never touches the
+   Software — but "service bureau" is a term of art close enough to the shape of
+   this business to want a written answer. *(#108.)*
 6. **DTM classification quality** against a PDAL baseline. *(Domain 8.)*
 7. **Is `.rsortho` hand-writable?** Less important than the draft thought, since
    `-editOrthoProjectionSelection` exists. *(Domain 9.)*

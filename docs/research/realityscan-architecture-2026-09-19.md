@@ -345,10 +345,20 @@ appeared.
    "but certain dialogs (e.g., the login window) will still require user
    interaction". A container blocking on a login window is indistinguishable
    from a hang. Needs its own tier-1 test, including token expiry mid-run.
-3. Whether free/standard tiers permit CLI/headless use. **Not one of the 82
-   documentation pages discusses entitlement**; it lives behind
-   `realityscan.com/en-US/linux`, which **returns 403** from this network, and
-   the EULA. The one critical gate re-verification could not advance.
+3. **Whether the licence permits *this* business.** Largely answered: the EULA
+   and pricing are saved as [`sources/eula.md`](sources/eula.md) and
+   [`sources/licensing-and-pricing.md`](sources/licensing-and-pricing.md). Free
+   under $1M USD gross revenue with "All RealityScan features"; CA$1,697 per seat
+   per year above it; the grant is "for any lawful purpose"; nothing forbids
+   automation or headless use, which are simply never mentioned. The residue is
+   §1.2(d): no making the Software available to third parties on a "service
+   bureau or similar basis". Selling processed deliverables is probably not that,
+   but it wants a written answer. *(#108.)*
+   Add a design consequence from §4: Epic "may update the Software remotely
+   without notifying you", and updates "must be installed in order for you to
+   continue to use the Software". **The engine version belongs in every Job's
+   provenance record**, or a cross-date difference cannot be attributed to the
+   site rather than the engine.
 4. Whether activation survives ephemeral rented GPUs non-interactively.
 5. **Whether output is deterministic.** Still no vendor statement — zero
    occurrences of "determinis", "reproducib" or "random seed" across all 82

@@ -115,11 +115,23 @@ detection; and no GUI step on the per-job critical path.
 After re-verification, **F3 (no GUI on the per-job critical path) is documented
 as satisfied**, and machine-readable failure detection is documented
 (`appQuitOnError=true`, exit codes, `-writeProgress`, `-getStatus`, `-stdConsole`)
-though still unmeasured. **Headless execution and licensing remain genuinely
-open**, and licensing is now conspicuous by its absence: none of the 82
-documentation pages discuss entitlement at all. It lives behind
-`realityscan.com/en-US/linux`, **which returns 403 from here**, and the EULA.
-So licensing is the one critical gate this session could not advance at all.
+though still unmeasured.
+
+**Licensing moved a long way.** The 403 on `realityscan.com/en-US/linux` was an
+Epic account gate on the *download*, not a block on the terms: the EULA and the
+licensing page are public and are now saved as
+[`sources/eula.md`](sources/eula.md) and
+[`sources/licensing-and-pricing.md`](sources/licensing-and-pricing.md).
+RealityScan is **free under $1,000,000 USD gross revenue over the last 12
+months, with "All RealityScan features"** — no capability gating between tiers —
+and CA$1,697 per seat per year above that. A4 reads as GO at our volume and A3
+as GO on the face of it. What is left on A2 is one clause: §1.2 forbids making
+the Software available to third parties on a "service bureau or similar basis",
+and whether selling processed deliverables is that needs a written answer rather
+than a confident reading.
+
+**Headless execution is therefore the last wholly-open critical gate**, and the
+only one that still needs a machine.
 
 Of the three further unknowns the draft named, two are closed (checkpoints, 3D
 Tiles CLI) and **determinism remains unknown after an exhaustive search** — zero
