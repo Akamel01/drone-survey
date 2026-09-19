@@ -1,5 +1,52 @@
 # Handoff — RealityScan evaluation, cloud session → local session
 
+> **CLOSED 2026-09-19.** The local session received this, verified the primary
+> sources, and re-tagged the work. **What it found is recorded below under
+> [Outcome](#outcome); read that first — parts of the text that follows are now
+> known to be wrong, and are kept because the handoff is a record of what was
+> believed at the time.**
+
+## Outcome
+
+**Egress was unrestricted.** 82 official documentation pages were fetched and
+saved to [`sources/`](sources/), each carrying its URL, HTTP status and fetch
+time. Two notes on the 403s this document reports:
+
+- `dev.epicgames.com` resolves fine, under either URL shape — the site links its
+  own pages as `/documentation/realityscan/<slug>` and serves them from
+  `/documentation/en-us/realityscan/<slug>`. Both return 200.
+- `rshelp.capturingreality.com` and `capturingreality.com` both return 200 at
+  their roots, but the deep paths this handoff lists return **404** — that
+  content has moved to `dev.epicgames.com`. A 404 is not a 403; the distinction
+  matters, because one means "blocked" and the other means "not there".
+- One thing genuinely is blocked here too: **`realityscan.com/en-US/linux`
+  returns 403** — the download and licensing page, which is also where the
+  documentation points for entitlement. Licensing therefore remains unverified,
+  and it is a critical gate.
+
+**Sixteen claims were contradicted** and are tabulated in the capability map's
+[Demotions](realityscan-capability-map-2026-09-19.md#demotions) section. Against
+the three claims this handoff asked to be attacked hardest:
+
+| # | Claim | Verdict |
+|---|---|---|
+| 1 | Headless mode is replay of GUI-authored configuration, making a Windows GUI seat permanent | **Half wrong.** Parameter files are real and GUI-authored, but they are **optional on every command that takes one**, the settings surface is 116 documented `-set` keys plus 57 per-selection keys plus a portable `settings.rcconfig`, and the authoring UI runs on **Linux Wine**. No Windows machine is required |
+| 2 | Headless reconstruction may not work on Linux at all | **Still open, and now the biggest question.** No Epic page addresses the reported hangs. Epic *does* document Docker with GPU passthrough, REST, gRPC and a passive notification mode for `.rscmd` pipelines in a container. New and specific: the headless-mode page says the **login dialog cannot be suppressed** — a container blocking on it is indistinguishable from a hang |
+| 3 | `-exportRegistration` COLMAP output can replace the pose provider for splatting | **Unresolved, and the resolving document is identified.** The verb is real, `-importColmap` is real, and RealityScan's native model is `sfmDistortionModel` default **`Brown3`** — exactly what `principal_point_survived()` (`nodes/solve/solve.py:114`) demands. Whether the COLMAP writer preserves the principal point is not documented. Epic publishes *"On the Coordinate Systems Employed in the Import, Estimation, and Export of Camera Geometry by RealityScan"* (PDF, linked client-side from the Camera Geometry reference). **Get it** |
+
+Of the six priority gaps this handoff named, five are closed: the literal `-set`
+keys, the GCP import verbs, `-exportReport`, `-export3dTiles` (so domain 13 stays
+in the pipeline), and checkpoints (`-editControlPointSelection "gpType=2"`, value
+`2 – Ground test`). Determinism is the one that survived: **zero occurrences of
+"determinis", "reproducib" or "random seed" across all 82 pages.**
+
+Not yet done, and deliberately left to the user, since all three are
+`disable-model-invocation` skills and two need a human in the loop:
+`/grill-with-docs` against the revised capability map, `/wayfinder` to re-derive
+the topology, `/domain-modeling` against the domain model.
+
+---
+
 Written 2026-09-19 by a Claude Code **web/cloud** session on branch
 `claude/cool-ptolemy-deu71j`. Addressed to a local session that has the
 project's plugins, skills and `CLAUDE.md`.

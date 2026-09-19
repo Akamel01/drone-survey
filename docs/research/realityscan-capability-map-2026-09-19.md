@@ -1,70 +1,165 @@
 # RealityScan capability map — all 18 in-scope domains
 
-Written 2026-09-19. Companion to
+Written 2026-09-19 by a cloud session working from search summaries.
+**Re-verified 2026-09-19 by a local session against the official documentation.**
+Companion to
 [gates](realityscan-gates-2026-09-19.md),
 [domain model](realityscan-domain-model-2026-09-19.md) and
 [validation program](realityscan-validation-2026-09-19.md).
 
 ## Evidence health — read this before anything else
 
-This environment's egress policy returned **403 for every primary source**:
-`dev.epicgames.com`, `rshelp.capturingreality.com`, `capturingreality.com`,
-`forums.unrealengine.com`, `web.archive.org`, and text-extraction proxies.
-Only `github.com` and search were reachable.
+The cloud session that wrote the first draft had an egress policy that returned
+403 for `dev.epicgames.com`, `rshelp.capturingreality.com`, `capturingreality.com`,
+`forums.unrealengine.com` and `web.archive.org`. Only `github.com` and search were
+reachable, so every documentation-derived claim was a search-engine summary of a
+page nobody had opened.
 
-Consequently **no claim in this document is tagged `VERIFIED` unless a file was
-actually fetched.** Exactly one was. Everything else derived from documentation
-is `SUPPORTED` — meaning a search engine summarised a page that no one opened.
+This session's egress is unrestricted. **82 official documentation pages were
+fetched and saved** under [`sources/`](sources/), each with its URL, HTTP status
+and fetch time in a header comment. Every `VERIFIED` tag below is backed by a
+string that can be grepped out of one of those files.
 
-Tags used: **VERIFIED** (fetched and read) · **SUPPORTED** (official page
-summarised, not opened) · **INFERRED** (follows logically, not stated) ·
-**REQUIRES TEST** (must be measured) · **UNKNOWN** (no evidence found).
+Tags used:
 
-The honest summary of this document's status: it is a **well-founded hypothesis
-about RealityScan, not a verified account of it.** It is sufficient to decide
-whether to run the tier-1 tests. It is not sufficient to commit to a migration.
+- **VERIFIED** — an official page in `sources/` states it. Command names are
+  checked against [`sources/all-commands.md`](sources/all-commands.md), setting
+  keys against [`sources/keys-and-values.md`](sources/keys-and-values.md).
+- **CONTRADICTED** — an official page says otherwise than the first draft did.
+  These are listed together in [Demotions](#demotions) and are the most valuable
+  output of the re-verification.
+- **SUPPORTED** — a page was opened but leaves it ambiguous, or the only source
+  is non-Epic.
+- **INFERRED** — follows logically, not stated.
+- **REQUIRES TEST** — documentation cannot settle it; it must be measured.
+- **UNKNOWN** — not found in any of the 82 pages. Stronger than the first draft's
+  `UNKNOWN`, which meant "not found in search results".
 
-## The one thing that was actually verified
+Two structural facts about the documentation shape everything below:
+
+1. **The `-set "key=value"` keys are documented.** `keys-and-values` lists 116
+   global setting keys with value types and defaults; `configure-selected-items`
+   lists a further 57 per-item keys for inputs, control points, constraints and
+   ortho projections. The first draft called the missing key strings "the single
+   largest practical gap in this document". They were a page away.
+2. **Nearly every export and tool command takes an *optional* `params.xml`**,
+   described as "using the **current settings** or the settings from the
+   `params.xml`". Current settings are what `-set` and
+   `-importGlobalSettings <settings.rcconfig>` define. The XML is a convenience,
+   not a precondition — see [The structural finding](#the-structural-finding).
+
+Status of this document after re-verification: **a documented account of what
+RealityScan's CLI exposes.** It is still not a measured account of what the
+engine does when run — that is what the tier-1 probe is for, and no amount of
+documentation substitutes for it.
+
+## The one thing that was verified before
 
 `github.com/EpicGames/RealityScan` is **not** the RealityScan engine, SDK, or
 CLI source. It is `pano2views`, a small JavaScript/WebGL2 utility converting
-360° panoramas to cubemap faces — roughly eight files. **VERIFIED** (fetched).
-
-The brief's instruction not to assume the repository holds the core engine was
-correct, and stronger than it needed to be: it holds nothing relevant to this
-evaluation at all. No official open-source engine, CLI or SDK exists on GitHub.
+360° panoramas to cubemap faces — roughly eight files. **VERIFIED** (fetched by
+the cloud session, still true).
 
 ## The structural finding
 
-Two separately-reported facts combine into the defining constraint:
+The first draft's defining claim was:
 
-1. Export settings are supplied to the CLI as an XML block extracted from an
-   `.rcinfo` file that the **GUI Export dialog** writes. Ortho-projection
-   parameters likewise come from a `.rcortho` file produced by ticking "Export
-   projection parameters file" **in the GUI**. *(SUPPORTED)*
-2. The Linux build is reported to be a Windows binary inside a bundled Wine
-   environment, positioned as **CLI-only with no full desktop UI**. *(SUPPORTED)*
+> RealityScan's headless mode is not parameterised automation, it is replay of
+> configuration authored in a GUI — and that GUI is not available on the platform
+> we would run production on. Therefore a **Windows GUI seat is a permanent
+> component of the system**.
 
-Therefore: **RealityScan's headless mode is not parameterised automation, it is
-replay of configuration authored in a GUI — and that GUI is not available on the
-platform we would run production on.** *(INFERRED, high confidence)*
+**Half of this survives. The half that fails is the half the architecture rested
+on.**
 
-The consequences are concrete and shape every later section:
+What the documentation confirms:
 
-- A **Windows GUI seat is a permanent component of the system**, not a migration
-  aid. It exists to author and version configuration templates.
-- Configuration templates become **first-class versioned artifacts** checked
-  into the repository, which fits the existing Profile-versioning model well.
-- **Any parameter not anticipated at authoring time requires a human, a Windows
-  machine and a GUI session.** Dataset-adaptive behaviour is limited to the
-  subset of parameters expressible through `-set` keys.
-- This does not fail gate F3, because no GUI step sits on the **per-job**
-  critical path. It is a CONDITIONAL GO shape: acceptable with the constraint
-  documented and the template library maintained.
+- Parameter files are real and are GUI-authored. *"Use the RealityScan UI
+  (Windows or Linux Wine) to create and save an XML file containing export
+  parameters and settings. This file can then be referenced and reused in CLI
+  commands."* — [`installation-linux`](sources/installation-linux.md). **VERIFIED.**
+- The ortho parameters file is the same story: *"You can obtain params.rsortho by
+  exporting an orthographic projection in the GUI and setting Export projection
+  parameters file to True."* — [`model-tools`](sources/model-tools.md).
+  **VERIFIED** (note the extension is `.rsortho`, not `.rcortho`).
 
-This is also why "can the CLI do X?" is the wrong question throughout. The right
-question is: **"can X be expressed in a template authored once, or does it need
-to vary per dataset?"**
+What the documentation contradicts:
+
+- **The parameter file is optional on every command that accepts one.**
+  `-exportModel modelName fileName [params.xml]`, `-simplify [targetTriangleCount
+  OR params.xml]`, `-calculateOrthoProjection [.rsortho] [.rsbox]`,
+  `-dtmClassify [params.xml]` — all documented as "using the **current settings**
+  or the settings from the params.xml file (optional parameter)".
+  **CONTRADICTED.**
+- **Current settings are settable headlessly**: 116 global `-set` / `-preset` keys, plus
+  `-editInputSelection`, `-editControlPointSelection`, `-editConstraintSelection`
+  and `-editOrthoProjectionSelection` for per-item settings, plus
+  `-exportGlobalSettings settings.rcconfig` / `-importGlobalSettings
+  settings.rcconfig` for the whole application state as one checked-in file.
+  **VERIFIED.**
+- **The authoring UI runs on Linux.** *"The desktop UI can be launched, but its
+  use is not recommended due to graphical glitches, window focus issues, and
+  unsupported HTML dialogs"* — [`realityscan-for-linux`](sources/realityscan-for-linux.md);
+  *"The UI is available for troubleshooting only"* —
+  [`installation-linux`](sources/installation-linux.md). A UI exists on Linux; it
+  is discouraged, not absent. **CONTRADICTED** (the draft said "no full desktop UI").
+
+So the corrected shape is:
+
+> Headless RealityScan is parameterised automation through `-set` and a
+> `.rcconfig`, **plus** an optional per-dialog XML for the settings that only a
+> dialog exposes. A GUI is needed to author those XML files, and that GUI can be
+> the bundled Wine one on the same Linux host. **No Windows machine is required.**
+
+The consequences change accordingly:
+
+- A Windows GUI seat is **not** a permanent component. Worst case is an
+  occasional, discouraged Wine UI session on the processing host to regenerate a
+  template.
+- Configuration templates are still first-class versioned artifacts — a
+  `.rcconfig`, a small set of `params.xml` files, one `.rsortho` per ortho
+  configuration. That still fits the Profile-versioning model.
+- **Dataset-adaptive behaviour is much wider than the draft allowed**: 116 global
+  keys plus 57 per-selection keys across four edit commands, not "the subset
+  expressible through `-set` keys" understood as a small remainder.
+- Gate F3 is unaffected — no GUI step sits on the per-job critical path — but the
+  CONDITIONAL in the recommendation loses one of its two main reasons.
+
+---
+
+## Demotions
+
+Every place the official documentation contradicts the first draft. Ordered by
+how much rested on the claim.
+
+| # | First draft said | Documentation says | Consequence |
+|---|---|---|---|
+| D1 | A **Windows GUI seat is a permanent component**; the Linux build has no full desktop UI | The Linux (Wine) build ships a UI, "available for troubleshooting only"; parameter XML can be authored from "the RealityScan UI (**Windows or Linux Wine**)" | The permanent-Windows-seat constraint falls. One less reason for CONDITIONAL |
+| D2 | Export is **XML-only**: "There is no inline-flag export configuration" | `params.xml` is optional on every command that takes it; "current settings" apply otherwise, and current settings come from 116 documented `-set` keys and `-importGlobalSettings` | Headless operation is parameterised, not pure replay |
+| D3 | "**The literal `-set` key strings are not** [confirmed] … the single largest practical gap" | [`keys-and-values`](sources/keys-and-values.md) documents 116 keys with types and defaults, and [`configure-selected-items`](sources/configure-selected-items.md) a further 57 | The largest stated gap did not exist |
+| D4 | **Checkpoints** (control points excluded from the solve) — `REQUIRES TEST`, and without them "no survey-grade claim is possible" | `-editControlPointSelection "gpType=2"` — `0 – Tie point`, `1 – Ground control`, **`2 – Ground test`**; plus `gpEnabled` to exclude a point from alignment | Independent accuracy evidence is obtainable unattended. Survey-grade claim is back on the table |
+| D5 | Domain 8: the DTM is "**a scene-type heuristic, not a ground-filtering algorithm**"; "no documentation describes an actual ground-vs-object classification" | `-dtmClassify` "Classify vertices of the selected model into pre-defined classes"; `-setSelectedClassAsGroundForDTM true`; `-setSelectedClassAsGroundForExport`; `-transferClassification` from AI label images | A real classify-then-nominate-ground workflow exists and is scriptable. Whether it is *good* is still `REQUIRES TEST` |
+| D6 | Domain 13: "the **CLI verb is unconfirmed** — if 3D Tiles export turns out to be GUI-only, domain 13 … drops out of the automated pipeline entirely. That is the highest-value unknown in the second tier" | `-export3dTiles fileName [params.xml]` | Domain 13 stays in. The highest-value second-tier unknown was already answered |
+| D7 | Domain 6 is "**the weakest domain**": close holes, post-hoc crop, mesh cleanup "none found" | `-closeHoles [maxEdgesCount]`, `-cutByBox inner OR outer [fillHoles]`, `-cleanModel` ("remove non-manifold edges and vertices, close small holes"), `-removeSelectedTriangles`, `-selectLargeTrianglesAbs/Rel`, `-selectMarginalTriangles` | Domain 6 is mid-strength, not weakest. Less work leaves for MeshLab |
+| D8 | Domain 10: volume measurement is "**GUI-driven, which makes it useless to an automated pipeline**" | paRSer `$OrthoProjectionVolume( orthoGuid, anyText )` "Outputs the calculated volumes and surface areas of an ortho projection" | Volumes are obtainable unattended through a report template |
+| D9 | Domain 1: AI mask **generation** is GUI-only | `-generateAIMasks` "Use AI Masking to generate masks by isolating the object of interest in your images" | Scriptable |
+| D10 | Domain 5: depth-map resolution key "**key name not found**" | `-setDownscaleForDepthMaps integer`, plus `mvsPreviewDownscaleFactor` / `mvsNormalDownscaleFactor` family in `keys-and-values` | Closed |
+| D11 | Domain 8/12: contours "export path exists; **CLI flag unconfirmed**" | `-computeContours [params.xml]`, `-exportContours fileName [params.xml]`, `-calculateCrossSections [step axis]`, `-exportCrossSections` | Closed |
+| D12 | Domain 2/6: `-exportComponent` | **No such command.** The real ones are `-exportSelectedComponentFile`, `-exportSelectedComponentDir`, `-exportLatestComponents` (gated by `-setMinComponentSize`) | A verb that would have failed at runtime |
+| D13 | Domain 18: paRSer CLI verb "`-exportReport`? **exact syntax unconfirmed**" | `-exportReport outputFileName templateFileName [true OR false]`; also `-printReport reportString` writing to the console | Closed |
+| D14 | Domain 9: the ortho parameter file is `.rcortho` | `.rsortho` (`.rcortho` appears only in a legacy example) | Cosmetic, but it is the filename a script would pass |
+| D15 | Domain 3: "**Exact CLI verb for GCP import** — UNKNOWN" | `-importGroundControlPoints gcpFileName [params.xml]` and `-importControlPointsMeasurements cpmFileName [params.xml]`, with `-exportGroundControlPoints` / `-exportControlPointsMeasurements` returning | Closed |
+| D16 | "**No documented image-count-per-VRAM guidance exists**" | `hardware-and-software-requirements` documents out-of-core processing, "16 GB of RAM is typically sufficient for processing thousands of high-resolution images, provided a component workflow is used", and that halving `sfmMaxFeaturesPerImage` from 40,000 to 20,000 "can double the number of images processed within the same memory limits" | Sizing has a documented lever. The two requirement pages disagree on the VRAM floor (1 GB vs 8 GB); take the Linux figure |
+
+Two claims the documentation **upheld** against attack, which is worth recording
+because the point of the exercise was to find the draft wrong:
+
+- Parameter files are genuinely GUI-authored (the D1/D2 correction is about them
+  being optional and the GUI being available on Linux, not about their origin).
+- The Linux build genuinely is a bundled Wine environment and genuinely is
+  labelled experimental: *"RealityScan for Linux (Wine) 2.1 … built on a bundled
+  Wine environment"*, *"The Linux (Wine) release is experimental"*. The cloud
+  session got this right from search summaries alone.
 
 ---
 
@@ -77,161 +172,188 @@ needed** · **Evidence**.
 
 | Capability | Native | CLI | GUI-only | External | Evidence |
 |---|---|---|---|---|---|
-| Add image folder | yes | `-addFolder <path>` | no | no | SUPPORTED |
-| Add individual images / image list | yes | `-add <path>` | no | no | SUPPORTED |
-| Image + explicit calibration | yes | `-addImageWithCalibration` | no | no | SUPPORTED |
+| Add image folder | yes | `-addFolder <path>` | no | no | VERIFIED |
+| Add individual images / image list | yes | `-add <path>` | no | no | VERIFIED |
+| Image + explicit calibration | yes | `-addImageWithCalibration` | no | no | VERIFIED |
+| Calibration group from EXIF | yes | `-setCalibrationGroupByExif`, `-setConstantCalibrationGroups`, `-setPriorCalibrationGroup`, `-setPriorLensGroup` | no | no | VERIFIED |
 | EXIF / XMP metadata read | yes | automatic on add | no | no | SUPPORTED |
-| GPS/GNSS priors | yes | from EXIF/XMP | no | no | SUPPORTED |
-| Camera position/orientation priors | yes | XMP sidecar | no | no | SUPPORTED |
-| Image masking (assignment) | yes | filename convention `<name>.mask.png` | no | no | SUPPORTED |
-| Image mask **generation** (AI) | yes | — | **yes** | yes | SUPPORTED |
+| GPS/GNSS priors | yes | from EXIF/XMP; `sfmEnableCameraPrior` and the `sfmCameraPriorAccuracy*` keys | no | no | VERIFIED |
+| Camera position/orientation priors | yes | XMP sidecar; `-editInputSelection "inpPose=…"`, `inpTx/inpTy/inpTz`, `inpRx/inpRy/inpRz` | no | no | VERIFIED |
+| Image masking (assignment) | yes | filename convention `<name>.mask.png`; `-editInputSelection "inpMaskOpts=…"` | no | no | VERIFIED |
+| Image mask **generation** (AI) | yes | **`-generateAIMasks`** | **no** | no | **CONTRADICTED (D9)** |
+| Mask export | yes | `-exportMasks`, `-generateMaskFromMesh`, `-exportMapsAndMask` | no | no | VERIFIED |
 | Multiple flights in one project | yes | repeated `-addFolder` | no | no | INFERRED |
-| Multiple cameras/lenses | yes | per-camera calibration groups | no | no | SUPPORTED |
-| Import existing component | yes | `-importComponent` | no | no | SUPPORTED |
-| Project file inspectable | yes | `.rcproj`/`.rsinfo` are XML | no | no | SUPPORTED |
-| Video-derived frames | partial | — | 360° workflow is a manual tutorial | yes | SUPPORTED |
-| **Pre-processing image validation** | **no** | — | — | **yes** | INFERRED |
+| Multiple cameras/lenses | yes | per-camera calibration groups | no | no | VERIFIED |
+| Import existing component | yes | `-importComponent` | no | no | VERIFIED |
+| Import laser scan / Leica BLK3D / video | yes | `-importLaserScan`, `-importLaserScanFolder`, `-importLeicaBlk3D`, `-importVideo` | no | no | VERIFIED |
+| Import flight log | yes | `-importFlightLog <flFileName> [params.xml]` | no | no | VERIFIED |
+| Project file inspectable | yes | `.rsproj`/`.rsinfo` are XML | no | no | SUPPORTED |
+| Video-derived frames | partial | `-importVideo`, `extractedVideoFramesLocation` | 360° workflow is a manual tutorial | yes | SUPPORTED |
+| **Pre-processing image validation** | **no** | — | — | **yes** | VERIFIED (absence — searched 82 pages) |
 | **Behaviour on missing/invalid EXIF** | — | — | — | — | **UNKNOWN — T2.8** |
 
 **Read**: ingestion is genuinely scriptable and the masking convention is a gift
-— externally generated masks are picked up with zero interaction. Two gaps
-matter. There is no documented input-validation stage, so ours stays
-(`exif-audit`, `filter` are not replaced). And the engine's behaviour on bad
-metadata is undocumented — it must be measured, because a silent default
-focal-length substitution would corrupt a survey quietly.
+— externally generated masks are picked up with zero interaction, and AI mask
+generation turns out to be scriptable too. Two gaps matter. There is no
+documented input-validation stage, so ours stays (`exif-audit`, `filter` are not
+replaced). And the engine's behaviour on bad metadata is undocumented — it must
+be measured, because a silent default focal-length substitution would corrupt a
+survey quietly.
 
 **One undocumented hazard**, from a third-party production pipeline: RealityScan
 reportedly **rewrites and relocates XMP sidecars inside the input folder** during
-alignment. *(SUPPORTED, non-Epic source.)* If true, the input folder is not
-read-only. **Never point the engine at the canonical image store** — always a
-job-scoped copy. This is cheap insurance regardless of whether it is true.
+alignment. *(SUPPORTED, non-Epic source; no Epic page addresses it either way.)*
+If true, the input folder is not read-only. **Never point the engine at the
+canonical image store** — always a job-scoped copy. This is cheap insurance
+regardless of whether it is true.
 
 ### 2. Alignment
 
 | Capability | Native | CLI | Evidence |
 |---|---|---|---|
-| Feature detection / matching / SfM | yes | `-align` | SUPPORTED |
-| Alignment settings | yes | `-set <key> <value>`, presets | SUPPORTED |
-| Image downscale factor | yes | `-set` key **name unconfirmed** | SUPPORTED / REQUIRES TEST |
-| Detector sensitivity | yes | `-set` key **name unconfirmed** | SUPPORTED / REQUIRES TEST |
-| Max features per image / per Mpx | yes | `-set` key **name unconfirmed** | SUPPORTED / REQUIRES TEST |
-| Preselector features | yes | `-set` key **name unconfirmed** | SUPPORTED / REQUIRES TEST |
-| Max reprojection error | yes | `-set` key **name unconfirmed** | SUPPORTED / REQUIRES TEST |
-| Component creation | yes | automatic | SUPPORTED |
-| Select largest component | yes | `-selectMaximalComponent` | SUPPORTED |
-| Merge components | yes | `-mergeComponents` | SUPPORTED (third-party corroborated) |
-| Export/import component | yes | `-exportComponent` / `-importComponent` | SUPPORTED |
-| Alignment statistics export | probable | see domain 14 | REQUIRES TEST |
+| Feature detection / matching / SfM | yes | `-align`, `-detectFeatures`, `-draft` | VERIFIED |
+| Alignment settings | yes | `-set "key=value"`, `-preset "key=value"` | VERIFIED |
+| Image downscale factor | yes | `sfmImageDownscaleFactor` (and `sfmImageDownscaleFactorDraftMode`) | **VERIFIED (D3)** |
+| Detector sensitivity | yes | `sfmDetectorSensitivity` | **VERIFIED (D3)** |
+| Max features per image / per Mpx | yes | `sfmMaxFeaturesPerImage`, `sfmMaxFeaturesPerMpx` | **VERIFIED (D3)** |
+| Preselector features | yes | `sfmPreselectorFeatures` | **VERIFIED (D3)** |
+| Max reprojection error | yes | `sfmMaxFeatureReprojectionError` | **VERIFIED (D3)** |
+| Image overlap model | yes | `sfmImagesOverlap`, `sfmImagesOverlapDraftMode` | VERIFIED |
+| Distortion model | yes | `sfmDistortionModel` — `Division`, `Brown3` (default), `Brown4`, `Brown3WithTangential2`, `Brown4WithTangential2`, `KplusBrown3WithTangential2`, `KplusBrown4WithTangential2` | **VERIFIED** — see domain 17 |
+| Component creation | yes | automatic; `sfmForceComponentRematch`, `sfmMergeGeoreferencedComponents` | VERIFIED |
+| Select largest component | yes | `-selectMaximalComponent` | VERIFIED |
+| Select best-error component | yes | `-selectComponentWithLeastReprojectionError` | VERIFIED |
+| Merge components | yes | `-mergeComponents` | VERIFIED |
+| Export component | yes | `-exportSelectedComponentFile`, `-exportSelectedComponentDir`, `-exportLatestComponents` + `-setMinComponentSize` | **CONTRADICTED (D12)** — `-exportComponent` does not exist |
+| Import component | yes | `-importComponent` | VERIFIED |
+| Marker detection | yes | `-detectMarkers` | VERIFIED |
+| Alignment statistics export | yes | paRSer, see domain 14 | VERIFIED |
 
-**Read**: the *capabilities* are confirmed; the **literal `-set` key strings are
-not**. Every human-readable setting label is known and not one exact key is.
-That is the single largest practical gap in this document, because the keys are
-the entire configuration surface. First task with working network access:
-retrieve the Keys and Values page in full.
+**Read**: the capabilities are confirmed **and so are the keys**. The first
+draft's largest stated gap — the literal `-set` strings — was one page away; the
+116 global keys are in [`sources/keys-and-values.md`](sources/keys-and-values.md)
+with value types and defaults, and 57 per-item keys in
+[`sources/configure-selected-items.md`](sources/configure-selected-items.md).
+Configuration is a solved problem, not a risk.
 
-**`-selectMaximalComponent` is a loaded gun.** Taking the largest component
-silently discards everything else. If a Capture splits 60/40, the pipeline
-produces a confident, clean, half-site deliverable. Gate on the selected
-component's *share* of registered images, not merely on component count
-(T2.14).
+`-selectMaximalComponent` is still a loaded gun. Taking the largest component
+silently discards everything else; the documentation says only "Select the
+largest component for further processing", with no warning and no threshold. If a
+Capture splits 60/40, the pipeline produces a confident, clean, half-site
+deliverable. Gate on the selected component's *share* of registered images, not
+merely on component count (T2.14). `-selectComponentWithLeastReprojectionError`
+is a second trap with the same shape — smallest mean error can mean smallest
+component.
 
 ### 3. Georeferencing
 
 | Capability | Native | CLI | Evidence |
 |---|---|---|---|
-| GPS/GNSS camera positions | yes | from EXIF/XMP | SUPPORTED |
-| GCP 3D positions from CSV | yes | file-driven import | SUPPORTED |
-| **GCP 2D image measurements from file** | **yes** | Control Points Measurements Import CSV | **SUPPORTED** |
-| Per-point accuracy / weights | yes | column in the control file; `groundcontrol.xml` | SUPPORTED |
-| Checkpoints (excluded from solve) | probable | — | REQUIRES TEST |
-| Set project / output CRS | yes | `-setProjectCoordinateSystem`, `-setOutputCoordinateSystem` (EPSG) | SUPPORTED |
-| Geoid / vertical datum | probable | — | UNKNOWN |
-| GCP residuals, numeric | probable | GUI shows orange vectors; numeric export unconfirmed | REQUIRES TEST |
-| **Wrong-CRS detection** | **no** | — | SUPPORTED (absence) |
-| Exact CLI verb for GCP import | — | — | **UNKNOWN** |
+| GPS/GNSS camera positions | yes | from EXIF/XMP | VERIFIED |
+| GCP 3D positions from file | yes | **`-importGroundControlPoints <gcpFileName> [params.xml]`** | **VERIFIED (D15)** |
+| GCP 2D image measurements from file | yes | **`-importControlPointsMeasurements <cpmFileName> [params.xml]`** | **VERIFIED (D15)** |
+| GCP export (round-trip) | yes | `-exportGroundControlPoints`, `-exportControlPointsMeasurements`, `-listControlPoints <fileName>` | VERIFIED |
+| Per-point accuracy / weights | yes | `-editControlPointSelection "gpWeight=…"`; `sfmControlPointXAccuracy` / `Y` / `Z`, `sfmControPointImageMeasAccuracy` | VERIFIED |
+| **Checkpoints (excluded from solve)** | **yes** | **`-editControlPointSelection "gpType=2"`** — `2 – Ground test`; `gpEnabled=false` to drop from alignment entirely | **CONTRADICTED (D4)** |
+| Control-point management | yes | `-selectControlPoint`, `-renameControlPoint`, `-deleteControlPoint`, `-invertControlPointSelection`, `-selectMeasurementByError <px> [name]`, `-selectMeasurementByIndex`, `-deleteControlPointMeasurement` | VERIFIED |
+| Set project / output CRS | yes | `-setProjectCoordinateSystem`, `-setOutputCoordinateSystem` | VERIFIED |
+| Geoid / vertical datum | probable | not documented in the CLI pages | UNKNOWN |
+| GCP residuals, numeric | yes | paRSer control-point function set; `-selectMeasurementByError` proves per-measurement pixel error is held numerically | VERIFIED |
+| Defined distances / constraints | yes | `-defineDistance`, `-editConstraintSelection`, `-deleteConstraint`; `sfmDefinedDistanceAccuracy` | VERIFIED |
+| **Wrong-CRS detection** | **no** | — | VERIFIED (absence — searched 82 pages) |
 
-**Read — and this is the good news of the whole evaluation**: the question that
-would have ended it doesn't. GCP *image observations* can be supplied from a
-CSV (image, point name, pixel X, pixel Y). GCP placement does **not** inherently
-require GUI clicking. Fully automated georeferencing is achievable in principle.
-The exact CLI verb triggering the import is unconfirmed, which is a detail, not
-a blocker.
+**Read — and this is still the good news of the evaluation, now with the verb
+attached**: GCP *image observations* can be supplied from a file and imported by
+`-importGroundControlPoints` / `-importControlPointsMeasurements`. GCP placement
+does **not** require GUI clicking. Fully automated georeferencing is achievable.
 
-**The bad news is symmetrical**: there is **no wrong-CRS detection**. The
-reported failure mode is that a mismatched project/output CRS surfaces as an
-invalid `.obj` at export — downstream, after hours of compute, and in a form
-that may not be obviously wrong. Gate C3 treats silent CRS mismatch as
-critical, so **we must build the plausibility check ourselves**: compare the
-GNSS bounding box against the declared EPSG before processing starts. It is a
-few lines of `pyproj` and it is the highest-value piece of own-code in this
-design.
+**Checkpoints are the material change.** `gpType=2 – Ground test` is exactly a
+control point excluded from the solve and used as independent accuracy evidence,
+and it is settable from the command line. The first draft's warning that "without
+them there is no independent accuracy evidence and no survey-grade claim is
+possible" is answered: the mechanism exists. Whether the numbers it produces are
+good enough is `REQUIRES TEST`, not `UNKNOWN`.
+
+**The bad news is unchanged**: there is **no wrong-CRS detection** anywhere in 81
+pages. Gate C3 treats silent CRS mismatch as critical, so **we build the
+plausibility check ourselves**: compare the GNSS bounding box against the declared
+EPSG before processing starts. A few lines of `pyproj`, and the highest-value
+piece of own-code in this design.
 
 ### 4. Point clouds (non-LiDAR)
 
 | Capability | Native | CLI | Evidence |
 |---|---|---|---|
-| Sparse / tie-point cloud | yes | export via registration / sparse export | SUPPORTED |
+| Sparse / tie-point cloud | yes | **`-exportSparsePointCloud <fileName> [params.xml]`** | VERIFIED |
 | **Dense point cloud** | yes, **derived from mesh vertices** | downstream of meshing | SUPPORTED |
-| Export LAS | yes | via export settings | SUPPORTED |
-| Export PLY / XYZ / PTS / PTX / CSV | yes | via export settings | SUPPORTED |
-| Export LAZ | probable | seen in import context | REQUIRES TEST |
-| **Export E57** | **import only in evidence** | — | **UNKNOWN — do not promise** |
-| Point filtering / outlier removal | GUI | no CLI found | SUPPORTED (absence) |
-| Ground classification from imagery | **doubtful** | built around ASPRS LiDAR classes | UNKNOWN — T3.4 |
-| Reconstruction region | yes | `-setReconstructionRegionAuto`, `-setReconstructionRegion <f>.rsbox`, `-exportReconstructionRegion`, `-setReconstructionRegionOnCPs` | SUPPORTED |
+| Point-cloud export formats | yes | via export settings / `params.xml` | SUPPORTED — the format list is in a dialog, not in the CLI docs |
+| **Export E57 / LAZ** | — | — | **UNKNOWN** — no mention in 82 pages; do not promise |
+| Point filtering / outlier removal | partial | `-selectLargeTrianglesAbs/Rel`, `-selectMarginalTriangles`, `-removeSelectedTriangles` operate on the mesh, not the cloud | SUPPORTED |
+| Classification | yes | `-dtmClassify`, `-selectClassification`, `-transferClassification`, `-selectVerticesOfSelectedClass`, `-setSelectedClassLasFormat`, `-setSelectedClassAsGroundForExport` | **CONTRADICTED (D5)** |
+| Reconstruction region | yes | `-setReconstructionRegionAuto`, `-setReconstructionRegion <f>.rsbox`, `-setReconstructionRegionByDensity`, `-setReconstructionRegionOnCPs`, `-exportReconstructionRegion`, `-moveReconstructionRegion`, `-rotateReconstructionRegion`, `-scaleReconstructionRegion`, `-offsetReconstructionRegion` | VERIFIED |
 
 **Read**: the dense cloud being **made of mesh vertices** inverts the normal
-pipeline. There is no cheap "dense cloud only" path — meshing must be paid for
-first. That changes runtime estimates and stage ordering, and it means point
-density is governed by meshing parameters rather than by a depth-map density
-setting.
+pipeline — no Epic page contradicts this, and none confirms it either, so it
+stays `SUPPORTED`. If true there is no cheap "dense cloud only" path, meshing
+must be paid for first, and point density is governed by meshing parameters. That
+is a runtime-estimate question and belongs in tier 2.
 
-Point-level filtering has **no CLI equivalent** — this goes to PDAL/CloudCompare
-and is not a loss, since those tools are better at it anyway.
+Point-level filtering still has no cloud-domain CLI equivalent — this goes to
+PDAL/CloudCompare and is not a loss, since those tools are better at it anyway.
+What did change is classification: it is scriptable (D5).
 
 ### 5. 3D reconstruction
 
 | Capability | Native | CLI | Evidence |
 |---|---|---|---|
-| Quality tiers | yes | `-calculatePreviewModel` / `-calculateNormalModel` / `-calculateHighModel` | SUPPORTED |
-| Reconstruction region | yes | as above, `.rsbox` file | SUPPORTED |
-| Depth-map resolution key | probable | **key name not found** | UNKNOWN |
-| Min/max vertex distance | probable | **key name not found** | UNKNOWN |
+| Quality tiers | yes | `-calculatePreviewModel` / `-calculateNormalModel` / `-calculateHighModel` | VERIFIED |
+| Reconstruction region | yes | as above, `.rsbox` file | VERIFIED |
+| Depth-map downscale | yes | **`-setDownscaleForDepthMaps <integer>`**; `mvsPreviewDownscaleFactor` (default 4), `mvsNormalDownscaleFactor`, and the 19-key `mvs*` family | **CONTRADICTED (D10)** |
+| Ground plane | yes | `-resetGround`, `-setGroundPlaneFromReconstructionRegion`, `-setCamerasGravityDirection` | VERIFIED |
 | Failure detection | partial | `-set "appQuitOnError=true"`; crash → exit 3 | SUPPORTED |
-| Resume model calculation | yes | autosave ≈15 min; `-continueModelCalculation`, `-load … recoverAutosave` | SUPPORTED |
-| **Alignment-stage resume** | **no evidence** | — | **UNKNOWN — assume none** |
+| Resume model calculation | yes | `-continueModelCalculation`, `-lockPoseForContinue`, `-recoverAutosave`, `-deleteAutosave` | VERIFIED |
+| **Alignment-stage resume** | **no** | — | **UNKNOWN** — no such command in `all-commands` |
 
 **Read**: the three quality tiers are confirmed and are the main standardised
-config choice. The sub-parameters beneath them are not retrievable and must be
-treated as unknown.
+config choice, and the sub-parameters beneath them are now documented rather than
+unknown.
 
-**Reconstruction is the reported failure point for headless operation** — two
-independent reports of `-calculateNormalModel`/`-calculateHighModel` hanging
-indefinitely or failing with a misleading "No model is selected" in headless
-Docker/Linux. This is exactly where T1.2 aims. A hang does not self-terminate,
-so an **external watchdog is mandatory**, not optional.
+**Reconstruction is still the reported failure point for headless operation** —
+two independent third-party reports of `-calculateNormalModel` /
+`-calculateHighModel` hanging indefinitely or failing with a misleading "No model
+is selected" in headless Docker/Linux. **No Epic page confirms or denies this**,
+so it stays `SUPPORTED (non-Epic)` and T1.2 stands unchanged. A hang does not
+self-terminate, so an **external watchdog is mandatory**, not optional. Note that
+Epic now documents Docker with GPU passthrough as a supported Linux deployment
+(`realityscan-for-linux`), which is evidence against the strong form of the
+report but not against the intermittent form.
 
 ### 6. 3D editing
 
 | Capability | CLI | Evidence |
 |---|---|---|
-| Simplify / decimate | `-simplify <N>` | SUPPORTED |
-| Smooth | `-smooth` (params unconfirmed) | SUPPORTED |
-| Select model / maximal component | `-selectModel`, `-selectMaximalComponent` | SUPPORTED |
-| Reconstruction-region crop | `.rsbox` before reconstruction | SUPPORTED |
-| **Close holes** | **none found** | SUPPORTED (absence) |
-| **Post-hoc mesh crop (Cut By Box)** | **none found** | UNKNOWN |
-| **Fine geometry removal** | **none found** | SUPPORTED (absence) |
-| **Mesh splitting / tiling** | **none found** | SUPPORTED (absence) |
-| **Retopology** | **feature appears absent entirely** | SUPPORTED (absence) |
-| Model import (external mesh) | yes, into the aligned component | SUPPORTED |
+| Simplify / decimate | `-simplify [targetTriangleCount OR params.xml]` | VERIFIED |
+| Smooth | `-smooth [params.xml]` | VERIFIED |
+| Select model / maximal component | `-selectModel`, `-selectMaximalComponent`, `-selectLargestModelComponent` (largest connected component of the mesh) | VERIFIED |
+| Reconstruction-region crop | `.rsbox` before reconstruction | VERIFIED |
+| **Close holes** | **`-closeHoles [maxEdgesCount]`** | **CONTRADICTED (D7)** |
+| **Post-hoc mesh crop (Cut By Box)** | **`-cutByBox inner OR outer [fillHoles]`**, plus `-selectTrianglesInsideReconReg` / `-selectTrianglesOutsideReconReg` | **CONTRADICTED (D7)** |
+| **Mesh cleanup** | **`-cleanModel`** — "remove non-manifold edges and vertices, close small holes, etc." | **CONTRADICTED (D7)** |
+| Triangle selection / removal | `-selectLargeTrianglesAbs`, `-selectLargeTrianglesRel`, `-selectMarginalTriangles`, `-invertTrianglesSelection`, `-removeSelectedTriangles`, `-deselectModelTriangles` | VERIFIED |
+| Model management | `-duplicateSelectedModel`, `-renameSelectedModel`, `-deleteSelectedModel` | VERIFIED |
+| **Mesh splitting / tiling** | none found | UNKNOWN |
+| **Retopology** | none found in 82 pages | VERIFIED (absence) |
+| Model import (external mesh) | `-importModel` | VERIFIED |
 
-**Read**: this is the weakest domain and the answer is clean — **crop before
-reconstruction via `.rsbox`, do all post-hoc editing externally.** The region
-box is scriptable and exportable, so the Site boundary can drive it directly
-from our own data. Hole-filling, fine cleanup, splitting and retopology go to
-MeshLab/CloudCompare/Instant Meshes. That is not a defeat; those tools are
-purpose-built and free.
+**Read**: **this domain was mis-called.** The first draft's "crop before
+reconstruction, do all post-hoc editing externally" was built on three rows that
+are wrong: hole closing, box cropping and non-manifold cleanup all have CLI
+verbs, and `-cleanModel` is precisely the mesh-hygiene pass the pipeline would
+otherwise have shelled out to MeshLab for. Retopology genuinely is absent.
+
+The corrected read: **do mesh hygiene in-engine (`-cleanModel`, `-closeHoles`,
+`-cutByBox`), send only retopology out.** That is a smaller external surface than
+the draft designed for, and it removes a whole tool from the dependency list.
 
 The **Model Import** capability is what makes the round-trip viable — see
 domain 7.
@@ -240,193 +362,210 @@ domain 7.
 
 | Capability | Native | CLI | Evidence |
 |---|---|---|---|
-| UV unwrap (Geometric, Mosaicing) | yes | via settings | SUPPORTED |
-| Texel size, gutter (default 2px) | yes | settings | SUPPORTED |
-| Max texture resolution to 16384² | yes | settings | SUPPORTED |
-| Texture count / tiling style | yes | settings | SUPPORTED |
-| **UDIM** | **yes** | tile-type option | SUPPORTED |
-| Calculate texture | yes | `-calculateTexture` | SUPPORTED |
-| Colour correction during texturing | yes | settings | SUPPORTED |
-| **Texture reprojection** | **yes** | documented retexture path | SUPPORTED |
-| Normal / displacement baking | yes | via reprojection | SUPPORTED |
-| Ambient occlusion baking | **not found** | — | UNKNOWN — do not claim |
-| **Re-texture an external mesh from original photos** | **yes** | Model Import into the calibrated component, then `-calculateTexture` | SUPPORTED |
+| UV unwrap | yes | `-unwrap`; `unwrapStyle`, `unwrapGutter` (default 2), texel-size and resolution keys | VERIFIED |
+| Texture calculation | yes | `-calculateTexture`, `-calculateQualityTexture` | VERIFIED |
+| Vertex colours | yes | `-calculateVertexColors`, `-calculatePreviewVertexColors`, `-calculateQualityColors` | VERIFIED |
+| Texturing method / style | yes | `txtMethod` and the `txt*` key family | VERIFIED |
+| Colour correction | yes | `-correctColors`, `-enableColorNormalization`, `-enableColorNormalizationReference`; `-editInputSelection "inpColorRef"/"inpColorNorm"` | VERIFIED |
+| Per-image texturing weight | yes | `-setWeightInTexturing`, `-editInputSelection "inpImageColorsWeight"` | VERIFIED |
+| **Texture reprojection** | **yes** | **`-reprojectTexture <sourceModel> <resultModel> [params.xml]`** | VERIFIED |
+| Normal / displacement / ST maps | yes | `-exportSTMap`, `-exportMapsAndMask` | VERIFIED |
+| **UDIM** | — | not mentioned in the CLI docs | **UNKNOWN** — the draft claimed it; no Epic page in `sources/` supports it |
+| Ambient occlusion baking | — | not found | UNKNOWN |
+| **Re-texture an external mesh from original photos** | **yes** | `-importModel` into the calibrated component, then `-unwrap` + `-calculateTexture` | VERIFIED |
 
-**Read**: the strongest domain, and it resolves the hardest architectural
+**Read**: still the strongest domain, and it resolves the hardest architectural
 question in the brief. An externally retopologised or repaired mesh can be
 imported into the component holding the calibrated cameras and textured from the
-**original imagery** — not resampled from an existing texture. That makes a
-genuine external round-trip possible rather than lossy:
+**original imagery** — not resampled from an existing texture:
 
 ```
-RealityScan mesh → MeshLab/Instant Meshes (repair, retopo) → Model Import
-  → -calculateTexture from original photographs → export
+RealityScan mesh → external retopo → -importModel
+  → -unwrap → -calculateTexture from original photographs → -exportModel
 ```
 
-UDIM being real is worth noting because it is commonly assumed absent.
+`-reprojectTexture` makes the lossy variant available too, when the source
+textures are the thing worth keeping.
+
+**UDIM is demoted to UNKNOWN.** The draft flagged it as "worth noting because it
+is commonly assumed absent" — but no page in `sources/` mentions UDIM at all. Do
+not promise it.
 
 ### 8. Terrain
 
 | Capability | Native | CLI | Evidence |
 |---|---|---|---|
-| DSM | yes — mesh altitude layer via ortho pipeline | `-calculateOrthoProjection` | SUPPORTED |
-| **DTM** | **scene-type heuristic, not bare-earth classification** | `.rcortho` `DTMParams`/`ClassificationParams`, `modelType` enum | SUPPORTED |
-| Contours / isolines | yes | export path exists; **CLI flag unconfirmed** | SUPPORTED / UNKNOWN |
-| Cross-sections | yes | SHP/DXF export | SUPPORTED |
-| Terrain QA | **none** | — | SUPPORTED (absence) |
+| DSM | yes — mesh altitude layer via the ortho pipeline | `-calculateOrthoProjection` | VERIFIED |
+| **Classification into classes** | **yes** | **`-dtmClassify [params.xml]`** — "Classify vertices of the selected model into pre-defined classes" | **CONTRADICTED (D5)** |
+| **Nominate a class as ground** | **yes** | **`-setSelectedClassAsGroundForDTM true`**, `-setSelectedClassAsGroundForExport` (Export class LAS → Ground (2)) | **CONTRADICTED (D5)** |
+| Classification from AI image labels | yes | `-transferClassification [params.xml]`, the `DETECT_IMAGE_LABELS` process id, `-setImageLayer`/`-setImagesLayer` | VERIFIED |
+| Classification management | yes | `-selectClassification`, `-selectClass`, `-deselectClass`, `-renameSelectedClass`, `-colorModelBySelectedClassification`, `-importClassificationFormat` / `-exportClassificationFormat`, `-importClassificationSettings` / `-exportClassificationSettings` | VERIFIED |
+| Contours / isolines | yes | **`-computeContours [params.xml]`**, **`-exportContours <fileName> [params.xml]`**, `-renameContours`, `-selectContours` | **CONTRADICTED (D11)** |
+| Cross-sections | yes | **`-calculateCrossSections [step axis]`**, `-exportCrossSections`, `-renameCrossSections`, `-selectCrossSections` | **CONTRADICTED (D11)** |
+| **DTM quality vs a true ground filter** | — | — | **REQUIRES TEST** |
+| Terrain QA | none | — | VERIFIED (absence) |
 
-**Read**: **this is the trap the brief warned about, and it is real.** The
-"DTM" is driven by a `modelType` enum — `industrial_complex`, `mixed`, `city`,
-`nature`, `meadows`, `countryside`, `mountains` — which is a scene-type
-heuristic, not a ground-filtering algorithm over image-derived points. No
-documentation describes an actual ground-vs-object classification.
+**Read**: **the trap the brief warned about is smaller than the draft thought,
+but it has not vanished — it has changed category.** There *is* a documented
+classification step (`-dtmClassify`) and an explicit "use this class as ground for
+DTM" switch, both scriptable. That is a real ground-classification workflow, not
+a scene-type dropdown.
 
-**Do not treat RealityScan's DTM as bare earth for survey work.** If a genuine
-DTM is required, ground classification belongs in PDAL (SMRF/PMF filters) over
-an exported point cloud. Gate ES5 is CONDITIONAL at best.
+What the documentation does **not** say is how good the classifier is on
+image-derived vertices, or what its pre-defined classes are. So the honest status
+is `REQUIRES TEST`, not `SUPPORTED (absence)`: **measure it against a PDAL
+SMRF/PMF baseline on the same Capture before claiming bare earth for survey
+work.** Gate ES5 moves from "CONDITIONAL at best" to "conditional on a
+measurement we can now actually design".
 
 ### 9. Mapping
 
 | Capability | Native | CLI | Evidence |
 |---|---|---|---|
-| Ortho projection | yes | `-calculateOrthoProjection <params>.rcortho` | SUPPORTED |
-| Ortho export | yes | `-exportOrthoProjection <out>.tiff <exportParams>.xml` | SUPPORTED |
-| GSD / resolution | yes | in `.rcortho` | SUPPORTED |
-| Extent | yes | in `.rcortho` | SUPPORTED |
-| Output CRS | yes | project/output CRS settings | SUPPORTED |
-| Map Wizard CLI equivalent | **yes — the above is it** | GUI writes the params file, CLI replays it | SUPPORTED |
+| Ortho projection | yes | `-calculateOrthoProjection [params.rsortho] [region.rsbox]` | VERIFIED |
+| Ortho export | yes | `-exportOrthoProjection <out>.tiff [exportParams.xml]` | VERIFIED |
+| Ortho selection / settings | yes | `-selectOrthoProjection`, `-editOrthoProjectionSelection "key=value"` | VERIFIED |
+| GSD / resolution / extent | yes | in `.rsortho`, or current settings | VERIFIED |
+| Output CRS | yes | `-setOutputCoordinateSystem` | VERIFIED |
+| Shapes into ortho | yes | `-importShapesToOrtho`, `-importShapesToSelectedOrtho`, `-exportShapes`, `-selectShape`, `-addShapeToSelection` | VERIFIED |
+| `.rsortho` origin | GUI-authored | *"You can obtain params.rsortho by exporting an orthographic projection in the GUI and setting Export projection parameters file to True"* | VERIFIED |
+| **`.rsortho` hand-writable** | — | docs link to a structure description but do not inline it | **REQUIRES TEST** — fetch one, read it, try editing it |
 
-**Read**: orthomosaic generation is **fully unattended** — the strongest
-replacement case against the current ODM path. The caveat is the structural
-one: `.rcortho` is authored in the GUI and replayed. Per-Site extents and GSD
-would need either a template per configuration or the params file generated by
-us, if its schema turns out to be writable by hand. **Worth testing early**
-(the file is likely XML), because hand-writable params would remove the Windows
-dependency for this domain entirely.
+**Read**: orthomosaic generation is **fully unattended** and both parameters are
+optional (`-calculateOrthoProjection` with no arguments uses current settings),
+which is the strongest replacement case against the current ODM path. The
+remaining question is narrower than the draft's: not "must a GUI author this"
+but "can we edit the file a GUI once authored". Since `-editOrthoProjectionSelection`
+exists, per-Site extent and GSD may not need the file at all.
+
+Note the extension is **`.rsortho`** (D14). `.rcortho` appears only in a legacy
+example line.
 
 ### 10. Survey analysis
 
-| Capability | Native | CLI | Evidence |
+| Capability | Native | CLI / unattended | Evidence |
 |---|---|---|---|
-| **Volume / cut-fill / stockpile** | **yes** | GUI; no CLI found | SUPPORTED |
-| Ground Test precision validation | yes | GUI | SUPPORTED |
-| GCP residual visualisation | yes | GUI (orange vectors) | SUPPORTED |
-| Distance / coordinate / area query | **no CLI** | — | SUPPORTED (absence) |
-| Checkpoint RMSE report | **not found** | — | UNKNOWN |
-| Contours, cross-sections | export only | SHP/DXF | SUPPORTED |
+| **Volume / surface area** | **yes** | **paRSer `$OrthoProjectionVolume(orthoGuid, anyText)`** — "Outputs the calculated volumes and surface areas of an ortho projection" | **CONTRADICTED (D8)** |
+| Ortho measurements | yes | paRSer `OrthoMeasurementFunctionSet` | VERIFIED |
+| Checkpoint / Ground Test precision | yes | `gpType=2` (D4) + paRSer control-point functions | VERIFIED |
+| GCP residuals, numeric | yes | paRSer `ControlPointsExportFunctionSet`; `-selectMeasurementByError` | VERIFIED |
+| Camera error statistics | yes | paRSer `CameraErrorsExportFunctionSet`, `RelativeCameraUncertaintyFunctionSet`, `MisalignmentFunctionSet` | VERIFIED |
+| Contours, cross-sections | yes | `-computeContours` / `-calculateCrossSections` and their exports | VERIFIED (D11) |
+| Distance / coordinate / area query | partial | `-defineDistance` constraints; general ad-hoc query has no CLI | SUPPORTED |
+| Checkpoint RMSE report | yes, by template | paRSer over control-point functions; no built-in RMSE variable found | SUPPORTED |
 
-**Read**: **RealityScan is a reconstruction engine with measurement tools bolted
-on, not a survey-analysis platform.** Native volume measurement is a real and
-pleasant surprise, but it is GUI-driven, which makes it useless to an automated
-pipeline.
+**Read**: **the draft's verdict — "a reconstruction engine with measurement tools
+bolted on, useless to an automated pipeline" — is half wrong.** The measurement
+tools are GUI-driven, but their *results* are exposed to paRSer, and paRSer runs
+headlessly through `-exportReport`. Volumes, ortho measurements, camera errors
+and control-point residuals are all obtainable unattended as structured output.
 
-Essentially all of domain 10 moves to external tooling: GDAL/rasterio for
-raster maths, PDAL for cloud analysis, Shapely/pyproj for geometry, our own code
-for checkpoint RMSE. That is not a weakness of the proposal — it is where this
-work belongs anyway, because these are the computations that must be auditable
-and version-controlled.
+Some of domain 10 still moves to external tooling — GDAL/rasterio for raster
+maths, PDAL for cloud analysis, Shapely/pyproj for geometry. But **checkpoint
+RMSE is now computable from engine data** rather than reconstructed from scratch,
+and that was the number the survey-grade claim needed.
 
 ### 11. 3D delivery
 
-**Export mechanism**: `-exportModel <modelName> <exportSettingsXML>`.
-**There is no inline-flag export configuration.** The XML is extracted from an
-`.rcinfo` written by the GUI Export dialog. *(SUPPORTED.)*
+**Export mechanism**: `-exportModel <modelName> <fileName> [params.xml]` and
+`-exportSelectedModel <fileName> [params.xml]`, plus `-exportModelToZip`.
+**The params XML is optional** (D2) — without it the current settings apply, and
+current settings are `-set`-driven and `.rcconfig`-portable.
 
-Formats reported in Epic's export-formats KB *(all SUPPORTED)*: **OBJ** (+MTL),
-**PLY**, **XYZ**, **FBX** (FBX201100–FBX2019, binary and ASCII), **GLB**,
-**USD**, **USDZ**, **STL**, **DXF**, **Alembic** `.abc`, **Collada** `.dae`,
-**3MF**, **PTX**, **LAS**, texture-only export, part-list metadata export.
+Format coverage: the CLI pages document the *mechanism*, not the format list. The
+format list lives in the Export dialog and in Epic's KB, which is **not** among
+the 82 pages fetched. So every specific format the first draft listed — OBJ, PLY,
+XYZ, FBX, GLB, USD, USDZ, STL, DXF, Alembic, Collada, 3MF, PTX, LAS — remains
+`SUPPORTED`, not `VERIFIED`, and the not-evidenced list (plain `.gltf`, KMZ from
+the model exporter, VRML, X3D, E57) remains **do not promise**.
 
-Not evidenced — **do not promise**: plain `.gltf` (only `.glb` confirmed),
-**KMZ from the model exporter**, VRML, X3D, **E57 export**.
+One verified addition: `-uploadToSketchfab` exists as a CLI verb. Irrelevant to
+this pipeline, noted so nobody rediscovers it as a surprise.
 
-Coordinate handling: output CRS under Settings; "Shifted project output" centres
-geometry at origin and records the georeferenced offset in `.rcinfo`. LoD export
-offers relative (%) or absolute (triangle count) simplification and preserves
-geolocation when the source is georeferenced. *(SUPPORTED.)*
-
-**Read**: format coverage is excellent and comfortably exceeds the current
-pipeline. The constraint is again structural — **a checked-in library of export
-XML templates, one per format/configuration**, each authored once on Windows.
+**Read**: the constraint the draft drew from this domain — "a checked-in library
+of export XML templates, one per format/configuration, each authored once on
+Windows" — is weakened twice over: the XML is optional, and where it is wanted it
+can be authored on Linux (D1, D2). A template library is still the right shape;
+it is no longer a Windows dependency.
 
 ### 12. GIS delivery
 
 | Format | Status | Evidence |
 |---|---|---|
-| GeoTIFF / TIFF (LZW, BigTIFF) | supported | SUPPORTED |
-| World file `.tfw` | supported | SUPPORTED |
-| Embedded CRS in raster | supported, user-selectable | SUPPORTED |
-| DSM / orthophoto raster | supported | SUPPORTED |
-| "DTM" raster | supported, **but see domain 8** | SUPPORTED |
-| Contours SHP/DXF | supported | SUPPORTED |
-| Cross-sections SHP/DXF | supported | SUPPORTED |
-| LAS / LAZ point cloud | supported (LAZ less certain) | SUPPORTED |
-| KML/KMZ with tiling | supported **from the ortho/LoD paths** | SUPPORTED |
-| **Cloud-Optimized GeoTIFF** | **not documented** | UNKNOWN |
-| GeoPackage | not documented | UNKNOWN |
-| E57 export | import only in evidence | UNKNOWN |
+| GeoTIFF / TIFF ortho raster | yes | `-exportOrthoProjection <out>.tiff` | VERIFIED |
+| DSM raster | yes | ortho pipeline altitude layer | VERIFIED |
+| "DTM" raster | yes, and see domain 8 | VERIFIED |
+| Contours SHP/DXF | yes | `-exportContours` (format by extension/params) | VERIFIED (D11) |
+| Cross-sections | yes | `-exportCrossSections` | VERIFIED (D11) |
+| Embedded CRS in raster | yes | `-setOutputCoordinateSystem` | VERIFIED |
+| World file `.tfw` | probable | export-dialog setting, not in the CLI pages | SUPPORTED |
+| LAS class assignment | yes | `-setSelectedClassLasFormat`, `-setSelectedClassAsGroundForExport` | VERIFIED |
+| **Cloud-Optimized GeoTIFF** | **not documented in 82 pages** | **UNKNOWN** |
+| GeoPackage | not documented in 82 pages | UNKNOWN |
+| E57 export | not documented in 82 pages | UNKNOWN |
+| KML/KMZ | not documented in 82 pages | UNKNOWN |
 
-**Read**: the current pipeline delivers a **COG**, read directly by MapLibre over
-HTTP range requests with no tile server (ADR 0011). COG is **not evidenced** as a
-RealityScan output. So `export-cog` **stays** — GDAL converts the GeoTIFF.
-That is a one-line node we already have, and it is also where the existing
-COG-validation check lives, which we need regardless.
+**Read**: unchanged and load-bearing. The current pipeline delivers a **COG**,
+read directly by MapLibre over HTTP range requests with no tile server (ADR
+0011), and COG appears nowhere in the RealityScan documentation. So `export-cog`
+**stays** — GDAL converts the GeoTIFF. That is a one-line node we already have,
+and it is where the existing COG-validation check lives, which we need
+regardless.
 
 ### 13. Web 3D
 
 | Capability | Status | Evidence |
 |---|---|---|
-| LoD generation | yes, relative % or absolute triangle count | SUPPORTED |
-| **Cesium 3D Tiles** | **yes — via the separate Level of Detail export dialog** | SUPPORTED |
-| 3D Tiles version | **1.0 only** — `tileset.json` + `.b3dm` folder | SUPPORTED |
-| 3D Tiles 1.1 (glTF content, implicit tiling) | **no** | SUPPORTED (absence) |
-| Draco compression | **no** — Cesium's separate Reality Tiler | SUPPORTED |
-| KTX2 / Basis textures | **no** — same | SUPPORTED |
-| CLI verb for LoD/Tiles export | **unconfirmed** — may not be `-exportModel` | **UNKNOWN — top domain-13 risk** |
+| LoD generation | yes | `-exportLod <fileName> [params.xml]` — linear LoD | VERIFIED |
+| **Cesium 3D Tiles** | **yes, and scriptable** | **`-export3dTiles <fileName> [params.xml]`** — hierarchical LoD to `.json` | **CONTRADICTED (D6)** |
+| 3D Tiles version | `tileset.json` + `.b3dm` | SUPPORTED — the CLI page does not state the version; the first draft's "1.0 only" came from search |
+| Draco / KTX2 compression | not mentioned in 82 pages | UNKNOWN |
 
-**Read**: native 3D Tiles is a genuine capability the current pipeline lacks —
-but it is **1.0 b3dm**, a decade-old tile format without modern geometry or
-texture compression. For client-facing web delivery over object storage, payload
-size is the binding constraint, so b3dm without Draco/KTX2 is a meaningful
-limitation. Reaching 1.1 + Draco + KTX2 needs Cesium's Reality Tiler or an
-equivalent external step.
+**Read**: **the top second-tier risk is retired.** `-export3dTiles` is a
+documented CLI command, so domain 13 does not drop out of the automated pipeline.
+Native 3D Tiles is a genuine capability the current pipeline lacks.
 
-And the **CLI verb is unconfirmed** — if 3D Tiles export turns out to be
-GUI-only, domain 13 fails F3 and drops out of the automated pipeline entirely.
-That is the highest-value unknown in the second tier of testing.
+What is now unverified is the *quality* claim rather than the *existence* claim:
+the tile version, and whether Draco/KTX2 are available, are not in the
+documentation. Payload size is the binding constraint for client-facing delivery
+over object storage, so measure an actual `-export3dTiles` output before
+committing — that is a tier-2 test, not a blocker.
 
 ### 14. QA
 
 | Metric | Obtainable unattended | Mechanism | Evidence |
 |---|---|---|---|
-| Alignment statistics | yes | paRSer `$ComponentStats` | SUPPORTED |
-| Registered vs unregistered cameras | yes | `$IterateCameras`, component stats | SUPPORTED |
-| Reprojection error — mean/median/max, px | yes | `$ComponentStats` | SUPPORTED |
-| Reprojection error — per camera | yes | `$CameraErrors` | SUPPORTED |
-| Control-point measurements / residuals | yes | `$ExportControlPointsMeasurements` + control-point functions | SUPPORTED; **exact variable names unconfirmed** |
-| Checkpoint errors | probable | same family | REQUIRES TEST |
-| Georeferencing accuracy | yes | "Registration and Georeferencing Accuracy Report" | SUPPORTED |
-| Point / component counts | yes | paRSer iteration | SUPPORTED |
-| Exit state | yes | exit 0 / code with `appQuitOnError=true` / 3 on crash | SUPPORTED |
-| **Point-cloud completeness** | **no** | external — PDAL/laspy/open3d | SUPPORTED (absence) |
-| **Reconstruction completeness** | **no** | external | SUPPORTED (absence) |
-| **Mesh validity (manifold, holes)** | **no CLI** | GUI "Check Topology"; external trimesh/MeshLab | SUPPORTED (absence) |
-| **Texture validity** | **no mechanism found at all** | external Pillow/OpenCV | SUPPORTED (absence) |
-| **DSM/DTM/ortho raster validity** | **no** | external GDAL/rasterio | SUPPORTED (absence) |
-| **Output-file integrity** | **no**, beyond "exited 0" | external readers | SUPPORTED (absence) |
-| **Coordinate-system correctness** | **no** — engine's own check is a visual map-drag | external pyproj bounds check | SUPPORTED (absence) |
+| Alignment / component statistics | yes | paRSer `ComponentFunctionSet`, `SfmExportFunctionSet`, `SfmHistogramExportFunctionSet` | VERIFIED |
+| Registered vs unregistered cameras | yes | paRSer `InputsFunctionSet`, `IteratorsFunctionSet` | VERIFIED |
+| Reprojection error, aggregate and per camera | yes | paRSer `CameraErrorsExportFunctionSet` | VERIFIED |
+| Relative camera uncertainty | yes | paRSer `RelativeCameraUncertaintyFunctionSet` | VERIFIED |
+| Misalignment | yes | paRSer `MisalignmentFunctionSet` | VERIFIED |
+| Control-point measurements / residuals | yes | paRSer `ControlPointsExportFunctionSet`; `-listControlPoints`, `-exportControlPointsMeasurements` | VERIFIED |
+| Checkpoint errors | yes | `gpType=2` points, read back through the same functions | VERIFIED (D4) |
+| Ortho volumes / measurements | yes | paRSer `OrthoProjectionFunctionSet`, `OrthoMeasurementFunctionSet` | VERIFIED (D8) |
+| Progress / process state | yes | `-writeProgress <file> <timeout>`, `-printProgress`, `-getStatus <instance OR *>`, documented process IDs | VERIFIED |
+| Exit state | yes | exit 0 / non-zero with `appQuitOnError=true`; crash → exit 3 | SUPPORTED |
+| Console capture | yes | `-stdConsole` "enables console redirection to the application standard output" | VERIFIED |
+| **Point-cloud completeness** | **no** | external — PDAL/laspy/open3d | VERIFIED (absence) |
+| **Reconstruction completeness** | **no** | external | VERIFIED (absence) |
+| **Mesh validity (manifold, holes)** | partial | `-cleanModel` *fixes* non-manifold geometry but reports nothing; validity measurement is external (trimesh) | **CONTRADICTED in part (D7)** |
+| **Texture validity** | **no mechanism found in 82 pages** | external Pillow/OpenCV | VERIFIED (absence) |
+| **DSM/DTM/ortho raster validity** | **no** | external GDAL/rasterio | VERIFIED (absence) |
+| **Output-file integrity** | **no**, beyond "exited 0" | external readers | VERIFIED (absence) |
+| **Coordinate-system correctness** | **no** | external pyproj bounds check | VERIFIED (absence) |
 
 **Read**: the split is clean and it validates the domain model's separation of
-Processing from Assurance. RealityScan is genuinely good at reporting **what it
-did internally** — reprojection error, camera registration, control-point
-measurements. It reports **almost nothing about whether the artifacts it wrote
-are any good**. Texture validity has no mechanism whatsoever.
+Processing from Assurance — and re-verification **strengthened** it. RealityScan
+is genuinely good at reporting **what it did internally**, and paRSer exposes
+more of that than the draft knew (uncertainty, misalignment, histograms, ortho
+volumes). It reports **almost nothing about whether the artifacts it wrote are
+any good**. Texture validity has no mechanism whatsoever.
 
-That is exactly the failure class this repo has already been burned by: an
-engine exiting cleanly having written an 87%-empty orthophoto. **Every
-artifact-level QA check must be ours, computed with independent readers.** The
-engine's statistics are an input to the verdict, never the verdict — which is
-what gate C5 and the Report entity already require.
+That is exactly the failure class this repo has already been burned by: an engine
+exiting cleanly having written an 87%-empty orthophoto, and a 934-face mesh from
+a 5.4M-point cloud. **Every artifact-level QA check must be ours, computed with
+independent readers** — the pattern already in `nodes/check_*.py` and ADR 0018.
+The engine's statistics are an input to the verdict, never the verdict.
 
 Gate construction on what is genuinely available:
 
@@ -435,120 +574,184 @@ Gate construction on what is genuinely available:
   check failing; CRS bounds check failing.
 - **PASS WITH WARNING** — borderline registration ratio; completeness within
   tolerance but trending; artifact present but suboptimal.
-- **REQUIRES MANUAL REVIEW** — **zero-checkpoint projects**, where no
-  independent accuracy evidence exists at all; and the dangerous combination of
-  *low reprojection error with a coverage gap*, which is the signature of a
-  confident reconstruction of the wrong subset of the Site.
+- **REQUIRES MANUAL REVIEW** — **zero-checkpoint projects**, and the dangerous
+  combination of *low reprojection error with a coverage gap*, which is the
+  signature of a confident reconstruction of the wrong subset of the Site.
 - **PASS** — all of the above clear.
 
 That third category deserves emphasis. **Low reprojection error is not evidence
 of a good result** — it measures self-consistency, not correctness. A split
 component reconstructed beautifully will report excellent error. Only coverage
-and checkpoints catch it.
+and checkpoints catch it, and checkpoints are now available (D4).
 
 ### 15. Automation
 
 | Mechanism | Status | Evidence |
 |---|---|---|
-| CLI, sequential hyphenated args | yes | SUPPORTED |
-| `-headless` (UI to tray icon) | yes | SUPPORTED |
-| `-silent <dir>` suppresses crash dialogs | yes | SUPPORTED |
-| `.rscmd` files via `-execrscmd <path>` | yes; comments `#`/`//`/`REM`, continuation `^`, vars `$(cmdStartDir)`, `$(arg1..9)` | SUPPORTED |
-| `-set <key> <value>` | yes; **key strings largely unconfirmed** | SUPPORTED |
+| CLI, sequential hyphenated args | yes | VERIFIED |
+| **`-headless`** | yes — "Hides user interface", tray icon on Windows | VERIFIED |
+| `-hideUI` / `-showUI` | yes — "Unlike headless, this command doesn't need to be run at startup and does not suppress actions that require user interaction" | VERIFIED |
+| `-silent` | yes | VERIFIED |
+| `-stdConsole` | yes — console redirection to standard output | VERIFIED |
+| `.rscmd` files | **`-execRSCMD <Commands.rscmd>`**, `-execRSCMDIndirect`; up to nine `$(arg1)–$(arg9)` variables | VERIFIED |
+| **`-set "key=value"` / `-preset "key=value"`** | yes; **116 documented global keys** | **VERIFIED (D3)** |
+| Per-selection settings | `-editInputSelection`, `-editControlPointSelection`, `-editConstraintSelection`, `-editOrthoProjectionSelection`; 57 documented keys | VERIFIED |
+| Whole-application settings as a file | `-exportGlobalSettings settings.rcconfig`, `-importGlobalSettings settings.rcconfig` | VERIFIED |
 | Exit code 0 = success | yes | SUPPORTED |
-| **Non-zero propagation requires `-set "appQuitOnError=true"`** | yes | SUPPORTED |
-| Crash → exit 3 + minidump | yes | SUPPORTED |
-| `results_<instance>.log` / `errors_<instance>.txt` | yes | SUPPORTED |
-| `-writeProgress <file> <timeout>` | yes | SUPPORTED |
-| Local parallelism: up to 4 instances | yes; `-delegateTo`, `-setInstanceName` | SUPPORTED |
-| **Remote Command Plugin (gRPC/REST), 2.1+** | yes; abort/pause/resume, fleet offload, Docker documented | SUPPORTED |
-| Model-stage resume | yes; autosave ≈15 min | SUPPORTED |
-| Alignment-stage resume | **no evidence** | UNKNOWN |
-| Determinism | **no statement found anywhere** | **UNKNOWN — T4.10** |
-| Free-tier CLI entitlement | **unconfirmed** | **UNKNOWN — T1.4** |
+| **Non-zero propagation requires `-set "appQuitOnError=true"`** | yes — and headless-mode docs name it as the way to suppress blocking dialogs | VERIFIED |
+| Crash → exit 3 + minidump | yes; `-crashReportPath` | SUPPORTED |
+| Logging | `appLog`, `operationLog` keys; `results_*`/`errors_*` files | VERIFIED |
+| `-writeProgress <file> <timeout>`, `-printProgress` | yes | VERIFIED |
+| Instance control | `-setInstanceName`, `-delegateTo <name OR *>`, `-getStatus`, `-waitCompleted`, `-abortInstance`, `-pauseInstance`, `-unpauseInstance` | VERIFIED |
+| **Remote Command Plugin (gRPC/REST)** | yes; fleet, master/worker, real-time notifications | VERIFIED |
+| **Docker with GPU passthrough** | yes — "RealityScan Linux can run fully inside a Docker container with GPU passthrough" | VERIFIED |
+| **Passive notification mode** | yes — "you provide a notification address and receive asynchronous events (progress, completion, errors) without polling … useful when running existing pipelines—such as .rscmd command files—inside a container without an active server loop" | VERIFIED |
+| Model-stage resume | yes; `-continueModelCalculation`, `-recoverAutosave` | VERIFIED |
+| Alignment-stage resume | no such command | UNKNOWN |
+| **Determinism** | **no statement in any of the 82 pages** | **UNKNOWN — T4.10** |
+| Free-tier CLI entitlement | not in the documentation pages; licensing lives at `realityscan.com/en-US/linux` | **UNKNOWN — T1.4** |
 
-**Read**: `appQuitOnError=true` is the most important single string in this
-document. **Without it, a failed command does not propagate a non-zero exit
-code** — the pipeline would read failure as success. It belongs in every
-invocation, unconditionally, and its absence should be a lint error in our own
-code.
+**Read**: `appQuitOnError=true` is still the most important single string in this
+document, and the headless-mode page now backs it directly: interruptions "can be
+suppressed by using the `-silent` or `-set "appQuitOnError=true"` options, but
+certain dialogs (e.g., the login window) will still require user interaction."
+**The login dialog is the one interaction the documentation says cannot be
+suppressed** — that belongs in the tier-1 test plan, because a container that
+blocks on a login window is indistinguishable from a hang.
 
-**The Remote Command Plugin is probably the correct integration surface**, not
-the bare CLI: it is Epic's documented answer for Docker/headless, it offers real
-process control (abort matters when jobs hang), and it sidesteps the dialog
-problem that has no display server to draw on.
+**The Remote Command Plugin is the documented integration surface for our case**,
+and re-verification made this much more concrete than "probably": Epic documents
+Docker with GPU passthrough, a REST server, a gRPC server, *and* a passive
+notification mode explicitly aimed at running `.rscmd` pipelines in a container
+with no server loop. That last one matches this repo's Runner shape almost
+exactly — a Node shells a command, the engine reports asynchronously, nothing
+polls.
+
+**Determinism remains unknown after an exhaustive search.** Zero occurrences of
+"determinis", "reproducib" or "random seed" across 82 pages. Phase 2
+(cross-date comparison) has to measure it.
 
 ### 16. External processing
 
-No capability was classified **redundant-because-RealityScan-does-it**. Full
-table in the boundary section below.
+Revised. The first draft classified nothing as redundant-because-RealityScan-
+does-it; three things now are:
+
+- **Mesh hygiene** — `-cleanModel`, `-closeHoles`, `-cutByBox` replace the
+  MeshLab step the draft planned (D7).
+- **Ground classification** — `-dtmClassify` + `-setSelectedClassAsGroundForDTM`
+  is at least a candidate to replace the PDAL SMRF/PMF step, pending the
+  measurement in domain 8 (D5).
+- **Volume computation** — paRSer `$OrthoProjectionVolume` replaces raster maths
+  for stockpile volumes (D8).
+
+Still external and not in dispute: COG conversion and validation (GDAL),
+retopology, point-cloud-domain filtering, CRS plausibility checking, and every
+artifact-level QA read.
 
 ### 17. Gaussian splatting
 
 **RealityScan does not natively support Gaussian Splatting** — no training, no
-native 3DGS export, no GUI/CLI feature — as of 2.1.1/2.2, evidence through
-≈June 2026. *(SUPPORTED, leaning confirmed-absent.)*
+native 3DGS export, no GUI or CLI feature. Neither `all-commands` nor
+`keys-and-values` contains a single splat-related name. **VERIFIED (absence)**, upgraded from the draft's structural
+argument.
 
-The strongest evidence is structural rather than textual: an Epic Developer
-Community thread requesting 3DGS sits under **Feedback & Requests**. Users do
-not request features that exist. Release notes for 2.1, 2.1.1 and 2.2 describe
-COLMAP/XMP export improvements, AMD GPU support and 360° capture — no 3DGS.
-
-**Disambiguation, explicitly flagged**: an Epic tutorial "Introduction to
+**Disambiguation, still worth flagging**: an Epic tutorial "Introduction to
 Gaussian Splatting in Unreal Engine" carries a `realityscan-*` URL slug but
-concerns rendering splats *inside Unreal* via Niagara. It is not a RealityScan
-desktop capability and must not be cited as one.
+concerns rendering splats *inside Unreal* via Niagara. Not a RealityScan desktop
+capability.
 
-**But the integration story is strong.** RealityScan exports camera registration
-in **COLMAP format** (`cameras.txt`, `images.txt`, `points3D.txt`) — present
-since RealityCapture 1.5 and **substantially expanded in 2.1.1**: flat-folder or
-standard COLMAP layout, binary and ASCII, mask handling, and **automatic
-filtering of low-accuracy points**. Release notes reportedly frame this as
-feeding downstream training pipelines directly. CLI mechanism is
-`-exportRegistration`; exact syntax REQUIRES TEST.
+**The integration story is what matters, and it firmed up:**
 
-Provisional distortion-model mapping *(needs confirmation)*: Division →
-SIMPLE_PINHOLE, Brown3 → SIMPLE_RADIAL, Brown4 → OPENCV_FISHEYE,
-Brown3+tangential2 → OPENCV, Brown3/4+tangential2 → FULL_OPENCV.
+| Fact | Status |
+|---|---|
+| `-exportRegistration <fileName> [params.xml]` exists | **VERIFIED** |
+| `-exportUndistortedImages <folderName> [params.xml]` exists, sharing the Export Registration dialog's settings | **VERIFIED** |
+| `-importColmap <filePath> [params.xml]` — "any of the three text files" — exists | **VERIFIED** |
+| RealityScan's own distortion model is `sfmDistortionModel`, default **`Brown3`**, options `Division`, `Brown3`, `Brown4`, `Brown3WithTangential2`, `Brown4WithTangential2`, `KplusBrown3WithTangential2`, `KplusBrown4WithTangential2` | **VERIFIED** |
+| **`-exportRegistration` emits COLMAP format** | **SUPPORTED** — the CLI page says only "Export registration … using the current settings or the settings from the params.xml"; the format list is in the Export Registration dialog, which is not documented on any of the 82 pages |
+| The provisional distortion-model mapping (Brown3 → `SIMPLE_RADIAL`, Brown3+tangential2 → `OPENCV`, …) | **UNKNOWN** — no Epic page states it |
+| Authoritative source exists: *"On the Coordinate Systems Employed in the Import, Estimation, and Export of Camera Geometry by RealityScan"* (PDF, linked from the Camera Geometry reference page) | **VERIFIED that it exists**; its link is rendered client-side and was not retrieved. **Get this PDF — it is the single document that settles the mapping** |
 
-**This matters more than it first appears.** ADR 0004 records a real defect in
+**Why this matters, restated against the code.** ADR 0004 records a real defect in
 the current path: the ODM→nerfstudio conversion **forces the principal point to
-the image centre and degrades silently**, and the native importer needs files
-ODM writes only at the end of a full run — so ODM cannot be stopped early. A
-proper COLMAP export with a real distortion model would fix both problems at
-once. **RealityScan replacing COLMAP/ODM as the pose provider for splatting is
-the single most attractive, lowest-risk adoption in this entire evaluation**,
-and it can be trialled without touching anything else.
+the image centre and degrades silently**, and the native importer needs files ODM
+writes only at the end of a full run — so ODM cannot be stopped early. The guard
+that catches it is `principal_point_survived()` in
+[`nodes/solve/solve.py:114`](../../nodes/solve/solve.py), which requires
+`projection_type == "brown"` with `c_x`/`c_y` present and not both exactly `0.0`,
+enforced at `solve.py:339-347`.
+
+RealityScan's native model **is** Brown, by default. That is the encouraging
+half. The unresolved half is whether `-exportRegistration`'s COLMAP writer
+preserves a per-camera principal point or pins it to the image centre on the way
+out — which is the same defect, one tool along. **Do not adopt this path until
+the PDF or a real export answers that**, and when it is trialled, the existing
+guard is the acceptance test, unchanged.
+
+Note the direction of travel, from ADR 0005: there is no supported way to feed
+ODM an external camera solve, so a RealityScan pose provider serves the **splat
+chain only**. The smallest landing site is a sibling Node to `solve` emitting the
+same three files in the same frame convention (`camera.json`, `poses.json`,
+`cameras.json`, written at `solve.py:335-337`), because `register.py` and
+`fit-splat` are already coded against that contract.
 
 ### 18. Reports
 
 **paRSer** is a text-substitution templating language — `$(variable)` and
-`$FunctionName(...)` — **not a fixed report format**. The shipped default
-templates are HTML, but a template is literal text with substitutions dropped
-in, so **the output format is a template-authoring choice**. *(SUPPORTED.)*
-
-This is the answer the QA subsystem needed. **JSON and CSV emission are
-achievable by writing a template that emits them.** Epic's 2.1 messaging
-reportedly states the rebuilt templating system lets teams output structured
-project metadata in JSON, with samples included. *(SUPPORTED — the single
-highest-value unconfirmed claim in this evaluation; confirm hands-on.)*
+`$FunctionName(...)` — **not a fixed report format**. The output format is a
+template-authoring choice. **VERIFIED**: [`syntax-overview`](sources/syntax-overview.md)
+and [`function-sets`](sources/function-sets.md), with 22 documented function sets
+harvested into `sources/`.
 
 | Item | Status | Evidence |
 |---|---|---|
-| Built-in templates | Overview; Registration and Georeferencing Accuracy; Selected Component | SUPPORTED |
+| CLI verb | **`-exportReport <outputFileName> <templateFileName> [true OR false]`** | **VERIFIED (D13)** |
+| Console variant | `-printReport <reportString>` — "Write out report texts in the Command Prompt … does not work with delegation" | VERIFIED |
+| Built-in templates | shipped in `installation folder\Reports` | VERIFIED |
 | HTML output | yes (default templates) | SUPPORTED |
-| PDF output | not found | UNKNOWN |
-| Custom templates | yes | SUPPORTED |
-| **Arbitrary output format incl. JSON** | **yes, by template** | SUPPORTED |
-| Statistical variables | `$ComponentStats`, `$CameraErrors`, `$IterateComponents`, `$IterateCameras`, control-point functions | SUPPORTED |
-| CLI verb (`-exportReport`?) | **exact syntax unconfirmed** | UNKNOWN |
+| Custom templates | yes | VERIFIED |
+| **Arbitrary output format incl. JSON** | **yes, by template** — a template is literal text with substitutions | VERIFIED (by construction) |
+| **A shipped JSON sample** | — | **UNKNOWN** — no page names one; the default templates ship in the install folder and must be inspected on a real install |
+| Function sets | 22 documented, incl. `ComponentFunctionSet`, `CameraErrorsExportFunctionSet`, `ControlPointsExportFunctionSet`, `OrthoProjectionFunctionSet`, `OrthoMeasurementFunctionSet`, `MisalignmentFunctionSet`, `RelativeCameraUncertaintyFunctionSet`, `SfmHistogramExportFunctionSet`, `IteratorsFunctionSet` | VERIFIED |
 
 **Read**: write **one paRSer template that emits JSON**, treat it as a versioned
-artifact in the repository beside the export XML templates, and have the
-pipeline parse its output into QA Results. This removes HTML scraping — which
-would have been brittle across engine versions — from the design entirely.
+artifact in the repository beside the export XML templates, and have the pipeline
+parse its output into QA Results. This removes HTML scraping — brittle across
+engine versions — from the design entirely.
+
+The one thing the draft assumed that documentation does not confirm is that Epic
+**ships** a JSON sample. It ships templates; nothing says one of them is JSON.
+That is a five-minute check on a real install, and it does not change the design
+either way, because the templating language is documented well enough to write
+one.
 
 A human-readable HTML report is still generated for the client deliverable, but
 it is **derived from the same data**, not the source of truth. The client's
 report and the pipeline's gate then cannot disagree, which is what gate C5 is
 protecting against.
+
+---
+
+## What is still not known after reading every page
+
+Ordered by how much rests on it.
+
+1. **Does `-exportRegistration` preserve the principal point in its COLMAP
+   output?** The adoption case for splatting depends on it, and the answer is in
+   a PDF the docs link but render client-side. *(Domain 17.)*
+2. **Does headless reconstruction complete on Linux, repeatedly?** No Epic page
+   addresses the reported hangs; Epic documents Docker + GPU passthrough as
+   supported, which is evidence but not proof. **T1.2 stands unchanged.**
+3. **The login dialog.** Headless-mode docs state it cannot be suppressed. A
+   container blocking on it looks exactly like a hang. Needs a tier-1 test of its
+   own, including what happens when a licence token expires mid-run.
+4. **Determinism.** Zero mentions in 82 pages. *(T4.10.)*
+5. **Licensing and the free-tier CLI entitlement.** Not on the documentation
+   pages at all; lives behind `realityscan.com/en-US/linux` and the EULA.
+   *(T1.4.)*
+6. **DTM classification quality** against a PDAL baseline. *(Domain 8.)*
+7. **Is `.rsortho` hand-writable?** Less important than the draft thought, since
+   `-editOrthoProjectionSelection` exists. *(Domain 9.)*
+8. **Export format lists** for models, point clouds and rasters — they live in
+   dialogs, not in the CLI documentation. E57, COG, LAZ, KMZ, UDIM and plain
+   `.gltf` are all **UNKNOWN**, not absent. Do not promise them.

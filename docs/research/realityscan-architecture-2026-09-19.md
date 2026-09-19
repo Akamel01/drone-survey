@@ -48,7 +48,8 @@ is a finding, not something to absorb.
 │  exports · paRSer reports                                       │
 │                                                                 │
 │  configured ONLY by versioned template files:                   │
-│    *.rscmd  ·  export *.xml  ·  *.rcortho  ·  *.rsbox           │
+│    *.rscmd · settings.rcconfig · export *.xml · *.rsortho       │
+│    *.rsbox · -set "key=value"                                    │
 │    *.parser (JSON-emitting report template)                     │
 └─────────────────────────────────────────────────────────────────┘
 ```
@@ -59,34 +60,64 @@ JSON report. **It makes no decisions.** Every decision — retry, placement,
 pass/fail, what to deliver — belongs to the orchestration layer.
 
 **Preferred integration surface: the Remote Command Plugin (gRPC/REST).**
-Not the bare CLI. Three reasons: it is Epic's documented answer for
-Docker/headless; it offers genuine process control including abort, which is
-the only real defence against a hang; and it avoids the dialog-with-no-display
-problem that is the reported cause of headless failures. The CLI remains the
-fallback if the plugin proves tier-locked (T1.3).
+Not the bare CLI. Re-verification made this concrete rather than probable —
+[`realityscan-for-linux`](sources/realityscan-for-linux.md) documents Docker
+with GPU passthrough, a REST server, a gRPC server, **and a passive
+notification mode**: *"you provide a notification address and receive
+asynchronous events (progress, completion, errors) without polling … useful
+when running existing pipelines—such as .rscmd command files—inside a container
+without an active server loop."*
 
-### The Windows configuration seat
+That passive mode matches this repo's Runner almost exactly: a Node shells a
+command, the engine reports asynchronously, nothing polls. It is the first
+choice; the full server is the second; the bare CLI is the fallback if the
+plugin proves tier-locked (T1.3).
 
-An unavoidable component, and the least comfortable part of this design:
+The plugin also supplies the process control a hang needs — `-abortInstance`,
+`-pauseInstance`, `-unpauseInstance`, `-getStatus`, `-waitCompleted` are all
+documented CLI verbs with plugin equivalents.
+
+### The configuration seat
+
+**Revised 2026-09-19 after re-verification. The first draft made this a
+permanent Windows machine; the documentation does not.**
+
+Two facts from [`installation-linux`](sources/installation-linux.md) and
+[`keys-and-values`](sources/keys-and-values.md) change its shape:
+
+- Parameter XML is authored from "the RealityScan UI (**Windows or Linux
+  Wine**)". The Linux build ships a UI — "available for troubleshooting only",
+  discouraged, but present. No separate Windows machine is required.
+- **The parameter file is optional on every command that accepts one.** Without
+  it, "current settings" apply, and current settings come from 116 documented
+  `-set` / `-preset` keys, 57 per-selection keys across `-editInputSelection`,
+  `-editControlPointSelection`, `-editConstraintSelection` and
+  `-editOrthoProjectionSelection`, and a portable `settings.rcconfig` moved with
+  `-exportGlobalSettings` / `-importGlobalSettings`.
+
+So the configuration flow is:
 
 ```
-Windows machine + RealityScan GUI
-        │  authors, by hand, once per configuration
+  -set keys + settings.rcconfig                 (the normal path: text, in git)
+        │
+        ├── covers alignment, reconstruction, texturing, per-item settings
+        │
+  Wine UI on the same Linux host, rarely        (the fallback path)
+        │  authors what only a dialog exposes
         ▼
-  export *.xml · *.rcortho · *.parser templates
+  export *.xml · *.rsortho · *.parser templates
         │  committed to the repository, versioned
         ▼
-  Linux production host replays them headlessly
+  Linux production host runs headlessly
 ```
 
-It is **not on the per-job critical path**, so gate F3 holds. But it means
-configuration changes require a human on a Windows box, which caps how
-dataset-adaptive the pipeline can be to whatever the `-set` keys expose.
+Gate F3 holds for the same reason as before — no GUI step is per-job — but the
+cap on dataset-adaptive behaviour is much weaker than the draft assumed: 173
+documented keys, not "whatever the `-set` keys expose" read as a remainder.
 
-**Test early whether `.rcortho` and the export XML are hand-writable.** They are
-very likely XML. If we can generate them from our own data — per-Site extents,
-per-job GSD — the Windows dependency shrinks to bootstrapping, and the design
-improves substantially. This is a cheap test with a large payoff.
+Still worth testing, at lower priority than before: whether `.rsortho` and the
+export XML are hand-writable. `-editOrthoProjectionSelection` may make the
+question moot for the ortho case.
 
 ## 3. Stage-by-stage pipeline
 
@@ -104,25 +135,25 @@ are **INFERRED** — no measurements exist.
 | 6 | Correction | ours | `correct` | images → images | EXIF loss | EXIF preserved |
 | 7 | Ingestion | RS | `-addFolder` (+ masks by convention) | images → project | metadata rejected | image count in project |
 | 8 | Alignment | RS | `-align` + `-set` keys | project → components | hang; split; misregistration | **component share ≥ threshold**, reprojection error |
-| 9 | Georeferencing | RS | CRS commands + GCP/measurement CSV import | + control → georeferenced | bad GCP; wrong CRS | per-point residuals |
+| 9 | Georeferencing | RS | `-setProjectCoordinateSystem`/`-setOutputCoordinateSystem`, `-importGroundControlPoints`, `-importControlPointsMeasurements`, `gpType=2` checkpoints | + control → georeferenced | bad GCP; wrong CRS | per-point residuals |
 | 10 | Component selection | RS | `-selectMaximalComponent` / `-mergeComponents` | → one component | **silent discard of the rest** | share gate, again |
 | 11 | Region | RS | `-setReconstructionRegion <Site>.rsbox` | → bounded region | region excludes Site | region vs Site boundary |
-| 12 | Reconstruction | RS | `-calculateNormalModel` | → mesh | **hang (T1.2)**; OOM; empty | **external watchdog**; mesh loads, faces > 0 |
+| 12 | Reconstruction | RS | `-calculateNormalModel` | → mesh | **hang (T1.2)**; **login dialog**; OOM; empty | **external watchdog**; mesh loads, faces > 0 |
 | 13 | Point cloud | RS | export from mesh vertices | → LAS/PLY | sparse coverage | PDAL completeness |
 | 14 | Simplify | RS | `-simplify <N>` | → LoD mesh | over-decimation | triangle count |
-| 15 | Mesh repair | **ext** | MeshLab / trimesh | → repaired | non-manifold | trimesh validity |
-| 16 | Re-import | RS | Model Import into calibrated component | → mesh in project | wrong component | mesh present |
+| 15 | Mesh repair | **RS** | `-cleanModel`, `-closeHoles [maxEdges]`, `-cutByBox inner\|outer [fillHoles]` | → repaired | over-aggressive cleanup | trimesh validity, **independent reader** |
+| 16 | Re-import (retopo only) | RS | `-importModel` into calibrated component | → mesh in project | wrong component | mesh present |
 | 17 | Texturing | RS | `-calculateTexture` | → textured | ghosting; seams | Pillow/OpenCV sanity + calibration review |
-| 18 | Ortho / DSM | RS | `-calculateOrthoProjection <f>.rcortho` → `-exportOrthoProjection` | → GeoTIFF | empty ortho; voids | **GDAL coverage ≥ 99%** |
-| 19 | **DTM** | **ext** | PDAL SMRF/PMF ground filter | cloud → bare earth | misclassification | compare to control area |
+| 18 | Ortho / DSM | RS | `-calculateOrthoProjection [<f>.rsortho] [<r>.rsbox]`, then `-exportOrthoProjection` | → GeoTIFF | empty ortho; voids | **GDAL coverage ≥ 99%** |
+| 19 | **DTM** | RS **or** ext | `-dtmClassify` + `-setSelectedClassAsGroundForDTM true`, **or** PDAL SMRF/PMF | cloud → bare earth | misclassification | **A/B the two on one Capture before choosing** |
 | 20 | COG | **ext** | GDAL | GeoTIFF → COG | invalid COG | **existing COG validator** |
-| 21 | Contours / sections | RS or ext | RS export, or GDAL | → SHP/DXF | CLI verb unconfirmed | opens in QGIS |
+| 21 | Contours / sections | RS | `-computeContours` / `-exportContours`; `-calculateCrossSections` / `-exportCrossSections` | → SHP/DXF | format list is dialog-side | opens in QGIS |
 | 22 | Survey analysis | **ext** | rasterio / PDAL / Shapely | → Measurements | — | recompute independently |
-| 23 | **COLMAP export** | RS | `-exportRegistration` | → cameras/images/points3D | distortion mismatch | camera count, model type |
+| 23 | **COLMAP export** | RS | `-exportRegistration <file> [params.xml]` | → cameras/images/points3D | **principal point pinned to image centre** | `principal_point_survived()`, `nodes/solve/solve.py:114` |
 | 24 | Splat fitting | **ext** | splatfacto / OpenSplat | COLMAP → splat | unchanged | existing gate |
-| 25 | 3D export | RS | `-exportModel <m> <settings>.xml` | → OBJ/GLB/FBX/… | XML template drift | independent reader per format |
-| 26 | 3D Tiles | RS or ext | LoD export (**verb unconfirmed**) or Cesium Reality Tiler | → tileset | **may be GUI-only** | tileset.json loads |
-| 27 | Reports | RS | paRSer **JSON template** | → JSON + HTML | template drift | schema validation |
+| 25 | 3D export | RS | `-exportModel <m> <file> [params.xml]` | → OBJ/GLB/FBX/… | XML template drift | independent reader per format |
+| 26 | 3D Tiles | RS | `-export3dTiles <file>.json [params.xml]` (`-exportLod` for linear LoD) | → tileset | payload size; compression unknown | tileset.json loads, **measure bytes** |
+| 27 | Reports | RS | `-exportReport <out> <template>` with a **JSON-emitting paRSer template** | → JSON + HTML | template drift | schema validation |
 | 28 | QA gate | **ours** | independent readers + thresholds | → QA Results | — | this *is* the validation |
 | 29 | Package / deliver | ours | `bundle`, `publish` | → Delivery Bundle | — | existing |
 
@@ -172,13 +203,13 @@ Levels: **Direct** · **With config** · **+ external utility** · **Partial** �
 | UV + texturing | yes | yes | yes | no | no | **With config** | T3.8 | low |
 | **Re-texture external mesh** | yes | **yes** | yes | no | no | **Direct** | — | low |
 | DSM | yes | yes | yes | no | no | **With config** | T3.3 | med |
-| **DTM** | survey | **no (heuristic)** | — | — | **yes** | **Cannot replace** | T3.4 | **high** |
-| Contours | opt | yes | **verb ?** | ? | maybe | **Unknown** | — | med |
+| **DTM** | survey | **yes — `-dtmClassify` + `-setSelectedClassAsGroundForDTM`** | yes | no | maybe | **With config, pending A/B vs PDAL** | **T3.4** | **high** |
+| Contours | opt | yes | `-computeContours` / `-exportContours` | no | no | **With config** | — | low |
 | **Orthomosaic** | yes | yes | yes | no | no | **With config** | **T3.5** | med |
-| GSD / extent control | yes | yes | `.rcortho` | **authored in GUI** | no | **With config** | — | med |
-| Volume measurement | opt | **yes** | **no** | **yes** | **yes** | **+ external** | — | med |
+| GSD / extent control | yes | yes | `.rsortho`, or `-editOrthoProjectionSelection` | GUI only for the file | no | **With config** | — | low |
+| Volume measurement | opt | **yes** | **paRSer `$OrthoProjectionVolume`** | no | maybe | **With config** | — | low |
 | Distance / area query | yes | no CLI | — | — | **yes** | **Cannot replace** | T3.2 | low |
-| Checkpoint RMSE | survey | not found | — | — | **yes (ours)** | **Cannot replace** | T3.2 | **high** |
+| Checkpoint RMSE | survey | **`gpType=2` Ground test points** | yes, via paRSer | no | **yes (ours, for the arithmetic)** | **With config + ours** | T3.2 | med |
 | OBJ/PLY/FBX/GLB/USD/STL/DXF | yes | yes | XML template | template from GUI | no | **With config** | T3.12 | low |
 | **COG** | yes | **not documented** | — | — | **yes (GDAL)** | **Cannot replace** | existing | low |
 | LAS/LAZ | yes | yes | yes | no | no | **Direct** | T3.12 | low |
@@ -204,8 +235,12 @@ Levels: **Direct** · **With config** · **+ external utility** · **Partial** �
 - **+ external utility**: ~6.
 - **Cannot replace**: ~11 — and **every one of them is validation, survey
   analysis, or delivery-format work**, not reconstruction.
-- **Unknown**: 4, of which **checkpoints, 3D Tiles CLI, and determinism** are
-  the ones that can move the verdict.
+- **Unknown**: 2. Re-verification closed **checkpoints** (`gpType=2`) and the
+  **3D Tiles CLI verb** (`-export3dTiles`), and moved **DTM**, **contours**,
+  **volume measurement** and **checkpoint RMSE** out of "cannot replace" into
+  "with config" — so the counts above shift by roughly four toward replaceable.
+  **Determinism** is the unknown that can still move the verdict, and
+  **licensing** is the gate that remains entirely untested.
 
 The shape of that distribution is the finding. **RealityScan is a
 reconstruction engine, not a survey system.** It would replace the
@@ -262,12 +297,16 @@ targets a defect ADR 0004 already records — the conversion forcing the princip
 point to image centre and degrading silently — and touches nothing else. **If
 the whole evaluation stalls, this piece is still worth shipping.**
 
-**Phase 2 — Configuration foundation (≈2 weeks).** Stand up the Windows seat.
-Author and commit: export XML templates per format, `.rcortho` templates,
-`.rsbox` generation from Site boundaries, and the **JSON-emitting paRSer
-template**. Test whether `.rcortho`/export XML are hand-writable — a yes here
-materially improves the architecture. Retrieve the full Keys and Values
-reference and pin the `-set` keys.
+**Phase 2 — Configuration foundation (≈1 week, revised down).** No Windows seat
+to stand up. Author and commit: a `settings.rcconfig` pinning the `-set` keys we
+depend on, export XML templates per format where a dialog exposes something
+`-set` does not, `.rsortho` templates, `.rsbox` generation from Site boundaries,
+and the **JSON-emitting paRSer template**. The Keys and Values reference is
+already retrieved and saved to [`sources/keys-and-values.md`](sources/keys-and-values.md)
+— 116 global keys — with 57 per-item keys in
+[`sources/configure-selected-items.md`](sources/configure-selected-items.md).
+Test whether `.rsortho`/export XML are hand-writable, at lower priority than the
+draft gave it: `-editOrthoProjectionSelection` may make the question moot.
 
 **Phase 3 — Orthomosaic parity (≈3 weeks).** Full ortho path behind a feature
 flag, running **in parallel with ODM on the same Captures**, compared on
@@ -292,42 +331,99 @@ split outcome — RealityScan for poses and mesh, ODM retired from splatting onl
 
 ## 7. Known gaps, uncertainties and assumptions
 
+**Revised 2026-09-19.** Five of the eleven gaps the first draft listed were
+closed by reading the documentation; the rest are restated, and two new ones
+appeared.
+
 **Blocking unknowns** (any could change the verdict):
 
-1. Whether headless reconstruction works at all on Linux without a display.
-2. Whether free/standard tiers permit CLI/headless use.
-3. Whether activation survives ephemeral rented GPUs non-interactively.
-4. Whether output is deterministic — **no vendor statement found anywhere**.
-5. Whether checkpoints (excluded-from-solve) are supported.
-6. Whether 3D Tiles export has a CLI verb.
+1. **Whether headless reconstruction works reliably on Linux without a display.**
+   Unchanged and now the largest open question. No Epic page addresses the
+   reported hangs; Epic does document Docker with GPU passthrough as supported.
+2. **The login dialog.** *New.* [`headless-mode`](sources/headless-mode.md)
+   states that `-silent` and `appQuitOnError=true` suppress most interruptions
+   "but certain dialogs (e.g., the login window) will still require user
+   interaction". A container blocking on a login window is indistinguishable
+   from a hang. Needs its own tier-1 test, including token expiry mid-run.
+3. Whether free/standard tiers permit CLI/headless use. **Not one of the 82
+   documentation pages discusses entitlement**; it lives behind
+   `realityscan.com/en-US/linux`, which **returns 403** from this network, and
+   the EULA. The one critical gate re-verification could not advance.
+4. Whether activation survives ephemeral rented GPUs non-interactively.
+5. **Whether output is deterministic.** Still no vendor statement — zero
+   occurrences of "determinis", "reproducib" or "random seed" across all 82
+   pages. The search is now exhaustive rather than incidental.
+6. **Whether `-exportRegistration`'s COLMAP output preserves the per-camera
+   principal point.** *New, and the deciding question for the splat adoption.*
+   RealityScan's own model is `sfmDistortionModel`, default `Brown3`, which is
+   what `principal_point_survived()` (`nodes/solve/solve.py:114`) requires — but
+   nothing documents what the COLMAP writer does with it. Epic publishes a PDF,
+   *"On the Coordinate Systems Employed in the Import, Estimation, and Export of
+   Camera Geometry by RealityScan"*, linked from the Camera Geometry reference
+   page and rendered client-side. **Fetch it.**
 
-**Documentation gaps** (retrievable with working network access):
+**Closed by re-verification** (was: "retrievable with working network access"):
 
-7. The literal `-set` key strings — the entire alignment/reconstruction config
-   surface. Largest single gap.
-8. Exact CLI verbs: GCP import, `-exportReport`, LoD/Tiles export.
-9. Depth-map resolution and vertex-distance keys.
-10. Whether a real JSON paRSer sample ships.
-11. Exact GCP/checkpoint residual variable names.
+| Was gap | Answer |
+|---|---|
+| The literal `-set` key strings — "largest single gap" | 116 global keys in `keys-and-values`, 57 per-item keys in `configure-selected-items` |
+| Exact CLI verb for GCP import | `-importGroundControlPoints`, `-importControlPointsMeasurements` |
+| Exact CLI verb for `-exportReport` | `-exportReport <out> <template> [true OR false]`; also `-printReport` |
+| Exact CLI verb for LoD / 3D Tiles export | `-exportLod`, **`-export3dTiles`** — domain 13 stays in the pipeline |
+| Depth-map resolution key | `-setDownscaleForDepthMaps`, `mvsPreviewDownscaleFactor`, `mvsNormalDownscaleFactor` |
+| Whether checkpoints are supported | Yes — `-editControlPointSelection "gpType=2"`, `2 – Ground test` |
+
+**Documentation gaps that remain:**
+
+7. **Export format lists.** They live in dialogs, not in the CLI pages. E57,
+   COG, LAZ, KMZ, UDIM and plain `.gltf` are `UNKNOWN` — not absent, but do not
+   promise them. COG in particular is unmentioned, which is why `export-cog`
+   stays.
+8. **Whether a real JSON paRSer sample ships.** The templating language is fully
+   documented across 22 function sets and the default templates live in
+   `installation folder\Reports`; nothing says one of them is JSON. A
+   five-minute check on a real install, and it does not change the design.
+9. **Whether `.rsortho` and the export XML are hand-writable.** Lower priority
+   than the draft gave it: `-editOrthoProjectionSelection` may make it moot.
+10. **DTM classification quality.** `-dtmClassify` and
+    `-setSelectedClassAsGroundForDTM` exist; nothing documents how the
+    classifier performs on image-derived vertices, or what its pre-defined
+    classes are. A/B against PDAL SMRF/PMF before claiming bare earth.
+11. **3D Tiles payload characteristics** — tile version, Draco, KTX2. Unmentioned
+    in the CLI documentation. Measure the bytes of a real `-export3dTiles`.
 
 **Assumptions made explicit** — each is a place this design could be wrong:
 
 - That the Remote Command Plugin is available at an affordable tier. If it is
   enterprise-only, the headless story reverts to the CLI and its reported hangs.
-- That `.rcortho` and export XML are hand-writable. If not, the Windows seat
-  becomes a routine operational dependency rather than a bootstrap one.
-- That the reported XMP-sidecar rewriting is real. We isolate inputs either way,
-  because the cost of doing so is one copy.
-- That paRSer can emit JSON. If not, QA rests on our own artifact computation
-  alone — workable, but we lose the engine's internal statistics.
-- That 12 GB VRAM suffices for a 500–800 image aerial Capture. **No documented
-  image-count-per-VRAM guidance exists**, and the GPU is shared with ~40
-  containers.
+  Note the passive notification mode is documented on the same page, so the
+  fallback may be better than the draft assumed.
+- That the reported XMP-sidecar rewriting is real. No Epic page addresses it
+  either way. We isolate inputs regardless, because the cost is one copy.
+- That paRSer can emit JSON. This is now *by construction* rather than by
+  assumption — a template is literal text with substitutions — but no sample has
+  been seen.
+- That 12 GB VRAM suffices for a 500–800 image aerial Capture. The draft called
+  this undocumented; it is not.
+  [`hardware-and-software-requirements`](sources/hardware-and-software-requirements.md)
+  states that *"Most processing tasks utilize advanced out-of-core techniques,
+  meaning system RAM is not a performance-limiting factor"*, that *"16 GB of RAM
+  is typically sufficient for processing thousands of high-resolution images,
+  provided a component workflow is used"*, and — the actionable knob — that
+  *"Reducing feature count per image from the default (e.g., 40,000) to a lower
+  value (e.g., 20,000) can double the number of images processed within the same
+  memory limits"*, which is `sfmMaxFeaturesPerImage`. Note the two pages disagree
+  on the GPU floor: this page says "At least 1 GB of VRAM" while
+  [`realityscan-for-linux`](sources/realityscan-for-linux.md) requires "NVIDIA GPU
+  with at least 8 GB VRAM" — take the Linux figure. The GPU is shared with ~40
+  containers, so the component workflow and a tuned `sfmMaxFeaturesPerImage` are
+  the levers, not more VRAM.
 
 **Out of scope, deliberately**: LiDAR ingestion and LiDAR-derived workflows.
 
-**The meta-uncertainty, stated plainly**: this document rests on search-engine
-summaries of pages that were never opened, because the egress policy blocked
-every primary source. The reasoning is sound given the inputs. The inputs are
-one tier weaker than this decision deserves. **Phase 0 exists to fix that, and
-nothing should be committed before it runs.**
+**The meta-uncertainty, restated**: the first draft rested on search-engine
+summaries of pages nobody opened. Those pages have now been fetched and saved to
+[`sources/`](sources/), and sixteen of the draft's claims were contradicted. What
+remains is a *documented* account of RealityScan's CLI surface, which is not the
+same as a *measured* account of the engine's behaviour. **Tier 1 still gates
+everything, and nothing should be committed before it runs.**

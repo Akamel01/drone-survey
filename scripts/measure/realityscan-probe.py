@@ -7,7 +7,12 @@ pipeline. It reconstructs nothing worth keeping. It exists to produce one
 machine-readable verdict per tier-1 test in
 `docs/research/realityscan-validation-2026-09-19.md`, so the GO/NO-GO gates in
 `docs/research/realityscan-gates-2026-09-19.md` can be answered with
-measurements instead of documentation nobody was able to open.
+measurements instead of documentation alone.
+
+Every verb and setting key this script emits was checked, 2026-09-19, against
+the saved copies of Epic's own pages in `docs/research/sources/` -- see
+`all-commands.md` and `keys-and-values.md`. Command order follows the official
+Linux CLI example in `installation-linux.md`.
 
 Three things here are load-bearing and are the reason this is a script rather
 than a shell one-liner:
@@ -162,6 +167,7 @@ def probe_headless_align(rs: str, images: Path, work: Path) -> Probe:
     p = Probe("T1.1 headless alignment", "A1", "S1")
     project = work / "t11.rsproj"
     cmd = build_command(rs, [
+        "-newScene",
         "-addFolder", str(images),
         "-align",
         "-save", str(project),
@@ -191,12 +197,17 @@ def probe_headless_model(rs: str, images: Path, work: Path, repeats: int = 10) -
         run_dir = work / f"t12_{i}"
         run_dir.mkdir(parents=True, exist_ok=True)
         mesh = run_dir / "model.obj"
+        # Order matters and is Epic's own, from the Linux CLI example: select the
+        # component first, then bound it, then reconstruct. Reconstructing before
+        # selecting leaves "which component?" unanswered -- the reported cause of
+        # the misleading "No model is selected".
         cmd = build_command(rs, [
+            "-newScene",
             "-addFolder", str(images),
             "-align",
+            "-selectMaximalComponent",
             "-setReconstructionRegionAuto",
             "-calculateNormalModel",
-            "-selectMaximalComponent",
             "-exportSelectedModel", str(mesh),
             "-quit",
         ])
