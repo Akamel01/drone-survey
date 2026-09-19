@@ -3,9 +3,28 @@ import { b2Env, b2ReadEnv, uploadFile, downloadFile, authorize } from "@/lib/b2"
 import { SKIPPED_KEY, STATUS_KEY, parseSpecKey } from "@/lib/keys";
 import type { Manifest } from "@/lib/missions";
 
-// Withdraw API: mark a spec as withdrawn (skipped.json) or un-withdraw if requested later
+// Withdraw marks a Dispatched Spec as one the host must not Load, by writing
+// it into the skip list. Un-withdraw removes that mark. A Spec that is already
+// Collected or Loaded is past the point a mark can help, so it is refused.
+//
+// Both paths report what actually happened: a storage failure is a failure
+// response, never a cheerful "withdrawn: false" over a write that never landed.
 export const runtime = "nodejs";
 export const preferredRegion = "yyz1";
+
+/** The skip list as stored, or {} when it does not exist yet. */
+async function readSkipList(bucket: string, token: Awaited<ReturnType<typeof authorize>>): Promise<Record<string, unknown>> {
+  const raw = await downloadFile(token, bucket, SKIPPED_KEY);
+  if (!raw) return {};
+  try {
+    const parsed = JSON.parse(raw.toString());
+    return parsed && typeof parsed === "object" ? (parsed as Record<string, unknown>) : {};
+  } catch {
+    // A corrupt skip list is not an empty one: overwriting it would silently
+    // un-withdraw every Spec already in it.
+    throw new Error("the stored skip list is not valid JSON");
+  }
+}
 
 export async function POST(request: Request) {
   const denied = authProblem(request);
@@ -17,97 +36,53 @@ export async function POST(request: Request) {
   } catch {
     return Response.json({ error: "Body is not JSON" }, { status: 400 });
   }
-  const key = (body as Record<string, unknown>)?.["key"] as string | undefined;
-  if (!key || typeof key !== "string") {
+  const fields = (body ?? {}) as Record<string, unknown>;
+  const key = fields["key"];
+  if (typeof key !== "string" || !parseSpecKey(key)) {
     return Response.json({ error: "Missing or invalid key" }, { status: 400 });
   }
 
-  // Validate key shape
-  const parsed = parseSpecKey(key);
-  if (!parsed) {
-    return Response.json({ error: "Invalid spec key" }, { status: 400 });
-  }
-
-  const statKey = SKIPPED_KEY;
-  const manifestKey = STATUS_KEY;
   const env = b2Env();
-  if (!env) {
-    return Response.json({ error: "Storage is not configured" }, { status: 503 });
-  }
   const readEnv = b2ReadEnv();
-  if (!readEnv) {
+  if (!env || !readEnv) {
     return Response.json({ error: "Storage is not configured" }, { status: 503 });
   }
 
-  // Guard: read manifest and reject if the key has been collected or loaded
+  const undo = fields["withdraw"] === false || fields["action"] === "unwithdraw" || fields["undo"] === true;
+
   try {
-    const sessionRead = await (async () => {
-      const s = await (await import("@/lib/b2")).authorize(readEnv);
-      return s;
-    })();
-    const manifestRaw = await downloadFile(sessionRead, readEnv.bucket, manifestKey);
+    const readSession = await authorize(readEnv);
+
+    // The guard reads the Manifest. If that read fails we refuse rather than
+    // proceed: an unread Manifest is not proof that nothing was Collected.
+    const manifestRaw = await downloadFile(readSession, readEnv.bucket, STATUS_KEY);
     if (manifestRaw) {
       const manifest = JSON.parse(manifestRaw.toString()) as Manifest;
-      if (manifest?.[key]?.collected_at || manifest?.[key]?.loaded_at) {
-        return Response.json({ error: "Cannot withdraw/unwithdraw a spec that has been collected or loaded" }, { status: 403 });
+      const row = manifest?.[key];
+      if (row?.collected_at || row?.loaded_at) {
+        return Response.json(
+          { error: "That Mission is already Collected or Loaded, so it cannot be withdrawn" },
+          { status: 409 },
+        );
       }
     }
-  } catch {
-    // Ignore manifest read failures; we'll still attempt to update the skipped store
-  }
 
-  // Determine undo path
-  const requestAny = body as Record<string, unknown>;
-  const unwithdraw = (requestAny?.["withdraw"] === false) || (requestAny?.["action"] === "unwithdraw");
-  const isUndo = (requestAny?.["undo"] === true) || unwithdraw;
-  if (isUndo) {
-    // Read current skipped.json
-    try {
-      const sessionRead2 = await (async () => {
-        const s = await (await import("@/lib/b2")).authorize(readEnv);
-        return s;
-      })();
-      const existingRaw2 = await downloadFile(sessionRead2, readEnv.bucket, statKey);
-      let existing2: Record<string, unknown> = {};
-      if (existingRaw2) {
-        try {
-          existing2 = JSON.parse(existingRaw2.toString()) as Record<string, unknown>;
-        } catch {
-          existing2 = {};
-        }
-      }
-      if (existing2.hasOwnProperty(key)) {
-        delete existing2[key];
-      }
-      const payload2 = Buffer.from(JSON.stringify(existing2, null, 2));
-      const writeSession2 = await authorize(env);
-      await uploadFile(writeSession2, statKey, payload2);
-    } catch {
-      // If anything goes wrong, continue to respond
+    const skipList = await readSkipList(readEnv.bucket, readSession);
+    const withdrawnAt = new Date().toISOString();
+    if (undo) {
+      delete skipList[key];
+    } else {
+      skipList[key] = { withdrawn_at: withdrawnAt };
     }
-    return Response.json({ key, withdrawn: false });
-  }
 
-  // Withdraw path: mark as withdrawn
-  // Read existing skipped.json
-  const readSession = await (async () => {
-    const s = await (await import("@/lib/b2")).authorize(readEnv);
-    return s;
-  })();
-  const existingRaw = await downloadFile(readSession, readEnv.bucket, statKey);
-  let existing: Record<string, unknown> = {};
-  if (existingRaw) {
-    try {
-      existing = JSON.parse(existingRaw.toString()) as Record<string, unknown>;
-    } catch {
-      existing = {};
-    }
-  }
-  const withdrawnAt = new Date().toISOString();
-  existing[key] = { withdrawn_at: withdrawnAt };
-  const payload = Buffer.from(JSON.stringify(existing, null, 2));
-  const writeSession = await authorize(env);
-  await uploadFile(writeSession, statKey, payload);
+    const writeSession = await authorize(env);
+    await uploadFile(writeSession, SKIPPED_KEY, Buffer.from(JSON.stringify(skipList, null, 2)));
 
-  return Response.json({ key, withdrawn_at: withdrawnAt });
+    return undo ? Response.json({ key, withdrawn: false }) : Response.json({ key, withdrawn_at: withdrawnAt });
+  } catch (error) {
+    return Response.json(
+      { error: `The skip list was not updated: ${error instanceof Error ? error.message : String(error)}` },
+      { status: 502 },
+    );
+  }
 }

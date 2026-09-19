@@ -43,19 +43,45 @@ export interface B2Session {
 // daily Class C cap: the status page polling every 30s spent 2,880 a day on
 // authorize alone. One session per key id, renewed well inside the token's life.
 const SESSION_TTL_MS = 12 * 60 * 60 * 1000;
-const sessions = new Map<string, { session: B2Session; expires: number }>();
+const sessions = new Map<string, { session: B2Session; env: B2Env; expires: number }>();
 
 export async function authorize(env: B2Env): Promise<B2Session> {
   const cached = sessions.get(env.keyId);
   if (cached && cached.expires > Date.now()) return cached.session;
+  return reauthorize(env);
+}
+
+/** Authorize for real, replacing whatever is cached for this key. */
+async function reauthorize(env: B2Env): Promise<B2Session> {
   const res = await fetch(B2_AUTH, {
     headers: { Authorization: "Basic " + Buffer.from(`${env.keyId}:${env.appKey}`).toString("base64") },
   });
   if (!res.ok) throw new Error(`authorize failed: ${res.status}`);
   const { apiUrl, downloadUrl, authorizationToken, allowed } = await res.json();
   const session = { apiUrl, downloadUrl, token: authorizationToken, bucketId: allowed.bucketId };
-  sessions.set(env.keyId, { session, expires: Date.now() + SESSION_TTL_MS });
+  sessions.set(env.keyId, { session, env, expires: Date.now() + SESSION_TTL_MS });
   return session;
+}
+
+// A cached token can stop working before its cache entry expires: the key was
+// rotated, or B2 invalidated it. Without this, one 401 poisons every call for
+// the rest of the twelve hours. Each call below retries once on a fresh token;
+// a second 401 is a real credential problem and is thrown.
+async function afterReauthorizing(stale: B2Session): Promise<B2Session | null> {
+  for (const [keyId, entry] of sessions) {
+    if (entry.session !== stale) continue;
+    sessions.delete(keyId);
+    return reauthorize(entry.env);
+  }
+  return null;
+}
+
+/** The fetch every call below goes through: one retry on a refreshed token. */
+async function b2Fetch(s: B2Session, url: (s: B2Session) => string, init: (s: B2Session) => RequestInit): Promise<Response> {
+  const first = await fetch(url(s), init(s));
+  if (first.status !== 401) return first;
+  const fresh = await afterReauthorizing(s);
+  return fresh ? fetch(url(fresh), init(fresh)) : first;
 }
 
 export interface B2File {
@@ -70,11 +96,11 @@ export async function listFiles(s: B2Session, prefix: string): Promise<B2File[]>
   while (true) {
     const body: Record<string, unknown> = { bucketId: s.bucketId, prefix, maxFileCount: 1000 };
     if (start) body.startFileName = start;
-    const res = await fetch(`${s.apiUrl}/b2api/v2/b2_list_file_names`, {
+    const res = await b2Fetch(s, (t) => `${t.apiUrl}/b2api/v2/b2_list_file_names`, (t) => ({
       method: "POST",
-      headers: { Authorization: s.token, "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-    });
+      headers: { Authorization: t.token, "Content-Type": "application/json" },
+      body: JSON.stringify({ ...body, bucketId: t.bucketId }),
+    }));
     if (!res.ok) throw new Error(`list failed: ${res.status}`);
     const page = await res.json();
     for (const f of page.files) out.push({ fileName: f.fileName, fileId: f.fileId });
@@ -85,9 +111,11 @@ export async function listFiles(s: B2Session, prefix: string): Promise<B2File[]>
 
 /** Null when the key does not exist; anything else throws. */
 export async function downloadFile(s: B2Session, bucket: string, key: string): Promise<Buffer | null> {
-  const res = await fetch(`${s.downloadUrl}/file/${bucket}/${encodeURIComponent(key).replace(/%2F/g, "/")}`, {
-    headers: { Authorization: s.token },
-  });
+  const res = await b2Fetch(
+    s,
+    (t) => `${t.downloadUrl}/file/${bucket}/${encodeURIComponent(key).replace(/%2F/g, "/")}`,
+    (t) => ({ headers: { Authorization: t.token } }),
+  );
   if (res.status === 404) return null;
   if (!res.ok) throw new Error(`download failed: ${res.status}`);
 
@@ -110,11 +138,11 @@ export async function downloadFile(s: B2Session, bucket: string, key: string): P
 }
 
 export async function uploadFile(s: B2Session, key: string, body: Buffer): Promise<void> {
-  const up = await fetch(`${s.apiUrl}/b2api/v2/b2_get_upload_url`, {
+  const up = await b2Fetch(s, (t) => `${t.apiUrl}/b2api/v2/b2_get_upload_url`, (t) => ({
     method: "POST",
-    headers: { Authorization: s.token, "Content-Type": "application/json" },
-    body: JSON.stringify({ bucketId: s.bucketId }),
-  });
+    headers: { Authorization: t.token, "Content-Type": "application/json" },
+    body: JSON.stringify({ bucketId: t.bucketId }),
+  }));
   if (!up.ok) throw new Error(`upload url failed: ${up.status}`);
   const { uploadUrl, authorizationToken: uploadToken } = await up.json();
   const put = await fetch(uploadUrl, {
@@ -131,10 +159,10 @@ export async function uploadFile(s: B2Session, key: string, body: Buffer): Promi
 }
 
 export async function deleteFile(s: B2Session, fileId: string, fileName: string): Promise<void> {
-  const res = await fetch(`${s.apiUrl}/b2api/v2/b2_delete_file_version`, {
+  const res = await b2Fetch(s, (t) => `${t.apiUrl}/b2api/v2/b2_delete_file_version`, (t) => ({
     method: "POST",
-    headers: { Authorization: s.token, "Content-Type": "application/json" },
+    headers: { Authorization: t.token, "Content-Type": "application/json" },
     body: JSON.stringify({ fileId, fileName }),
-  });
+  }));
   if (!res.ok) throw new Error(`delete failed: ${res.status}`);
 }
