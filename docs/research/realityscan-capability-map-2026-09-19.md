@@ -150,6 +150,8 @@ how much rested on the claim.
 | D14 | Domain 9: the ortho parameter file is `.rcortho` | `.rsortho` (`.rcortho` appears only in a legacy example) | Cosmetic, but it is the filename a script would pass |
 | D15 | Domain 3: "**Exact CLI verb for GCP import** — UNKNOWN" | `-importGroundControlPoints gcpFileName [params.xml]` and `-importControlPointsMeasurements cpmFileName [params.xml]`, with `-exportGroundControlPoints` / `-exportControlPointsMeasurements` returning | Closed |
 | D16 | "**No documented image-count-per-VRAM guidance exists**" | `hardware-and-software-requirements` documents out-of-core processing, "16 GB of RAM is typically sufficient for processing thousands of high-resolution images, provided a component workflow is used", and that halving `sfmMaxFeaturesPerImage` from 40,000 to 20,000 "can double the number of images processed within the same memory limits" | Sizing has a documented lever. The two requirement pages disagree on the VRAM floor (1 GB vs 8 GB); take the Linux figure |
+| D17 | Domain 18: Epic "reportedly states the rebuilt templating system lets teams output structured project metadata in JSON, **with samples included**" — "the single highest-value unconfirmed claim in this evaluation" | The install's `Reports/` directory contains **only HTML templates**. No JSON sample ships | The design is unchanged — paRSer can still emit JSON by construction — but nobody hands us one. Budget for writing it |
+| D18 | Domain 17 assumed the splat path must go **through COLMAP**, with a provisional distortion-model mapping to verify | `calibration.xml` ships a **`Radiance Fields Transformation File`** exporter writing nerfstudio-style `transforms.json` directly, with `"camera_model": "SIMPLE_RADIAL"`, real per-camera `cx`/`cy`, and the axis-flip already applied | The shortest adoption may skip COLMAP entirely. Re-opens #112 as a choice between three exporters rather than a yes/no on one |
 
 Two claims the documentation **upheld** against attack, which is worth recording
 because the point of the exercise was to find the draft wrong:
@@ -603,7 +605,8 @@ and checkpoints catch it, and checkpoints are now available (D4).
 | Logging | `appLog`, `operationLog` keys; `results_*`/`errors_*` files | VERIFIED |
 | `-writeProgress <file> <timeout>`, `-printProgress` | yes | VERIFIED |
 | Instance control | `-setInstanceName`, `-delegateTo <name OR *>`, `-getStatus`, `-waitCompleted`, `-abortInstance`, `-pauseInstance`, `-unpauseInstance` | VERIFIED |
-| **Remote Command Plugin (gRPC/REST)** | yes; fleet, master/worker, real-time notifications | VERIFIED |
+| **Remote Command Plugin (gRPC/REST)** | yes; fleet, master/worker, real-time notifications. **Ships inside the free-tier package** (`Plugins/RealityScan.RemoteCommandPlugin/`, gRPC 1.40.0 linked in), not a separate download or tier | VERIFIED — installed 2.2.0.119430 |
+| Plugin command surface | `RsRemoteStartREST`/`GRPC` (`serverUrl`), `RsRemoteStartNotifyREST` (`notifyUrl`, optional base64 `notifyUrlHeaders`), `RsRemoteStartNotifyGRPC`, **`RsRemoteStartNotifyToFile` (`filePath`)**, and a `Stop` for each | VERIFIED — from the shipped `.rsplugin` manifest |
 | **Docker with GPU passthrough** | yes — "RealityScan Linux can run fully inside a Docker container with GPU passthrough" | VERIFIED |
 | **Passive notification mode** | yes — "you provide a notification address and receive asynchronous events (progress, completion, errors) without polling … useful when running existing pipelines—such as .rscmd command files—inside a container without an active server loop" | VERIFIED |
 | Model-stage resume | yes; `-continueModelCalculation`, `-recoverAutosave` | VERIFIED |
@@ -669,7 +672,9 @@ capability.
 | `-exportUndistortedImages <folderName> [params.xml]` exists, sharing the Export Registration dialog's settings | **VERIFIED** |
 | `-importColmap <filePath> [params.xml]` — "any of the three text files" — exists | **VERIFIED** |
 | RealityScan's own distortion model is `sfmDistortionModel`, default **`Brown3`**, options `Division`, `Brown3`, `Brown4`, `Brown3WithTangential2`, `Brown4WithTangential2`, `KplusBrown3WithTangential2`, `KplusBrown4WithTangential2` | **VERIFIED** |
-| **`-exportRegistration` emits COLMAP format** | **SUPPORTED** — the CLI page says only "Export registration … using the current settings or the settings from the params.xml"; the format list is in the Export Registration dialog, which is not documented on any of the 82 pages |
+| **`-exportRegistration` emits COLMAP format** | **VERIFIED** — the shipped `calibration.xml` declares `desc="COLMAP" writer="RealityScan.Export.COLMAP" undistortImages="1" exportImages="1"`. It undistorts and copies out the images |
+| **A native radiance-fields exporter exists**: `desc="Radiance Fields Transformation File"`, `mask="*.json"`, writing nerfstudio-style `transforms.json` with `"camera_model": "SIMPLE_RADIAL"`, per-camera `cx`/`cy`, `k1..k4`, and an inverted axis-flipped `transform_matrix` | **VERIFIED** — template body readable in `calibration.xml`. This may remove the need to route through COLMAP at all |
+| An exporter that **preserves** calibration: `desc="OpenCV-compliant Internal/External Camera Parameters"`, `undistortImages="0"`, fields `f_pix,px_pix,py_pix,k1,k2,t2,t1,k3,k4` | **VERIFIED** — and its field order independently confirms the t1/t2 swap |
 | The provisional distortion-model mapping (Brown3 → `SIMPLE_RADIAL`, Brown3+tangential2 → `OPENCV`, …) | **UNKNOWN** — no Epic page states it |
 | RealityScan holds and exports a **genuine per-camera principal point** — normalized coordinates centred on the image centre, so zero means centre and non-zero means off-centre; `$px`/`$py` per camera in paRSer; `xcr:PrincipalPointU`/`V` in XMP, defaulting to centre only when *absent* | **VERIFIED** — [`camera-geometry-reference`](sources/camera-geometry-reference.md) |
 | **RealityScan's tangential coefficients `t1, t2` are OpenCV's `t2, t1`** — the orderings are swapped, while radial `k1..k4` match | **VERIFIED** — an importer passing them through unchanged is silently wrong |
@@ -721,7 +726,7 @@ harvested into `sources/`.
 | HTML output | yes (default templates) | SUPPORTED |
 | Custom templates | yes | VERIFIED |
 | **Arbitrary output format incl. JSON** | **yes, by template** — a template is literal text with substitutions | VERIFIED (by construction) |
-| **A shipped JSON sample** | — | **UNKNOWN** — no page names one; the default templates ship in the install folder and must be inspected on a real install |
+| **A shipped JSON sample** | **no** | **VERIFIED (absence)** — the install's `Reports/` directory holds only HTML templates (`Overview.html`, `ComponentAccuracyReport.html`, `SelectedComponent.html`, `Misalignment.html`, `MapView.html`, …) plus localisations. No `.json`, no `.parser` sample anywhere. We write our own |
 | Function sets | 22 documented, incl. `ComponentFunctionSet`, `CameraErrorsExportFunctionSet`, `ControlPointsExportFunctionSet`, `OrthoProjectionFunctionSet`, `OrthoMeasurementFunctionSet`, `MisalignmentFunctionSet`, `RelativeCameraUncertaintyFunctionSet`, `SfmHistogramExportFunctionSet`, `IteratorsFunctionSet` | VERIFIED |
 
 **Read**: write **one paRSer template that emits JSON**, treat it as a versioned
