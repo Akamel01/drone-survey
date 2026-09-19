@@ -92,25 +92,45 @@ class HangError(Exception):
     """The process exceeded its wall clock and had to be killed."""
 
 
+def wine_path(p: str | Path) -> str:
+    """Convert a POSIX path to the Wine drive form the engine actually parses.
+
+    Measured 2026-09-19: passing a native path such as /home/x/images makes the
+    engine strip the leading slash and treat the rest as a COMMAND --
+    "An unknown command \'home/x/images\'. Is it a feature request or a typo?"
+    The run then never reaches -quit and idles forever with no output. That is
+    almost certainly what third-party reports of "headless hangs indefinitely"
+    actually were. Epic\'s own Linux example uses Z:\\ paths; nothing warns you.
+    """
+    # abspath, not resolve: resolve() follows symlinks, which rewrites the
+    # path out from under the caller (on macOS /home -> /System/Volumes/Data/home).
+    return "Z:" + os.path.abspath(str(p)).replace("/", "\\")
+
+
 def build_command(rs: str, args: list[str]) -> list[str]:
     """Assemble an invocation, refusing to omit the error-propagation flag.
 
     The refusal is the point. `appQuitOnError=true` is easy to leave out and
     its absence is invisible until a failed job is reported as a success.
+
+    -stdConsole is equally non-optional here: without it the engine writes
+    NOTHING to stdout, so a failing run looks identical to a silent one.
     """
     if "-headless" not in args:
         args = ["-headless", *args]
+    if "-stdConsole" not in args:
+        args = ["-stdConsole", *args]
     cmd = [rs, *QUIT_ON_ERROR, *args]
     if "appQuitOnError=true" not in cmd:
         raise AssertionError("refusing to invoke without appQuitOnError=true")
     return cmd
 
 
-def run_watched(cmd: list[str], timeout: int, env: dict | None = None) -> tuple[int, float]:
+def run_watched(cmd: list[str], timeout: int, env: dict | None = None) -> tuple[int, float, str]:
     """Run to completion or kill the whole process group. Never wait forever.
 
-    Returns (exit_code, seconds). Raises HangError on timeout -- the caller
-    must not be able to mistake a hang for a slow success.
+    Returns (exit_code, seconds, output). Raises HangError on timeout -- the
+    caller must not be able to mistake a hang for a slow success.
     """
     started = time.monotonic()
     proc = subprocess.Popen(
@@ -121,7 +141,7 @@ def run_watched(cmd: list[str], timeout: int, env: dict | None = None) -> tuple[
         env=env,
     )
     try:
-        proc.communicate(timeout=timeout)
+        out, _ = proc.communicate(timeout=timeout)
     except subprocess.TimeoutExpired:
         # Kill the group: RealityScan spawns helpers, and orphans hold the GPU.
         try:
@@ -130,7 +150,28 @@ def run_watched(cmd: list[str], timeout: int, env: dict | None = None) -> tuple[
             proc.kill()
         proc.wait(timeout=30)
         raise HangError(f"exceeded {timeout}s")
-    return proc.returncode, time.monotonic() - started
+    text = (out or b"").decode("utf-8", "replace")
+    return proc.returncode, time.monotonic() - started, text
+
+
+def unusable_environment(code: int, out: str) -> str | None:
+    """Distinguish "our setup is not ready" from "the engine failed".
+
+    Both previously surfaced as exit 4, and the probe called both FAIL. One of
+    them is BLOCKED -- absence of evidence -- and conflating them produced a
+    confident NO-GO from a run that never started.
+    """
+    if INIT_FAILURE in out:
+        return ("engine could not initialize graphics (DXGI_ERROR_UNSUPPORTED). "
+                "DISPLAY must point at a working X server, e.g. Xvfb")
+    if code == 4 and not out.strip():
+        return ("engine exited 4 with no output at all -- it did not start. "
+                "Check DISPLAY, and check for a blocking sign-in dialog "
+                "(xwininfo -root -tree shows a MessageOverlay window)")
+    if "unknown command" in out.lower():
+        return ("the engine parsed an argument as a command -- a path was very "
+                "likely passed in POSIX form instead of Z:\\ form")
+    return None
 
 
 def read_mesh_faces(path: Path) -> int | None:
@@ -151,15 +192,37 @@ def read_mesh_faces(path: Path) -> int | None:
 
 
 def headless_env() -> dict:
-    """An environment with no display, so the test tests what it claims to.
+    """An environment with no *real* display, but with a virtual framebuffer.
 
-    If DISPLAY leaks through, a passing result proves nothing about the
-    SSH-only production host this is meant to represent.
+    The first version of this stripped DISPLAY entirely. That tested the wrong
+    thing: Wine\'s DXGI cannot enumerate adapters with no X connection at all,
+    so every run died in ~5s with "application initialization failed with code
+    0x887a0004" (DXGI_ERROR_UNSUPPORTED) before doing any work -- and the probe
+    read that as the engine failing rather than as its own environment being
+    unready.
+
+    What production actually looks like is an SSH-only host with a virtual
+    framebuffer, not a host with no X server at compiled-in. So DISPLAY is kept
+    and must point at an Xvfb; a real desktop session is still excluded because
+    WAYLAND_DISPLAY and XAUTHORITY are dropped.
     """
     env = dict(os.environ)
-    for key in ("DISPLAY", "WAYLAND_DISPLAY", "XAUTHORITY"):
+    for key in ("WAYLAND_DISPLAY", "XAUTHORITY"):
         env.pop(key, None)
     return env
+
+
+def display_is_virtual() -> str | None:
+    """Return a reason the display is unusable, or None if it looks fine."""
+    disp = os.environ.get("DISPLAY")
+    if not disp:
+        return ("DISPLAY is unset. Wine\'s DXGI needs an X connection even "
+                "headless; start one with: Xvfb :77 -screen 0 1280x1024x24 -ac "
+                "and re-run with DISPLAY=:77")
+    return None
+
+
+INIT_FAILURE = "0x887a0004"   # DXGI_ERROR_UNSUPPORTED -- no usable display
 
 
 def probe_headless_align(rs: str, images: Path, work: Path) -> Probe:
@@ -168,16 +231,19 @@ def probe_headless_align(rs: str, images: Path, work: Path) -> Probe:
     project = work / "t11.rsproj"
     cmd = build_command(rs, [
         "-newScene",
-        "-addFolder", str(images),
+        "-addFolder", wine_path(images),
         "-align",
-        "-save", str(project),
+        "-save", wine_path(project),
         "-quit",
     ])
     try:
-        code, secs = run_watched(cmd, TIMEOUT_ALIGN, env=headless_env())
+        code, secs, out = run_watched(cmd, TIMEOUT_ALIGN, env=headless_env())
     except HangError as exc:
-        return p.failed(f"hung with no display server: {exc}", hang=True)
+        return p.failed(f"hung: {exc}", hang=True)
     p.seconds = secs
+    blocked = unusable_environment(code, out)
+    if blocked:
+        return p.blocked(blocked)
     if code != 0:
         return p.failed(f"exit {code}", exit_code=code)
     if not project.exists():
@@ -203,20 +269,23 @@ def probe_headless_model(rs: str, images: Path, work: Path, repeats: int = 10) -
         # the misleading "No model is selected".
         cmd = build_command(rs, [
             "-newScene",
-            "-addFolder", str(images),
+            "-addFolder", wine_path(images),
             "-align",
             "-selectMaximalComponent",
             "-setReconstructionRegionAuto",
             "-calculateNormalModel",
-            "-exportSelectedModel", str(mesh),
+            "-exportSelectedModel", wine_path(mesh),
             "-quit",
         ])
         try:
-            code, secs = run_watched(cmd, TIMEOUT_MODEL, env=headless_env())
+            code, secs, out = run_watched(cmd, TIMEOUT_MODEL, env=headless_env())
         except HangError:
             outcomes.append("hang")
             continue
         p.seconds += secs
+        if unusable_environment(code, out):
+            outcomes.append("blocked")
+            continue
         if code != 0:
             outcomes.append(f"exit{code}")
             continue
@@ -235,6 +304,8 @@ def probe_headless_model(rs: str, images: Path, work: Path, repeats: int = 10) -
         return p.failed("exited 0 having written an empty mesh")
     if any(o.startswith("exit") for o in outcomes):
         return p.failed(f"non-zero exits: {outcomes}")
+    if "blocked" in outcomes:
+        return p.blocked(unusable_environment(4, "") or "environment not ready")
     if "unverified" in outcomes:
         return p.blocked("no independent mesh reader installed; install trimesh")
     return p.passed(f"{repeats}/{repeats} produced a readable mesh")
@@ -259,12 +330,18 @@ def probe_failure_is_visible(rs: str, images: Path, work: Path) -> Probe:
         # Truncate half of them mid-file: readable header, unusable payload.
         dst.write_bytes(data[: len(data) // 3] if i % 2 == 0 else data)
 
-    cmd = build_command(rs, ["-addFolder", str(broken), "-align", "-quit"])
+    cmd = build_command(rs, ["-addFolder", wine_path(broken), "-align", "-quit"])
     try:
-        code, secs = run_watched(cmd, TIMEOUT_ALIGN, env=headless_env())
+        code, secs, out = run_watched(cmd, TIMEOUT_ALIGN, env=headless_env())
     except HangError as exc:
         return p.failed(f"hung on corrupt input: {exc}", hang=True)
     p.seconds = secs
+    blocked = unusable_environment(code, out)
+    if blocked:
+        # Critical: without this, a broken environment makes THIS probe "pass",
+        # because a refusal to start is also a non-zero exit. A pass for the
+        # wrong reason is worse than a failure.
+        return p.blocked(blocked)
     if code == 0:
         return p.failed(
             "exited 0 on deliberately corrupt input -- failure is not "
@@ -365,9 +442,27 @@ def selftest() -> int:
             failures.append("watchdog fired far too late")
 
     # A clean exit still runs to completion normally.
-    code, _ = run_watched(["/bin/sh", "-c", "exit 7"], timeout=10)
+    code, _, _ = run_watched(["/bin/sh", "-c", "exit 7"], timeout=10)
     if code != 7:
         failures.append(f"exit code not propagated: got {code}")
+
+    # -stdConsole is as load-bearing as appQuitOnError: without it the engine
+    # writes nothing to stdout and a failure is indistinguishable from silence.
+    if "-stdConsole" not in cmd:
+        failures.append("build_command dropped -stdConsole")
+
+    # Paths must reach the engine in Wine form, or they parse as commands.
+    if wine_path("/home/x/images") != "Z:\\home\\x\\images":
+        failures.append(f"wine_path is wrong: {wine_path('/home/x/images')}")
+
+    # A refusal to start must read as BLOCKED, never as FAIL or PASS. This is
+    # the bug that produced a confident NO-GO from runs that never started.
+    if unusable_environment(4, "") is None:
+        failures.append("exit 4 with no output was not recognised as blocked")
+    if unusable_environment(4, "application initialization failed with code 0x887a0004") is None:
+        failures.append("DXGI init failure was not recognised as blocked")
+    if unusable_environment(0, "Reconstruction completed in 5s") is not None:
+        failures.append("a healthy run was misreported as blocked")
 
     # One S1 failure must force NO-GO even when everything else passes.
     good = Probe("ok", "A1", "S1").passed()
