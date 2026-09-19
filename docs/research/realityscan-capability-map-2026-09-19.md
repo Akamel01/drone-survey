@@ -154,6 +154,7 @@ how much rested on the claim.
 | D18 | Domain 17 assumed the splat path must go **through COLMAP**, with a provisional distortion-model mapping to verify | `calibration.xml` ships a **`Radiance Fields Transformation File`** exporter writing nerfstudio-style `transforms.json` directly, with `"camera_model": "SIMPLE_RADIAL"`, real per-camera `cx`/`cy`, and the axis-flip already applied | The shortest adoption may skip COLMAP entirely. Re-opens #112 as a choice between three exporters rather than a yes/no on one |
 | D19 | "Headless reconstruction **may not work on Linux at all**" — the claim the evaluation called decisive | **10/10 reconstructions completed** headless on an SSH-only host. The reported hangs are reproducible and explained: no framebuffer, or POSIX paths silently parsed as commands so `-quit` never runs | The load-bearing worry is retired. A1 passes on measurement |
 | D20 | The first-run login dialog was a documented risk with unknown impact | It is **the** blocker, and it is one-time. An invisible `MessageOverlay` with a "Skip for now" link; dismissing it persists across runs | F3 holds — the click is bootstrap, not per-job — but it must be stated explicitly in the ADR |
+| D21 | Determinism was `UNKNOWN`, framed as a documentation gap to be closed by finding a vendor statement | There is no statement, **and the engine is measurably non-deterministic at the coverage level** — alignment splits into a different number of components run to run | D1 degrades the verdict to CONDITIONAL GO with a named mitigation. The mitigation is component-share gating, which stops being optional |
 
 Two claims the documentation **upheld** against attack, which is worth recording
 because the point of the exercise was to find the draft wrong:
@@ -240,9 +241,13 @@ with value types and defaults, and 57 per-item keys in
 [`sources/configure-selected-items.md`](sources/configure-selected-items.md).
 Configuration is a solved problem, not a risk.
 
-`-selectMaximalComponent` is still a loaded gun. Taking the largest component
-silently discards everything else; the documentation says only "Select the
-largest component for further processing", with no warning and no threshold. If a
+`-selectMaximalComponent` is still a loaded gun, and it is no longer a
+hypothetical one. **Measured (#110): identical input produces a different number
+of components run to run — 3/2/2 at 20 images, 6/7 at 122 — so the "largest"
+component is not stable, and ten runs reconstructed measurably different parts of
+the same scene while every one of them exited 0 with a clean million-face mesh.**
+The documentation says only "Select the largest component for further
+processing", with no warning and no threshold. If a
 Capture splits 60/40, the pipeline produces a confident, clean, half-site
 deliverable. Gate on the selected component's *share* of registered images, not
 merely on component count (T2.14). `-selectComponentWithLeastReprojectionError`
@@ -618,7 +623,8 @@ and checkpoints catch it, and checkpoints are now available (D4).
 | **`-set "key=value"` / `-preset "key=value"`** | yes; **116 documented global keys** | **VERIFIED (D3)** |
 | Per-selection settings | `-editInputSelection`, `-editControlPointSelection`, `-editConstraintSelection`, `-editOrthoProjectionSelection`; 57 documented keys | VERIFIED |
 | Whole-application settings as a file | `-exportGlobalSettings settings.rcconfig`, `-importGlobalSettings settings.rcconfig` | VERIFIED |
-| Exit code 0 = success | yes | SUPPORTED |
+| Exit code 0 = success | yes, **but only if the project was saved** | SUPPORTED |
+| **`-save` is required before `-quit`** | **MEASURED.** A completed 122-image alignment followed by a bare `-quit` emits `Processing failed: Operation aborted.` and **exits 4**; the identical run with `-save` before `-quit` exits 0. With `appQuitOnError=true` mandatory, an unsaved quit turns a good run into a reported failure — the mirror image of the A6 hazard, and just as silent | **VERIFIED — measured** |
 | **Non-zero propagation requires `-set "appQuitOnError=true"`** | yes — and headless-mode docs name it as the way to suppress blocking dialogs | VERIFIED |
 | Crash → exit 3 + minidump | yes; `-crashReportPath` | SUPPORTED |
 | Logging | `appLog`, `operationLog` keys; `results_*`/`errors_*` files | VERIFIED |
@@ -630,7 +636,7 @@ and checkpoints catch it, and checkpoints are now available (D4).
 | **Passive notification mode** | yes — "you provide a notification address and receive asynchronous events (progress, completion, errors) without polling … useful when running existing pipelines—such as .rscmd command files—inside a container without an active server loop" | VERIFIED |
 | Model-stage resume | yes; `-continueModelCalculation`, `-recoverAutosave` | VERIFIED |
 | Alignment-stage resume | no such command | UNKNOWN |
-| **Determinism** | **no statement in any of the 82 pages, and the engine is not bit-deterministic**: ten identical reconstructions of the same 20 images produced ten distinct meshes, 1,010,152–1,063,414 faces, a 5.3% spread | **MEASURED.** Rules out the bit-identical reading of gate D1's GO band. Whether the *surfaces* agree within the accuracy claim is still open — see #110 |
+| **Determinism** | **The engine is not deterministic, and the instability is in alignment rather than meshing.** Identical input finalized **3/2/2 components** at 20 images and **6/7** at full Capture size. `-selectMaximalComponent` then selects a different component per run, so ten runs reconstructed **different parts of the scene**: 17.6% mean bounding-box extent drift, worst median surface deviation **5.07%** against gate EV5's 1% GO bar. Every run exited 0 and wrote a clean ~1M-face mesh | **MEASURED — #110.** No seed or determinism control exists anywhere in the 82 pages. Confounded by an unrepresentative dataset, so D1 needs re-measuring on a real Capture; the component-share gate is required regardless |
 | **Free-tier entitlement** | **Free under $1,000,000 USD gross revenue over the last 12 months, with "All RealityScan features"** — no capability gating between tiers; CA$1,697 per seat per year above it | **VERIFIED** — [`eula`](sources/eula.md) §2(b)(i), [`licensing-and-pricing`](sources/licensing-and-pricing.md) |
 | Whether the CLI, headless operation or the Remote Command Plugin are separately entitled | neither the EULA nor the licensing page mentions the CLI, "headless" or "automated" at all | **UNKNOWN — T1.4**; silence in the direction we want, but silence |
 
