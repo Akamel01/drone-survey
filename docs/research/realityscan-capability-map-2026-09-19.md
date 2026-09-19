@@ -152,6 +152,8 @@ how much rested on the claim.
 | D16 | "**No documented image-count-per-VRAM guidance exists**" | `hardware-and-software-requirements` documents out-of-core processing, "16 GB of RAM is typically sufficient for processing thousands of high-resolution images, provided a component workflow is used", and that halving `sfmMaxFeaturesPerImage` from 40,000 to 20,000 "can double the number of images processed within the same memory limits" | Sizing has a documented lever. The two requirement pages disagree on the VRAM floor (1 GB vs 8 GB); take the Linux figure |
 | D17 | Domain 18: Epic "reportedly states the rebuilt templating system lets teams output structured project metadata in JSON, **with samples included**" — "the single highest-value unconfirmed claim in this evaluation" | The install's `Reports/` directory contains **only HTML templates**. No JSON sample ships | The design is unchanged — paRSer can still emit JSON by construction — but nobody hands us one. Budget for writing it |
 | D18 | Domain 17 assumed the splat path must go **through COLMAP**, with a provisional distortion-model mapping to verify | `calibration.xml` ships a **`Radiance Fields Transformation File`** exporter writing nerfstudio-style `transforms.json` directly, with `"camera_model": "SIMPLE_RADIAL"`, real per-camera `cx`/`cy`, and the axis-flip already applied | The shortest adoption may skip COLMAP entirely. Re-opens #112 as a choice between three exporters rather than a yes/no on one |
+| D19 | "Headless reconstruction **may not work on Linux at all**" — the claim the evaluation called decisive | **10/10 reconstructions completed** headless on an SSH-only host. The reported hangs are reproducible and explained: no framebuffer, or POSIX paths silently parsed as commands so `-quit` never runs | The load-bearing worry is retired. A1 passes on measurement |
+| D20 | The first-run login dialog was a documented risk with unknown impact | It is **the** blocker, and it is one-time. An invisible `MessageOverlay` with a "Skip for now" link; dismissing it persists across runs | F3 holds — the click is bootstrap, not per-job — but it must be stated explicitly in the ADR |
 
 Two claims the documentation **upheld** against attack, which is worth recording
 because the point of the exercise was to find the draft wrong:
@@ -320,11 +322,25 @@ What did change is classification: it is scriptable (D5).
 config choice, and the sub-parameters beneath them are now documented rather than
 unknown.
 
-**Reconstruction is still the reported failure point for headless operation** —
-two independent third-party reports of `-calculateNormalModel` /
-`-calculateHighModel` hanging indefinitely or failing with a misleading "No model
-is selected" in headless Docker/Linux. **No Epic page confirms or denies this**,
-so it stays `SUPPORTED (non-Epic)` and T1.2 stands unchanged. A hang does not
+**Reconstruction was the reported failure point, and it has now been measured.**
+T1.2 ran `-calculateNormalModel` ten times on an SSH-only host with no desktop:
+**10/10 completed, every mesh readable by an independent reader, no hangs.**
+Headless reconstruction on Linux works.
+
+The reported hangs were real, but they were not the engine failing. Three
+environment requirements, none of which appear together in any Epic page:
+
+1. **A virtual framebuffer.** Wine's DXGI cannot enumerate adapters with no X
+   connection; without one the engine dies in ~5s with `application
+   initialization failed with code 0x887a0004` (`DXGI_ERROR_UNSUPPORTED`) and
+   writes nothing to stdout.
+2. **Wine `Z:\` paths.** A POSIX path loses its leading slash and is parsed as a
+   command — *"An unknown command 'home/akamel/…'. Is it a feature request or a
+   typo?"* — after which `-quit` never executes and the process **idles
+   forever**: CPU decaying to 4%, GPU at 0%, log frozen after two lines.
+   **This is almost certainly what the third-party "hangs indefinitely" reports
+   were**, and plausibly the misleading "No model is selected" as well.
+3. **A one-time sign-in dismissal.** See domain 15. A hang does not
 self-terminate, so an **external watchdog is mandatory**, not optional. Note that
 Epic now documents Docker with GPU passthrough as a supported Linux deployment
 (`realityscan-for-linux`), which is evidence against the strong form of the
@@ -591,7 +607,10 @@ and checkpoints catch it, and checkpoints are now available (D4).
 | Mechanism | Status | Evidence |
 |---|---|---|
 | CLI, sequential hyphenated args | yes | VERIFIED |
-| **`-headless`** | yes — "Hides user interface", tray icon on Windows | VERIFIED |
+| **`-headless`** | yes — "Hides user interface", tray icon on Windows. **On Linux it does not suppress the first-run sign-in modal** | VERIFIED — measured |
+| **First-run Epic sign-in modal** | A `MessageOverlay` window reading *"Sign in to RealityScan — Use your Epic Games account or create a new one"*, with **"Skip for now"**. Drawn invisibly under a framebuffer; the process idles until it is dismissed. **One click, and the dismissal persists across later runs** | **VERIFIED — measured.** This is the documentation's "certain dialogs (e.g., the login window) will still require user interaction", made concrete |
+| **A display is required even headless** | Wine's DXGI needs an X connection; `Xvfb :77 -screen 0 1280x1024x24 -ac` is sufficient | **VERIFIED — measured** |
+| **Paths must be in Wine `Z:\` form** | a POSIX path is parsed as a command and the run never reaches `-quit` | **VERIFIED — measured** |
 | `-hideUI` / `-showUI` | yes — "Unlike headless, this command doesn't need to be run at startup and does not suppress actions that require user interaction" | VERIFIED |
 | `-silent` | yes | VERIFIED |
 | `-stdConsole` | yes — console redirection to standard output | VERIFIED |
@@ -611,7 +630,7 @@ and checkpoints catch it, and checkpoints are now available (D4).
 | **Passive notification mode** | yes — "you provide a notification address and receive asynchronous events (progress, completion, errors) without polling … useful when running existing pipelines—such as .rscmd command files—inside a container without an active server loop" | VERIFIED |
 | Model-stage resume | yes; `-continueModelCalculation`, `-recoverAutosave` | VERIFIED |
 | Alignment-stage resume | no such command | UNKNOWN |
-| **Determinism** | **no statement in any of the 82 pages** | **UNKNOWN — T4.10** |
+| **Determinism** | **no statement in any of the 82 pages, and the engine is not bit-deterministic**: ten identical reconstructions of the same 20 images produced ten distinct meshes, 1,010,152–1,063,414 faces, a 5.3% spread | **MEASURED.** Rules out the bit-identical reading of gate D1's GO band. Whether the *surfaces* agree within the accuracy claim is still open — see #110 |
 | **Free-tier entitlement** | **Free under $1,000,000 USD gross revenue over the last 12 months, with "All RealityScan features"** — no capability gating between tiers; CA$1,697 per seat per year above it | **VERIFIED** — [`eula`](sources/eula.md) §2(b)(i), [`licensing-and-pricing`](sources/licensing-and-pricing.md) |
 | Whether the CLI, headless operation or the Remote Command Plugin are separately entitled | neither the EULA nor the licensing page mentions the CLI, "headless" or "automated" at all | **UNKNOWN — T1.4**; silence in the direction we want, but silence |
 

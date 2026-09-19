@@ -81,8 +81,15 @@ only a dialog exposes, and can be authored on the same Linux host. The
 per-job critical path has no GUI step, so gate F3 passes, and the CONDITIONAL
 loses one of its two main reasons.
 
-**2. Headless reconstruction still may not work reliably.** This is now the
-single biggest open question. No Epic page addresses the third-party reports of
+**2. Headless reconstruction works. Measured, ten times.** This was the single
+biggest open question and it is now closed in RealityScan's favour: T1.2 ran
+`-calculateNormalModel` ten times on an SSH-only host and got ten readable
+meshes, no hangs. The reported failures were environmental, and all three causes
+are now identified — no virtual framebuffer, POSIX paths parsed as commands, and
+an invisible first-run sign-in modal. Details in the capability map; the
+original text below is kept for the record of what was believed beforehand.
+
+~~This is now the single biggest open question.~~ No Epic page addresses the third-party reports of
 `-calculateNormalModel` hanging under headless Linux — but Epic *does* document
 Docker with GPU passthrough, a REST server, a gRPC server and a passive
 notification mode for running `.rscmd` pipelines in a container with no server
