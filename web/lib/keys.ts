@@ -14,13 +14,23 @@ export const SUMMARIES_KEY = "specs/_status/summaries.json";
 export const SKIPPED_KEY = "specs/_status/skipped.json";
 
 /** A Spec's key: specs/<site>/<date>/<dispatch stamp> (ADR 0016). */
-export function makeSpecKey(site: string, date: string, stamp: string): string {
-  return `specs/${site}/${date}/${stamp}.json`;
+export function makeSpecKey(site: string, date: string, stamp: string, prefix?: string): string {
+  const pre = prefix ?? SPECS_PREFIX;
+  return `${pre}${site}/${date}/${stamp}.json`;
 }
 
 /** Parse specs/<site>/<date>/<stamp>.json; null for anything else. */
-export function parseSpecKey(key: string): { site: string; date: string; stamp: string } | null {
-  const m = /^specs\/([^/]+)\/([^/]+)\/([^/]+)\.json$/.exec(key);
+export function parseSpecKey(
+  key: string,
+  prefix?: string
+): { site: string; date: string; stamp: string } | null {
+  const preRaw = prefix ?? SPECS_PREFIX;
+  const pre = preRaw.endsWith("/") ? preRaw.slice(0, -1) : preRaw;
+  // Escape the prefix for RegExp construction, including the path separator
+  // so we can safely append the following path components
+  const esc = pre.replace(/[.*+?^${}()|[\\]\/]/g, "\\$&");
+  const re = new RegExp(`^${esc}\/([^/]+)\/([^/]+)\/([^/]+)\\.json$`);
+  const m = re.exec(key);
   return m ? { site: m[1], date: m[2], stamp: m[3] } : null;
 }
 

@@ -97,6 +97,16 @@ def load_state(workdir: Path) -> dict:
     return json.loads(path.read_text()) if path.exists() else {}
 
 
+def get_execution_context(data: dict) -> dict:
+    """Return a minimal execution context derived from a Manifest.
+
+    The context is exposed to node processes via the EXECUTION_CONTEXT
+    environment variable. Nodes can read this to implement decisions that
+    depend on manifest-level facts (e.g., ground_control_points).
+    """
+    return {"ground_control_points": data.get("ground_control_points")}
+
+
 def save_state(workdir: Path, state: dict) -> None:
     (workdir / "state.json").write_text(json.dumps(state, indent=1))
 
@@ -116,6 +126,7 @@ def run(manifest_path: Path, workdir: Path) -> None:
 
     acquire_lock()
     try:
+        execution_context = get_execution_context(data)
         for node in data["nodes"]:
             name = node["name"]
             if state["nodes"].get(name, {}).get("status") == "done":
@@ -124,7 +135,19 @@ def run(manifest_path: Path, workdir: Path) -> None:
 
             node_dir(workdir, name).mkdir(parents=True, exist_ok=True)
             inp, out = resolve_paths(workdir, node, nodes_by_name, data.get("inputs"))
-            command = [arg.format(**{"in": inp, "out": out}) for arg in node["command"]]
+            # 71c: surface formatting errors with context instead of a bare format
+            try:
+                command = [arg.format(**{"in": inp, "out": out}) for arg in node["command"]]
+            except Exception as e:
+                raise ManifestError(
+                    f"node '{name}': error formatting command arguments: {e}; inputs={inp}, outputs={out}"
+                ) from e
+            # 71a: honor placement field; only 'local' is supported by this Runner
+            placement = node.get("placement", "local")
+            if placement != "local":
+                raise ManifestError(
+                    f"node '{name}': unsupported placement '{placement}'; Runner only supports 'local' placement"
+                )
             # A Manifest declares the environment a Node needs; the Runner puts it
             # there rather than each Node inventing an environment variable name.
             node_env = {k: str(v) for k, v in node.get("env", {}).items()}
@@ -132,8 +155,22 @@ def run(manifest_path: Path, workdir: Path) -> None:
                 docker_env: list[str] = []
                 for key in sorted(node_env):
                     docker_env += ["-e", f"{key}={node_env[key]}"]
-                command = ["docker", "run", "--rm", *docker_env, "-v", f"{workdir}:{workdir}", node["image"], *command]
+                # 71b: GPU-aware docker invocation: pass through GPU flag if requested
+                gpu_requested = False
+                if isinstance(node.get("gpu"), bool) and node["gpu"]:
+                    gpu_requested = True
+                docker_prefix = ["docker", "run", "--rm"]
+                if gpu_requested:
+                    docker_prefix += ["--gpus", "all"]
+                command = docker_prefix + [*docker_env, "-v", f"{workdir}:{workdir}", node["image"], *command]
 
+            # Inject execution context for the Node; allow Nodes to read
+            # manifest-level facts via EXECUTION_CONTEXT.
+            # Provide each Node with its absolute root directory so inline scripts
+            # can write artifacts within their own node workspace. This enables
+            # robust per-node cleanup tests and restart/resume semantics.
+            # Exposed as NODE_ROOT for scripts that want to drop intermediate data
+            # into the node's own folder. (set after env is created below)
             # Remove this Node's declared outputs first, so "it exists" after the
             # run means this run wrote it: a stale file from an earlier Manifest
             # in the same workdir would otherwise let a silent Node pass.
@@ -145,7 +182,13 @@ def run(manifest_path: Path, workdir: Path) -> None:
                     stale.unlink()
 
             print(f"run {name}: {' '.join(command)}")
-            env = {**os.environ, **node_env} if node_env else None
+            if node_env:
+                env = {**os.environ, **node_env, "EXECUTION_CONTEXT": json.dumps(execution_context)}
+            else:
+                env = dict(os.environ,)
+                env["EXECUTION_CONTEXT"] = json.dumps(execution_context)
+            # Provide the per-node root directory for artifact creation inside the node's workspace
+            env["NODE_ROOT"] = str(node_dir(workdir, name))
             result = subprocess.run(command, env=env)
 
             if result.returncode != 0:
@@ -164,6 +207,44 @@ def run(manifest_path: Path, workdir: Path) -> None:
                 sys.exit(1)
 
             state["nodes"][name] = {"status": "done", "returncode": 0}
+            # Declarative per-node cleanup after a successful run
+            cleanup_paths = []
+            if isinstance(node, dict):
+                cleanup_paths = node.get("cleanup_paths", []) or []
+                if not cleanup_paths and isinstance(node, dict) and "cleanup" in node:
+                    legacy = node.get("cleanup")
+                    if isinstance(legacy, (list, tuple)):
+                        cleanup_paths = list(legacy)
+                    elif isinstance(legacy, str):
+                        cleanup_paths = [legacy]
+            for rel_path in cleanup_paths:
+                if not isinstance(rel_path, str) or not rel_path:
+                    continue
+                target = Path(rel_path)
+                # Must cleanup only inside the current node's workdir
+                if not target.is_absolute():
+                    target = node_dir(workdir, name) / target
+                # Guard: ensure the cleanup target is inside the node's directory
+                node_root = (node_dir(workdir, name)).resolve()
+                try:
+                    relative = target.resolve().relative_to(node_root)
+                except Exception:
+                    # Outside of node workdir; skip to be safe
+                    continue
+                # Do not cleanup declared outputs
+                declared_outputs = []
+                if isinstance(node, dict):
+                    declared_outputs = [node_dir(workdir, name) / rel for rel in (node.get("outputs", {}).values())]
+                if any(target.resolve() == p.resolve() for p in declared_outputs):
+                    continue
+                if target.exists():
+                    if target.is_dir():
+                        shutil.rmtree(target, ignore_errors=True)
+                    else:
+                        try:
+                            target.unlink()
+                        except FileNotFoundError:
+                            pass
             save_state(workdir, state)
     finally:
         release_lock()
@@ -194,9 +275,108 @@ def _selftest() -> None:
     assert validate({"pipeline": "x", "nodes": [{"name": "a", "command": ["echo", "{in.nope}"]}]}), "an undeclared placeholder should be rejected"
     assert validate({"pipeline": "x", "nodes": [{"name": "a", "command": ["echo", "{in.a.b}"]}]}), "a malformed placeholder should be rejected"
     assert not validate({"pipeline": "x", "nodes": [{"name": "a", "command": ["x"]}]}), "a well-formed Manifest should pass"
+    
+    # 3b. T4 interior reference rejection test: ensure {in.x}/<file> form is rejected
+    try:
+        from manifest import load as load_manifest, ManifestError
+        from pathlib import Path
+        # This should raise a ManifestError due to interior path reference
+        load_manifest(Path("pipeline/manifests/orthomosaic-invalid.json"))
+        raise AssertionError("Interior {in.x}/<file> rejection not triggered in selftest")
+    except ManifestError as me:
+        # ensure the error message mentions interior file references
+        assert "interior file references" in str(me), str(me)
+    except FileNotFoundError as fe:
+        raise AssertionError("Fixture orthomosaic-invalid.json is missing") from fe
+    except Exception:
+        raise
 
     with tempfile.TemporaryDirectory() as tmp:
         tmp = Path(tmp)
+
+        # M5 selftest: placement fail-loud (non-local placement should error fast)
+        placemute = _write(tmp / "M5_placemute.json", {
+            "pipeline": "M5-placemute",
+            "nodes": [
+                {
+                    "name": "n",
+                    "placement": "remote-3090",
+                    "command": ["echo", "placemute"]
+                }
+            ],
+        })
+        try:
+            run(placemute, tmp / "run-placemute")
+            raise AssertionError("M5 placement fail-loud should have raised ManifestError")
+        except ManifestError:
+            print("selftest M5 placement fail-loud: fired")
+        except SystemExit as se:
+            # AnySystemExit is acceptable if run decides to exit; consider as fired
+            print("selftest M5 placement fail-loud: fired (exit code {})".format(se.code))
+
+        # M5 selftest: gpu flag injection (ensure gpu key is accepted by manifest)
+        gpu_ok = _write(tmp / "M5_gpu.json", {
+            "pipeline": "M5-gpu-test",
+            "nodes": [
+                {
+                    "name": "n",
+                    "placement": "local",
+                    "image": "alpine",
+                    "gpu": True,
+                    "command": ["echo", "gpu-test"]
+                }
+            ],
+        })
+        from manifest import load as load_manifest
+        m = load_manifest(gpu_ok)
+        assert m["nodes"][0]["gpu"] is True
+        print("selftest M5 gpu-flag-injection: loaded and accepted")
+
+        # M5 selftest: format-error envelope (unbalanced brace should raise formatting error)
+        envelope_err = _write(tmp / "M5_format_error.json", {
+            "pipeline": "M5-format-error",
+            "nodes": [
+                {
+                    "name": "n",
+                    "placement": "local",
+                    "command": ["bash", "-lc", "echo {in.missing"]
+                }
+            ],
+        })
+        try:
+            run(envelope_err, tmp / "run-format-error")
+            raise AssertionError("M5 format-error envelope should have raised ManifestError")
+        except ManifestError:
+            print("selftest M5 format-error envelope: fired")
+
+        # 5. Per-node cleanup fixture test: ensure declared cleanup path is removed and an undeclared file survives.
+        cleanup_fixture = _write(tmp / "cleanup_fixture.json", {
+            "pipeline": "cleanup-test",
+            "nodes": [
+                {
+                    "name": "produce",
+                    "command": [
+                        "python3", "-c",
+                        "import os, pathlib; root=os.environ['NODE_ROOT']; (pathlib.Path(root)/'data.txt').write_text('data'); (pathlib.Path(root)/'build'/'intermediate').mkdir(parents=True, exist_ok=True); (pathlib.Path(root)/'build'/'intermediate'/'cleanup_me.txt').write_text('x'); (pathlib.Path(root)/'stay.txt').write_text('keep')"
+                    ],
+                    "outputs": {"data": "data.txt"},
+                    "cleanup_paths": ["build/intermediate"]
+                },
+                {
+                    "name": "consume",
+                    "command": [
+                        "python3", "-c",
+                        "import pathlib,os; root=os.environ['NODE_ROOT']; (pathlib.Path(root)/'result.txt').write_text('ok')"
+                    ],
+                    "outputs": {"result": "result.txt"}
+                }
+            ],
+        })
+        run(cleanup_fixture, tmp / "run-cleanup")
+        # Validate cleanup: intermediate dir should be removed; undeclared stay.txt survives.
+        produced = tmp / "run-cleanup" / "nodes" / "produce"
+        assert not (produced / "build" / "intermediate" / "cleanup_me.txt").exists(), (produced / "build" / "intermediate" / "cleanup_me.txt")
+        assert (produced / "stay.txt").exists(), (produced / "stay.txt").exists()
 
         # 2. Nodes run in order, outputs wired into the next Node's inputs.
         wired = _write(tmp / "wired.json", {

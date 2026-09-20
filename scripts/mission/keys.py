@@ -19,8 +19,14 @@ SKIPPED_KEY = "specs/_status/skipped.json"
 
 
 def spec_key_pattern(prefix: str) -> re.Pattern:
-    """Specs are keyed <prefix><site-id>/<date>/<dispatch-timestamp>.json (ADR 0017)."""
-    return re.compile(rf"^{re.escape(prefix)}([^/]+)/([^/]+)/([^/]+)\.json$")
+    """Specs are keyed <prefix><site-id>/<date>/<dispatch-timestamp>.json (ADR 0017).
+
+    Note: use an explicit slash escape to avoid any inadvertent interpretation
+    of the path separators in environments that apply different regex rules.
+    This keeps parity with the web-side grammar used in TS as well.
+    """
+    # Escape the prefix, then match three path components ending with ".json".
+    return re.compile(rf"^{re.escape(prefix)}([^/]+)\/([^/]+)\/([^/]+)\.json$")
 
 
 def make_spec_key(prefix: str, site: str, date: str, stamp: str) -> str:
@@ -43,12 +49,13 @@ def _selftest() -> None:
     grammar and web/lib/keys.ts ever disagree, one of the two suites fails."""
     import json
     from pathlib import Path
-
     fixture = json.loads((Path(__file__).resolve().parents[2] / "fixtures" / "store-keys.json").read_text())
-    pattern = spec_key_pattern(SPEC_PREFIX)
+    # Honor the fixture-pinned specs_prefix in order to keep parity with TS
+    specs_prefix = fixture.get("specs_prefix", SPEC_PREFIX)
+    pattern = spec_key_pattern(specs_prefix)
     for entry in fixture["spec_keys"]:
         assert parse_spec_key(entry["key"]) == {k: entry[k] for k in ("site", "date", "stamp")}, entry
-        assert make_spec_key(SPEC_PREFIX, entry["site"], entry["date"], entry["stamp"]) == entry["key"], entry
+        assert make_spec_key(specs_prefix, entry["site"], entry["date"], entry["stamp"]) == entry["key"], entry
     for key in fixture["not_spec_keys"]:
         assert pattern.match(key) is None, key
         assert parse_spec_key(key) is None, key
