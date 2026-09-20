@@ -101,10 +101,7 @@ def main() -> None:
     p.add_argument("--end-with", required=True)
     p.add_argument("--option", action="append", default=[], help="repeatable name=value, passed through to NodeODM/ODM")
     p.add_argument("--timeout-seconds", type=float, default=3 * 3600, help="boundary: a single ODM run may not exceed 3 hours")
-    p.add_argument("--remove-task", action="store_true",
-                   help="remove the NodeODM task once this stage completes -- set this only on the last "
-                        "reconstruct-* stage in the Manifest; every earlier stage must leave the task alone "
-                        "so the next stage's restart can find it")
+    # Remove-task flag deprecated; cleanup is declarative via Manifest
     args = p.parse_args()
 
     task = read_task(args.in_dir)
@@ -131,10 +128,9 @@ def main() -> None:
         faces, cloud_points = count_mesh_faces(zf), count_cloud_points(zf)
     zip_path.unlink()
 
-    if args.remove_task:
-        client.remove(host, task_uuid)
-    else:
-        (args.out / "task.json").write_text(json.dumps(task, indent=1))  # carried forward unchanged for the next stage
+    # Cleanup of the per-stage task is handled declaratively by the Runner.
+    # Do not remove the task payload here to support restart/resume semantics.
+    
 
     print(f"reconstruct: stage {args.rerun_from}->{args.end_with} done" + (f"; extracted {extracted}" if extracted else ""))
 

@@ -264,7 +264,10 @@ def main() -> None:
         current = newest_per_site_date(specs, pattern)
         print(f"{len(specs)} Specs Dispatched, {len(new)} not yet Collected:")
         for name in sorted(specs):
-            site, date, _ = pattern.match(name).groups()
+            m = pattern.match(name)
+            if not m:
+                continue
+            site, date, _ = m.groups()
             tags = ["new" if name in new else "collected"]
             if current.get((site, date)) != name:
                 tags.append("superseded")

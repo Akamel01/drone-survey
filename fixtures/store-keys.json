@@ -31,6 +31,7 @@
     "specs/foo/bar/2026-09-17/20260917T000000Z.json"
   ],
   "drafts_prefix": "specs/_drafts/",
+  "specs_prefix": "specs/",
   "draft_key": {
     "id": "0193abcd",
     "key": "specs/_drafts/0193abcd.json"
