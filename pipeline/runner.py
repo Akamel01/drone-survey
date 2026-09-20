@@ -135,14 +135,14 @@ def run(manifest_path: Path, workdir: Path) -> None:
 
             node_dir(workdir, name).mkdir(parents=True, exist_ok=True)
             inp, out = resolve_paths(workdir, node, nodes_by_name, data.get("inputs"))
-            # 71c: surface formatting errors with context instead of a bare format
+            # A Manifest that formats badly says which Node and what it had to work with.
             try:
                 command = [arg.format(**{"in": inp, "out": out}) for arg in node["command"]]
             except Exception as e:
                 raise ManifestError(
                     f"node '{name}': error formatting command arguments: {e}; inputs={inp}, outputs={out}"
                 ) from e
-            # 71a: honor placement field; only 'local' is supported by this Runner
+            # ADR 0014's remote rungs are parked: refuse them rather than run them here.
             placement = node.get("placement", "local")
             if placement != "local":
                 raise ManifestError(
@@ -155,22 +155,12 @@ def run(manifest_path: Path, workdir: Path) -> None:
                 docker_env: list[str] = []
                 for key in sorted(node_env):
                     docker_env += ["-e", f"{key}={node_env[key]}"]
-                # 71b: GPU-aware docker invocation: pass through GPU flag if requested
-                gpu_requested = False
-                if isinstance(node.get("gpu"), bool) and node["gpu"]:
-                    gpu_requested = True
+                # A Node that declares it needs the card gets it passed through.
                 docker_prefix = ["docker", "run", "--rm"]
-                if gpu_requested:
+                if node.get("gpu"):
                     docker_prefix += ["--gpus", "all"]
                 command = docker_prefix + [*docker_env, "-v", f"{workdir}:{workdir}", node["image"], *command]
 
-            # Inject execution context for the Node; allow Nodes to read
-            # manifest-level facts via EXECUTION_CONTEXT.
-            # Provide each Node with its absolute root directory so inline scripts
-            # can write artifacts within their own node workspace. This enables
-            # robust per-node cleanup tests and restart/resume semantics.
-            # Exposed as NODE_ROOT for scripts that want to drop intermediate data
-            # into the node's own folder. (set after env is created below)
             # Remove this Node's declared outputs first, so "it exists" after the
             # run means this run wrote it: a stale file from an earlier Manifest
             # in the same workdir would otherwise let a silent Node pass.
@@ -182,13 +172,15 @@ def run(manifest_path: Path, workdir: Path) -> None:
                     stale.unlink()
 
             print(f"run {name}: {' '.join(command)}")
-            if node_env:
-                env = {**os.environ, **node_env, "EXECUTION_CONTEXT": json.dumps(execution_context)}
-            else:
-                env = dict(os.environ,)
-                env["EXECUTION_CONTEXT"] = json.dumps(execution_context)
-            # Provide the per-node root directory for artifact creation inside the node's workspace
-            env["NODE_ROOT"] = str(node_dir(workdir, name))
+            # EXECUTION_CONTEXT carries the Manifest's own facts (was there ground
+            # control?); NODE_ROOT is the Node's own directory, so a Node can write
+            # intermediates somewhere cleanup_paths can name.
+            env = {
+                **os.environ,
+                **node_env,
+                "EXECUTION_CONTEXT": json.dumps(execution_context),
+                "NODE_ROOT": str(node_dir(workdir, name)),
+            }
             result = subprocess.run(command, env=env)
 
             if result.returncode != 0:
@@ -208,16 +200,7 @@ def run(manifest_path: Path, workdir: Path) -> None:
 
             state["nodes"][name] = {"status": "done", "returncode": 0}
             # Declarative per-node cleanup after a successful run
-            cleanup_paths = []
-            if isinstance(node, dict):
-                cleanup_paths = node.get("cleanup_paths", []) or []
-                if not cleanup_paths and isinstance(node, dict) and "cleanup" in node:
-                    legacy = node.get("cleanup")
-                    if isinstance(legacy, (list, tuple)):
-                        cleanup_paths = list(legacy)
-                    elif isinstance(legacy, str):
-                        cleanup_paths = [legacy]
-            for rel_path in cleanup_paths:
+            for rel_path in node.get("cleanup_paths", []):
                 if not isinstance(rel_path, str) or not rel_path:
                     continue
                 target = Path(rel_path)
@@ -232,9 +215,7 @@ def run(manifest_path: Path, workdir: Path) -> None:
                     # Outside of node workdir; skip to be safe
                     continue
                 # Do not cleanup declared outputs
-                declared_outputs = []
-                if isinstance(node, dict):
-                    declared_outputs = [node_dir(workdir, name) / rel for rel in (node.get("outputs", {}).values())]
+                declared_outputs = [node_dir(workdir, name) / rel for rel in node.get("outputs", {}).values()]
                 if any(target.resolve() == p.resolve() for p in declared_outputs):
                     continue
                 if target.exists():
@@ -275,21 +256,16 @@ def _selftest() -> None:
     assert validate({"pipeline": "x", "nodes": [{"name": "a", "command": ["echo", "{in.nope}"]}]}), "an undeclared placeholder should be rejected"
     assert validate({"pipeline": "x", "nodes": [{"name": "a", "command": ["echo", "{in.a.b}"]}]}), "a malformed placeholder should be rejected"
     assert not validate({"pipeline": "x", "nodes": [{"name": "a", "command": ["x"]}]}), "a well-formed Manifest should pass"
-    
-    # 3b. T4 interior reference rejection test: ensure {in.x}/<file> form is rejected
+
+    # A placeholder that reaches inside another Node's output directory is the
+    # seam #93 removed; the fixture Manifest exists to be refused.
+    invalid = Path(__file__).resolve().parent / "manifests" / "orthomosaic-invalid.json"
+    assert invalid.is_file(), f"missing fixture {invalid}"
     try:
-        from manifest import load as load_manifest, ManifestError
-        from pathlib import Path
-        # This should raise a ManifestError due to interior path reference
-        load_manifest(Path("pipeline/manifests/orthomosaic-invalid.json"))
-        raise AssertionError("Interior {in.x}/<file> rejection not triggered in selftest")
-    except ManifestError as me:
-        # ensure the error message mentions interior file references
-        assert "interior file references" in str(me), str(me)
-    except FileNotFoundError as fe:
-        raise AssertionError("Fixture orthomosaic-invalid.json is missing") from fe
-    except Exception:
-        raise
+        load_manifest(invalid)
+        raise AssertionError("a {in.x}/<file> reference should have been rejected")
+    except ManifestError as error:
+        assert "interior file references" in str(error), str(error)
 
     with tempfile.TemporaryDirectory() as tmp:
         tmp = Path(tmp)
@@ -307,12 +283,9 @@ def _selftest() -> None:
         })
         try:
             run(placemute, tmp / "run-placemute")
-            raise AssertionError("M5 placement fail-loud should have raised ManifestError")
-        except ManifestError:
-            print("selftest M5 placement fail-loud: fired")
-        except SystemExit as se:
-            # AnySystemExit is acceptable if run decides to exit; consider as fired
-            print("selftest M5 placement fail-loud: fired (exit code {})".format(se.code))
+            raise AssertionError("a non-local placement should have stopped the run")
+        except ManifestError as error:
+            assert "remote-3090" in str(error), str(error)
 
         # M5 selftest: gpu flag injection (ensure gpu key is accepted by manifest)
         gpu_ok = _write(tmp / "M5_gpu.json", {
@@ -327,7 +300,6 @@ def _selftest() -> None:
                 }
             ],
         })
-        from manifest import load as load_manifest
         m = load_manifest(gpu_ok)
         assert m["nodes"][0]["gpu"] is True
         print("selftest M5 gpu-flag-injection: loaded and accepted")
