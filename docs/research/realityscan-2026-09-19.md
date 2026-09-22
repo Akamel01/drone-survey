@@ -29,9 +29,15 @@ them.
 
 ## Executive conclusion
 
-**Verdict: CONDITIONAL GO on a narrow adoption. NO-GO on wholesale replacement.
-The documentation questions are now settled; the execution questions are not,
-and tier 1 still gates everything.**
+**Verdict: CONDITIONAL GO on a narrow adoption. NO-GO on wholesale replacement.**
+Locked 2026-09-22 as
+[ADR 0020](../adr/0020-realityscan-for-poses-not-for-the-ortho-chain.md): adopt
+RealityScan as the splat pose provider, keep ODM for the ortho chain, gate on
+component share, and put the engine version in Job provenance.
+
+Worth stating plainly, because this document could read as more negative than it
+is: **RealityScan passed every gate that was actually tested.** The CONDITIONAL
+is about the tier-2 gates that were never run, not about failures.
 
 ### What re-verification changed
 
@@ -82,35 +88,38 @@ per-job critical path has no GUI step, so gate F3 passes, and the CONDITIONAL
 loses one of its two main reasons.
 
 **2. Headless reconstruction works. Measured, ten times.** This was the single
-biggest open question and it is now closed in RealityScan's favour: T1.2 ran
-`-calculateNormalModel` ten times on an SSH-only host and got ten readable
-meshes, no hangs. The reported failures were environmental, and all three causes
-are now identified — no virtual framebuffer, POSIX paths parsed as commands, and
-an invisible first-run sign-in modal. Details in the capability map; the
-original text below is kept for the record of what was believed beforehand.
+biggest open question and it closed in RealityScan's favour: `-calculateNormalModel`
+ran ten times on an SSH-only host and produced ten readable meshes, no hangs.
 
-~~This is now the single biggest open question.~~ No Epic page addresses the third-party reports of
-`-calculateNormalModel` hanging under headless Linux — but Epic *does* document
-Docker with GPU passthrough, a REST server, a gRPC server and a passive
-notification mode for running `.rscmd` pipelines in a container with no server
-loop. That is evidence for the supported path, not proof the bare CLI is safe.
-And the headless-mode page states plainly that most dialogs can be suppressed
-with `-silent` or `appQuitOnError=true` **but "certain dialogs (e.g., the login
-window) will still require user interaction"** — a container blocking on a login
-window is indistinguishable from a hang. T1.2 runs first and it now has a
-sibling: a licence/login test.
+The reported failures were real but environmental, and all three causes are now
+identified: no virtual framebuffer (Wine's DXGI fails `0x887a0004` without an X
+connection), POSIX paths silently parsed as commands so `-quit` never runs and
+the process idles forever, and an invisible first-run Epic sign-in modal that
+`-headless` does not suppress. The documentation's own warning — *"certain
+dialogs (e.g., the login window) will still require user interaction"* — turned
+out to be the literal blocker, and dismissing it once persists.
 
-**3. The most valuable adoption is still the smallest one.** `-exportRegistration`
-is a real command, `-importColmap` is a real command, and RealityScan's native
-distortion model is `sfmDistortionModel`, **default `Brown3`** — which is exactly
-the `projection_type == "brown"` that `principal_point_survived()` in
-[`nodes/solve/solve.py:114`](../../nodes/solve/solve.py) demands. What the
-documentation does **not** state is whether the COLMAP writer preserves a
-per-camera principal point or pins it to the image centre on the way out. That is
-the same defect ADR 0004 records, one tool along. Epic publishes a PDF —
-*"On the Coordinate Systems Employed in the Import, Estimation, and Export of
-Camera Geometry by RealityScan"* — that settles it. **Get that PDF before
-adopting this path**; the existing guard is the acceptance test either way.
+**3. The most valuable adoption is still the smallest one, and it is measured.**
+`-exportRegistration <name>.json` writes a nerfstudio `transforms.json` directly
+— not COLMAP-then-convert — so `ns-process-data odm` leaves the chain entirely,
+and with it the conversion ADR 0004 records as degrading silently. Principal
+point sits at the image centre in 9/9 frames with zero distortion, which looks
+like ADR 0004's defect and is its opposite: the exporter undistorts per camera,
+so each frame carries its own dimensions and focal length and the calibration is
+applied to the pixels rather than discarded.
+
+Two consequences. `principal_point_survived()` does **not** apply to this output
+and must not be relaxed to fit it — it needs a sibling keyed on whether the
+images were undistorted. And the export inherits the coverage instability in
+finding 4, having carried 9 of 20 images from an unstable component split.
+
+**4. The engine is non-deterministic, and it varies coverage rather than
+tessellation.** Ten identical runs produced ten meshes spanning 17.6% mean
+bounding-box drift, because alignment splits into a different number of
+components each run (3/2/2 at 20 images, 6/7 at 122) and `-selectMaximalComponent`
+takes whichever is largest. Every run exited 0 with a clean million-face mesh.
+Gating on the selected component's **share of registered images** is the single
+most valuable thing this investigation produced.
 
 ### What would force NO-GO
 
