@@ -11,7 +11,7 @@ response is not proof of a good upload).
 
 Credentials come from an env file (KEY=VALUE lines), default
 ~/.config/wayfinder/b2-delivery.env, holding B2_KEY_ID and
-B2_APPLICATION_KEY. That file's contents are never printed. Without it (or
+B2_APP_KEY. That file's contents are never printed. Without it (or
 without both keys in it), a real run refuses outright rather than failing
 silently or partway through; --dry-run needs no credentials at all, since
 the bucket and key this ticket targets do not exist yet.
@@ -55,10 +55,10 @@ def read_credentials(path: Path) -> tuple[str, str]:
         k, v = k.strip(), v.strip().strip("'\"")
         if k == "B2_KEY_ID":
             key_id = v
-        elif k == "B2_APPLICATION_KEY":
+        elif k == "B2_APP_KEY":
             app_key = v
     if not key_id or not app_key:
-        sys.exit(f"refusing to publish: {path} is missing B2_KEY_ID and/or B2_APPLICATION_KEY")
+        sys.exit(f"refusing to publish: {path} is missing B2_KEY_ID and/or B2_APP_KEY")
     return key_id, app_key
 
 
@@ -148,11 +148,11 @@ def publish(bundle_dir: Path, manifest: dict, bucket: str, creds_path: Path) -> 
 def main() -> None:
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("--bundle", required=True, help="a Bundle directory built by nodes/bundle/build.py")
-    p.add_argument("--bucket", required=True, help="the B2 bucket name, e.g. wayfinder-delivery-bundles")
+    p.add_argument("--bucket", required=True, help="the B2 bucket name, e.g. wayfinder-delivery-ca-east")
     p.add_argument(
         "--creds",
         default=os.environ.get("WAYFINDER_B2_DELIVERY_CREDS", str(Path.home() / ".config" / "wayfinder" / "b2-delivery.env")),
-        help="env file with B2_KEY_ID / B2_APPLICATION_KEY (never printed)",
+        help="env file with B2_KEY_ID / B2_APP_KEY (never printed)",
     )
     p.add_argument("--dry-run", action="store_true", help="print the upload plan; no network request")
     args = p.parse_args()
