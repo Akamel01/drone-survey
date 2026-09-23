@@ -63,8 +63,25 @@
   color: var(--warn);
 }
 
+/* An entry the store could not read. Saying so is the point: the old code
+   returned an empty list and said nothing (issue #125). */
+.skipped {
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--warn);
+  margin: 0 0 8px;
+}
+
+.note {
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-dim);
+  margin-top: 6px;
+}
+
 .entryActions {
   display: flex;
+  flex-wrap: wrap;
   gap: 6px;
 }
 

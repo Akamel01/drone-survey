@@ -7,15 +7,30 @@ import styles from "./SavedMissions.module.css";
 
 interface SavedMissionsProps {
   missions: SavedMission[];
+  /** Stored entries the store could not read. Shown, never swallowed. */
+  skipped: number;
   onLoad: (spec: MissionSpec) => void;
   onDelete: (saved_at: string) => void;
 }
 
 const coord = (p: [number, number] | null) => (p ? `${p[0].toFixed(5)}, ${p[1].toFixed(5)}` : null);
 
-export default function SavedMissions({ missions, onLoad, onDelete }: SavedMissionsProps) {
+export default function SavedMissions({ missions, skipped, onLoad, onDelete }: SavedMissionsProps) {
   const [importErrors, setImportErrors] = useState<{ [key: string]: string }>({});
   const [importing, setImporting] = useState<string | null>(null);
+  const [notes, setNotes] = useState<{ [key: string]: string }>({});
+
+  // Loading a Mission only ever writes the editor: it reads the saved list and
+  // changes nothing in it. The note exists because a Load whose result already
+  // matches the editor is otherwise indistinguishable from a Load that did
+  // nothing, which is how a Mission looked lost (issue #125).
+  const handleLoad = (m: SavedMission) => {
+    onLoad(toMissionSpec(m));
+    setNotes((n) => ({
+      ...n,
+      [m.saved_at]: `Loaded “${m.site || "Untitled"}” into the editor. It is still saved here.`,
+    }));
+  };
 
   // Import handler
   const handleImport = async function (m: SavedMission) {
@@ -73,6 +88,20 @@ export default function SavedMissions({ missions, onLoad, onDelete }: SavedMissi
   return (
     <details className={styles.details}>
       <summary>Saved missions ({missions.length})</summary>
+      {skipped > 0 && (
+        <p className={styles.skipped}>
+          {skipped} stored {skipped === 1 ? "entry" : "entries"} could not be read and{" "}
+          {skipped === 1 ? "is" : "are"} not listed. Every readable Mission is shown, and nothing was
+          overwritten.
+          {missions.length === 0 && (
+            <>
+              {" "}
+              The stored data is kept as it was, under{" "}
+              <span className="mono">drone-planner.saved-missions.unreadable</span>.
+            </>
+          )}
+        </p>
+      )}
       {missions.length === 0 ? (
         <p className={styles.empty}>No saved missions yet.</p>
       ) : (
@@ -119,11 +148,12 @@ export default function SavedMissions({ missions, onLoad, onDelete }: SavedMissi
                 {home ? `Home ${home}` : "No home point set"}
               </div>
               <div className={styles.entryActions}>
-                <button onClick={() => onLoad(toMissionSpec(m))}>Load</button>
+                <button onClick={() => handleLoad(m)}>Load</button>
                 <button onClick={() => downloadMission(toMissionSpec(m))}>Download</button>
                 <button onClick={() => onDelete(m.saved_at)}>Delete</button>
                 <button onClick={() => handleImport(m)} disabled={importing === m.saved_at}>Import</button>
               </div>
+              {notes[m.saved_at] && <div className={styles.note}>{notes[m.saved_at]}</div>}
               {importErrors[m.saved_at] && (
                 <div style={{ color: 'red', fontSize: 12, marginTop: 6 }}>{importErrors[m.saved_at]}</div>
               )}
