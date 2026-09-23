@@ -318,6 +318,20 @@ def _selftest() -> None:
             pass  # the writer may still refuse this fixture; the directory is the point
         assert missing.is_dir(), "build() must create the directory it writes into"
 
+        # The shape report_loaded() is handed matches what _group_by_spec returns.
+        grouped = _group_by_spec([
+            (specs / "a.json", "WAYFINDER 1", {"name": "A", "waypoints": 3}),
+            (specs / "a.json", "WAYFINDER 2", {"name": "A2", "waypoints": 2}),
+            (specs / "b.json", "WAYFINDER 3", {"name": "B", "waypoints": 7}),
+        ])
+        assert [(spec.name, [c for c, _ in group]) for spec, group in grouped] == [
+            ("a.json", ["WAYFINDER 1", "WAYFINDER 2"]),
+            ("b.json", ["WAYFINDER 3"]),
+        ], grouped
+        for _, group in grouped:
+            for card, part in group:  # two values, not three
+                assert isinstance(card, str) and "waypoints" in part
+
         # Sequential card assignment across missions, oldest first.
         fake = [
             (specs / "a.json", [{"name": "A", "waypoints": 10}, {"name": "A2", "waypoints": 5}]),
@@ -406,8 +420,12 @@ def main() -> None:
         (backups / "cards.txt").write_text(sheet + "\n")
         done = json.loads(LOADED.read_text()) if LOADED.exists() else []
         LOADED.write_text(json.dumps(done + [str(spec) for spec, _, _ in loaded], indent=1))
-        report_loaded(args.status_config, [(spec_key(spec), [(c, p) for _, c, p in group])
-                                           for spec, group in _group_by_spec(loaded)])
+        # _group_by_spec already yields (card, part) pairs; re-unpacking them as
+        # triples raised ValueError *after* the cards were written and read back,
+        # so a Load that fully succeeded reported nothing and the Status tab
+        # showed it as never Loaded.
+        report_loaded(args.status_config,
+                      [(spec_key(spec), group) for spec, group in _group_by_spec(loaded)])
         print(time.strftime("%Y-%m-%d %H:%M:%S"), ", ".join(str(s) for s in queue))
         print(sheet)
         print("Close and reopen each card's waypoint editor on the Controller to load it.")
