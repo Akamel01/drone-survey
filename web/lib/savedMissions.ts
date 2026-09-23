@@ -5,6 +5,7 @@
 // Mission and is consumed by scripts/mission/make_mission.py.
 
 import { DEFAULT_SPEC, slugSegment, type MissionSpec } from "./spec.ts";
+import type { StatusRow } from "./missions.ts";
 
 const STORAGE_KEY = "drone-planner.saved-missions";
 // Where a blob that stopped parsing is kept. Without this the next save
@@ -18,6 +19,12 @@ export type SavedMission = MissionSpec & {
    *  is kept either way — a 200 from the drafts route is the writer's own word
    *  that it landed, which ADR 0018 says is not evidence (issue #124). */
   sent_at?: string;
+  /** The draft id the shared store gave this Mission when it was sent there.
+   *  This is the only link between a saved entry and the Spec it was later
+   *  Dispatched as: the draft record carries `dispatched_key`, so the chain is
+   *  saved entry to draft id to Spec key, every step recorded, none inferred
+   *  from Site name and date (issue #127). Absent on anything sent before. */
+  draft_id?: string;
 };
 
 /**
@@ -122,6 +129,7 @@ function readRaw(): SavedMissionsRead {
         ...normalizeSpec(e),
         saved_at: typeof e.saved_at === "string" ? e.saved_at : new Date(0).toISOString(),
         ...(typeof e.sent_at === "string" ? { sent_at: e.sent_at } : {}),
+        ...(typeof e.draft_id === "string" ? { draft_id: e.draft_id } : {}),
       });
     } catch {
       skipped += 1;
@@ -165,12 +173,124 @@ export function deleteMission(saved_at: string): SavedMissionsRead {
 
 /** Records that a Mission was sent to Mission status, keeping the local copy.
  *  The saved list is the operator's own copy; a send is not a reason to take
- *  it away from them (issue #124). */
-export function markMissionSent(saved_at: string, sent_at = new Date().toISOString()): SavedMissionsRead {
+ *  it away from them (issue #124).
+ *
+ *  The draft id is recorded here because this is the only moment it exists:
+ *  the drafts route mints it and hands it back, and nothing else ever ties
+ *  this entry to the store (issue #127). */
+export function markMissionSent(
+  saved_at: string,
+  sent_at = new Date().toISOString(),
+  draft_id?: string,
+): SavedMissionsRead {
   const read = readRaw();
-  read.missions = read.missions.map((m) => (m.saved_at === saved_at ? { ...m, sent_at } : m));
+  read.missions = read.missions.map((m) =>
+    m.saved_at === saved_at ? { ...m, sent_at, ...(draft_id ? { draft_id } : {}) } : m,
+  );
   writeRaw(read.missions);
   return sorted(read);
+}
+
+/** Replaces one saved entry's Spec in place, keeping its identity (saved_at)
+ *  and its link to the store. Called only once `savedMissionState` says this
+ *  entry may be overwritten, or after its Dispatched Spec was withdrawn. */
+export function overwriteMission(saved_at: string, spec: MissionSpec): SavedMissionsRead {
+  const read = readRaw();
+  read.missions = read.missions.map((m) => (m.saved_at === saved_at ? { ...m, ...spec, saved_at } : m));
+  writeRaw(read.missions);
+  return sorted(read);
+}
+
+/**
+ * Where a saved Mission has got to, read from the store's own status rows.
+ *
+ * - `draft`      never sent anywhere; the planner owns it outright.
+ * - `sent`       a draft exists in the shared store, nothing is Dispatched.
+ * - `dispatched` a Spec exists and the host may Load it at any moment.
+ * - `loaded`     the host has taken it; a KMZ may be on the Controller already.
+ * - `unknown`    it left the planner, but this copy cannot be tied to what it
+ *                became. Treated as strictly as `dispatched`, because the
+ *                alternative is permitting an overwrite that silently
+ *                desynchronises the planner from the field.
+ */
+export type SavedState = "draft" | "sent" | "dispatched" | "loaded" | "unknown";
+
+export interface SavedStatus {
+  state: SavedState;
+  /** The Spec key an overwrite has to withdraw, when it is known. */
+  dispatched_key: string | null;
+  /** True when saving over this entry changes nothing outside the planner. */
+  can_overwrite: boolean;
+  /** Why not, in the operator's words. Null when `can_overwrite`. */
+  why_not: string | null;
+}
+
+const FREE: SavedStatus = { state: "draft", dispatched_key: null, can_overwrite: true, why_not: null };
+
+/**
+ * Joins a saved entry to the status rows by recorded id, never by Site name
+ * and date. Pass `rows: null` when the store was not read (not configured,
+ * not authorised, offline): an entry that was sent then reads as `unknown`
+ * rather than as a free draft, so a failed read can never unlock an overwrite.
+ */
+export function savedMissionState(m: SavedMission, rows: StatusRow[] | null): SavedStatus {
+  // Never sent: nothing outside the planner can disagree with it.
+  if (!m.sent_at && !m.draft_id) return FREE;
+
+  const unknown = (why: string): SavedStatus => ({
+    state: "unknown",
+    dispatched_key: null,
+    can_overwrite: false,
+    why_not: why,
+  });
+
+  if (!m.draft_id) {
+    // Sent before issue #127, so no id was kept. The Spec it became cannot be
+    // named from here, and so cannot be withdrawn from here either.
+    return unknown(
+      "This Mission was sent to Mission status before the planner recorded which draft it became, so it cannot be told apart from what is in the store. Save it as a new Mission, and withdraw the old one from Mission status by hand if it is still waiting.",
+    );
+  }
+  if (rows === null) {
+    return unknown("Mission status could not be read, so what became of this Mission is not known.");
+  }
+
+  const draft = rows.find((r) => r.kind === "draft" && r.id === m.draft_id);
+  if (!draft) {
+    return unknown(
+      "The draft this Mission was sent as is no longer in the store. Deleting a draft leaves its Dispatched Spec behind, so there may still be one, and it cannot be named from here.",
+    );
+  }
+  if (!draft.dispatched_key) {
+    // A draft in the store and nothing more. Nothing has been handed to the
+    // host, so editing in place is honest.
+    return { state: "sent", dispatched_key: null, can_overwrite: true, why_not: null };
+  }
+
+  const spec = rows.find((r) => r.kind === "spec" && r.id === draft.dispatched_key);
+  if (!spec) {
+    return unknown("Its Dispatched Spec is not in the status list, so its state is not known.");
+  }
+  if (spec.state === "withdrawn") {
+    // Already withdrawn: the host will not Load it, so nothing in the field
+    // depends on this entry any more.
+    return { state: "sent", dispatched_key: spec.id, can_overwrite: true, why_not: null };
+  }
+  if (spec.state === "loaded" || spec.state === "collected") {
+    return {
+      state: "loaded",
+      dispatched_key: spec.id,
+      can_overwrite: false,
+      why_not:
+        "It has already been Loaded onto the Controller, which is past the point a withdrawal can reach.",
+    };
+  }
+  return {
+    state: "dispatched",
+    dispatched_key: spec.id,
+    can_overwrite: false,
+    why_not: "It has been Dispatched, and the host may Load it at any moment.",
+  };
 }
 
 export function slug(s: string) {

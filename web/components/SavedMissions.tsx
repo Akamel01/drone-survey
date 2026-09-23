@@ -1,7 +1,8 @@
 "use client";
 
 import type { MissionSpec } from "@/lib/spec";
-import { downloadMission, toMissionSpec, type SavedMission } from "@/lib/savedMissions";
+import { downloadMission, toMissionSpec, savedMissionState, type SavedMission } from "@/lib/savedMissions";
+import type { StatusRow } from "@/lib/missions";
 import { noteMissionsChanged } from "@/lib/actions";
 import React, { useState } from "react";
 import styles from "./SavedMissions.module.css";
@@ -10,15 +11,40 @@ interface SavedMissionsProps {
   missions: SavedMission[];
   /** Stored entries the store could not read. Shown, never swallowed. */
   skipped: number;
-  onLoad: (spec: MissionSpec) => void;
+  /** Mission status as last read, or null when it could not be read at all.
+   *  Null is not "nothing is Dispatched" and is never treated as such. */
+  rows: StatusRow[] | null;
+  /** Why the status rows are missing, when they are. */
+  rowsProblem: string | null;
+  /** The saved entry the editor is currently editing, if any. */
+  editing: string | null;
+  onLoad: (spec: MissionSpec, saved_at: string) => void;
   onDelete: (saved_at: string) => void;
-  /** Records that this Mission reached Mission status. The local copy stays. */
-  onSent: (saved_at: string) => void;
+  /** Records that this Mission reached Mission status, and the draft id it
+   *  became there — the only link back to what it is later Dispatched as. */
+  onSent: (saved_at: string, draft_id?: string) => void;
 }
 
 const coord = (p: [number, number] | null) => (p ? `${p[0].toFixed(5)}, ${p[1].toFixed(5)}` : null);
 
-export default function SavedMissions({ missions, skipped, onLoad, onDelete, onSent }: SavedMissionsProps) {
+const STATE_LABEL: Record<string, string> = {
+  draft: "Not sent",
+  sent: "Draft in Mission status",
+  dispatched: "Dispatched",
+  loaded: "Loaded onto the Controller",
+  unknown: "State not known",
+};
+
+export default function SavedMissions({
+  missions,
+  skipped,
+  rows,
+  rowsProblem,
+  editing,
+  onLoad,
+  onDelete,
+  onSent,
+}: SavedMissionsProps) {
   const [notes, setNotes] = useState<{ [key: string]: string }>({});
   const [errors, setErrors] = useState<{ [key: string]: string }>({});
   const [sending, setSending] = useState<string | null>(null);
@@ -46,7 +72,7 @@ export default function SavedMissions({ missions, skipped, onLoad, onDelete, onS
   // result already matches the editor is otherwise indistinguishable from a
   // Load that did nothing.
   const handleLoad = (m: SavedMission) => {
-    onLoad(toMissionSpec(m));
+    onLoad(toMissionSpec(m), m.saved_at);
     say(m.saved_at, `Loaded “${m.site || "Untitled"}” into the editor. It is still saved here.`);
   };
 
@@ -79,7 +105,18 @@ export default function SavedMissions({ missions, skipped, onLoad, onDelete, onS
         // A Mission status view open in another window must show this draft
         // now, not at its next five-minute poll (issue #126).
         noteMissionsChanged();
-        onSent(m.saved_at);
+        // The id the store minted is kept on the saved entry. It is the only
+        // thing that will later tie this copy to the Spec it is Dispatched
+        // as; nothing reconstructs it from the Site name and date (#127).
+        let draftId: string | undefined;
+        try {
+          const body = await resp.json();
+          if (typeof body?.draft?.id === "string") draftId = body.draft.id;
+        } catch {
+          // No id back: the entry records the send without the link, and
+          // reads as "state not known" rather than as a free draft.
+        }
+        onSent(m.saved_at, draftId);
         say(m.saved_at, `“${name}” is now a draft under Mission status. Your saved copy is kept.`);
       } else {
         // The drafts route refuses a Spec it cannot file — an unnamed Site is
@@ -111,8 +148,16 @@ export default function SavedMissions({ missions, skipped, onLoad, onDelete, onS
   };
 
   return (
-    <details className={styles.details}>
-      <summary>Saved missions ({missions.length})</summary>
+    // A standing list, not a drawer. It was a <details> and closed itself on
+    // every re-render, so the list the operator works from kept vanishing
+    // (issue #127).
+    <section className={styles.list}>
+      {missions.length > 0 && (
+        <p className={styles.heading}>
+          {missions.length} saved {missions.length === 1 ? "mission" : "missions"}
+        </p>
+      )}
+      {rowsProblem && <p className={styles.skipped}>{rowsProblem}</p>}
       {skipped > 0 && (
         <p className={styles.skipped}>
           {skipped} stored {skipped === 1 ? "entry" : "entries"} could not be read and{" "}
@@ -133,19 +178,33 @@ export default function SavedMissions({ missions, skipped, onLoad, onDelete, onS
         missions.map((m) => {
           const home = coord(m.home);
           const isOrbit = m.mission_type === "orbit";
+          const status = savedMissionState(m, rows);
           return (
-            <div key={m.saved_at} className={styles.entry}>
+            <div
+              key={m.saved_at}
+              className={`${styles.entry} ${editing === m.saved_at ? styles.editing : ""}`}
+            >
               <div className={styles.entryHead}>
                 <strong>{m.site || "Untitled"}</strong>
                 <span className="mono">{m.date}</span>
               </div>
               <div className={styles.savedAt}>
                 {isOrbit ? "Orbit" : "Grid"} · saved {new Date(m.saved_at).toLocaleString()}
+                {editing === m.saved_at ? " · open in the editor" : ""}
               </div>
+              {/* Whether this Mission has left the planner decides whether the
+                  editor may save over it, so it is stated on the entry itself
+                  rather than only in the Save control (issue #127). */}
+              {status.state !== "draft" && (
+                <div className={status.can_overwrite ? styles.sent : styles.locked}>
+                  {STATE_LABEL[status.state]}
+                  {status.why_not ? `. ${status.why_not}` : ""}{" "}
+                  <a href="/plan/mission_status">open Mission status</a>
+                </div>
+              )}
               {m.sent_at && (
                 <div className={styles.sent}>
-                  Sent to Mission status {new Date(m.sent_at).toLocaleString()} ·{" "}
-                  <a href="/plan/mission_status">open Mission status</a>
+                  Sent to Mission status {new Date(m.sent_at).toLocaleString()}
                 </div>
               )}
               <div className={styles.meta}>
@@ -192,6 +251,6 @@ export default function SavedMissions({ missions, skipped, onLoad, onDelete, onS
           );
         })
       )}
-    </details>
+    </section>
   );
 }
