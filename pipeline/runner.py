@@ -111,6 +111,46 @@ def save_state(workdir: Path, state: dict) -> None:
     (workdir / "state.json").write_text(json.dumps(state, indent=1))
 
 
+# Another project's containers share this GPU and pin an embedding model to it
+# with keep_alive=-1, leaving under 5 GiB of 12 GiB for Fitting (#40). Ollama
+# reloads a model on its next request, so unloading before a run costs that
+# project one cold start and costs us nothing. Best effort by design: a host
+# without the container, or without Docker, is not an error here.
+OLLAMA_CONTAINER = os.environ.get("RUNNER_OLLAMA_CONTAINER", "sme_ollama")
+
+
+def loaded_ollama_models(listing: str) -> list[str]:
+    """Model names from `ollama ps` output, header and blank lines dropped."""
+    names = []
+    for line in listing.splitlines()[1:]:
+        fields = line.split()
+        if fields and fields[0] != "NAME":
+            names.append(fields[0])
+    return names
+
+
+def free_gpu_memory(container: str = OLLAMA_CONTAINER) -> list[str]:
+    """Unload every model Ollama holds on the GPU. Returns what was unloaded."""
+    def ollama(*args: str) -> subprocess.CompletedProcess | None:
+        try:
+            return subprocess.run(
+                ["docker", "exec", container, "ollama", *args],
+                capture_output=True, text=True, timeout=60,
+            )
+        except (OSError, subprocess.SubprocessError):
+            return None
+
+    listing = ollama("ps")
+    if listing is None or listing.returncode != 0:
+        return []
+    unloaded = []
+    for model in loaded_ollama_models(listing.stdout):
+        stopped = ollama("stop", model)
+        if stopped is not None and stopped.returncode == 0:
+            unloaded.append(model)
+    return unloaded
+
+
 def run(manifest_path: Path, workdir: Path) -> None:
     """Run every Node in order; resume past ones already marked done."""
     data = load_manifest(manifest_path)
@@ -126,6 +166,10 @@ def run(manifest_path: Path, workdir: Path) -> None:
 
     acquire_lock()
     try:
+        unloaded = free_gpu_memory()
+        if unloaded:
+            print(f"freed GPU memory: unloaded {', '.join(unloaded)}")
+
         execution_context = get_execution_context(data)
         for node in data["nodes"]:
             name = node["name"]
@@ -266,6 +310,15 @@ def _selftest() -> None:
         raise AssertionError("a {in.x}/<file> reference should have been rejected")
     except ManifestError as error:
         assert "interior file references" in str(error), str(error)
+
+    # N. GPU unload reads `ollama ps` without mistaking its header for a model.
+    from runner import loaded_ollama_models
+    assert loaded_ollama_models("NAME    ID    SIZE    PROCESSOR    CONTEXT    UNTIL\n") == [], "an empty listing holds no models"
+    assert loaded_ollama_models(
+        "NAME                  ID              SIZE      PROCESSOR    CONTEXT    UNTIL\n"
+        "qwen3-embedding:8b    64b933495768    6.2 GB    100% GPU     4096       Forever\n"
+    ) == ["qwen3-embedding:8b"], "a loaded model should be named"
+    assert free_gpu_memory("no-such-container-xyzzy") == [], "a missing container is not an error"
 
     with tempfile.TemporaryDirectory() as tmp:
         tmp = Path(tmp)

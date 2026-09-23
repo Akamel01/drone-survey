@@ -127,6 +127,12 @@ def assign(parts: list[dict], available: list[tuple[str, str]]) -> list[tuple[st
 
 def build(spec: Path, out_dir: Path) -> list[dict]:
     """Run the one KMZ writer and return its per-part report."""
+    # The queue path gives each Spec its own subdirectory so two missions'
+    # parts cannot collide on `mission.kmz`; that subdirectory does not exist
+    # yet. Created here rather than at each call site because the writer's
+    # failure is a bare FileNotFoundError from inside zipfile, which reads as
+    # "make_mission.py is broken" and cost a field Load to diagnose.
+    out_dir.mkdir(parents=True, exist_ok=True)
     done = subprocess.run(
         [sys.executable, str(HERE / "make_mission.py"), "--spec", str(spec), "--out", str(out_dir / "mission.kmz")],
         capture_output=True, text=True,
@@ -300,6 +306,17 @@ def _selftest() -> None:
         assert unloaded_queue(specs, record) == []  # withdrawn newest: the older sibling stays unloaded
         (specs / "_status" / "skipped.json").unlink()
         assert unloaded_queue(specs, record) == [newer]  # un-withdrawn / missing file: full queue
+
+        # build() creates the directory it is handed: the queue path passes one
+        # per Spec that does not exist yet, and only that path does.
+        missing = tmp / "never-created" / "deeper"
+        spec_for_build = specs / "rehearsal" / "2026-09-13" / "20260913T000000Z.json"
+        assert not missing.exists()
+        try:
+            build(spec_for_build, missing)
+        except SystemExit:
+            pass  # the writer may still refuse this fixture; the directory is the point
+        assert missing.is_dir(), "build() must create the directory it writes into"
 
         # Sequential card assignment across missions, oldest first.
         fake = [

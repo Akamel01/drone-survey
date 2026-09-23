@@ -9,9 +9,9 @@
     },
     {
       "name": "publish",
-      "command": ["python3", "nodes/publish/publish.py", "--bundle", "{in.bundle}", "--bucket", "wayfinder-delivery-bundles", "--dry-run"],
+      "command": ["python3", "nodes/publish/publish.py", "--bundle", "{in.bundle}", "--bucket", "wayfinder-delivery-ca-east"],
       "inputs": {"bundle": {"node": "bundle", "output": "bundle"}},
-      "notes": "--dry-run is hardcoded: the delivery bucket and its application key do not exist yet (docs/business/object-storage-setup.md). Remove --dry-run once they do, and confirm 'wayfinder-delivery-bundles' against the operator's actual bucket name."
+      "notes": "Publishes for real. The bucket wayfinder-delivery-ca-east exists in B2 CA-East, is allPrivate with SSE-B2, and carries the CORS rules the viewer needs. Credentials come from ~/.config/wayfinder/b2-delivery.env on the machine that runs this."
     }
   ]
 }
