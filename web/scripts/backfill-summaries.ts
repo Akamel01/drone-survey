@@ -1,12 +1,14 @@
 // One-off backfill: Specs Dispatched before dispatch-time summaries existed have
 // no entry in specs/_status/summaries.json, so the Status tab shows no point
-// count or distance for them. This recomputes those numbers from each Spec body
+// count or distance for them, and a summary written before part counts
+// existed leaves the Status tab unable to predict which card a waiting
+// Mission will Load into (#128). This recomputes those numbers from each Spec body
 // using the same preview() the planner uses — never a second implementation.
 //
 //   cd web && node --env-file=.env.local scripts/backfill-summaries.ts
 //
 // Reads Specs; writes only specs/_status/summaries.json. Safe to re-run: it
-// skips keys that already have a summary.
+// skips keys whose summary already carries a part count.
 import { authorize, b2Env, b2ReadEnv, downloadFile, listFiles, uploadFile } from "../lib/b2.ts";
 import { SPECS_PREFIX, SUMMARIES_KEY, parseSpecKey } from "../lib/keys.ts";
 import type { SpecSummary } from "../lib/missions.ts";
@@ -34,7 +36,11 @@ async function main(): Promise<void> {
   for (const f of files) {
     const key = f.fileName;
     if (!parseSpecKey(key)) continue; // drafts and _status are not Specs
-    if (summaries[key]) continue;
+    // A summary written before part counts existed is the whole reason the
+    // Status tab cannot predict a card for an already-Dispatched Mission, so
+    // "already has a summary" is not a reason to skip it -- "already has a
+    // part count" is.
+    if (summaries[key]?.parts != null) continue;
     const raw = await downloadFile(read, writeEnv.bucket, key);
     if (!raw) continue;
     let spec: MissionSpec;
@@ -52,6 +58,7 @@ async function main(): Promise<void> {
       console.error(`skipped (unexpected aoi shape): ${key}`);
       continue;
     }
+    const had = summaries[key] != null;
     const p = preview(spec);
     summaries[key] = {
       photo_count: p.photo_count,
@@ -59,7 +66,7 @@ async function main(): Promise<void> {
       parts: p.parts,
     };
     added++;
-    console.log(`added ${p.photo_count} points · ${p.path_length_m.toFixed(1)} m  ${key}`);
+    console.log(`${had ? "filled in" : "added"} ${p.photo_count} points · ${p.path_length_m.toFixed(1)} m · ${p.parts} part(s)  ${key}`);
   }
 
   await uploadFile(write, SUMMARIES_KEY, Buffer.from(JSON.stringify(summaries, null, 2)));
