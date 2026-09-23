@@ -1,10 +1,20 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { DEFAULT_SPEC, type MissionSpec } from "@/lib/spec";
 import { stampToIso } from "@/lib/keys";
 import type { MissionState, StatusRow } from "@/lib/missions";
 import { isSpecWithdrawable, isWithdrawn, isDraftDeletable } from "@/lib/missions";
+import {
+  IDLE,
+  MISSIONS_CHANGED_KEY,
+  beginAction,
+  endAction,
+  isRunning,
+  noteMissionsChanged,
+  type ActionResult,
+  type ActionState,
+} from "@/lib/actions";
 import styles from "./MissionStatus.module.css";
 
 // The mission console: every mission from the server store and every
@@ -38,8 +48,11 @@ export default function MissionStatus({ spec, onLoadMission, allowSave = true }:
   // Draft previews cache removed: compute inline previews during render.
   const [passphrase, setPassphrase] = useState<string | null>(null);
   const [status, setStatus] = useState<FetchState>({ kind: "loading" });
-  const [busy, setBusy] = useState<string | null>(null);
-  const [notice, setNotice] = useState<string | null>(null);
+  // One action at a time, reported where the operator pressed it.
+  const [action, setAction] = useState<ActionState>(IDLE);
+  const inFlight = useRef(false);
+  // While one write is in flight no control takes a second one.
+  const busy = action.running !== null;
   // Console controls (ticket #60): all client-side over the joined rows.
   const [query, setQuery] = useState("");
   const [stateFilter, setStateFilter] = useState<string>("all");
@@ -79,39 +92,45 @@ export default function MissionStatus({ spec, onLoadMission, allowSave = true }:
       if (!document.hidden) load(key);
     };
     document.addEventListener("visibilitychange", refresh);
+    // A write from another window of this planner (an Import from the map tab,
+    // a second browser): react to the write instead of waiting out the
+    // interval. `storage` fires only in the *other* windows, so this costs a
+    // transaction only when something actually changed.
+    const onWrite = (e: StorageEvent) => {
+      if (e.key === MISSIONS_CHANGED_KEY) load(key);
+    };
+    window.addEventListener("storage", onWrite);
     const t = setInterval(refresh, 300000);
     return () => {
       clearInterval(t);
       document.removeEventListener("visibilitychange", refresh);
+      window.removeEventListener("storage", onWrite);
     };
   }, [load]);
 
-  async function act(label: string, fn: () => Promise<Response>) {
-    if (!passphrase) return;
-    setBusy(label);
-    setNotice(null);
+  // The five-minute poll is far too slow to be an action's feedback, so every
+  // action reports its own outcome on the row it was pressed on and refreshes
+  // the view from the store the moment it finishes.
+  async function act(label: string, on: string, fn: () => Promise<Response>) {
+    if (!passphrase || inFlight.current) return;
+    inFlight.current = true;
+    setAction((s) => beginAction(s, label, on));
+    let result: ActionResult;
     try {
       const res = await fn();
       const body = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        setNotice(`${label} failed: ${body.error ?? res.status}`);
-      } else if (body.key) {
-        setNotice(`${label}: ${body.key}`);
-      } else if (body.deleted) {
-        setNotice(`${label}: draft removed (its Dispatched Spec, if any, stays in the store)`);
-      } else if (body.draft) {
-        setNotice(`${label}: draft saved`);
-      }
-      await load(passphrase);
+      result = res.ok ? { ok: true, body } : { ok: false, status: res.status, body };
+      if (res.ok) noteMissionsChanged();
     } catch (err) {
-      setNotice(`${label} failed: ${err instanceof Error ? err.message : "unknown"}`);
-    } finally {
-      setBusy(null);
+      result = { ok: false, threw: err instanceof Error ? err.message : "unknown" };
     }
+    inFlight.current = false;
+    setAction((s) => endAction(s, label, on, result));
+    await load(passphrase);
   }
 
   const saveDraft = () =>
-    act("Save draft", () =>
+    act("Save draft", "", () =>
       fetch("/api/drafts", {
         method: "POST",
         headers: { "Content-Type": "application/json", "x-wayfinder-key": passphrase! },
@@ -120,7 +139,7 @@ export default function MissionStatus({ spec, onLoadMission, allowSave = true }:
     );
 
   const dispatchDraft = (id: string, draftSpec: MissionSpec) =>
-    act("Dispatch", () =>
+    act("Dispatch", id, () =>
       fetch("/api/dispatch", {
         method: "POST",
         headers: { "Content-Type": "application/json", "x-wayfinder-key": passphrase! },
@@ -130,7 +149,7 @@ export default function MissionStatus({ spec, onLoadMission, allowSave = true }:
 
   const deleteDraft = (id: string, site: string) => {
     if (!window.confirm(`Delete the draft "${site}"? A Dispatched Spec from it stays in the store.`)) return;
-    act("Delete", () =>
+    act("Delete", id, () =>
       fetch(`/api/drafts?id=${encodeURIComponent(id)}`, {
         method: "DELETE",
         headers: { "x-wayfinder-key": passphrase! },
@@ -140,7 +159,7 @@ export default function MissionStatus({ spec, onLoadMission, allowSave = true }:
 
   // Withdraw a spec from the queue (without deleting the immutable Spec). The API
   // accepts a key and returns the updated skipped.json; we refresh after action.
-  const withdrawSpec = (id: string) => act("Withdraw", () =>
+  const withdrawSpec = (id: string) => act("Withdraw", id, () =>
     fetch("/api/withdraw", {
       method: "POST",
       headers: { "Content-Type": "application/json", "x-wayfinder-key": passphrase! },
@@ -148,7 +167,7 @@ export default function MissionStatus({ spec, onLoadMission, allowSave = true }:
     }),
   );
 
-  const unwithdrawSpec = (id: string) => act("Unwithdraw", () =>
+  const unwithdrawSpec = (id: string) => act("Unwithdraw", id, () =>
     fetch("/api/withdraw", {
       method: "POST",
       headers: { "Content-Type": "application/json", "x-wayfinder-key": passphrase! },
@@ -162,14 +181,25 @@ export default function MissionStatus({ spec, onLoadMission, allowSave = true }:
     try {
       const res = await fetch(`/api/specs?key=${encodeURIComponent(key)}`);
       if (!res.ok) {
-        setNotice(`Edit failed: ${res.status}`);
+        setAction((s) => endAction(s, "Edit", key, { ok: false, status: res.status, body: {} }));
         return;
       }
       onLoadMission((await res.json()) as MissionSpec);
     } catch (err) {
-      setNotice(`Edit failed: ${err instanceof Error ? err.message : "unknown"}`);
+      const threw = err instanceof Error ? err.message : "unknown";
+      setAction((s) => endAction(s, "Edit", key, { ok: false, threw }));
     }
   }
+
+  // The message belongs next to the control that produced it: this view is
+  // taller than a screen, and a message at the top of the list is a message
+  // nobody reading a row halfway down will ever see (issue #126).
+  const renderNotice = () =>
+    action.notice && (
+      <p className={action.notice.failed ? styles.error : styles.notice} role="status" aria-live="polite">
+        {action.notice.text}
+      </p>
+    );
 
   // Before the client-only read lands there is nothing to show yet; an empty
   // passphrase afterwards means the operator never typed one.
@@ -183,6 +213,9 @@ export default function MissionStatus({ spec, onLoadMission, allowSave = true }:
   if (status.kind === "error") {
     return (
       <div>
+        {/* The rows are gone, but the operator still needs to hear what their
+            last action did — losing it here is how a failure became silence. */}
+        {renderNotice()}
         <p className={styles.error}>{status.message}</p>
         <button onClick={() => passphrase && load(passphrase)}>Retry</button>
       </div>
@@ -223,12 +256,14 @@ export default function MissionStatus({ spec, onLoadMission, allowSave = true }:
     <div>
       <div className={styles.entryActions}>
         {allowSave && (
-          <button onClick={saveDraft} disabled={busy !== null}>
-            {busy === "Save draft" ? "Saving…" : "Save current as draft"}
+          <button onClick={saveDraft} disabled={busy}>
+            {isRunning(action, "Save draft", "") ? "Saving…" : "Save current as draft"}
           </button>
         )}
       </div>
-      {notice && <p className={styles.notice}>{notice}</p>}
+      {/* A message whose row is gone (a Delete) or filtered out still has to
+          land somewhere the operator can see it. */}
+      {action.notice && !visible.some((v) => v.row.id === action.notice!.on) && renderNotice()}
       {status.kind === "ok" && status.notice && (
         <p className={styles.error}>
           The host refused a Load ({status.notice.at}): {status.notice.parts_needed} parts waiting,{" "}
@@ -332,40 +367,41 @@ export default function MissionStatus({ spec, onLoadMission, allowSave = true }:
             {row.kind === "draft" && (
               <div className={styles.entryActions}>
                 {!row.dispatched_key && (
-                <button onClick={() => dispatchDraft(row.id, draftSpec(row))} disabled={busy !== null}>
-                    {busy === "Dispatch" ? "Dispatching…" : "Dispatch"}
+                  <button onClick={() => dispatchDraft(row.id, draftSpec(row))} disabled={busy}>
+                    {isRunning(action, "Dispatch", row.id) ? "Dispatching…" : "Dispatch"}
                   </button>
                 )}
                 <button onClick={() => onLoadMission(draftSpec(row))}>Edit</button>
                 <button
                   onClick={() => deleteDraft(row.id, row.site)}
-                  disabled={busy !== null || !isDraftDeletable(row)}
+                  disabled={busy || !isDraftDeletable(row)}
                   title={
                     isDraftDeletable(row)
                       ? "Delete this draft"
                       : "Dispatched Specs are immutable — they can only be superseded by a newer Dispatch"
                   }
                 >
-                  Delete
+                  {isRunning(action, "Delete", row.id) ? "Deleting…" : "Delete"}
                 </button>
               </div>
             )}
             {row.kind === "spec" && (
               <div className={styles.entryActions}>
                 {isWithdrawn(row) ? (
-                  <button onClick={() => unwithdrawSpec(row.id)} disabled={busy !== null}>
-                    Unwithdraw
+                  <button onClick={() => unwithdrawSpec(row.id)} disabled={busy}>
+                    {isRunning(action, "Unwithdraw", row.id) ? "Unwithdrawing…" : "Unwithdraw"}
                   </button>
                 ) : isSpecWithdrawable(row) ? (
-                  <button onClick={() => withdrawSpec(row.id)} disabled={busy !== null}>
-                    Withdraw
+                  <button onClick={() => withdrawSpec(row.id)} disabled={busy}>
+                    {isRunning(action, "Withdraw", row.id) ? "Withdrawing…" : "Withdraw"}
                   </button>
                 ) : null}
-                <button onClick={() => editSpec(row.id)} disabled={busy !== null}>
+                <button onClick={() => editSpec(row.id)} disabled={busy}>
                   Edit as new draft
                 </button>
               </div>
             )}
+            {action.notice?.on === row.id && renderNotice()}
           </div>
         );
       })}
