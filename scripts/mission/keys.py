@@ -16,6 +16,9 @@ DRAFTS_PREFIX = "specs/_drafts/"
 STATUS_KEY = "specs/_status/missions.json"
 SUMMARIES_KEY = "specs/_status/summaries.json"
 SKIPPED_KEY = "specs/_status/skipped.json"
+# The Card Ledger (ADR 0022): which Mission each Card holds and whether it has
+# been Flown. Written by the host that Loads, read by the planner.
+LEDGER_KEY = "specs/_status/card-ledger.json"
 
 
 def spec_key_pattern(prefix: str) -> re.Pattern:

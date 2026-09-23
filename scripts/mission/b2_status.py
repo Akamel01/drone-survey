@@ -12,6 +12,8 @@ delivery key.
 Network only, no Controller: importing this file cannot touch a mount.
 """
 
+from __future__ import annotations
+
 import datetime
 import json
 import sys
@@ -21,6 +23,7 @@ import b2  # noqa: E402  (one home for storage access)
 from pathlib import Path
 
 STATUS_KEY = keys.STATUS_KEY
+LEDGER_KEY = keys.LEDGER_KEY
 # Underscore-prefixed inside specs/ on purpose: store keys are confined to the
 # specs/ prefix, and collect.py's Spec pattern only matches three-segment
 # site/date/file keys, so the manifest is invisible to Collect.
@@ -30,6 +33,18 @@ NOTICE_KEY = "_notice"
 class QueueOverflowError(Exception):
     """The waiting queue does not fit the WAYFINDER cards. Raised before any
     card is touched so the caller can report it and refuse atomically."""
+
+
+class LedgerRefusal(Exception):
+    """A Load the Card Ledger does not authorise: a Spec with no Reservation, a
+    Reservation that does not match what the writer produced, or a Card pool
+    that has changed since it was calibrated (ADR 0022).
+
+    Raised before any card is touched, so the refusal is atomic. The message
+    always states what the operator does next — a failure is never silent, and
+    the host never falls back to choosing Cards itself, because that is the
+    defect this exists to end.
+    """
 
 
 def utcnow() -> str:
@@ -91,10 +106,161 @@ def merge_overflow(manifest: dict, keys: list[str], needed: int, have: int, at: 
     return manifest
 
 
+def merge_refusal(manifest: dict, kind: str, keys: list[str], reason: str, at: str) -> dict:
+    """Record a refusal the Ledger caused: nothing was Loaded, the Controller is
+    as it was, and the operator can see which Missions did not go and why.
+
+    `reason` is the whole refusal, because every refusal already states what to
+    do next — a failure is never silent, and never merely a code (ADR 0018).
+    """
+    manifest[NOTICE_KEY] = {"type": kind, "at": at, "waiting": keys, "reason": reason}
+    return manifest
+
+
+def merge_drift(manifest: dict, drift: list[dict], at: str) -> dict:
+    """Record where the Ledger and the Controller disagree. Reported against the
+    Load, never corrected: a difference here is the only evidence that a Card
+    holds something other than what was planned (ADR 0022)."""
+    if drift:
+        manifest["_drift"] = {"at": at, "cards": drift}
+    else:
+        manifest.pop("_drift", None)
+    return manifest
+
+
 def clear_notice(manifest: dict) -> dict:
     """A successful Load retires any past refusal."""
     manifest.pop(NOTICE_KEY, None)
     return manifest
+
+
+# ---------------------------------------------------------------------------
+# The Card Ledger (ADR 0022)
+#
+# The Python twin of web/lib/model.ts. Same rules, same names, same shapes, and
+# both sides assert against fixtures/card-ledger.json so they cannot drift.
+# Pure functions over plain data: no mount, no network, no Controller.
+# ---------------------------------------------------------------------------
+
+EMPTY_LEDGER: dict = {"pool": [], "holdings": {}}
+
+
+def card_unavailable(ledger: dict, card: str) -> str | None:
+    """Why a Card cannot be reused, or None when it can.
+
+    A Card is occupied by a Mission that has not been Flown. Withdrawing or
+    superseding that Mission releases it, because what it holds is no longer
+    current. The pool is what is calibrated, never what is hoped for.
+    """
+    if card not in ledger.get("pool", []):
+        return "not calibrated"
+    held = ledger.get("holdings", {}).get(card)
+    if not held or held.get("flown_at"):
+        return None
+    return (f"holds an unflown Mission ({held['spec_key']}, "
+            f"flight {held['flight']} of {held['flights']})")
+
+
+def available_cards(ledger: dict) -> list[str]:
+    return [c for c in ledger.get("pool", []) if card_unavailable(ledger, c) is None]
+
+
+def reserve_cards(ledger: dict, needed: int) -> dict:
+    """The outcome of asking for Cards at Dispatch: {"ok": True, "cards": [...]}
+    or a refusal naming what is in the way. The planner does the reserving; the
+    host holds this so both languages assert the same rule."""
+    free = available_cards(ledger)
+    if needed > len(free):
+        blocking = [(c, card_unavailable(ledger, c)) for c in ledger.get("pool", [])]
+        blocking = [(c, why) for c, why in blocking if why is not None]
+        reason = (f"no Cards are calibrated; {needed} needed" if not blocking else
+                  f"{needed} Cards needed, {len(free)} free. " +
+                  "; ".join(f"{c}: {why}" for c, why in blocking))
+        return {"ok": False, "reason": reason, "available": len(free), "needed": needed}
+    return {"ok": True, "cards": free[:needed]}
+
+
+def with_reservation(ledger: dict, cards: list[str], spec_key: str, reserved_at: str) -> dict:
+    """Claim Cards for a Spec's flights. Returns a new Ledger; never mutates."""
+    holdings = dict(ledger.get("holdings", {}))
+    for i, card in enumerate(cards):
+        holdings[card] = {"card": card, "spec_key": spec_key,
+                          "flight": i + 1, "flights": len(cards), "reserved_at": reserved_at}
+    return {**ledger, "holdings": holdings}
+
+
+def with_release(ledger: dict, spec_key: str) -> dict:
+    """Give back every Card held for a Spec — what Withdrawn and Superseded do.
+    A Flown holding is the record of what was flown and is left alone."""
+    holdings = {c: h for c, h in ledger.get("holdings", {}).items()
+                if not (h["spec_key"] == spec_key and not h.get("flown_at"))}
+    return {**ledger, "holdings": holdings}
+
+
+def cards_for(ledger: dict, spec_key: str) -> list[dict]:
+    """The Cards a Spec holds, in flight order. Empty means no Reservation."""
+    return sorted((h for h in ledger.get("holdings", {}).values() if h["spec_key"] == spec_key),
+                  key=lambda h: h["flight"])
+
+
+def stale_cards(ledger: dict, live_spec_keys: set[str]) -> list[dict]:
+    """A Card holding a Mission that is no longer current. The Controller cannot
+    report this — its own labels are frozen at creation (ADR 0016)."""
+    return [h for h in ledger.get("holdings", {}).values()
+            if h.get("written_at") and not h.get("flown_at") and h["spec_key"] not in live_spec_keys]
+
+
+def ledger_drift(ledger: dict, on_device: dict) -> list[dict]:
+    """Where the Ledger and the Controller disagree. Reported, never quietly
+    corrected. A Card the device was not asked about is not evidence."""
+    drift = []
+    for card in ledger.get("pool", []):
+        if card not in on_device:
+            continue
+        expected = (ledger.get("holdings", {}).get(card) or {}).get("spec_key")
+        found = on_device[card]
+        if expected != found:
+            drift.append({"card": card, "expected": expected, "found": found})
+    return drift
+
+
+def merge_written(ledger: dict, written: dict, at: str) -> dict:
+    """Stamp written_at on each holding the host verified by read-back.
+
+    `written` is {card: md5 of the file now on the Controller}. The md5 is what
+    lets the next plug-in say whether a Card still holds what was written: a
+    Load is only reported once its read-back has already matched.
+    """
+    holdings = dict(ledger.get("holdings", {}))
+    for card, digest in written.items():
+        if card not in holdings:
+            continue
+        holdings[card] = {**holdings[card], "written_at": at, "written_md5": digest}
+    return {**ledger, "holdings": holdings}
+
+
+def merge_verified(ledger: dict, at: str) -> dict:
+    """Stamp when the host last checked the Ledger against the Controller."""
+    return {**ledger, "verified_at": at}
+
+
+def download_ledger(download_url: str, bucket: str, token: str) -> dict:
+    """The Ledger so far; an empty one when the host has never written it.
+
+    An empty Ledger is not a licence to choose Cards: every Spec then has no
+    Reservation and is refused by name, which is the point (ADR 0022).
+    """
+    try:
+        found = json.loads(b2.download(download_url, bucket, LEDGER_KEY, token))
+    except FileNotFoundError:
+        return dict(EMPTY_LEDGER)
+    return {"pool": found.get("pool", []), "holdings": found.get("holdings", {}),
+            **({"verified_at": found["verified_at"]} if "verified_at" in found else {})}
+
+
+def upload_ledger(api_url: str, token: str, bucket_id: str, ledger: dict) -> None:
+    b2.upload(api_url, token, bucket_id, LEDGER_KEY,
+              json.dumps(ledger, indent=1, sort_keys=True).encode())
 
 
 def download_manifest(api_url: str, download_url: str, bucket: str, token: str) -> dict:
@@ -153,6 +319,30 @@ def _selftest() -> None:
     assert m["_notice"]["type"] == "overflow" and m["_notice"]["waiting"] == ["a", "b"], m
     clear_notice(m)
     assert "_notice" not in m, m
+
+    # 5. A Ledger refusal is recorded like any other: what did not go, and what
+    #    to do about it. A later success retires it.
+    m = {}
+    merge_refusal(m, "no-reservation", ["k"], "no Card is reserved for k; Dispatch it again.", "t4")
+    assert m["_notice"]["type"] == "no-reservation" and "Dispatch" in m["_notice"]["reason"], m
+    clear_notice(m)
+    assert "_notice" not in m, m
+
+    # 6. Drift is recorded while it lasts and cleared when it stops. Recorded,
+    #    never corrected: the Ledger keeps saying what was planned.
+    m = {}
+    merge_drift(m, [{"card": "WAYFINDER 2", "expected": "a", "found": "b"}], "t5")
+    assert m["_drift"]["cards"][0]["card"] == "WAYFINDER 2", m
+    merge_drift(m, [], "t6")
+    assert "_drift" not in m, m
+
+    # 7. written_at is only ever stamped on a Card the Ledger already holds, and
+    #    carries the md5 the read-back proved, so the next plug-in can check it.
+    led = with_reservation({"pool": ["A", "B"], "holdings": {}}, ["A"], "specs/s/d/k.json", "t0")
+    led = merge_written(led, {"A": "abc", "B": "def"}, "t7")
+    assert led["holdings"]["A"]["written_at"] == "t7" and led["holdings"]["A"]["written_md5"] == "abc"
+    assert "B" not in led["holdings"], "a Card with no holding is never invented by a write report"
+    assert merge_verified(led, "t8")["verified_at"] == "t8"
 
     _fixture_check()
     print("b2_status self-check: ok")
