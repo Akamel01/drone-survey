@@ -12,7 +12,13 @@ const STORAGE_KEY = "drone-planner.saved-missions";
 // permanent loss (issue #125).
 const UNREADABLE_KEY = `${STORAGE_KEY}.unreadable`;
 
-export type SavedMission = MissionSpec & { saved_at: string };
+export type SavedMission = MissionSpec & {
+  saved_at: string;
+  /** When this Mission was sent to Mission status, if it was. The local copy
+   *  is kept either way — a 200 from the drafts route is the writer's own word
+   *  that it landed, which ADR 0018 says is not evidence (issue #124). */
+  sent_at?: string;
+};
 
 /**
  * What one read of the store found: the entries it could use, and how many it
@@ -115,6 +121,7 @@ function readRaw(): SavedMissionsRead {
       missions.push({
         ...normalizeSpec(e),
         saved_at: typeof e.saved_at === "string" ? e.saved_at : new Date(0).toISOString(),
+        ...(typeof e.sent_at === "string" ? { sent_at: e.sent_at } : {}),
       });
     } catch {
       skipped += 1;
@@ -156,6 +163,15 @@ export function deleteMission(saved_at: string): SavedMissionsRead {
   return sorted(read);
 }
 
+/** Records that a Mission was sent to Mission status, keeping the local copy.
+ *  The saved list is the operator's own copy; a send is not a reason to take
+ *  it away from them (issue #124). */
+export function markMissionSent(saved_at: string, sent_at = new Date().toISOString()): SavedMissionsRead {
+  const read = readRaw();
+  read.missions = read.missions.map((m) => (m.saved_at === saved_at ? { ...m, sent_at } : m));
+  writeRaw(read.missions);
+  return sorted(read);
+}
 
 export function slug(s: string) {
   return slugSegment(s || "site", 60);

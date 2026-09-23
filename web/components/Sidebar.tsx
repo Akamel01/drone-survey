@@ -20,6 +20,7 @@ interface SidebarProps {
   savedSkipped: number;
   onLoadMission: (spec: MissionSpec) => void;
   onDeleteMission: (saved_at: string) => void;
+  onMissionSent: (saved_at: string) => void;
 }
 
 // Plain metric area: m² under a square kilometre, km² above.
@@ -126,6 +127,7 @@ export default function Sidebar({
   savedSkipped,
   onLoadMission,
   onDeleteMission,
+  onMissionSent,
 }: SidebarProps) {
   const flight = spec.flight;
   const camera = spec.camera;
@@ -581,6 +583,7 @@ export default function Sidebar({
           skipped={savedSkipped}
           onLoad={onLoadMission}
           onDelete={onDeleteMission}
+          onSent={onMissionSent}
         />
       </Section>
     </aside>

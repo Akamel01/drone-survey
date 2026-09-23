@@ -7,6 +7,7 @@ import {
   loadSavedMissions,
   saveMission,
   deleteMission,
+  markMissionSent,
   type SavedMission,
 } from "@/lib/savedMissions";
 import MapPane, { type DrawMode } from "@/components/MapPane";
@@ -96,6 +97,7 @@ export default function PlanPage() {
           savedSkipped={savedSkipped}
           onLoadMission={setSpecState}
           onDeleteMission={(saved_at) => applySaved(deleteMission(saved_at))}
+          onMissionSent={(saved_at) => applySaved(markMissionSent(saved_at))}
         />
       </div>
       <SummaryBar

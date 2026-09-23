@@ -11,7 +11,9 @@ const store = new Map<string, string>();
   clear: () => store.clear(),
 };
 
-const { loadSavedMissions, saveMission, deleteMission } = await import("./savedMissions.ts");
+const { loadSavedMissions, saveMission, deleteMission, markMissionSent } = await import(
+  "./savedMissions.ts"
+);
 const { DEFAULT_SPEC } = await import("./spec.ts");
 
 const KEY = "drone-planner.saved-missions";
@@ -96,6 +98,19 @@ test("an unreadable blob is kept, not overwritten by the next save", () => {
   );
 });
 
+test("sending a Mission marks it, and never removes it", () => {
+  store.set(KEY, JSON.stringify([good("Sent one", "2026-09-01T00:00:00.000Z")]));
+
+  const { missions } = markMissionSent("2026-09-01T00:00:00.000Z", "2026-09-05T12:00:00.000Z");
+
+  assert.equal(missions.length, 1, "the local copy stays");
+  assert.equal(missions[0].sent_at, "2026-09-05T12:00:00.000Z");
+  assert.equal(
+    loadSavedMissions().missions[0].sent_at,
+    "2026-09-05T12:00:00.000Z",
+    "and the mark survives a re-read",
+  );
+});
 
 test("delete removes only the entry asked for", () => {
   store.set(

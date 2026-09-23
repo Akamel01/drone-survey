@@ -72,11 +72,25 @@
   margin: 0 0 8px;
 }
 
-.note {
+.sent {
+  font-size: 11px;
+  color: var(--text-dim);
+  margin: 0 0 8px;
+}
+
+.note,
+.error {
   font-size: 12px;
   line-height: 1.5;
-  color: var(--text-dim);
   margin-top: 6px;
+}
+
+.note {
+  color: var(--text-dim);
+}
+
+.error {
+  color: var(--warn);
 }
 
 .entryActions {
