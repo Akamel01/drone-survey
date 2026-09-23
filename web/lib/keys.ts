@@ -9,6 +9,13 @@
 
 export const SPECS_PREFIX = "specs/";
 export const DRAFTS_PREFIX = "specs/_drafts/";
+/** One file per Mission, so two Missions saved at once cannot overwrite each
+ *  other -- the whole-file hazard is confined to the Ledger, which has a
+ *  merge rule of its own (ADR 0021). */
+export const MISSIONS_PREFIX = "specs/_missions/";
+/** The Card Ledger: written by the planner at Dispatch and by the host at
+ *  Load, read by both (ADR 0022). */
+export const LEDGER_KEY = "specs/_status/card-ledger.json";
 export const STATUS_KEY = "specs/_status/missions.json";
 export const SUMMARIES_KEY = "specs/_status/summaries.json";
 export const SKIPPED_KEY = "specs/_status/skipped.json";
@@ -37,6 +44,18 @@ export function parseSpecKey(
 /** A draft's key: one JSON file per draft, under the drafts prefix. */
 export function draftKey(id: string): string {
   return `${DRAFTS_PREFIX}${id}.json`;
+}
+
+/** A Mission record's key. The id is a server-minted uuid; this still refuses
+ *  anything that could climb out of the prefix, because the id arrives from
+ *  the browser on every call after the first. */
+export function missionKey(id: string): string {
+  if (!isSafeId(id)) throw new Error(`unsafe mission id: ${id}`);
+  return `${MISSIONS_PREFIX}${id}.json`;
+}
+
+export function isSafeId(id: unknown): id is string {
+  return typeof id === "string" && /^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$/.test(id);
 }
 
 /** Dispatch stamps sort lexically; this turns one back into an instant. */

@@ -52,6 +52,11 @@ export interface ManifestEntry {
   loaded_at?: string;
   parts?: number;
   cards?: LoadedCard[];
+  /** When imagery for this Mission's Site and date arrived. Evidence the
+   *  system may infer Flown from; the operator's own mark is what decides it,
+   *  and where the two disagree both are shown (ADR 0021). Written by the
+   *  host, never by the planner. */
+  imagery_at?: string;
 }
 
 export type Manifest = Record<string, ManifestEntry>;
