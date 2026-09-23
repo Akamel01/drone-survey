@@ -617,7 +617,51 @@ def _selftest() -> None:
             assert "WAYFINDER 9" in str(e) and "not calibrated" in str(e), e
         else:
             raise AssertionError("a Card outside the calibrated pool was Loaded into")
+    # The bootstrap: nothing else writes the pool, and without a pool the
+    # planner cannot reserve, so the host refuses every Spec forever. An empty
+    # Ledger must therefore gain the calibrated Cards on an ordinary run.
+    import load as _self  # the module object, to stand in for its store calls
+    _written: dict = {}
+    _fetch, _publish = _self.fetch_ledger, _self.publish_ledger
+    try:
+        _self.fetch_ledger = lambda cfg: {"pool": [], "holdings": {}}
+        _self.publish_ledger = lambda cfg, ledger: _written.update(ledger)
+        _self.publish_pool(Path("/nonexistent"))
+        assert _written.get("pool") == [c for c, _ in cards()], _written
+        _written.clear()
+        _self.fetch_ledger = lambda cfg: {"pool": [c for c, _ in cards()], "holdings": {}}
+        _self.publish_pool(Path("/nonexistent"))
+        assert _written == {}, "an unchanged pool must not cost a write"
+    finally:
+        _self.fetch_ledger, _self.publish_ledger = _fetch, _publish
+
     print("load self-check: ok")
+
+
+def publish_pool(status_config: Path, ledger: dict | None = None) -> dict:
+    """Put the calibrated Card names into the Ledger, so the planner can reserve.
+
+    Nothing else writes the pool. The planner reserves Cards at Dispatch and
+    refuses when none are free, so an empty pool refuses every Dispatch; the
+    host refuses every Spec that has no Reservation. Between them, a store that
+    has never seen a pool can never start -- the planner cannot reserve and the
+    host never gets far enough to say what exists.
+
+    So the pool is published on every run, before the queue is even looked at,
+    rather than as a side effect of a successful Load. Calibration belongs to
+    the host because only the host can see the Controller (ADR 0022); this is
+    where it says so.
+    """
+    if ledger is None:
+        ledger = fetch_ledger(status_config)
+    pool = [name for name, _ in cards()]
+    if ledger.get("pool") == pool:
+        return ledger
+    was = len(ledger.get("pool") or [])
+    ledger = {**ledger, "pool": pool}
+    publish_ledger(status_config, ledger)
+    print(f"published the Card pool to the Ledger: {len(pool)} Cards (was {was})")
+    return ledger
 
 
 def main() -> None:
@@ -629,10 +673,17 @@ def main() -> None:
     p.add_argument("--status-config", type=Path, default=DEFAULT_STATUS_CONFIG,
                    help="B2 status credentials env file (read specs/, write status/*)")
     p.add_argument("--selftest", action="store_true", help="run the offline self-check and exit")
+    p.add_argument("--publish-pool", action="store_true",
+                   help="write the calibrated Card names to the Ledger and exit; needs no Controller")
     args = p.parse_args()
 
     if args.selftest:
         _selftest()
+        return
+    if args.publish_pool:
+        # Seeding, and the recovery when calibration changes: no Controller is
+        # needed to say which Cards exist, only the calibration file.
+        publish_pool(args.status_config)
         return
     stamp = time.strftime("%Y%m%dT%H%M%S")
     backups = LOADS / stamp
@@ -650,6 +701,11 @@ def main() -> None:
             (SPECS / "_status" / "skipped.json").write_bytes(_data)
         except (Exception, SystemExit):
             pass
+        # Before anything else: the planner cannot reserve a Card it does not
+        # know exists, and it is the only thing that reserves. Publishing the
+        # pool here is what lets a store that has never seen one get started.
+        publish_pool(args.status_config)
+
         queue = unloaded_queue(SPECS, LOADED)
         if not queue:
             return  # nothing new; cron calls this every minute
