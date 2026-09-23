@@ -69,8 +69,35 @@ async function main(): Promise<void> {
     console.log(`${had ? "filled in" : "added"} ${p.photo_count} points · ${p.path_length_m.toFixed(1)} m · ${p.parts} part(s)  ${key}`);
   }
 
+  // This uploads the whole file, so anything written while the loop was running
+  // -- a Dispatch recording its own summary -- would be replaced by a copy that
+  // predates it. Re-read immediately before writing and fold in anything new,
+  // and refuse outright if a key we started with has gone. Recomputing is cheap;
+  // silently dropping another writer's record is not, and nothing downstream
+  // could tell that it happened.
+  const beforeKeys = new Set(Object.keys(summaries));
+  const latestRaw = await downloadFile(read, writeEnv.bucket, SUMMARIES_KEY);
+  const latest: Record<string, SpecSummary> = latestRaw
+    ? (JSON.parse(latestRaw.toString()) as Record<string, SpecSummary>)
+    : {};
+
+  const lost = Object.keys(latest).filter((k) => !beforeKeys.has(k) && summaries[k] == null);
+  let folded = 0;
+  for (const k of lost) {
+    summaries[k] = latest[k];
+    folded++;
+  }
+  const dropped = Object.keys(latest).filter((k) => summaries[k] == null);
+  if (dropped.length) {
+    console.error(`refusing to write: ${dropped.length} summaries would be lost, first ${dropped[0]}`);
+    process.exit(1);
+  }
+
   await uploadFile(write, SUMMARIES_KEY, Buffer.from(JSON.stringify(summaries, null, 2)));
-  console.log(`summaries: ${Object.keys(summaries).length} total, ${added} added.`);
+  console.log(
+    `summaries: ${Object.keys(summaries).length} total, ${added} written` +
+      (folded ? `, ${folded} folded in from a concurrent write` : ""),
+  );
 }
 
 main().catch((err) => {
