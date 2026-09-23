@@ -1,20 +1,31 @@
 #!/usr/bin/env python3
 """Load Mission Specs onto the Controller, into the WAYFINDER cards, over jmtpfs.
 
-One plug-in Loads every waiting Spec, oldest first, each mission's parts into
-successive WAYFINDER cards — so several Dispatched missions all land, each
-traceable to its card (ADR 0016). Cards and their slot GUIDs come from
-wayfinder_slots.json, calibrated once.
+One plug-in Loads every waiting Spec into the Cards that were reserved for it at
+Dispatch, read from the Card Ledger in the store — never Cards chosen here, and
+never the first Card every time, which overwrote Missions that had not been
+Flown (ADR 0022). A Spec with no Reservation is refused by name and told what to
+do; this script does not choose a Card for it. Cards and their slot GUIDs come
+from wayfinder_slots.json, calibrated once, and the pool is checked against the
+Controller rather than trusted.
+
+At every plug-in the Ledger is checked against the Controller itself and
+verified_at recorded. A Card whose contents disagree is reported, never quietly
+corrected. After a Load, written_at is recorded from the read-back that proved
+it, so no write is reported that was not verified.
 
 Every card is backed up before it is touched. Success is a read-back after a
 fresh mount, never the copy's exit status; on any mismatch every card is put
 back as it was, so a Load is all or nothing. A queue that does not fit the
-cards is refused before anything is touched, never partially Loaded.
+cards, a Spec with no Reservation, and a Card pool that has changed are all
+refused before anything is touched, never partially Loaded.
 
     python3 load.py SPEC.json --yes
     python3 load.py --newest --yes     # what cron runs while the Controller is plugged in
     python3 load.py --selftest
 """
+
+from __future__ import annotations
 
 import argparse
 import hashlib
@@ -117,12 +128,86 @@ def cards() -> list[tuple[str, str]]:
     return sorted(slots.items(), key=lambda kv: int(kv[0].split()[-1]))
 
 
-def assign(parts: list[dict], available: list[tuple[str, str]]) -> list[tuple[str, str, dict]]:
-    """Part i goes into card i. Refuse rather than drop a part."""
-    if len(parts) > len(available):
-        sys.exit(f"{len(parts)} parts but only {len(available)} WAYFINDER cards; "
-                 f"rename more cards in DJI Fly and calibrate them")
-    return [(name, guid, part) for (name, guid), part in zip(available, parts)]
+def pool_drift(root: Path) -> list[str]:
+    """Every way the Card pool no longer matches what was calibrated.
+
+    A Card is a Placeholder Mission the operator made by hand, and the slot GUID
+    is its identity — so a Placeholder deleted, added or remade since
+    `wayfinder_slots.json` was written shows up here. The file is not trusted on
+    its own: a Load into a Card that may no longer be what it was is the failure
+    this detector exists to prevent (ADR 0022).
+    """
+    calibrated = {guid: name for name, guid in cards()}
+    waypoint = root / WAYPOINT_DIR
+    try:
+        present = {d.name for d in waypoint.iterdir() if d.is_dir()}
+    except OSError as e:
+        return [f"could not read the Controller's Missions at {waypoint}: {e}"]
+    problems = [f"{calibrated[g]} ({g}) was calibrated but is no longer on the Controller"
+                for g in sorted(calibrated) if g not in present]
+    problems += [f"a Placeholder Mission the pool does not know about is on the Controller ({g})"
+                 for g in sorted(present - set(calibrated))]
+    return problems
+
+
+def reserved_plan(entries: list[tuple[Path, list[dict]]],
+                  ledger: dict) -> list[tuple[Path, str, str, dict]]:
+    """(spec, card, slot GUID, part) for every part, taken from the Reservation.
+
+    Cards come from the Ledger, never chosen fresh here: a Card was claimed when
+    its Spec was Dispatched, and the host's job is to honour that claim. A Spec
+    with no Reservation is refused by name rather than given a Card, because
+    choosing one is exactly the defect ADR 0022 ends.
+    """
+    slots = dict(cards())
+    plan: list[tuple[Path, str, str, dict]] = []
+    for spec, parts in entries:
+        key = spec_key(spec)
+        held = b2_status.cards_for(ledger, key)
+        if not held:
+            raise b2_status.LedgerRefusal(
+                f"no Card is reserved for {key}; nothing was touched. This Spec was Dispatched "
+                f"before Cards were reserved at Dispatch, or the Card Ledger could not be read. "
+                f"Withdraw it and Dispatch it again from the planner, which reserves a Card and "
+                f"says so before you leave.")
+        if len(held) != len(parts):
+            raise b2_status.LedgerRefusal(
+                f"{key} reserved {len(held)} Card(s) at Dispatch but its plan makes {len(parts)} "
+                f"Mission(s); nothing was touched. The Spec and the Reservation disagree — "
+                f"Withdraw it and Dispatch it again so the two are made from the same plan.")
+        for holding, part in zip(held, parts):
+            card = holding["card"]
+            if card not in slots:
+                raise b2_status.LedgerRefusal(
+                    f"{key} is reserved for {card}, which is not calibrated on this Controller; "
+                    f"nothing was touched. Calibrate {card} into wayfinder_slots.json, or Withdraw "
+                    f"the Spec and Dispatch it again against the calibrated pool.")
+            plan.append((spec, card, slots[card], part))
+    return plan
+
+
+def observe_cards(root: Path, ledger: dict) -> dict[str, str | None]:
+    """What each Card the host has written actually holds now, in Ledger terms.
+
+    The read-back the loader already performs is the evidence, and the md5 it
+    recorded at Load is the check: a Card whose file still hashes to what was
+    written holds that Spec, and anything else is reported as unknown rather
+    than guessed at. Cards this host has never written are left out — the
+    Controller was not asked about them, so they are evidence of nothing.
+    """
+    waypoint = root / WAYPOINT_DIR
+    slots = dict(cards())
+    seen: dict[str, str | None] = {}
+    for card, held in ledger.get("holdings", {}).items():
+        if card not in slots or not held.get("written_md5"):
+            continue
+        live = waypoint / slots[card] / f"{slots[card]}.kmz"
+        if not live.exists():
+            seen[card] = None
+            continue
+        digest = md5(live)
+        seen[card] = held["spec_key"] if digest == held["written_md5"] else f"unknown contents (md5 {digest})"
+    return seen
 
 
 def build(spec: Path, out_dir: Path) -> list[dict]:
@@ -168,24 +253,35 @@ def remount(mount: Path) -> None:
 
 
 def load_all(entries: list[tuple[Path, list[dict]]], root: Path, backups: Path,
-             fresh_mount=None) -> list[tuple[Path, str, dict]]:
-    """Write every mission's parts to successive cards, read all back, roll
-    back on any mismatch. Returns (spec, card, part). Refuses the whole queue
-    before touching a card when the parts do not fit — never a partial Load."""
+             fresh_mount=None, ledger: dict | None = None) -> list[tuple[Path, str, dict]]:
+    """Write every mission's parts to the Cards reserved for them, read all back,
+    roll back on any mismatch. Returns (spec, card, part), each part carrying the
+    `written_md5` the read-back proved.
+
+    Every refusal happens before a card is touched, so a Load is all or nothing:
+    a queue that does not fit, a Card pool that has changed, and a Spec with no
+    Reservation are all decided up front.
+    """
     waypoint = root / WAYPOINT_DIR
+    ledger = dict(b2_status.EMPTY_LEDGER) if ledger is None else ledger
     total = sum(len(parts) for _, parts in entries)
     if total > len(cards()):
+        # A backstop, not the gate. Availability is decided at Dispatch now, and
+        # a Spec that got this far already holds a Reservation — which is why
+        # this no longer compares against the total and then overwrites an
+        # unflown Mission anyway (ADR 0022).
         waiting = ", ".join(spec.name for spec, _ in entries)
         raise b2_status.QueueOverflowError(
             f"{total} parts waiting ({waiting}) but only {len(cards())} WAYFINDER cards; "
             f"nothing was touched. Dispatch fewer missions or clear a card, then replug.")
-    # Assign sequentially: mission i's parts take the next free cards in order.
-    plan: list[tuple[Path, str, str, dict]] = []
-    free = cards()
-    for spec, parts in entries:
-        chunk = assign(parts, free)
-        plan.extend([(spec, name, guid, part) for (name, guid, part) in chunk])
-        free = free[len(chunk):]
+    changed = pool_drift(root)
+    if changed:
+        raise b2_status.LedgerRefusal(
+            "the Card pool has changed since it was calibrated; nothing was touched:\n  "
+            + "\n  ".join(changed)
+            + "\nRecalibrate the pool into wayfinder_slots.json before Loading again, so a Mission "
+              "is never written into a Card that is no longer what it was.")
+    plan = reserved_plan(entries, ledger)
     with tempfile.TemporaryDirectory() as tmp:
         tmp = Path(tmp)
         staged = {}
@@ -221,14 +317,87 @@ def load_all(entries: list[tuple[Path, list[dict]]], root: Path, backups: Path,
                 shutil.copyfile(backups / f"{guid}.kmz", live)
             sys.exit(f"read-back did not match for {', '.join(bad)}; every card was restored "
                      f"from {backups}. Check the restore with a second Load attempt or --list.")
+        # The read-back is the evidence, so the hash it just proved is what goes
+        # into the Ledger: a write is never reported that was not verified.
+        for _, _, guid, part in plan:
+            part["written_md5"] = md5(waypoint / guid / f"{guid}.kmz")
         return [(spec, card, part) for spec, card, _, part in plan]
 
 
-def load(spec: Path, root: Path, backups: Path, fresh_mount=None) -> list[tuple[str, dict]]:
+def load(spec: Path, root: Path, backups: Path, fresh_mount=None,
+         ledger: dict | None = None) -> list[tuple[str, dict]]:
     """Write one Spec's parts, read back, roll back on mismatch. Returns (card, part)."""
     with tempfile.TemporaryDirectory() as tmp:
-        loaded = load_all([(spec, build(spec, Path(tmp)))], root, backups, fresh_mount)
+        loaded = load_all([(spec, build(spec, Path(tmp)))], root, backups, fresh_mount, ledger)
     return [(card, part) for _, card, part in loaded]
+
+
+def _ledger_fixture_check() -> None:
+    """The Card Ledger contract, asserted from the same fixture as
+    `web/lib/model.test.ts`, case for case. The two languages hold the same
+    rules; the fixture is what stops them drifting apart (ADR 0022).
+
+    Skipped loudly when the fixture is absent: these scripts are deployed to the
+    host as a flat directory rather than a checkout, and the planner asserts the
+    same cases from its own suite, which only ever runs in a checkout.
+    """
+    fixture_path = HERE.parents[1] / "fixtures" / "card-ledger.json"
+    if not fixture_path.is_file():
+        print(f"Card Ledger fixture absent ({fixture_path}); that check skipped")
+        return
+    fixture = json.loads(fixture_path.read_text())
+    ledger, case = fixture["ledger"], fixture["cases"]
+
+    # A Card holding an unflown Mission is not available; a Flown one is.
+    assert b2_status.available_cards(ledger) == case["available"]["expect"]
+    assert "unflown" in b2_status.card_unavailable(ledger, "WAYFINDER 1")
+    assert b2_status.card_unavailable(ledger, "WAYFINDER 2") is None, "Flown releases the Card"
+
+    # A Card outside the calibrated pool cannot be reserved.
+    assert b2_status.card_unavailable(ledger, case["uncalibrated_card"]["card"]) \
+        == case["uncalibrated_card"]["expect_reason"]
+
+    # A Spec that splits into two Missions takes two Cards.
+    two = b2_status.reserve_cards(ledger, case["reserve_two"]["needed"])
+    assert two["ok"] is case["reserve_two"]["expect_ok"]
+    assert two["cards"] == case["reserve_two"]["expect_cards"], two
+
+    # Asking for more Cards than are free is refused, naming what is in the way.
+    over = b2_status.reserve_cards(ledger, case["reserve_more_than_free"]["needed"])
+    assert over["ok"] is case["reserve_more_than_free"]["expect_ok"]
+    assert over["available"] == case["reserve_more_than_free"]["expect_available"], over
+    for fragment in case["reserve_more_than_free"]["expect_reason_mentions"]:
+        assert fragment in over["reason"], (fragment, over["reason"])
+
+    # Withdrawing a Spec gives its Cards back, and keeps a Flown record.
+    after = b2_status.with_release(ledger, case["release_on_withdraw"]["spec_key"])
+    assert b2_status.available_cards(after) == case["release_on_withdraw"]["expect_available_after"]
+    kept = b2_status.with_release(ledger, case["flown_holding_survives_release"]["spec_key"])
+    assert case["flown_holding_survives_release"]["expect_holding_kept"] in kept["holdings"], kept
+
+    # Reserving records the flight order, so a row can say flight 2 of 3.
+    held = b2_status.with_reservation({"pool": ["A", "B", "C"], "holdings": {}},
+                                      ["A", "B", "C"], "specs/s/d/k.json", "2026-09-23T00:00:00Z")
+    assert [f"{h['flight']} of {h['flights']} in {h['card']}"
+            for h in b2_status.cards_for(held, "specs/s/d/k.json")] == \
+        ["1 of 3 in A", "2 of 3 in B", "3 of 3 in C"]
+    assert b2_status.available_cards(held) == []
+
+    # A Card whose Mission is no longer current is stale, and only once written.
+    assert [h["card"] for h in b2_status.stale_cards(ledger, set())] == ["WAYFINDER 1"]
+    reserved_only = b2_status.with_reservation({"pool": ["A"], "holdings": {}},
+                                               ["A"], "specs/x/y/z.json", "t")
+    assert b2_status.stale_cards(reserved_only, set()) == [], \
+        "a Reservation that never reached the Controller cannot be stale on it"
+
+    # A Ledger that disagrees with the Controller reports the difference, and
+    # silence from the device is not a disagreement.
+    assert b2_status.ledger_drift(ledger, case["drift"]["on_device"]) == case["drift"]["expect_drift"]
+    assert b2_status.ledger_drift(ledger, {}) == []
+
+    # A Spec with no Reservation has no Cards: what load() refuses on.
+    assert b2_status.cards_for(ledger, "specs/never/dispatched/here.json") == []
+    print("card-ledger fixture: ok")
 
 
 def _selftest() -> None:
@@ -257,19 +426,80 @@ def _selftest() -> None:
                 z.writestr("wpmz/template.kml", "<wpml:createTime>1789000000000</wpml:createTime><wpml:author>fly</wpml:author>")
                 z.writestr("wpmz/waylines.wpml", "<kml/>")
 
-        loaded = load(tmp / "spec.json", root, tmp / "backup")
+        pool = [c for c, _ in cards()]
         first_card, first_guid = cards()[0]
+        # A Spec with no Reservation is refused by name and told what to do,
+        # never given a Card the host picked for itself.
+        try:
+            load(tmp / "spec.json", root, tmp / "backup0",
+                 ledger={"pool": pool, "holdings": {}})
+        except b2_status.LedgerRefusal as e:
+            assert "no Card is reserved" in str(e) and "Dispatch it again" in str(e), e
+        else:
+            raise AssertionError("a Spec with no Reservation was Loaded anyway")
+        assert not (tmp / "backup0").exists(), "a refused Load must not touch a card"
+
+        # The same Spec with a Reservation goes to the Card that was reserved.
+        ledger = b2_status.with_reservation(
+            {"pool": pool, "holdings": {}}, ["WAYFINDER 1"], "spec.json", "2026-09-23T00:00:00Z")
+        loaded = load(tmp / "spec.json", root, tmp / "backup", ledger=ledger)
         assert [c for c, _ in loaded] == [first_card], loaded
         live = root / WAYPOINT_DIR / first_guid / f"{first_guid}.kmz"
         assert read_create_time(live) == 1789000000000  # the slot keeps its own createTime
         assert zipfile.ZipFile(live).read("wpmz/waylines.wpml").count(b"<Placemark>") == loaded[0][1]["waypoints"]
         assert zipfile.ZipFile(tmp / "backup" / f"{first_guid}.kmz").read("wpmz/waylines.wpml") == b"<kml/>"
 
+        # Only a verified write is reported: the md5 the read-back proved is what
+        # goes into the Ledger, and a Card the Ledger does not hold is never invented.
+        written = b2_status.merge_written(
+            ledger, {card: part["written_md5"] for card, part in loaded}, "2026-09-23T01:00:00Z")
+        assert written["holdings"]["WAYFINDER 1"]["written_md5"] == md5(live)
+        assert written["holdings"]["WAYFINDER 1"]["written_at"] == "2026-09-23T01:00:00Z"
+
+        # Verifying against the Controller: the Card still holds what was written.
+        assert observe_cards(root, written) == {"WAYFINDER 1": "spec.json"}
+        assert b2_status.ledger_drift(written, observe_cards(root, written)) == []
+        # A Reservation that has not been written is not evidence of anything:
+        # the Controller still holds its own Placeholder, which is not drift.
+        reserved_only = b2_status.with_reservation(written, ["WAYFINDER 3"], "other.json", "t")
+        assert "WAYFINDER 3" not in observe_cards(root, reserved_only)
+        assert b2_status.ledger_drift(reserved_only, observe_cards(root, reserved_only)) == []
+
+        # Something else in the Card: reported, never quietly corrected.
+        live.write_bytes(b"a Mission this host did not write")
+        seen = observe_cards(root, written)
+        assert seen["WAYFINDER 1"].startswith("unknown contents"), seen
+        drifted = b2_status.ledger_drift(written, seen)
+        assert [d["card"] for d in drifted] == ["WAYFINDER 1"], drifted
+        assert drifted[0]["expected"] == "spec.json" and drifted[0]["found"] == seen["WAYFINDER 1"]
+        assert written["holdings"]["WAYFINDER 1"]["spec_key"] == "spec.json", \
+            "the Ledger keeps saying what was planned; drift is reported, not corrected"
+
+        # The pool itself is checked, never trusted: a Placeholder Mission
+        # deleted or added since calibration refuses the Load before it starts.
+        assert pool_drift(root) == []
+        stray = root / WAYPOINT_DIR / "E1E1E1E1-0000-0000-0000-000000000000"
+        stray.mkdir()
+        assert any("does not know about" in p for p in pool_drift(root)), pool_drift(root)
+        stray.rmdir()
+        gone = root / WAYPOINT_DIR / cards()[-1][1]
+        shutil.move(str(gone), str(tmp / "moved-away"))
+        assert any("no longer on the Controller" in p for p in pool_drift(root)), pool_drift(root)
+        try:
+            load(tmp / "spec.json", root, tmp / "backup1", ledger=ledger)
+        except b2_status.LedgerRefusal as e:
+            assert "pool has changed" in str(e) and "Recalibrate" in str(e), e
+        else:
+            raise AssertionError("a changed Card pool was Loaded into anyway")
+        shutil.move(str(tmp / "moved-away"), str(gone))
+        assert pool_drift(root) == []
+        shutil.copyfile(tmp / "backup" / f"{first_guid}.kmz", live)  # undo the drift fixture
+
         # A read-back that does not match restores every card from its backup.
         def corrupt():
             live.write_bytes(b"not what was sent")
         try:
-            load(tmp / "spec.json", root, tmp / "backup2", fresh_mount=corrupt)
+            load(tmp / "spec.json", root, tmp / "backup2", fresh_mount=corrupt, ledger=ledger)
         except SystemExit as e:
             assert "restored" in str(e), e
         else:
@@ -332,22 +562,11 @@ def _selftest() -> None:
             for card, part in group:  # two values, not three
                 assert isinstance(card, str) and "waypoints" in part
 
-        # Sequential card assignment across missions, oldest first.
-        fake = [
-            (specs / "a.json", [{"name": "A", "waypoints": 10}, {"name": "A2", "waypoints": 5}]),
-            (specs / "b.json", [{"name": "B", "waypoints": 7}]),
-        ]
-        got_cards: list[str] = []
-        free = cards()
-        for _, parts in fake:
-            chunk = assign(parts, free)
-            got_cards.extend(c for c, _, _ in chunk)
-            free = free[len(chunk):]
-        assert got_cards == ["WAYFINDER 1", "WAYFINDER 2", "WAYFINDER 3"], got_cards
-
-        # The planner predicts this same assignment before the Load runs, so
-        # the committed fixture is the contract between the two: if the rule
-        # here and the planner's prediction ever drift, one of the two fails.
+        # Which Card a Mission goes into is no longer predicted from its place
+        # in the queue — it is the Reservation made at Dispatch (ADR 0022), so
+        # the queue-position prediction the fixture still carries is not
+        # asserted here any more. The calibrated pool itself is still a contract
+        # between the two sides, and is still checked.
         fixture_path = HERE.parents[1] / "fixtures" / "store-records.json"
         # These scripts are deployed to the host as a flat directory, not as a
         # checkout, so the fixture is genuinely absent there. Skip it loudly
@@ -355,16 +574,12 @@ def _selftest() -> None:
         # the planner's own tests, which only ever run in a checkout, so a drift
         # between the two rules is still caught.
         if not fixture_path.is_file():
-            print(f"card-assignment fixture absent ({fixture_path}); that check skipped")
+            print(f"card-pool fixture absent ({fixture_path}); that check skipped")
         else:
             contract = json.loads(fixture_path.read_text())["card_prediction"]
             assert [c for c, _ in cards()] == contract["pool"], cards()
-            free, predicted = cards(), []
-            for entry in contract["queue"]:
-                chunk = assign([{"name": entry["key"], "waypoints": 1}] * entry["parts"], free)
-                predicted.append([c for c, _, _ in chunk])
-                free = free[len(chunk):]
-            assert predicted == contract["cards"], predicted
+
+        _ledger_fixture_check()
 
         # A queue that does not fit raises before anything is staged.
         try:
@@ -382,13 +597,26 @@ def _selftest() -> None:
         assert mounted(tmp) is False  # no STORAGE directory
         assert mounted(Stale(tmp)) is False
 
-        # More parts than cards is refused, never truncated.
+        # A Reservation that does not match the plan the writer produced is
+        # refused rather than truncated: one Card reserved, two Missions made.
+        two_parts = b2_status.with_reservation(
+            {"pool": pool, "holdings": {}}, ["WAYFINDER 1"], "spec.json", "t")
         try:
-            assign([{}] * (len(cards()) + 1), cards())
-        except SystemExit:
-            pass
+            reserved_plan([(tmp / "spec.json", [{"name": "A"}, {"name": "B"}])], two_parts)
+        except b2_status.LedgerRefusal as e:
+            assert "reserved 1 Card(s)" in str(e) and "Dispatch it again" in str(e), e
         else:
-            raise AssertionError("more parts than cards was accepted")
+            raise AssertionError("a Reservation that did not match the plan was accepted")
+
+        # A Card reserved that this Controller does not have is refused by name.
+        uncalibrated = b2_status.with_reservation(
+            {"pool": pool + ["WAYFINDER 9"], "holdings": {}}, ["WAYFINDER 9"], "spec.json", "t")
+        try:
+            reserved_plan([(tmp / "spec.json", [{"name": "A"}])], uncalibrated)
+        except b2_status.LedgerRefusal as e:
+            assert "WAYFINDER 9" in str(e) and "not calibrated" in str(e), e
+        else:
+            raise AssertionError("a Card outside the calibrated pool was Loaded into")
     print("load self-check: ok")
 
 
@@ -429,12 +657,19 @@ def main() -> None:
             sys.exit("this replaces the Missions in the WAYFINDER cards on the Controller; pass --yes")
         if not mounted(MOUNT):
             remount(MOUNT)
+        ledger = fetch_ledger(args.status_config)
+        ledger = verify_ledger(MOUNT / STORAGE, ledger, args.status_config)
         with tempfile.TemporaryDirectory() as tmp:
             entries = [(spec, build(spec, Path(tmp) / spec.stem)) for spec in queue]
             try:
-                loaded = load_all(entries, MOUNT / STORAGE, backups, fresh_mount=lambda: remount(MOUNT))
+                loaded = load_all(entries, MOUNT / STORAGE, backups,
+                                  fresh_mount=lambda: remount(MOUNT), ledger=ledger)
             except b2_status.QueueOverflowError as e:
                 report_overflow(args.status_config, queue, sum(len(p) for _, p in entries))
+                sys.exit(str(e))
+            except b2_status.LedgerRefusal as e:
+                report_refusal(args.status_config, "card-ledger", queue, str(e))
+                publish_ledger(args.status_config, ledger)  # the verification still happened
                 sys.exit(str(e))
         sheet = "\n".join(f"Open {card}: {part['name']} ({part['waypoints']} waypoints) [{spec.name}]"
                           for spec, card, part in loaded)
@@ -447,6 +682,8 @@ def main() -> None:
         # showed it as never Loaded.
         report_loaded(args.status_config,
                       [(spec_key(spec), group) for spec, group in _group_by_spec(loaded)])
+        publish_ledger(args.status_config, b2_status.merge_written(
+            ledger, {card: part["written_md5"] for _, card, part in loaded}, b2_status.utcnow()))
         print(time.strftime("%Y-%m-%d %H:%M:%S"), ", ".join(str(s) for s in queue))
         print(sheet)
         print("Close and reopen each card's waypoint editor on the Controller to load it.")
@@ -459,12 +696,22 @@ def main() -> None:
         remount(MOUNT)
 
     backups = LOADS / stamp
-    loaded = load(args.spec, MOUNT / STORAGE, backups, fresh_mount=lambda: remount(MOUNT))
+    ledger = fetch_ledger(args.status_config)
+    ledger = verify_ledger(MOUNT / STORAGE, ledger, args.status_config)
+    try:
+        loaded = load(args.spec, MOUNT / STORAGE, backups,
+                      fresh_mount=lambda: remount(MOUNT), ledger=ledger)
+    except b2_status.LedgerRefusal as e:
+        report_refusal(args.status_config, "card-ledger", [args.spec], str(e))
+        publish_ledger(args.status_config, ledger)  # the verification still happened
+        sys.exit(str(e))
     sheet = "\n".join(f"Open {card}: {part['name']} ({part['waypoints']} waypoints)" for card, part in loaded)
     (backups / "cards.txt").write_text(sheet + "\n")
     done = json.loads(LOADED.read_text()) if LOADED.exists() else []
     LOADED.write_text(json.dumps(done + [str(args.spec)], indent=1))
     report_loaded(args.status_config, [(spec_key(args.spec), loaded)])
+    publish_ledger(args.status_config, b2_status.merge_written(
+        ledger, {card: part["written_md5"] for card, part in loaded}, b2_status.utcnow()))
     print(time.strftime("%Y-%m-%d %H:%M:%S"), args.spec)
     print(sheet)
     print("Close and reopen each card's waypoint editor on the Controller to load it.")
@@ -486,6 +733,103 @@ def _group_by_spec(loaded: list[tuple[Path, str, dict]]) -> list[tuple[Path, lis
         else:
             groups.append((spec, [(card, part)]))
     return groups
+
+
+def _store(status_config: Path) -> dict:
+    """Authorized store access for the status key (read specs/, write status/*)."""
+    from collect import load_env, authorize  # local import: same bin dir, no cycle at runtime
+    senv = load_env(status_config)
+    return authorize(senv["B2_KEY_ID"], senv["B2_APP_KEY"])
+
+
+def fetch_ledger(status_config: Path) -> dict:
+    """The Card Ledger from the store.
+
+    A Ledger that cannot be read comes back empty, loudly. That is not a
+    fallback: an empty Ledger means every Spec has no Reservation and is refused
+    by name, which is exactly what ADR 0022 asks for. The host never chooses
+    Cards for itself — doing so is the defect.
+    """
+    if not status_config.exists():
+        print(f"no status credentials at {status_config}; the Card Ledger could not be read")
+        return dict(b2_status.EMPTY_LEDGER)
+    try:
+        sauth = _store(status_config)
+        return b2_status.download_ledger(
+            sauth["downloadUrl"], sauth["allowed"]["bucketName"], sauth["authorizationToken"])
+    except (Exception, SystemExit) as e:
+        print(f"the Card Ledger could not be read ({e}); no Spec can be Loaded until it can")
+        return dict(b2_status.EMPTY_LEDGER)
+
+
+def publish_ledger(status_config: Path, ledger: dict) -> None:
+    """Write the Ledger back. Bookkeeping, not the Load: the cards are already
+    written and verified, so this is loud when it fails and never fatal."""
+    if not status_config.exists():
+        print(f"no status credentials at {status_config}; the Card Ledger was not updated")
+        return
+    try:
+        sauth = _store(status_config)
+        b2_status.upload_ledger(sauth["apiUrl"], sauth["authorizationToken"],
+                                sauth["allowed"]["bucketId"], ledger)
+    except (Exception, SystemExit) as e:
+        print(f"the Card Ledger was not updated ({e}); the Load itself succeeded")
+        return
+    print("Updated the Card Ledger")
+
+
+def verify_ledger(root: Path, ledger: dict, status_config: Path) -> dict:
+    """Check the Ledger against the Controller at this plug-in and stamp
+    verified_at. Drift is reported and never corrected: the Ledger keeps saying
+    what was planned, because the difference is the only evidence that a Card
+    holds something else (ADR 0022)."""
+    drift = b2_status.ledger_drift(ledger, observe_cards(root, ledger))
+    for d in drift:
+        print(f"CARD LEDGER DISAGREES WITH THE CONTROLLER: {d['card']} should hold "
+              f"{d['expected']} but holds {d['found']}. Not corrected. Do not fly {d['card']} "
+              f"until you have Dispatched and Loaded that Mission again.")
+    report_drift(status_config, drift)
+    return b2_status.merge_verified(ledger, b2_status.utcnow())
+
+
+def report_drift(status_config: Path, drift: list[dict]) -> None:
+    """Put the disagreement where the planner can withhold readiness over it."""
+    if not status_config.exists():
+        print(f"no status credentials at {status_config}; drift not reported")
+        return
+    try:
+        sauth = _store(status_config)
+        sallowed = sauth["allowed"]
+        manifest = b2_status.download_manifest(
+            sauth["apiUrl"], sauth["downloadUrl"], sallowed["bucketName"], sauth["authorizationToken"])
+        b2_status.merge_drift(manifest, drift, b2_status.utcnow())
+        b2_status.upload_manifest(sauth["apiUrl"], sauth["authorizationToken"], sallowed["bucketId"], manifest)
+    except (Exception, SystemExit) as e:
+        print(f"drift report failed ({e})")
+        return
+    print(f"Reported {len(drift)} disagreeing Card(s) to the manifest" if drift
+          else "Card Ledger agrees with the Controller")
+
+
+def report_refusal(status_config: Path, kind: str, queue: list[Path], reason: str) -> None:
+    """Write a Ledger refusal into the manifest so the Status tab shows it
+    against the waiting Missions. Nothing was touched, so there is nothing to
+    roll back — but the operator must never learn of it only from a cron log."""
+    if not status_config.exists():
+        print(f"no status credentials at {status_config}; the refusal was not reported")
+        return
+    try:
+        sauth = _store(status_config)
+        sallowed = sauth["allowed"]
+        manifest = b2_status.download_manifest(
+            sauth["apiUrl"], sauth["downloadUrl"], sallowed["bucketName"], sauth["authorizationToken"])
+        b2_status.merge_refusal(manifest, kind, [spec_key(s) for s in queue],
+                                reason, b2_status.utcnow())
+        b2_status.upload_manifest(sauth["apiUrl"], sauth["authorizationToken"], sallowed["bucketId"], manifest)
+    except (Exception, SystemExit) as e:
+        print(f"the refusal was not reported ({e})")
+        return
+    print("Reported the refusal to the manifest")
 
 
 def report_overflow(status_config: Path, queue: list[Path], needed: int) -> None:
