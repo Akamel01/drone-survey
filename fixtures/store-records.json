@@ -16,19 +16,22 @@
         {
           "card": "WAYFINDER 1",
           "name": "Field north",
-          "waypoints": 32
+          "waypoints": 32,
+          "path_length_m": 421
         },
         {
           "card": "WAYFINDER 2",
           "name": "Field south",
-          "waypoints": 31
+          "waypoints": 31,
+          "path_length_m": 407
         }
       ]
     }
   },
   "summary": {
     "photo_count": 69,
-    "path_length_m": 828.0
+    "path_length_m": 828.0,
+    "parts": 2
   },
   "draft": {
     "id": "0193abcd",
@@ -38,5 +41,33 @@
       "date": "2026-09-17"
     },
     "updated_at": "2026-09-17T08:00:00Z"
+  },
+  "card_prediction": {
+    "pool": [
+      "WAYFINDER 1",
+      "WAYFINDER 2",
+      "WAYFINDER 3",
+      "WAYFINDER 4",
+      "WAYFINDER 5"
+    ],
+    "queue": [
+      {
+        "key": "specs/alpha/2026-09-18/20260918T120000Z.json",
+        "parts": 2
+      },
+      {
+        "key": "specs/bravo/2026-09-18/20260918T090000Z.json",
+        "parts": 1
+      }
+    ],
+    "cards": [
+      [
+        "WAYFINDER 1",
+        "WAYFINDER 2"
+      ],
+      [
+        "WAYFINDER 3"
+      ]
+    ]
   }
 }

@@ -345,6 +345,19 @@ def _selftest() -> None:
             free = free[len(chunk):]
         assert got_cards == ["WAYFINDER 1", "WAYFINDER 2", "WAYFINDER 3"], got_cards
 
+        # The planner predicts this same assignment before the Load runs, so
+        # the committed fixture is the contract between the two: if the rule
+        # here and the planner's prediction ever drift, one of the two fails.
+        fixture = json.loads((HERE.parents[1] / "fixtures" / "store-records.json").read_text())
+        contract = fixture["card_prediction"]
+        assert [c for c, _ in cards()] == contract["pool"], cards()
+        free, predicted = cards(), []
+        for entry in contract["queue"]:
+            chunk = assign([{"name": entry["key"], "waypoints": 1}] * entry["parts"], free)
+            predicted.append([c for c, _, _ in chunk])
+            free = free[len(chunk):]
+        assert predicted == contract["cards"], predicted
+
         # A queue that does not fit raises before anything is staged.
         try:
             load_all([(specs / "big.json", [{"name": "x", "waypoints": 1}] * (len(cards()) + 1))],

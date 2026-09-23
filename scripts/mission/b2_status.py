@@ -2,10 +2,12 @@
 """Report Collects and Loads to the cloud manifest the planner reads.
 
 The manifest is one small JSON object at specs/_status/missions.json, keyed by
-key: {collected_at, loaded_at, parts, cards: [{card, name, waypoints}]}. The
-host is its only writer; the planner only reads. Uploads use a dedicated
-status key (read specs/, write status/*) that collect.py/load.py take as
---status-config — never the read-only collect key, never the delivery key.
+key: {collected_at, loaded_at, parts, cards: [{card, name, waypoints,
+path_length_m}]}. The host is its only writer; the planner only reads, and
+compares those figures with what it predicted before the Load (#128). Uploads
+use a dedicated status key (read specs/, write status/*) that collect.py and
+load.py take as --status-config — never the read-only collect key, never the
+delivery key.
 
 Network only, no Controller: importing this file cannot touch a mount.
 """
@@ -59,8 +61,15 @@ def merge_loaded(manifest: dict, entries: list[tuple[str, list[tuple[str, dict]]
             {
                 "loaded_at": at,
                 "parts": len(loaded),
+                # path_length_m is the writer's own measurement of the file it
+                # wrote, under the same name summaries.json uses for the
+                # planner's prediction, so the two can be compared directly.
+                # The Controller's own card figures are frozen at Placeholder
+                # creation (ADR 0016), so this is the only distance the
+                # operator can trust.
                 "cards": [
-                    {"card": card, "name": part["name"], "waypoints": part["waypoints"]}
+                    {"card": card, "name": part["name"], "waypoints": part["waypoints"],
+                     **({"path_length_m": part["path_length_m"]} if "path_length_m" in part else {})}
                     for card, part in loaded
                 ],
             }
@@ -116,16 +125,22 @@ def _selftest() -> None:
     m = {}
     merge_loaded(
         m,
-        [("specs/f/2026-09-17/k.json", [("WAYFINDER 1", {"name": "F", "waypoints": 32})])],
+        [("specs/f/2026-09-17/k.json",
+          [("WAYFINDER 1", {"name": "F", "waypoints": 32, "path_length_m": 828})])],
         "t2",
     )
     assert m == {
         "specs/f/2026-09-17/k.json": {
             "loaded_at": "t2",
             "parts": 1,
-            "cards": [{"card": "WAYFINDER 1", "name": "F", "waypoints": 32}],
+            "cards": [{"card": "WAYFINDER 1", "name": "F", "waypoints": 32, "path_length_m": 828}],
         }
     }, m
+
+    # 2b. A part from a writer that reported no distance still records a card.
+    m = {}
+    merge_loaded(m, [("k", [("WAYFINDER 1", {"name": "F", "waypoints": 32})])], "t2")
+    assert m["k"]["cards"] == [{"card": "WAYFINDER 1", "name": "F", "waypoints": 32}], m
 
     # 3. A Load never clobbers the collected_at underneath it.
     m = {"k": {"collected_at": "t0"}}
