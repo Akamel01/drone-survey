@@ -11,6 +11,7 @@ import {
 } from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 import { BASEMAP, BASEMAP_OSM } from "@/lib/basemap";
+import { insertCorner, moveCorner, removeCorner } from "@/lib/aoi";
 import { circlePolygon, geodesicM } from "@/lib/mission";
 import type { CircleShape, MissionSpec } from "@/lib/spec";
 import type { Preview } from "@/lib/mission";
@@ -299,6 +300,13 @@ export default function MapPane({
     map.on("load", () => addLayers(map));
     map.on("style.load", () => addLayers(map));
 
+    // The editing handles sit on top of everything else, so anything that reacts
+    // to a press on the map has to know when the press was really on a handle.
+    const onHandle = (point: MapMouseEvent["point"]) =>
+      map.getLayer("aoi-vertices") !== undefined &&
+      map.queryRenderedFeatures(point, { layers: ["aoi-vertices", "aoi-midpoints", "circle-handles"] })
+        .length > 0;
+
     map.on("click", (e: MapMouseEvent) => {
       const { mode, spec, onAoiChange, onHomeChange, onPoiChange, onModeChange } = stateRef.current;
       const p: LL = [e.lngLat.lat, e.lngLat.lng];
@@ -314,6 +322,9 @@ export default function MapPane({
         return;
       }
       if (mode === "draw-polygon" || mode === "append-polygon") {
+        // A press on a handle is an edit of a corner that exists, never a new
+        // one: without this a click on a handle drops a second corner on top.
+        if (onHandle(e.point)) return;
         onAoiChange([...spec.aoi, p]);
         return;
       }
@@ -360,8 +371,12 @@ export default function MapPane({
       }
     });
 
+    // A corner handle is live wherever it is drawn. Arming the drag only in
+    // `idle` left every corner placed while drawing visibly grabbable and dead,
+    // and the press panned the map instead (#122). The handles are drawn only
+    // for an editable area, so their own presence is the whole condition.
     map.on("mousedown", "aoi-vertices", (e: MapLayerMouseEvent) => {
-      if (stateRef.current.mode !== "idle" || !e.features?.length) return;
+      if (!e.features?.length) return;
       e.preventDefault();
       dragIndexRef.current = e.features[0].properties!.index as number;
       map.dragPan.disable();
@@ -371,13 +386,11 @@ export default function MapPane({
     // Clicking a midpoint inserts a vertex there, then hands straight over to the
     // existing drag machinery so a click drops it and a drag positions it.
     map.on("mousedown", "aoi-midpoints", (e: MapLayerMouseEvent) => {
-      const { mode, spec, onAoiChange } = stateRef.current;
-      if (mode !== "idle" || !e.features?.length) return;
+      const { spec, onAoiChange } = stateRef.current;
+      if (!e.features?.length) return;
       e.preventDefault();
       const edge = e.features[0].properties!.edgeIndex as number;
-      const next = spec.aoi.slice();
-      next.splice(edge + 1, 0, [e.lngLat.lat, e.lngLat.lng]);
-      onAoiChange(next);
+      onAoiChange(insertCorner(spec.aoi, edge, [e.lngLat.lat, e.lngLat.lng]), spec.shape);
       dragIndexRef.current = edge + 1;
       map.dragPan.disable();
       map.getCanvas().style.cursor = "grabbing";
@@ -396,10 +409,7 @@ export default function MapPane({
     map.on("mousedown", "aoi-fill", (e: MapLayerMouseEvent) => {
       const { mode, spec } = stateRef.current;
       if (mode !== "idle" || spec.mission_type === "orbit" || spec.aoi.length < 3) return;
-      const onHandle = map.queryRenderedFeatures(e.point, {
-        layers: ["aoi-vertices", "aoi-midpoints", "circle-handles"],
-      });
-      if (onHandle.length) return;
+      if (onHandle(e.point)) return;
       e.preventDefault();
       shapeDragRef.current = {
         start: [e.lngLat.lat, e.lngLat.lng],
@@ -415,9 +425,8 @@ export default function MapPane({
       if (!e.features?.length || spec.shape) return;
       e.preventDefault();
       e.originalEvent.preventDefault();
-      if (spec.aoi.length <= 3) return; // a polygon needs three corners
       const i = e.features[0].properties!.index as number;
-      onAoiChange(spec.aoi.filter((_, j) => j !== i));
+      onAoiChange(removeCorner(spec.aoi, i), spec.shape); // a polygon needs three corners
     });
 
     map.on("mousemove", (e: MapMouseEvent) => {
@@ -475,9 +484,7 @@ export default function MapPane({
       }
 
       if (dragIndexRef.current === null) return;
-      const next = spec.aoi.slice();
-      next[dragIndexRef.current] = p;
-      onAoiChange(next, spec.shape);
+      onAoiChange(moveCorner(spec.aoi, dragIndexRef.current, p), spec.shape);
     });
 
     const endDrag = () => {
@@ -488,16 +495,16 @@ export default function MapPane({
       circleDragRef.current = null;
       shapeDragRef.current = null;
       map.dragPan.enable();
-      map.getCanvas().style.cursor = "";
+      map.getCanvas().style.cursor = stateRef.current.mode === "idle" ? "" : "crosshair";
     };
     map.on("mouseup", endDrag);
     for (const layer of ["aoi-vertices", "aoi-midpoints", "circle-handles"]) {
       map.on("mouseenter", layer, () => {
-        if (stateRef.current.mode === "idle") map.getCanvas().style.cursor = "grab";
+        map.getCanvas().style.cursor = "grab";
       });
       map.on("mouseleave", layer, () => {
         if (dragIndexRef.current === null && circleDragRef.current === null) {
-          map.getCanvas().style.cursor = "";
+          map.getCanvas().style.cursor = stateRef.current.mode === "idle" ? "" : "crosshair";
         }
       });
     }
@@ -506,7 +513,9 @@ export default function MapPane({
       if (mode === "idle" && spec.mission_type !== "orbit") map.getCanvas().style.cursor = "move";
     });
     map.on("mouseleave", "aoi-fill", () => {
-      if (shapeDragRef.current === null) map.getCanvas().style.cursor = "";
+      if (shapeDragRef.current === null) {
+        map.getCanvas().style.cursor = stateRef.current.mode === "idle" ? "" : "crosshair";
+      }
     });
 
     const onKeydown = (e: KeyboardEvent) => {
@@ -542,6 +551,10 @@ export default function MapPane({
 
     if (!drawingRef.current) set("aoi", isOrbit ? fc([]) : polygonGeoJSON(spec.aoi));
     set("aoi-vertices", isOrbit || spec.shape ? fc([]) : pointsGeoJSON(spec.aoi, (i) => ({ index: i })));
+    // Hidden while a shape is being drawn: there, a click on the map appends a
+    // corner, and an insert handle sitting on the outline would make the two
+    // indistinguishable. The corner handles carry no such ambiguity, so they
+    // stay, and stay live (#122).
     set("aoi-midpoints", isOrbit || mode !== "idle" ? fc([]) : midpointsGeoJSON(spec.aoi, spec.shape));
 
     const handles: GeoJSON.Feature[] = [];
