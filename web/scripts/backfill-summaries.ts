@@ -56,6 +56,7 @@ async function main(): Promise<void> {
     summaries[key] = {
       photo_count: p.photo_count,
       path_length_m: Math.round(p.path_length_m * 100) / 100,
+      parts: p.parts,
     };
     added++;
     console.log(`added ${p.photo_count} points · ${p.path_length_m.toFixed(1)} m  ${key}`);
