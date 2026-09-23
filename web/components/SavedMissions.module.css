@@ -1,10 +1,29 @@
-.details summary {
-  cursor: pointer;
+/* A standing list: it used to be a <details> that closed itself on every
+   re-render, which took the list away mid-edit (issue #127). */
+.list {
+  display: block;
+}
+
+.heading {
   font-size: 12px;
+  font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.08em;
   color: var(--text-dim);
-  margin-bottom: 10px;
+  margin: 0 0 10px;
+}
+
+/* The entry the editor is working on, so a Save has a visible subject. */
+.editing {
+  border-color: var(--accent);
+}
+
+/* A Mission that has left the planner and cannot be saved over in place. */
+.locked {
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--warn);
+  margin: 0 0 8px;
 }
 
 .empty {
