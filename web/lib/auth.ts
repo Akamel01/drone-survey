@@ -11,11 +11,29 @@ export function secretMatches(given: string, expected: string): boolean {
 export function authProblem(request: Request): Response | null {
   const expected = process.env.DISPATCH_SECRET;
   if (!expected) {
-    return Response.json({ error: "Dispatch is not configured" }, { status: 503 });
+    // No refusal is silent and none leaves the operator without a next step:
+    // this one is a deployment that was never given its secret, which no
+    // passphrase can fix, so saying "not authorised" would send them to retype
+    // one for an hour.
+    return Response.json(
+      {
+        error:
+          "This deployment has no shared secret set, so it cannot reach the store at all. " +
+          "No passphrase will work until DISPATCH_SECRET is set on the deployment.",
+      },
+      { status: 503 },
+    );
   }
   const given = request.headers.get("x-wayfinder-key") ?? "";
   if (!given || !secretMatches(given, expected)) {
-    return Response.json({ error: "Not authorised" }, { status: 401 });
+    return Response.json(
+      {
+        error:
+          "That passphrase is not the one this deployment expects. Retype it in the bar along the " +
+          "bottom of the Plan tab; it is stored only in this browser.",
+      },
+      { status: 401 },
+    );
   }
   return null;
 }
