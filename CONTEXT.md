@@ -84,10 +84,38 @@ them, and what it does if something goes wrong. A Grid Mission is one kind.
 _Avoid_: KML, flight plan file, route
 
 **Mission Spec**:
-The planner's record of a Mission, in our own format, from which the file the
-Controller reads is generated. A Spec is never edited: a change is a new Spec
+The planner's record of one Capture's flying, in our own format, from which the
+files the Controller reads are generated. A Spec covers the whole Site; the
+writer decides how many Missions that takes, because a Site larger than one
+battery is flown as several. A Spec is never edited: a change is a new Spec
 that supersedes the earlier one.
 _Avoid_: JSON, plan, config, mission file
+
+**Mission Name**:
+The short name the operator gives one Spec, to tell it apart from another for
+the same Site on the same day — "north half", "orbit". Distinct from the Site's
+name, which identifies the place and outlives every Spec written against it.
+_Avoid_: title, label, mission id, site name
+
+**Card**:
+One Placeholder Mission on the Controller, addressed by the name the operator
+gave it. A Card holds exactly one Mission, so a Spec split into three Missions
+occupies three Cards.
+_Avoid_: slot, placeholder, WAYFINDER, waypoint instance
+
+**Reservation**:
+A Card claimed for a Mission at the moment its Spec is Dispatched, rather than
+when the host writes to it. Reserving early is what lets the planner state
+which Card a Mission will be in, and refuse a Dispatch when no Card is
+available, while the operator is still at the planner.
+_Avoid_: allocation, assignment, booking
+
+**Card Ledger**:
+The record of which Mission each Card holds and whether it has been Flown. It
+lives in the store so the planner can read it, is written by the host that
+Loads, and is checked against the Controller itself at each plug-in — a Card
+whose contents disagree with the Ledger is reported, never quietly corrected.
+_Avoid_: index, registry, card state, manifest
 
 **Controller**:
 The handheld unit the operator flies with, which runs the flight app and holds
@@ -117,6 +145,40 @@ To fetch Dispatched Mission Specs onto the host that Loads. Collecting is what
 the host does on its own; Loading is what happens when the Controller is
 plugged in.
 _Avoid_: download, pull, sync
+
+**Mission State**:
+Where one Mission has reached on its way from the planner to a flight. The
+states are Planned, Dispatched, Collected, Loaded, Flown, Withdrawn and
+Superseded, and they are the same words as the verbs that cause them.
+
+A Mission waiting to be Collected is Dispatched however many are ahead of it;
+its position in the line is something the Mission has, not a state it is in.
+_Avoid_: queued, pending, status, in progress
+
+**Planned**:
+A Mission that exists and has not been Dispatched. The only state in which it
+can be edited in place.
+_Avoid_: draft, unsaved, local
+
+**Flown**:
+A Mission the operator has flown. Imagery arriving from that Site and date is
+evidence the system infers this from, but the operator's own mark is what
+decides it: they may mark a Mission Flown before the imagery lands, or unmark
+one the imagery suggested, and their answer wins. Where the two disagree, both
+are shown rather than the difference being resolved silently.
+_Avoid_: complete, done, finished, captured
+
+**Withdrawn**:
+A Dispatched Mission cancelled before it was Collected. Nothing reached the
+Controller, so nothing has to be undone there.
+_Avoid_: cancelled, deleted, removed
+
+**Superseded**:
+A Mission replaced by a newer one for the same Site, date and name. Two
+Missions for one Site on one day are not superseded by each other when the
+operator named them differently: that is two deliberate flights, not a
+correction.
+_Avoid_: replaced, stale, outdated, overwritten
 
 ### Deliverables
 
