@@ -86,7 +86,14 @@ export async function POST(request: Request) {
         const writeSession: B2Session = readEnv2.keyId === env2.keyId ? readSession : await authorize(env2);
         const existingRaw = await downloadFile(readSession, env2.bucket, existingKey);
         const parsed: Record<string, unknown> = existingRaw ? JSON.parse(existingRaw.toString()) : {};
-        parsed[key] = { photo_count: summary.photo_count, path_length_m: summary.path_length_m };
+        // parts is what decides which card this Mission lands in: the Status tab
+        // predicts the card by walking the waiting queue, and cannot place
+        // anything behind a Mission whose split it does not know.
+        parsed[key] = {
+          photo_count: summary.photo_count,
+          path_length_m: summary.path_length_m,
+          parts: summary.parts,
+        };
         await uploadFile(writeSession, existingKey, Buffer.from(JSON.stringify(parsed, null, 2)));
       }
     } catch (err) {

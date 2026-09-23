@@ -3,8 +3,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { DEFAULT_SPEC, type MissionSpec } from "@/lib/spec";
 import { stampToIso } from "@/lib/keys";
-import type { MissionState, StatusRow } from "@/lib/missions";
-import { isSpecWithdrawable, isWithdrawn, isDraftDeletable } from "@/lib/missions";
+import type { CardPrediction, LoadedCard, MissionState, StatusRow } from "@/lib/missions";
+import { CARD_POOL, cardMismatch, isSpecWithdrawable, isWithdrawn, isDraftDeletable } from "@/lib/missions";
 import {
   IDLE,
   MISSIONS_CHANGED_KEY,
@@ -344,9 +344,31 @@ export default function MissionStatus({ spec, onLoadMission, allowSave = true }:
             )}
             {row.cards.length > 0 && (
               <div className={styles.meta}>
-                {row.cards.map((c) => `${c.card}: ${c.name}${c.waypoints == null ? "" : ` (${c.waypoints})`}`).join(" · ")}
+                {row.cards.map((c) => cardLine(c)).join(" · ")}
+                {/* ADR 0016 measured this: a card's own name, distance and
+                    point count are frozen at its creation and describe
+                    whatever it last held, so the Controller cannot confirm
+                    the right Mission is in it. These figures can. */}
+                <div>
+                  Read from what the host wrote. The card&apos;s own figures on the Controller are
+                  frozen at its creation and do not describe what is in it now.
+                </div>
               </div>
             )}
+            {/* The host has not written anything yet, so this is arithmetic on
+                the waiting queue, not a fact — and it moves the moment another
+                Mission is Dispatched ahead of this one. */}
+            {row.prediction && <Predicted p={row.prediction} />}
+            {(() => {
+              const off = cardMismatch(row);
+              return off ? (
+                <div className={styles.error}>
+                  Loaded card does not match the plan: {off}. The card&apos;s own figures on the
+                  Controller are frozen at its creation, so this line is the only place the
+                  difference shows.
+                </div>
+              ) : null;
+            })()}
             <details className={styles.detail}>
               <summary>Details</summary>
               <div className={`${styles.meta} mono`}>{row.id}</div>
@@ -405,6 +427,47 @@ export default function MissionStatus({ spec, onLoadMission, allowSave = true }:
           </div>
         );
       })}
+    </div>
+  );
+}
+
+function metres(m: number): string {
+  return m < 1000 ? `${Math.round(m)} m` : `${(m / 1000).toFixed(2)} km`;
+}
+
+/** One reported card: what the host wrote, and what it measured writing it. */
+function cardLine(c: LoadedCard): string {
+  const figures = [
+    c.waypoints == null ? null : `${c.waypoints} points`,
+    c.path_length_m == null ? null : metres(c.path_length_m),
+  ].filter(Boolean);
+  return `${c.card}: ${c.name}${figures.length ? ` (${figures.join(", ")})` : ""}`;
+}
+
+/** The card a waiting Mission is expected to land in — labelled a prediction
+ *  everywhere it appears, because a Dispatch ahead of it changes the answer
+ *  and nothing on the Controller can be used to check it (ADR 0016). */
+function Predicted({ p }: { p: CardPrediction }) {
+  if (p.overflow) {
+    return (
+      <div className={styles.error}>
+        Predicted: nothing Loads. The waiting missions need more than the {CARD_POOL.length}{" "}
+        calibrated WAYFINDER cards, and the host refuses the whole queue rather than loading
+        part of it. Withdraw a mission or calibrate another card.
+      </div>
+    );
+  }
+  const figures = [
+    p.waypoints == null ? null : `${p.waypoints} points`,
+    p.path_length_m == null ? null : metres(p.path_length_m),
+  ].filter(Boolean);
+  const where = p.cards.length > 1 ? `${p.cards[0]}–${p.cards[p.cards.length - 1]}` : p.cards[0];
+  return (
+    <div className={styles.meta}>
+      <em>Predicted</em>, not loaded yet: {where}
+      {p.parts > 1 ? ` (${p.parts} parts)` : ""}
+      {figures.length ? ` · ${figures.join(" · ")}${p.parts > 1 ? " over all parts" : ""}` : ""}. A
+      Mission Dispatched ahead of this one changes the card.
     </div>
   );
 }

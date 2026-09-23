@@ -2,6 +2,8 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import {
+  CARD_POOL,
+  cardMismatch,
   joinStatus,
   type DraftRecord,
   type Manifest,
@@ -338,4 +340,115 @@ test("the golden record fixture yields the rows the host's records describe", ()
   assert.deepEqual(loaded.cards, fixture.manifest[key].cards, "the manifest's cards are the row's cards");
   assert.deepEqual(loaded.metrics, fixture.summary, "the stored summary is the row's metrics");
   assert.equal(skipped.state, "withdrawn", "a skip-list entry with no Load marks the row withdrawn");
+});
+
+// --- Predicted cards for a Mission still waiting to Load (#128) -------------
+// The prediction has to follow load.py's own rule, so the queue table lives in
+// the committed fixture and load.py's self-check asserts the same assignment.
+function specKey(site: string, date: string, stamp: string): string {
+  return `specs/${site}/${date}/${stamp}.json`;
+}
+
+const ALPHA = specKey("alpha", "2026-09-18", "20260918T120000Z");
+const BRAVO = specKey("bravo", "2026-09-18", "20260918T090000Z");
+
+test("the card prediction follows load.py's assignment over the whole queue", () => {
+  const fixture = JSON.parse(readFileSync(new URL("../../fixtures/store-records.json", import.meta.url), "utf8")) as {
+    card_prediction: { pool: string[]; queue: { key: string; parts: number }[]; cards: string[][] };
+  };
+  const contract = fixture.card_prediction;
+  assert.deepEqual(CARD_POOL, contract.pool, "the planner's pool is the host's calibrated pool");
+  const summaries = Object.fromEntries(
+    contract.queue.map((q) => [q.key, { photo_count: 10 * q.parts, path_length_m: 100, parts: q.parts }]),
+  );
+  const rows = joinStatus([], contract.queue.map((q) => q.key), {}, {}, summaries);
+  const got = contract.queue.map((q) => rows.find((r) => r.id === q.key)!.prediction!.cards);
+  assert.deepEqual(got, contract.cards, "the second mission's card depends on the first one's part count");
+});
+
+test("the waiting queue is ordered by key, as load.py's unloaded_queue() sorts it", () => {
+  // load.py sorts the queue by path, not by time: bravo's older Dispatch stamp
+  // does not put it first, because "alpha" sorts before "bravo".
+  const summaries = {
+    [ALPHA]: { photo_count: 60, path_length_m: 800, parts: 2 },
+    [BRAVO]: { photo_count: 20, path_length_m: 300, parts: 1 },
+  };
+  const rows = joinStatus([], [BRAVO, ALPHA], {}, {}, summaries);
+  const byId = Object.fromEntries(rows.map((r) => [r.id, r]));
+  assert.deepEqual(byId[ALPHA].prediction?.cards, ["WAYFINDER 1", "WAYFINDER 2"]);
+  assert.deepEqual(byId[BRAVO].prediction?.cards, ["WAYFINDER 3"]);
+  assert.equal(byId[ALPHA].prediction?.waypoints, 60);
+  assert.equal(byId[ALPHA].prediction?.path_length_m, 800);
+});
+
+test("a Collected mission still takes its cards from the ones behind it", () => {
+  const summaries = {
+    [ALPHA]: { photo_count: 60, path_length_m: 800, parts: 3 },
+    [BRAVO]: { photo_count: 20, path_length_m: 300, parts: 1 },
+  };
+  // Collected but not Loaded is still in the host's queue, and still takes cards.
+  const rows = joinStatus([], [ALPHA, BRAVO], { [ALPHA]: { collected_at: "t" } }, {}, summaries);
+  const byId = Object.fromEntries(rows.map((r) => [r.id, r]));
+  assert.equal(byId[ALPHA].state, "collected");
+  assert.deepEqual(byId[BRAVO].prediction?.cards, ["WAYFINDER 4"]);
+});
+
+test("a queue that overflows the pool predicts that nothing Loads", () => {
+  const summaries = {
+    [ALPHA]: { photo_count: 60, path_length_m: 800, parts: 4 },
+    [BRAVO]: { photo_count: 20, path_length_m: 300, parts: 2 },
+  };
+  const rows = joinStatus([], [ALPHA, BRAVO], {}, {}, summaries);
+  for (const key of [ALPHA, BRAVO]) {
+    const row = rows.find((r) => r.id === key)!;
+    assert.equal(row.prediction?.overflow, true, `${key} must say the host refuses the whole queue`);
+    assert.deepEqual(row.prediction?.cards, [], "no card is promised when nothing Loads");
+    assert.equal(row.overflow, true);
+  }
+});
+
+test("an unknown split predicts nothing for itself or anything behind it", () => {
+  // No summary for alpha: its card count is unknowable, so bravo's is too.
+  const rows = joinStatus([], [ALPHA, BRAVO], {}, {}, { [BRAVO]: { photo_count: 20, path_length_m: 300, parts: 1 } });
+  const byId = Object.fromEntries(rows.map((r) => [r.id, r]));
+  assert.equal(byId[ALPHA].prediction, undefined);
+  assert.equal(byId[BRAVO].prediction, undefined, "a guess behind an unknown split would be fiction");
+});
+
+test("a Loaded mission carries the host's cards and no prediction", () => {
+  const manifest: Manifest = {
+    [ALPHA]: {
+      collected_at: "t",
+      loaded_at: "t2",
+      parts: 1,
+      cards: [{ card: "WAYFINDER 1", name: "Alpha", waypoints: 69, path_length_m: 828 }],
+    },
+  };
+  const [row] = joinStatus([], [ALPHA], manifest, {}, { [ALPHA]: { photo_count: 69, path_length_m: 828, parts: 1 } });
+  assert.equal(row.prediction, undefined, "a measurement is never dressed up as a prediction");
+  assert.equal(row.cards[0].path_length_m, 828);
+  assert.equal(cardMismatch(row), null);
+});
+
+test("a Load that disagrees with the plan says so in both figures", () => {
+  const manifest: Manifest = {
+    [ALPHA]: {
+      collected_at: "t",
+      loaded_at: "t2",
+      parts: 1,
+      cards: [{ card: "WAYFINDER 1", name: "Alpha", waypoints: 5, path_length_m: 900 }],
+    },
+  };
+  const [row] = joinStatus([], [ALPHA], manifest, {}, { [ALPHA]: { photo_count: 62, path_length_m: 990, parts: 1 } });
+  const off = cardMismatch(row)!;
+  assert.match(off, /62 points planned, 5 loaded/);
+  assert.match(off, /990 m planned, 900 m loaded/);
+});
+
+test("a host that reported no distance is not read as a disagreement", () => {
+  const manifest: Manifest = {
+    [ALPHA]: { collected_at: "t", loaded_at: "t2", parts: 1, cards: [{ card: "WAYFINDER 1", name: "A", waypoints: 62 }] },
+  };
+  const [row] = joinStatus([], [ALPHA], manifest, {}, { [ALPHA]: { photo_count: 62, path_length_m: 990, parts: 1 } });
+  assert.equal(cardMismatch(row), null, "a missing figure is silence, not a mismatch");
 });

@@ -23,6 +23,28 @@ export interface LoadedCard {
   // Optional: real host cards carry a measured waypoint count; predicted cards
   // do not yet have a value.
   waypoints?: number;
+  /** Flight distance of the part the host wrote into this card, in metres. */
+  path_length_m?: number;
+}
+
+// The calibrated WAYFINDER pool (scripts/mission/wayfinder_slots.json). The
+// loader refuses a queue that needs more cards than this rather than
+// truncating it, so a prediction past the pool is a prediction that nothing
+// Loads at all (#118).
+export const CARD_POOL = ["WAYFINDER 1", "WAYFINDER 2", "WAYFINDER 3", "WAYFINDER 4", "WAYFINDER 5"];
+
+/** What the host is expected to do with a Mission that has not Loaded yet.
+ *  A guess, never a fact: it changes the moment another Mission is Dispatched
+ *  ahead of this one, because cards are handed out over the whole queue. */
+export interface CardPrediction {
+  /** Card names, one per part, in part order. Empty when nothing will Load. */
+  cards: string[];
+  parts: number;
+  /** Planner-side figures for the whole Mission, across all its parts. */
+  waypoints?: number;
+  path_length_m?: number;
+  /** The queue needs more cards than the pool holds: the host refuses it whole. */
+  overflow: boolean;
 }
 
 export interface ManifestEntry {
@@ -78,12 +100,16 @@ export interface StatusRow {
   /** The draft body, on draft rows only — the tab Dispatches and edits from it. */
   spec?: MissionSpec;
   /** Optional per-spec metrics if available from summaries.json. */
-  metrics?: { photo_count: number; path_length_m: number };
+  metrics?: SpecSummary;
   /** ISO instant this row's information is as of: draft update, dispatch stamp,
    *  collect stamp, or load stamp, whichever is newest. */
   updated: string;
   /** Indicates that the assigned card set overflows the 5-card pool. */
   overflow?: boolean;
+  /** Predicted card, point count and distance while this Mission waits to
+   *  Load. Absent once the host has reported, and absent when the parts count
+   *  of something ahead in the queue is unknown. */
+  prediction?: CardPrediction;
   /** Server-side computed human-friendly age from the row's timestamp. */
   age?: string;
   /** True when a waiting mission has sat longer than the 15-minute nudge. */
@@ -95,6 +121,8 @@ export interface StatusRow {
 export interface SpecSummary {
   photo_count: number;
   path_length_m: number;
+  /** How many parts the writer will split this Mission into — one card each. */
+  parts?: number;
 }
 
 /** Pure join of drafts + Dispatched keys + host manifest into status rows. */
@@ -155,7 +183,13 @@ export function joinStatus(
         summaries?.[key] &&
         Number.isFinite(summaries[key].photo_count) &&
         Number.isFinite(summaries[key].path_length_m)
-          ? { photo_count: summaries[key].photo_count, path_length_m: summaries[key].path_length_m }
+          ? {
+              photo_count: summaries[key].photo_count,
+              path_length_m: summaries[key].path_length_m,
+              // Carried through because the prediction is derived from it and
+              // the row is what the API hands the browser.
+              ...(typeof summaries[key].parts === "number" ? { parts: summaries[key].parts } : {}),
+            }
           : undefined,
     });
   }
@@ -227,8 +261,76 @@ export function joinStatus(
   waitingOrdered.forEach((w) => {
     if (!w.cards) w.cards = [];
   });
+  predictCards(rows, summaries);
   // Newest-first display order remains defined by stamp as before.
   return rows.sort((a, b) => (a.stamp < b.stamp ? 1 : -1));
+}
+
+/** Predict which cards the host will use for every Mission still waiting to
+ *  Load, following `load.py`'s own rule: one pass over the whole queue in key
+ *  order (Site, then date, then Dispatch stamp — `unloaded_queue()` sorts by
+ *  path, not by time), parts taken sequentially from the card pool, and the
+ *  whole queue refused rather than truncated when it does not fit.
+ *
+ *  Mutates the rows, and only the waiting ones: a Loaded row carries the
+ *  host's measurement instead, which is the only figure that is a fact. */
+export function predictCards(rows: StatusRow[], summaries: Record<string, SpecSummary> = {}): void {
+  const queue = rows
+    .filter(
+      (r) =>
+        r.kind === "spec" &&
+        (r.state === "dispatched" || r.state === "queued" || r.state === "collected"),
+    )
+    .sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+  const partsOf = (r: StatusRow): number | null => {
+    const n = summaries[r.id]?.parts;
+    return typeof n === "number" && Number.isFinite(n) && n > 0 ? n : null;
+  };
+  const known = queue.map(partsOf);
+  const total = known.reduce<number>((sum, n) => sum + (n ?? 0), 0);
+  const overfull = known.every((n) => n !== null) && total > CARD_POOL.length;
+  let next = 0;
+  for (const [i, row] of queue.entries()) {
+    const parts = known[i];
+    // A Mission whose split is unknown moves the cards for everything behind
+    // it by an unknown amount, so nothing behind it is predictable either.
+    if (parts === null) break;
+    const past = overfull || next + parts > CARD_POOL.length;
+    row.prediction = {
+      cards: past ? [] : CARD_POOL.slice(next, next + parts),
+      parts,
+      waypoints: summaries[row.id]?.photo_count,
+      path_length_m: summaries[row.id]?.path_length_m,
+      overflow: past,
+    };
+    row.overflow = past;
+    next += parts;
+  }
+}
+
+/** The disagreement between what the planner expected and what the host wrote,
+ *  which is the whole point of showing both: a Load that put a different
+ *  Mission in the card cannot be caught on the Controller, whose own labels
+ *  are frozen at Placeholder creation (ADR 0016). Null when they agree, or
+ *  when there is nothing to compare. */
+export function cardMismatch(row: StatusRow): string | null {
+  if (!row.metrics || row.cards.length === 0) return null;
+  const measuredPoints = row.cards.reduce<number>((n, c) => n + (c.waypoints ?? 0), 0);
+  const measuredDist = row.cards.reduce<number>((n, c) => n + (c.path_length_m ?? 0), 0);
+  const notes: string[] = [];
+  if (row.cards.every((c) => typeof c.waypoints === "number") && measuredPoints !== row.metrics.photo_count) {
+    notes.push(`${row.metrics.photo_count} points planned, ${measuredPoints} loaded`);
+  }
+  // Distance is two measurements of the same path, so only a real difference
+  // counts: 5% is well past rounding and the two geodesic sums.
+  if (
+    row.cards.every((c) => typeof c.path_length_m === "number") &&
+    row.metrics.path_length_m > 0 &&
+    Math.abs(measuredDist - row.metrics.path_length_m) / row.metrics.path_length_m > 0.05
+  ) {
+    notes.push(`${Math.round(row.metrics.path_length_m)} m planned, ${Math.round(measuredDist)} m loaded`);
+  }
+  return notes.length ? notes.join("; ") : null;
 }
 
 // A waiting mission the host has not picked up in 15 minutes is worth a nudge:
