@@ -16,8 +16,11 @@ interface SidebarProps {
   areaHa: number;
   preview: Preview;
   savedMissions: SavedMission[];
+  /** Entries the store could not read. Shown, never swallowed (issue #125). */
+  savedSkipped: number;
   onLoadMission: (spec: MissionSpec) => void;
   onDeleteMission: (saved_at: string) => void;
+  onMissionSent: (saved_at: string) => void;
 }
 
 // Plain metric area: m² under a square kilometre, km² above.
@@ -121,8 +124,10 @@ export default function Sidebar({
   areaHa,
   preview,
   savedMissions,
+  savedSkipped,
   onLoadMission,
   onDeleteMission,
+  onMissionSent,
 }: SidebarProps) {
   const flight = spec.flight;
   const camera = spec.camera;
@@ -573,7 +578,13 @@ export default function Sidebar({
       </Section>
 
       <Section title="Saved missions">
-        <SavedMissions missions={savedMissions} onLoad={onLoadMission} onDelete={onDeleteMission} />
+        <SavedMissions
+          missions={savedMissions}
+          skipped={savedSkipped}
+          onLoad={onLoadMission}
+          onDelete={onDeleteMission}
+          onSent={onMissionSent}
+        />
       </Section>
     </aside>
   );

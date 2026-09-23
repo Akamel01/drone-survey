@@ -3,7 +3,13 @@
 import { useEffect, useMemo, useState } from "react";
 import { DEFAULT_SPEC, type CircleShape, type MissionSpec } from "@/lib/spec";
 import { preview, areaHectares } from "@/lib/mission";
-import { loadSavedMissions, saveMission, deleteMission, type SavedMission } from "@/lib/savedMissions";
+import {
+  loadSavedMissions,
+  saveMission,
+  deleteMission,
+  markMissionSent,
+  type SavedMission,
+} from "@/lib/savedMissions";
 import MapPane, { type DrawMode } from "@/components/MapPane";
 import Sidebar from "@/components/Sidebar";
 import SummaryBar from "@/components/SummaryBar";
@@ -20,9 +26,16 @@ export default function PlanPage() {
   // Empty on the server (no localStorage there); filled in after mount so the
   // server-rendered and first client-rendered HTML match.
   const [savedMissions, setSavedMissions] = useState<SavedMission[]>([]);
+  // How many stored entries could not be read. Kept beside the list so the
+  // operator is told, instead of a short list passing for the whole list.
+  const [savedSkipped, setSavedSkipped] = useState(0);
+  const applySaved = (read: { missions: SavedMission[]; skipped: number }) => {
+    setSavedMissions(read.missions);
+    setSavedSkipped(read.skipped);
+  };
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- one-time client-only read of localStorage
-    setSavedMissions(loadSavedMissions());
+    applySaved(loadSavedMissions());
     // A draft sent over from the Mission status tab for editing.
     try {
       const handoff = localStorage.getItem(EDIT_HANDOFF_KEY);
@@ -81,14 +94,16 @@ export default function PlanPage() {
           areaHa={areaHa}
           preview={preview_}
           savedMissions={savedMissions}
+          savedSkipped={savedSkipped}
           onLoadMission={setSpecState}
-          onDeleteMission={(saved_at) => setSavedMissions(deleteMission(saved_at))}
+          onDeleteMission={(saved_at) => applySaved(deleteMission(saved_at))}
+          onMissionSent={(saved_at) => applySaved(markMissionSent(saved_at))}
         />
       </div>
       <SummaryBar
         spec={spec}
         preview={preview_}
-        onSaveMission={() => setSavedMissions(saveMission(spec))}
+        onSaveMission={() => applySaved(saveMission(spec))}
       />
     </div>
   );
