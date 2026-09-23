@@ -62,11 +62,13 @@ Usage:
 """
 
 import argparse
+import uuid
 import json
 import subprocess
 import sys
 import zipfile
 from pathlib import Path
+import os
 
 import nodeodm_client as client
 
@@ -98,6 +100,19 @@ def parse_options(pairs: list[str]) -> list[dict]:
                     parsed = value
         options.append({"name": name, "value": parsed})
     return options
+
+
+def _load_execution_context_from_env() -> dict:
+    """Read EXECUTION_CONTEXT that the Runner injects into the process env.
+    Returns a dict if present, otherwise an empty dict.
+    """
+    raw = os.environ.get("EXECUTION_CONTEXT")
+    if not raw:
+        return {}
+    try:
+        return json.loads(raw)
+    except Exception:
+        return {}
 
 
 def primary_camera(cameras: dict) -> dict:
@@ -266,12 +281,16 @@ def main() -> None:
     p.add_argument("--timeout-seconds", type=float, default=3 * 3600, help="boundary: a single ODM run may not exceed 3 hours")
     p.add_argument("--odm-image", default=DEFAULT_ODM_IMAGE,
                    help="ODM CLI container image -- used only for the first (no-gcp) pass, see module docstring")
-    p.add_argument("--keep-task", action="store_true",
-                   help="don't remove the NodeODM task on completion -- set this on the second (with-gcp) solve, "
-                        "whose task `reconstruct` continues via restart; the first solve's task is never resumed "
-                        "and is removed to free the container's disk (bug found live: reconstruct's restart failed "
-                        "with \"not found\" against a task solve had already removed)")
+    # Cleanup is declarative via the manifest; remove-task flag is deprecated.
     args = p.parse_args()
+
+    # Context-driven no-GCP signal: if the Runner indicates no GCPs via env,
+    # force no-gcp on this run (first/second pass shenanigans).
+    ctx = _load_execution_context_from_env()
+    if isinstance(ctx, dict) and "ground_control_points" in ctx:
+        if not ctx["ground_control_points"]:
+            # Override to force the no-GCP path for this solve invocation.
+            args.gcp = None
 
     images = list_images(args.images_dir)
     if not images:
@@ -281,7 +300,10 @@ def main() -> None:
     # register always creates --gcp's path; empty means "no Anchors to
     # register" and is the deliberate, expected no-ground-control signal
     # (see register.py), not an error -- only a genuinely missing file is.
-    gcp_path = args.gcp if (args.gcp is not None and args.gcp.stat().st_size > 0) else None
+    # F2: remove the emptiness check; if a gcp path is provided, pass it through
+    # as-is. The manifest controls whether we actually have GCPs via the
+    # EXECUTION_CONTEXT signal.
+    gcp_path = args.gcp if args.gcp is not None else None
 
     options = [{"name": "end-with", "value": args.end_with}] + parse_options(args.option)
     args.out.mkdir(parents=True, exist_ok=True)
@@ -300,8 +322,12 @@ def main() -> None:
                                            args.odm_image, args.timeout_seconds)
         cameras, poses = poses_from_reconstruction(reconstruction_path)
         remove_odm_project(project_root)  # heavy, root-owned opensfm working set; poses/camera already extracted
+        # F1: no-GCP path must still provide a stable task descriptor for later stages.
+        # Provide a minimal task.json with uuid/host so reconstruct.py can proceed
+        # without KeyError when the next stage restarts the task.
         (args.out / "task.json").write_text(json.dumps({
             "route": "odm-cli", "end_with": args.end_with, "gcp": False,
+            "host": "odm-cli", "uuid": str(uuid.uuid4()),
         }, indent=1))
     else:
         print(f"solve: submitting {len(images)} images to {args.host} "
@@ -324,8 +350,8 @@ def main() -> None:
                 poses = extract_poses(zf)
             zip_path.unlink()  # keep the Runner's workdir small; the zip's content is re-derivable from the task while it exists
         finally:
-            if not args.keep_task:
-                client.remove(args.host, task_uuid)  # task data lives in the container, not the workdir -- free it regardless of outcome
+            # Cleanup is handled declaratively by the Runner; do not manually remove here
+            pass
 
         (args.out / "task.json").write_text(json.dumps({
             "uuid": task_uuid, "host": args.host, "end_with": args.end_with, "gcp": gcp_path is not None,

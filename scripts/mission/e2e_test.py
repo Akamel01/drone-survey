@@ -1,6 +1,12 @@
 #!/usr/bin/env python3
 """End to end: a Mission Spec from the planner becomes a KMZ the aircraft can fly.
 
+This module is guarded by a minimum Python floor check (M8). If the host Python
+version is below the required floor (3.11), the test exits loudly with a clear
+message to fail fast on non-compliant hosts.
+"""
+"""End to end: a Mission Spec from the planner becomes a KMZ the aircraft can fly.
+
 Each piece is checked on its own elsewhere. This checks the seams, which is where
 the expensive failures live (design.md, "Verification: each Node, then the whole
 path"). It drives the real planner maths through node and the real writer through
@@ -13,6 +19,16 @@ import json
 import math
 import subprocess
 import sys
+
+# M8 floor check: host Python must be at least 3.11
+MIN_PY = (3, 11)
+if sys.version_info < MIN_PY:
+    print(
+        f"FATAL: Minimum Python {MIN_PY[0]}.{MIN_PY[1]} required for M8; current version is "
+        f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}",
+        file=sys.stderr,
+    )
+    sys.exit(3)
 import tempfile
 import zipfile
 from pathlib import Path

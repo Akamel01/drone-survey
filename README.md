@@ -58,6 +58,7 @@ the Runner executes it. Detail lives in [`docs/design.md`](docs/design.md).
 ## Installation
 
 Prerequisites: Python 3.11, Node 24, `jmtpfs` (field host only).
+- Minimum Python version for scripts/mission (M8 floor): 3.11
 
 ```bash
 git clone https://github.com/Akamel01/drone-survey.git

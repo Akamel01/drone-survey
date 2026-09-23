@@ -1,5 +1,6 @@
 {
   "pipeline": "orthomosaic",
+  "ground_control_points": false,
   "nodes": [
     {
       "name": "ingest",
@@ -32,28 +33,38 @@
         "--option", "feature-quality=low"
       ],
       "inputs": {"images": {"node": "correct", "output": "images"}},
-      "outputs": {"solved": "solved"}
+      "outputs": {
+        "solved": "solved",
+        "poses": "solved/poses.json",
+        "camera": "solved/camera.json"
+      },
+      "cleanup_paths": ["odm_project"]
     },
     {
       "name": "register",
       "command": [
         "python3", "nodes/register/register.py",
-        "--poses", "{in.solved}/poses.json", "--camera", "{in.solved}/camera.json",
+        "--poses", "{in.poses}", "--camera", "{in.camera}",
         "--out", "{out.registered}"
       ],
-      "inputs": {"solved": {"node": "solve-initial", "output": "solved"}},
-      "outputs": {"registered": "registered"}
+      "inputs": {
+        "solved": {"node": "solve-initial", "output": "solved"},
+        "poses": {"node": "solve-initial", "output": "poses"},
+        "camera": {"node": "solve-initial", "output": "camera"}
+      },
+      "outputs": {"registered": "registered", "gcp_list": "registered/gcp_list.txt"}
     },
     {
       "name": "solve-final",
       "command": [
         "python3", "nodes/solve/solve.py",
-        "--in", "{in.images}", "--gcp", "{in.registered}/gcp_list.txt", "--out", "{out.solved}",
-        "--option", "feature-quality=low", "--keep-task"
+        "--in", "{in.images}", "--gcp", "{in.gcp_list}", "--out", "{out.solved}",
+        "--option", "feature-quality=low"
       ],
       "inputs": {
         "images": {"node": "correct", "output": "images"},
-        "registered": {"node": "register", "output": "registered"}
+        "registered": {"node": "register", "output": "registered"},
+        "gcp_list": {"node": "register", "output": "gcp_list"}
       },
       "outputs": {"solved": "solved"}
     },
@@ -86,26 +97,30 @@
         "--rerun-from", "odm_georeferencing", "--end-with", "odm_orthophoto"
       ],
       "inputs": {"reconstructed": {"node": "reconstruct-mesh", "output": "reconstructed"}},
-      "outputs": {"reconstructed": "reconstructed"}
+      "outputs": {"reconstructed": "reconstructed", "odm_orthophoto": "reconstructed/odm_orthophoto.tif"}
     },
     {
       "name": "reconstruct-report",
       "command": [
         "python3", "nodes/reconstruct/reconstruct.py",
         "--in", "{in.reconstructed}", "--out", "{out.reconstructed}",
-        "--rerun-from", "odm_report", "--end-with", "odm_postprocess", "--remove-task"
+        "--rerun-from", "odm_report", "--end-with", "odm_postprocess"
       ],
-      "inputs": {"reconstructed": {"node": "reconstruct-georef", "output": "reconstructed"}},
-      "outputs": {"reconstructed": "reconstructed"}
+      "inputs": {"reconstructed": {"node": "reconstruct-georef", "output": "reconstructed"},
+                  "odm_orthophoto": {"node": "reconstruct-georef", "output": "odm_orthophoto"}},
+      "outputs": {"reconstructed": "reconstructed", "odm_orthophoto": "reconstructed/odm_orthophoto.tif"}
     },
     {
       "name": "export-cog",
       "image": "drone-export-cog",
       "command": [
         "python3", "nodes/export-cog/export_cog.py",
-        "--in", "{in.reconstructed}/odm_orthophoto.tif", "--out", "{out.cog}"
+        "--in", "{in.odm_orthophoto}", "--out", "{out.cog}"
       ],
-      "inputs": {"reconstructed": {"node": "reconstruct-report", "output": "reconstructed"}},
+      "inputs": {
+        "reconstructed": {"node": "reconstruct-report", "output": "reconstructed"},
+        "odm_orthophoto": {"node": "reconstruct-report", "output": "odm_orthophoto"}
+      },
       "outputs": {"cog": "cog"}
     }
   ]
