@@ -348,15 +348,23 @@ def _selftest() -> None:
         # The planner predicts this same assignment before the Load runs, so
         # the committed fixture is the contract between the two: if the rule
         # here and the planner's prediction ever drift, one of the two fails.
-        fixture = json.loads((HERE.parents[1] / "fixtures" / "store-records.json").read_text())
-        contract = fixture["card_prediction"]
-        assert [c for c, _ in cards()] == contract["pool"], cards()
-        free, predicted = cards(), []
-        for entry in contract["queue"]:
-            chunk = assign([{"name": entry["key"], "waypoints": 1}] * entry["parts"], free)
-            predicted.append([c for c, _, _ in chunk])
-            free = free[len(chunk):]
-        assert predicted == contract["cards"], predicted
+        fixture_path = HERE.parents[1] / "fixtures" / "store-records.json"
+        # These scripts are deployed to the host as a flat directory, not as a
+        # checkout, so the fixture is genuinely absent there. Skip it loudly
+        # rather than fail the whole self-check: the same table is asserted from
+        # the planner's own tests, which only ever run in a checkout, so a drift
+        # between the two rules is still caught.
+        if not fixture_path.is_file():
+            print(f"card-assignment fixture absent ({fixture_path}); that check skipped")
+        else:
+            contract = json.loads(fixture_path.read_text())["card_prediction"]
+            assert [c for c, _ in cards()] == contract["pool"], cards()
+            free, predicted = cards(), []
+            for entry in contract["queue"]:
+                chunk = assign([{"name": entry["key"], "waypoints": 1}] * entry["parts"], free)
+                predicted.append([c for c, _, _ in chunk])
+                free = free[len(chunk):]
+            assert predicted == contract["cards"], predicted
 
         # A queue that does not fit raises before anything is staged.
         try:

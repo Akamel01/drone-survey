@@ -164,7 +164,15 @@ def _fixture_check() -> None:
     import json
     from pathlib import Path
 
-    fixture = json.loads((Path(__file__).resolve().parents[2] / "fixtures" / "store-records.json").read_text())
+    # Deployed to the host as a flat directory rather than a checkout, so the
+    # fixture is genuinely absent there. Skipping loudly beats failing the whole
+    # self-check: the web side asserts the same shapes and only runs in a
+    # checkout, so a disagreement between the two is still caught.
+    fixture_path = Path(__file__).resolve().parents[2] / "fixtures" / "store-records.json"
+    if not fixture_path.is_file():
+        print(f"record-shape fixture absent ({fixture_path}); that check skipped")
+        return
+    fixture = json.loads(fixture_path.read_text())
     key = next(iter(fixture["manifest"]))
     merged = merge_collected(json.loads(json.dumps(fixture["manifest"])),
                              ["specs/new/2026-09-17/20260917T100000Z.json"], "2026-09-17T10:00:00Z")
