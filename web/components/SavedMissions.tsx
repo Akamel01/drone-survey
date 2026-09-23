@@ -2,6 +2,7 @@
 
 import type { MissionSpec } from "@/lib/spec";
 import { downloadMission, toMissionSpec, type SavedMission } from "@/lib/savedMissions";
+import { noteMissionsChanged } from "@/lib/actions";
 import React, { useState } from "react";
 import styles from "./SavedMissions.module.css";
 
@@ -39,6 +40,9 @@ export default function SavedMissions({ missions, onLoad, onDelete }: SavedMissi
         body: JSON.stringify({ spec: toMissionSpec(m) }),
       });
       if (resp.ok) {
+        // A Mission status view open in another window must show this draft
+        // now, not at its next five-minute poll (issue #126).
+        noteMissionsChanged();
         onDelete(m.saved_at);
         // remove any error entry if present
         if (m.saved_at) {
