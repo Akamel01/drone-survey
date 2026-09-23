@@ -55,7 +55,15 @@ async function main(): Promise<void> {
     const aoiPairs =
       Array.isArray(spec.aoi) && spec.aoi.every((p) => Array.isArray(p) && p.length >= 2);
     if (spec.mission_type !== "orbit" && !aoiPairs) {
-      console.error(`skipped (unexpected aoi shape): ${key}`);
+      // A Spec from before the current schema: its area is {lat,lng} objects
+      // and its flight settings are flat, with no gimbal pitch, margin passes,
+      // speed or battery. Points and distance cannot be derived from that
+      // without inventing the missing inputs, and a card prediction certainly
+      // cannot. Record why rather than skipping in silence — a blank row with
+      // no explanation is the failure this whole set of fixes is about.
+      summaries[key] = { unavailable: "Dispatched before the current Mission format" };
+      added++;
+      console.log(`no figures (pre-schema Spec)  ${key}`);
       continue;
     }
     const had = summaries[key] != null;

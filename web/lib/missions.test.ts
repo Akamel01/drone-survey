@@ -452,3 +452,23 @@ test("a host that reported no distance is not read as a disagreement", () => {
   const [row] = joinStatus([], [ALPHA], manifest, {}, { [ALPHA]: { photo_count: 62, path_length_m: 990, parts: 1 } });
   assert.equal(cardMismatch(row), null, "a missing figure is silence, not a mismatch");
 });
+
+test("a Spec with no figures at all is an unknown, never a mismatch", () => {
+  // A Spec Dispatched before the current format carries no gimbal pitch,
+  // margin passes, speed or battery, so nothing can be derived from it without
+  // inventing the inputs. The row states that; it must not also claim the host
+  // loaded something different from a plan that never existed.
+  const manifest = {
+    [ALPHA]: {
+      collected_at: "t",
+      loaded_at: "t2",
+      parts: 1,
+      cards: [{ card: "WAYFINDER 1", name: "A", waypoints: 62, path_length_m: 990 }],
+    },
+  };
+  const [row] = joinStatus([], [ALPHA], manifest, {}, {
+    [ALPHA]: { unavailable: "Dispatched before the current Mission format" },
+  });
+  assert.equal(cardMismatch(row), null);
+  assert.equal(row.metrics?.unavailable, "Dispatched before the current Mission format");
+});
