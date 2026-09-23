@@ -4,6 +4,7 @@ import type { ReactNode } from "react";
 import { ensureSiteId, type MissionSpec, type MissionType, type TurnMode } from "@/lib/spec";
 import type { Preview } from "@/lib/mission";
 import type { SavedMission } from "@/lib/savedMissions";
+import type { StatusRow } from "@/lib/missions";
 import { isDrawing, type DrawMode } from "./MapPane";
 import SavedMissions from "./SavedMissions";
 import styles from "./Sidebar.module.css";
@@ -18,9 +19,14 @@ interface SidebarProps {
   savedMissions: SavedMission[];
   /** Entries the store could not read. Shown, never swallowed (issue #125). */
   savedSkipped: number;
-  onLoadMission: (spec: MissionSpec) => void;
+  /** Mission status as last read; null when it could not be read (issue #127). */
+  statusRows: StatusRow[] | null;
+  statusProblem: string | null;
+  /** The saved entry the editor is editing, if any. */
+  editingSavedAt: string | null;
+  onLoadMission: (spec: MissionSpec, saved_at: string) => void;
   onDeleteMission: (saved_at: string) => void;
-  onMissionSent: (saved_at: string) => void;
+  onMissionSent: (saved_at: string, draft_id?: string) => void;
 }
 
 // Plain metric area: m² under a square kilometre, km² above.
@@ -125,6 +131,9 @@ export default function Sidebar({
   preview,
   savedMissions,
   savedSkipped,
+  statusRows,
+  statusProblem,
+  editingSavedAt,
   onLoadMission,
   onDeleteMission,
   onMissionSent,
@@ -607,6 +616,9 @@ export default function Sidebar({
         <SavedMissions
           missions={savedMissions}
           skipped={savedSkipped}
+          rows={statusRows}
+          rowsProblem={statusProblem}
+          editing={editingSavedAt}
           onLoad={onLoadMission}
           onDelete={onDeleteMission}
           onSent={onMissionSent}
