@@ -119,10 +119,15 @@ export interface StatusRow {
 // Lightweight per-spec metrics summary shape stored in summaries.json, to be
 // consumed by the UI without re-computing on polls.
 export interface SpecSummary {
-  photo_count: number;
-  path_length_m: number;
+  photo_count?: number;
+  path_length_m?: number;
   /** How many parts the writer will split this Mission into — one card each. */
   parts?: number;
+  /** Why this Spec has no figures, when it has none. A Spec written before the
+   *  current schema carries no gimbal pitch, margin passes, speed or battery,
+   *  so its point count and distance cannot be derived without inventing the
+   *  inputs. Recording the reason keeps a blank row from reading as a fault. */
+  unavailable?: string;
 }
 
 /** Pure join of drafts + Dispatched keys + host manifest into status rows. */
@@ -178,19 +183,23 @@ export function joinStatus(
       queue: waitIndex < 0 ? null : waitIndex + 1,
       updated: entry.loaded_at ?? entry.collected_at ?? stampToIso(parsed!.stamp),
       // A partial or hand-edited summary must not surface a half number: both
-      // fields must be finite, else the row shows nothing.
-      metrics:
-        summaries?.[key] &&
-        Number.isFinite(summaries[key].photo_count) &&
-        Number.isFinite(summaries[key].path_length_m)
-          ? {
-              photo_count: summaries[key].photo_count,
-              path_length_m: summaries[key].path_length_m,
-              // Carried through because the prediction is derived from it and
-              // the row is what the API hands the browser.
-              ...(typeof summaries[key].parts === "number" ? { parts: summaries[key].parts } : {}),
-            }
-          : undefined,
+      // fields must be finite, else the row shows nothing. A summary that
+      // states instead why it has no figures is carried through as that
+      // reason, so the row can say it rather than leaving a silent gap.
+      metrics: (() => {
+        const sum = summaries?.[key];
+        if (!sum) return undefined;
+        if (Number.isFinite(sum.photo_count) && Number.isFinite(sum.path_length_m)) {
+          return {
+            photo_count: sum.photo_count,
+            path_length_m: sum.path_length_m,
+            // Carried through because the prediction is derived from it and
+            // the row is what the API hands the browser.
+            ...(typeof sum.parts === "number" ? { parts: sum.parts } : {}),
+          };
+        }
+        return typeof sum.unavailable === "string" ? { unavailable: sum.unavailable } : undefined;
+      })(),
     });
   }
 
@@ -318,17 +327,26 @@ export function cardMismatch(row: StatusRow): string | null {
   const measuredPoints = row.cards.reduce<number>((n, c) => n + (c.waypoints ?? 0), 0);
   const measuredDist = row.cards.reduce<number>((n, c) => n + (c.path_length_m ?? 0), 0);
   const notes: string[] = [];
-  if (row.cards.every((c) => typeof c.waypoints === "number") && measuredPoints !== row.metrics.photo_count) {
-    notes.push(`${row.metrics.photo_count} points planned, ${measuredPoints} loaded`);
+  // A Spec with no planned figures at all has nothing to disagree with, so it
+  // cannot be a mismatch -- only an unknown, which the row states separately.
+  const plannedPoints = row.metrics.photo_count;
+  const plannedDist = row.metrics.path_length_m;
+  if (
+    plannedPoints != null &&
+    row.cards.every((c) => typeof c.waypoints === "number") &&
+    measuredPoints !== plannedPoints
+  ) {
+    notes.push(`${plannedPoints} points planned, ${measuredPoints} loaded`);
   }
   // Distance is two measurements of the same path, so only a real difference
   // counts: 5% is well past rounding and the two geodesic sums.
   if (
+    plannedDist != null &&
     row.cards.every((c) => typeof c.path_length_m === "number") &&
-    row.metrics.path_length_m > 0 &&
-    Math.abs(measuredDist - row.metrics.path_length_m) / row.metrics.path_length_m > 0.05
+    plannedDist > 0 &&
+    Math.abs(measuredDist - plannedDist) / plannedDist > 0.05
   ) {
-    notes.push(`${Math.round(row.metrics.path_length_m)} m planned, ${Math.round(measuredDist)} m loaded`);
+    notes.push(`${Math.round(plannedDist)} m planned, ${Math.round(measuredDist)} m loaded`);
   }
   return notes.length ? notes.join("; ") : null;
 }

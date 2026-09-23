@@ -325,7 +325,10 @@ export default function MissionStatus({ spec, onLoadMission, allowSave = true }:
             { /* Metrics are the producer's, stored once at Dispatch: the browser
                  *  does not re-derive geometry on every render. */ }
             {(() => {
-              if (row.metrics) {
+              if (row.metrics?.unavailable) {
+                return <div className={styles.meta}>No figures: {row.metrics.unavailable}</div>;
+              }
+              if (row.metrics?.photo_count != null && row.metrics.path_length_m != null) {
                 const { photo_count, path_length_m } = row.metrics;
                 const dist = path_length_m;
                 const s = dist < 1000 ? `${Math.round(dist)} m` : `${(dist / 1000).toFixed(2)} km`;
