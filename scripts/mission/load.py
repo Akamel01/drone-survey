@@ -132,10 +132,15 @@ def pool_drift(root: Path) -> list[str]:
     """Every way the Card pool no longer matches what was calibrated.
 
     A Card is a Placeholder Mission the operator made by hand, and the slot GUID
-    is its identity — so a Placeholder deleted, added or remade since
-    `wayfinder_slots.json` was written shows up here. The file is not trusted on
-    its own: a Load into a Card that may no longer be what it was is the failure
+    is its identity — so a Placeholder deleted or remade since
+    `wayfinder_slots.json` was written shows up here, a remade one as the
+    disappearance of the GUID it used to have. The file is not trusted on its
+    own: a Load into a Card that may no longer be what it was is the failure
     this detector exists to prevent (ADR 0022).
+
+    A Placeholder the pool does not know about is **not** drift. The operator
+    keeps far more Placeholders than are calibrated — 38 on the Controller
+    against 5 calibrated — and calling those drift refused every Load (#118).
     """
     calibrated = {guid: name for name, guid in cards()}
     waypoint = root / WAYPOINT_DIR
@@ -143,11 +148,8 @@ def pool_drift(root: Path) -> list[str]:
         present = {d.name for d in waypoint.iterdir() if d.is_dir()}
     except OSError as e:
         return [f"could not read the Controller's Missions at {waypoint}: {e}"]
-    problems = [f"{calibrated[g]} ({g}) was calibrated but is no longer on the Controller"
-                for g in sorted(calibrated) if g not in present]
-    problems += [f"a Placeholder Mission the pool does not know about is on the Controller ({g})"
-                 for g in sorted(present - set(calibrated))]
-    return problems
+    return [f"{calibrated[g]} ({g}) was calibrated but is no longer on the Controller"
+            for g in sorted(calibrated) if g not in present]
 
 
 def survey(root: Path) -> list[tuple[int | None, str]]:
@@ -166,7 +168,9 @@ def survey(root: Path) -> list[tuple[int | None, str]]:
         if not d.is_dir():
             continue
         kmz = d / f"{d.name}.kmz"
-        rows.append((read_create_time(kmz) if kmz.exists() else None, d.name))
+        if not kmz.exists():
+            continue  # DJI Fly keeps its own directories here (capability, map_preview)
+        rows.append((read_create_time(kmz), d.name))
     return sorted(rows, key=lambda r: (r[0] is None, r[0]))
 
 
@@ -512,11 +516,14 @@ def _selftest() -> None:
             "the Ledger keeps saying what was planned; drift is reported, not corrected"
 
         # The pool itself is checked, never trusted: a Placeholder Mission
-        # deleted or added since calibration refuses the Load before it starts.
+        # deleted since calibration refuses the Load before it starts.
         assert pool_drift(root) == []
+        # An uncalibrated Placeholder is ordinary. The operator keeps dozens of
+        # them and only a few are calibrated, so treating one as drift refused
+        # every Load on the real Controller (#118).
         stray = root / WAYPOINT_DIR / "E1E1E1E1-0000-0000-0000-000000000000"
         stray.mkdir()
-        assert any("does not know about" in p for p in pool_drift(root)), pool_drift(root)
+        assert pool_drift(root) == [], "an uncalibrated Placeholder is not drift"
         stray.rmdir()
         gone = root / WAYPOINT_DIR / cards()[-1][1]
         shutil.move(str(gone), str(tmp / "moved-away"))
