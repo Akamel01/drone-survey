@@ -150,6 +150,42 @@ def pool_drift(root: Path) -> list[str]:
     return problems
 
 
+def survey(root: Path) -> list[tuple[int | None, str]]:
+    """(createTime, slot GUID) for every Placeholder Mission on the Controller.
+
+    createTime is the field DJI Fly keys a mission's stored name from, so the
+    order these were created in is the order the operator named them in -- if
+    the Placeholders were made one after another. That is a hypothesis, not a
+    fact, which is why this only reports; nothing is written from it. It is
+    checked against the Cards already calibrated by hand (ADR 0016) before any
+    of it is believed.
+    """
+    waypoint = root / WAYPOINT_DIR
+    rows = []
+    for d in sorted(waypoint.iterdir()):
+        if not d.is_dir():
+            continue
+        kmz = d / f"{d.name}.kmz"
+        rows.append((read_create_time(kmz) if kmz.exists() else None, d.name))
+    return sorted(rows, key=lambda r: (r[0] is None, r[0]))
+
+
+def survey_disagrees(rows: list[tuple[int | None, str]]) -> list[str]:
+    """Where creation order and the hand-calibrated names disagree.
+
+    Empty means every Card calibrated by hand sits exactly where creation order
+    predicts it, which is the only evidence that would let the rest be named
+    the same way.
+    """
+    by_guid = {guid: name for name, guid in cards()}
+    known = [(i, by_guid[guid]) for i, (_, guid) in enumerate(rows) if guid in by_guid]
+    missing = [n for n in by_guid.values() if n not in [k for _, k in known]]
+    problems = [f"{n} is calibrated but is not on the Controller" for n in sorted(missing)]
+    problems += [f"{name} is {i + 1} in creation order, not {name.split()[-1]}"
+                 for i, name in known if str(i + 1) != name.split()[-1]]
+    return problems
+
+
 def reserved_plan(entries: list[tuple[Path, list[dict]]],
                   ledger: dict) -> list[tuple[Path, str, str, dict]]:
     """(spec, card, slot GUID, part) for every part, taken from the Reservation.
@@ -635,6 +671,35 @@ def _selftest() -> None:
     finally:
         _self.fetch_ledger, _self.publish_ledger = _fetch, _publish
 
+    # The survey only reports, so the one thing it must get right is when it
+    # says creation order can be trusted. A Card sitting out of order has to be
+    # named, not averaged over.
+    with tempfile.TemporaryDirectory() as tmpdir:
+        import zipfile
+        root = Path(tmpdir)
+        guids = [g for _, g in cards()]
+
+        def _controller(order: list[str]) -> None:
+            for i, guid in enumerate(order):
+                d = root / WAYPOINT_DIR / guid
+                d.mkdir(parents=True, exist_ok=True)
+                with zipfile.ZipFile(d / f"{guid}.kmz", "w") as z:
+                    z.writestr("wpmz/template.kml",
+                               f"<wpml:createTime>{1_700_000_000_000 + i * 60_000}</wpml:createTime>")
+                    z.writestr("wpmz/waylines.wpml", "<kml/>")
+
+        _controller(guids)
+        rows = survey(root)
+        assert [g for _, g in rows] == guids, "the survey must report oldest first"
+        assert survey_disagrees(rows) == [], survey_disagrees(rows)
+
+        # Two Placeholders created in the other order: the survey must say so
+        # rather than let creation order name the remaining Cards.
+        shutil.rmtree(root / WAYPOINT_DIR)
+        _controller([guids[1], guids[0]] + guids[2:])
+        problems = survey_disagrees(survey(root))
+        assert any("WAYFINDER 1" in x for x in problems), problems
+
     print("load self-check: ok")
 
 
@@ -673,12 +738,36 @@ def main() -> None:
     p.add_argument("--status-config", type=Path, default=DEFAULT_STATUS_CONFIG,
                    help="B2 status credentials env file (read specs/, write status/*)")
     p.add_argument("--selftest", action="store_true", help="run the offline self-check and exit")
+    p.add_argument("--survey", action="store_true",
+                   help="list every Placeholder Mission in creation order and check it against "
+                        "the Cards already calibrated; writes nothing")
     p.add_argument("--publish-pool", action="store_true",
                    help="write the calibrated Card names to the Ledger and exit; needs no Controller")
     args = p.parse_args()
 
     if args.selftest:
         _selftest()
+        return
+    if args.survey:
+        if not mounted(MOUNT):
+            remount(MOUNT)
+        rows = survey(MOUNT / STORAGE)
+        by_guid = {guid: name for name, guid in cards()}
+        print(f"{len(rows)} Placeholder Missions on the Controller, oldest first:\n")
+        for i, (created, guid) in enumerate(rows, 1):
+            when = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(created / 1000)) if created else "no createTime"
+            print(f"  {i:>3}  {when}  {guid}  {by_guid.get(guid, '')}")
+        problems = survey_disagrees(rows)
+        print()
+        if problems:
+            print("creation order does NOT predict the calibrated names:")
+            for problem in problems:
+                print(f"  {problem}")
+            print("\nCalibrate the rest by hand (ADR 0016). Nothing was written.")
+        else:
+            print(f"every calibrated Card sits where creation order predicts it "
+                  f"({len(by_guid)} of {len(rows)} checked). The rest can be named the same way, "
+                  f"but only after a marker Mission proves at least one of them on the screen.")
         return
     if args.publish_pool:
         # Seeding, and the recovery when calibration changes: no Controller is
