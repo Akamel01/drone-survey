@@ -1,12 +1,12 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { ensureSiteId, type MissionSpec, type MissionType, type TurnMode } from "@/lib/spec";
+import { newSiteId, type MissionSpec, type MissionType, type TurnMode } from "@/lib/spec";
 import type { Preview } from "@/lib/mission";
-import type { SavedMission } from "@/lib/savedMissions";
-import type { StatusRow } from "@/lib/missions";
+import { MISSION_NAME_MAX, missionNameProblem } from "@/lib/missionRecords";
+import type { SiteChoice } from "@/lib/missionView";
+import type { Editing } from "@/app/plan/page";
 import { isDrawing, type DrawMode } from "./MapPane";
-import SavedMissions from "./SavedMissions";
 import styles from "./Sidebar.module.css";
 
 interface SidebarProps {
@@ -16,17 +16,16 @@ interface SidebarProps {
   onModeChange: (m: DrawMode) => void;
   areaHa: number;
   preview: Preview;
-  savedMissions: SavedMission[];
-  /** Entries the store could not read. Shown, never swallowed (issue #125). */
-  savedSkipped: number;
-  /** Mission status as last read; null when it could not be read (issue #127). */
-  statusRows: StatusRow[] | null;
-  statusProblem: string | null;
-  /** The saved entry the editor is editing, if any. */
-  editingSavedAt: string | null;
-  onLoadMission: (spec: MissionSpec, saved_at: string) => void;
-  onDeleteMission: (saved_at: string) => void;
-  onMissionSent: (saved_at: string, draft_id?: string) => void;
+  /** The Sites already in the store. A Site is chosen from these, never typed
+   *  fresh: a Site is the unit a client buys work about, identified once at
+   *  onboarding, and typing a name per Mission was quietly creating a new one
+   *  every time (ADR 0021). */
+  sites: SiteChoice[];
+  /** The stored Mission the editor is working on, and its Mission Name. */
+  editing: Editing;
+  onNameChange: (name: string) => void;
+  /** The one Mission list, rendered here and identically on the status tab. */
+  missionList: ReactNode;
 }
 
 // Plain metric area: m² under a square kilometre, km² above.
@@ -129,14 +128,10 @@ export default function Sidebar({
   onModeChange,
   areaHa,
   preview,
-  savedMissions,
-  savedSkipped,
-  statusRows,
-  statusProblem,
-  editingSavedAt,
-  onLoadMission,
-  onDeleteMission,
-  onMissionSent,
+  sites,
+  editing,
+  onNameChange,
+  missionList,
 }: SidebarProps) {
   const flight = spec.flight;
   const camera = spec.camera;
@@ -595,13 +590,28 @@ export default function Sidebar({
         </Field>
       </Section>
 
-      <Section title="Identification">
-        <Field label="Site name" value={spec.site || "—"}>
+      <Section
+        title="Identification"
+        info="The Site is the place, chosen once and reused so its Captures accumulate under it. The Mission Name tells two Missions of one Site on one day apart."
+      >
+        <SiteField
+          sites={sites}
+          site={spec.site}
+          site_id={spec.site_id}
+          onChoose={(choice) => setSpec((s) => ({ ...s, site: choice.site, site_id: choice.site_id }))}
+        />
+        <Field label="Mission Name" value={editing.name.trim() || "—"}>
           <input
             type="text"
-            value={spec.site}
-            onChange={(e) => setSpec((s) => ensureSiteId({ ...s, site: e.target.value }))}
+            value={editing.name}
+            maxLength={MISSION_NAME_MAX}
+            placeholder="north half, orbit"
+            onChange={(e) => onNameChange(e.target.value)}
           />
+          <div className={styles.hint}>
+            {missionNameProblem(editing.name) ??
+              "Two Missions may share a Site and a date when their names differ — that is two deliberate flights, not a correction."}
+          </div>
         </Field>
         <Field label="Date" value={spec.date || "—"}>
           <input type="date" value={spec.date} onChange={(e) => setSpec((s) => ({ ...s, date: e.target.value }))} />
@@ -612,18 +622,77 @@ export default function Sidebar({
         </div>
       </Section>
 
-      <Section title="Saved missions">
-        <SavedMissions
-          missions={savedMissions}
-          skipped={savedSkipped}
-          rows={statusRows}
-          rowsProblem={statusProblem}
-          editing={editingSavedAt}
-          onLoad={onLoadMission}
-          onDelete={onDeleteMission}
-          onSent={onMissionSent}
-        />
-      </Section>
+      <Section title="Missions">{missionList}</Section>
     </aside>
+  );
+}
+
+/**
+ * Choosing the Site, or naming a new one.
+ *
+ * The field this replaces was labelled "Site name" and typed fresh for every
+ * Mission, which minted a new Site id each time and broke Capture accumulation
+ * before the 3D Timelapse was ever built (ADR 0021). A new Site is still
+ * possible -- it is how the first one exists -- but it is a deliberate act with
+ * its own control, not what happens by default.
+ */
+function SiteField({
+  sites,
+  site,
+  site_id,
+  onChoose,
+}: {
+  sites: SiteChoice[];
+  site: string;
+  site_id?: string;
+  onChoose: (choice: SiteChoice) => void;
+}) {
+  const known = site_id != null && sites.some((s) => s.site_id === site_id);
+  const naming = !known;
+  return (
+    <Field label="Site" value={site.trim() || "—"}>
+      <select
+        value={known ? (site_id as string) : "new"}
+        onChange={(e) => {
+          if (e.target.value === "new") {
+            onChoose({ site_id: newSiteId(""), site: "" });
+            return;
+          }
+          const chosen = sites.find((s) => s.site_id === e.target.value);
+          if (chosen) onChoose(chosen);
+        }}
+      >
+        {sites.map((s) => (
+          <option key={s.site_id} value={s.site_id}>
+            {s.site}
+          </option>
+        ))}
+        <option value="new">New Site…</option>
+      </select>
+      {naming && (
+        <input
+          type="text"
+          value={site}
+          placeholder="Name the new Site"
+          onChange={(e) =>
+            onChoose({
+              site: e.target.value,
+              // The id is minted once, when the Site first gets a name, and
+              // never again: renaming a Site must not change the place it is.
+              site_id: site_id && site.trim() ? site_id : newSiteId(e.target.value),
+            })
+          }
+        />
+      )}
+      <div className={styles.hint}>
+        {/* The hint follows whether this Site has an identifier, not whether it
+            is in the list: the list is empty when the store could not be read,
+            and telling the operator a Site they have flown before is about to
+            be created is exactly the confusion this field exists to end. */}
+        {site_id && site.trim()
+          ? `Identified as ${site_id}. Captures accumulate under it.`
+          : "A new Site is created when this Mission is saved. Its identifier never changes, even if the name does."}
+      </div>
+    </Field>
   );
 }

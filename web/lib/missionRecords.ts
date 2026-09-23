@@ -17,7 +17,7 @@ import {
   type CardLedger,
   type MissionState,
 } from "./model.ts";
-import type { ManifestEntry, Manifest } from "./missions.ts";
+import type { LoadedCard, ManifestEntry, Manifest } from "./missions.ts";
 import { isValidSiteId, siteNameProblem, type MissionSpec } from "./spec.ts";
 
 /** One Mission, as stored at specs/_missions/<id>.json.
@@ -68,6 +68,12 @@ export interface MissionRow {
   /** The Cards reserved for this Mission, in flight order. Empty until
    *  Dispatch, because that is when a Card stops being a prediction. */
   cards: CardHolding[];
+  /** What the host says it actually wrote to those Cards, with the point count
+   *  and distance it measured writing them. Carried rather than summarised,
+   *  because the disagreement between these figures and the planner's is the
+   *  only detector for flying the wrong Mission -- the Controller's own labels
+   *  are frozen at a Card's creation and cannot be asked (ADR 0022). */
+  loaded_cards: LoadedCard[];
   /** The newer Mission that superseded this one, when one did. */
   superseded_by: string | null;
   /** What each side says about Flown. The operator's mark decides; imagery is
@@ -167,6 +173,7 @@ export function deriveMissions(
             .filter((h) => h.spec_key === record.dispatched_key)
             .sort((a, b) => a.flight - b.flight)
         : [],
+      loaded_cards: entry?.cards ?? [],
       superseded_by: null,
       flown_marked: marked,
       flown_evidence_at: evidence,

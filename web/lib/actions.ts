@@ -62,9 +62,20 @@ export function describeResult(label: string, result: ActionResult): string {
     return `${label} failed: ${typeof why === "string" && why ? why : result.status}`;
   }
   const { body } = result;
+  // Named after what the endpoint actually reports, in the glossary's words.
+  // There is no "draft" and no "queued" (ADR 0021).
+  if (Array.isArray(body.cards) && body.cards.length > 0) {
+    return `Dispatched. ${body.cards.join(", ")} ${body.cards.length === 1 ? "is" : "are"} reserved for it.`;
+  }
+  if (Array.isArray(body.cards_released)) {
+    return body.cards_released.length
+      ? `Withdrawn. ${body.cards_released.join(", ")} released.`
+      : "Withdrawn. It held no Card.";
+  }
+  if (typeof body.archived === "string") {
+    return "Removed from the list. It is archived, not deleted — nothing is lost.";
+  }
   if (typeof body.key === "string") return `${label}: ${body.key}`;
-  if (body.deleted) return `${label}: draft removed (its Dispatched Spec, if any, stays in the store)`;
-  if (body.draft) return `${label}: draft saved`;
   return `${label}: done`;
 }
 
