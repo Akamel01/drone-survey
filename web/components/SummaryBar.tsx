@@ -1,9 +1,10 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { dispatchProblem, type MissionSpec } from "@/lib/spec";
+import { dispatchProblem, siteNameProblem, type MissionSpec } from "@/lib/spec";
 import type { Preview } from "@/lib/mission";
 import { downloadMission } from "@/lib/savedMissions";
+import { noteMissionsChanged } from "@/lib/actions";
 import styles from "./SummaryBar.module.css";
 
 interface SummaryBarProps {
@@ -43,6 +44,7 @@ export default function SummaryBar({ spec, preview, onSaveMission }: SummaryBarP
   }
 
   const specProblem = dispatchProblem(spec);
+  const saveProblem = siteNameProblem(spec.site);
   const dispatchDisabled = dispatch.kind === "sending" || !!specProblem || !passphrase.trim();
 
   async function runDispatch() {
@@ -57,6 +59,9 @@ export default function SummaryBar({ spec, preview, onSaveMission }: SummaryBarP
       // A failed Dispatch must never look like a success, so only a 2xx with
       // a storage key counts — anything else surfaces the server's own text.
       if (res.ok && body.key) {
+        // A Mission status view open elsewhere shows this Spec now, not at its
+        // next five-minute poll (issue #126).
+        noteMissionsChanged();
         setDispatch({ kind: "ok", key: body.key, parts: preview.parts });
       } else {
         setDispatch({ kind: "error", message: body.error ?? `Dispatch failed (${res.status})` });
@@ -67,6 +72,9 @@ export default function SummaryBar({ spec, preview, onSaveMission }: SummaryBarP
   }
 
   function save() {
+    // The server refuses a nameless Mission too (lib/spec.ts); this only says
+    // so here, next to the control, instead of after a round trip.
+    if (saveProblem) return;
     onSaveMission();
     setSaved(true);
     setTimeout(() => setSaved(false), 1500);
@@ -136,7 +144,9 @@ export default function SummaryBar({ spec, preview, onSaveMission }: SummaryBarP
             {dispatch.kind === "sending" ? "Dispatching…" : "Dispatch"}
           </button>
           <button onClick={copy}>{copied ? "Copied" : "Copy spec"}</button>
-          <button onClick={save}>{saved ? "Saved" : "Save mission"}</button>
+          <button onClick={save} disabled={!!saveProblem} title={saveProblem ?? undefined}>
+            {saved ? "Saved" : "Save mission"}
+          </button>
           <button className="primary" onClick={() => downloadMission(spec)}>
             Download Mission Spec
           </button>
@@ -149,6 +159,7 @@ export default function SummaryBar({ spec, preview, onSaveMission }: SummaryBarP
         </div>
       )}
       {dispatch.kind === "error" && <div className={styles.dispatchError}>{dispatch.message}</div>}
+      {saveProblem && <div className={styles.dispatchError}>Save mission: {saveProblem}.</div>}
       {hasProblems && (
         <ul className={styles.problems}>
           {preview.problems.map((p, i) => (

@@ -3,7 +3,7 @@
 // blindly. Run with: node --test lib/spec.test.ts
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { DEFAULT_SPEC, dispatchProblem, draftProblem, ensureSiteId, isValidSiteId, newSiteId, slugSegment, type MissionSpec } from "./spec.ts";
+import { DEFAULT_SPEC, dispatchProblem, draftProblem, ensureSiteId, isValidSiteId, newSiteId, siteNameProblem, slugSegment, type MissionSpec } from "./spec.ts";
 
 // dispatchProblem also requires a flyable area; a small triangle is enough to
 // isolate what these tests are actually about, the site_id checks.
@@ -71,10 +71,10 @@ test("a draft may be an unfinished plan that Dispatch refuses", () => {
 });
 
 test("a draft may be blank where Dispatch requires a value", () => {
-  // The drafts route has always judged shape, not readiness: an operator saves a
-  // Mission before it has a name or a date, and Dispatch is where blanks are fatal.
+  // The drafts route judges shape, not readiness: an operator saves a Mission
+  // before it has a date, and Dispatch is where the rest of the blanks are
+  // fatal. The Site name is the exception — see the name tests below.
   for (const spec of [
-    { ...DEFAULT_SPEC, site: "" },
     { ...DEFAULT_SPEC, site: "Field", date: "" },
   ] as MissionSpec[]) {
     assert.equal(draftProblem(spec), null, `savable as a draft: ${JSON.stringify(spec.site)}`);
@@ -117,12 +117,33 @@ test("slugSegment always yields something the server would accept as a Site id",
 
 test("the draft gate keeps the verdicts it replaced", () => {
   const base = { ...DEFAULT_SPEC, site: "Field", date: "2026-01-01" };
-  // Blank fields are a draft in progress: the old route accepted them.
-  assert.equal(draftProblem({ ...base, site: "", date: "" }), null, "a blank draft is still a draft");
+  // Blank fields are a draft in progress: the old route accepted them. The
+  // Site name is no longer one of them (issue #123).
+  assert.equal(draftProblem({ ...base, date: "" }), null, "a dateless draft is still a draft");
   assert.equal(draftProblem({ ...base, site_id: "not a legal id" }), null, "a draft needs no storage-safe id");
   // Shape rules it did enforce, and still does.
   assert.notEqual(draftProblem({ ...base, version: 2 }), null);
   assert.notEqual(draftProblem({ ...base, mission_type: "circus" }), null);
   assert.notEqual(draftProblem({ ...base, site: 7 }), null, "a non-string site must be refused, not thrown over");
   assert.notEqual(draftProblem({ ...base, date: 7 }), null, "a non-string date must be refused, not thrown over");
+});
+
+// Issue #123: a Mission with no name is refused everywhere a Spec is created or
+// promoted, and the client's predicate is the server's, not a second rule.
+test("a Site name is required, and whitespace is not a name", () => {
+  for (const site of ["", "   ", "\t\n", 7, null, undefined]) {
+    assert.notEqual(siteNameProblem(site), null, `${JSON.stringify(site)} is not a name`);
+  }
+  assert.equal(siteNameProblem("Rehearsal Field"), null);
+  assert.equal(siteNameProblem(" padded "), null, "a name is trimmed, not rejected");
+});
+
+test("both gates refuse a nameless Mission, with the same verdict", () => {
+  for (const site of ["", "   "]) {
+    const spec = { ...DEFAULT_SPEC, ...FLYABLE, site, date: "2026-01-01" } as MissionSpec;
+    // The drafts route and the dispatch route each return this string verbatim,
+    // so a request made straight to either API is refused without the client.
+    assert.equal(draftProblem(spec), siteNameProblem(site));
+    assert.equal(dispatchProblem(spec), siteNameProblem(site));
+  }
 });
