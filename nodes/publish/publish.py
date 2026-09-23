@@ -78,6 +78,22 @@ def b2_authorize(key_id: str, app_key: str) -> dict:
     return b2_call(B2_AUTHORIZE_URL, {"Authorization": f"Basic {token}"})  # GET, no body
 
 
+def key_scope(auth: dict) -> dict:
+    """What this key may reach, and where to reach it.
+
+    v3 of the authorize call moved the key's scope and the API url under
+    `apiInfo.storageApi`; v2 had them at the top level in `allowed` and
+    `apiUrl`. This module calls v3, so v3 is read first -- the fallback is
+    only so a v2 url in someone's config does not fail obscurely.
+    """
+    storage = (auth.get("apiInfo") or {}).get("storageApi")
+    if storage:
+        return storage
+    scope = dict(auth.get("allowed") or {})
+    scope.setdefault("apiUrl", auth.get("apiUrl"))
+    return scope
+
+
 def b2_get_upload_url(api_url: str, auth_token: str, bucket_id: str) -> dict:
     return b2_call(
         f"{api_url}/b2api/v3/b2_get_upload_url",
@@ -122,14 +138,14 @@ def publish(bundle_dir: Path, manifest: dict, bucket: str, creds_path: Path) -> 
 
     key_id, app_key = read_credentials(creds_path)
     auth = b2_authorize(key_id, app_key)
-    allowed = auth.get("allowed") or {}
-    if allowed.get("bucketName") and allowed["bucketName"] != bucket:
-        sys.exit(f"refusing to publish: this application key is scoped to bucket '{allowed['bucketName']}', not '{bucket}'")
-    bucket_id = allowed.get("bucketId")
+    scope = key_scope(auth)
+    if scope.get("bucketName") and scope["bucketName"] != bucket:
+        sys.exit(f"refusing to publish: this application key is scoped to bucket '{scope['bucketName']}', not '{bucket}'")
+    bucket_id = scope.get("bucketId")
     if not bucket_id:
         sys.exit("refusing to publish: could not determine a bucket id from this application key (expected a single-bucket-scoped key; see docs/business/object-storage-setup.md)")
 
-    upload_info = b2_get_upload_url(auth["apiUrl"], auth["authorizationToken"], bucket_id)
+    upload_info = b2_get_upload_url(scope["apiUrl"], auth["authorizationToken"], bucket_id)
     total = 0
     for f in files:
         full = bundle_dir / f["path"]

@@ -251,7 +251,17 @@ def check_runner_end_to_end(ortho: Path, scene: Path, meta: Path) -> None:
     with tempfile.TemporaryDirectory() as workdir:
         env = dict(os.environ)
         env.update(BUNDLE_ORTHO=str(ortho), BUNDLE_SPLAT_SCENE=str(scene), BUNDLE_SPLAT_META=str(meta))
-        result = run([sys.executable, str(RUNNER), str(DELIVER_MANIFEST), "--workdir", workdir], env=env)
+        # The real Manifest publishes for real. This check is about the wiring
+        # between the two Nodes, so it runs a copy whose publish is a dry run:
+        # a validator that uploads to the delivery bucket every time it runs
+        # would be unrunnable offline and would litter a client-facing store.
+        rehearsal = json.loads(DELIVER_MANIFEST.read_text())
+        for node in rehearsal["nodes"]:
+            if node["name"] == "publish" and "--dry-run" not in node["command"]:
+                node["command"] = node["command"] + ["--dry-run"]
+        manifest_path = Path(workdir) / "deliver-rehearsal.json"
+        manifest_path.write_text(json.dumps(rehearsal))
+        result = run([sys.executable, str(RUNNER), str(manifest_path), "--workdir", workdir], env=env)
         assert result.returncode == 0, f"Runner failed on deliver.json:\n{result.stdout}\n{result.stderr}"
         assert "pipeline 'deliver' complete." in result.stdout, result.stdout
 
