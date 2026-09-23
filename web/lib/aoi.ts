@@ -32,3 +32,19 @@ export function removeCorner(aoi: LL[], i: number): LL[] {
   if (!inRing(aoi, i) || aoi.length <= 3) return aoi;
   return aoi.filter((_, j) => j !== i);
 }
+
+/**
+ * Drop the stray corners a double-click leaves behind.
+ *
+ * A double-click delivers two ordinary click events before `dblclick` fires, so
+ * the last one or two corners of a polygon finished that way were never meant
+ * as corners: they are the double-click itself. Below four there is nothing
+ * safe to trim — the ring is already at or under the three a polygon needs — so
+ * the result can still be too short, and the caller has to say so rather than
+ * finish a shape that is not one.
+ */
+export function trimDoubleClick(aoi: LL[]): LL[] {
+  if (aoi.length >= 5) return aoi.slice(0, -2);
+  if (aoi.length === 4) return aoi.slice(0, -1);
+  return aoi;
+}

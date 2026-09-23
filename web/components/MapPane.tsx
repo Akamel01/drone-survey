@@ -11,7 +11,7 @@ import {
 } from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 import { BASEMAP, BASEMAP_OSM } from "@/lib/basemap";
-import { insertCorner, moveCorner, removeCorner } from "@/lib/aoi";
+import { insertCorner, moveCorner, removeCorner, trimDoubleClick } from "@/lib/aoi";
 import { circlePolygon, geodesicM } from "@/lib/mission";
 import type { CircleShape, MissionSpec } from "@/lib/spec";
 import type { Preview } from "@/lib/mission";
@@ -25,6 +25,19 @@ export type DrawMode =
   | "append-polygon"
   | "set-home"
   | "set-poi";
+
+/** A mode in which a click on the map places part of a shape, rather than editing one. */
+export const isDrawing = (m: DrawMode) =>
+  m === "draw-polygon" || m === "draw-rectangle" || m === "draw-circle" || m === "append-polygon";
+
+/** The one thing a click on the map does in each drawing mode, in the operator's words. */
+export function drawModeLabel(m: DrawMode): string {
+  if (m === "draw-polygon") return "Drawing a polygon";
+  if (m === "append-polygon") return "Adding corners to the area";
+  if (m === "draw-rectangle") return "Drawing a rectangle";
+  if (m === "draw-circle") return "Drawing a circle";
+  return "";
+}
 
 interface MapPaneProps {
   spec: MissionSpec;
@@ -250,6 +263,9 @@ export default function MapPane({
   const [basemap, setBasemap] = useState<"esri" | "osm">("esri");
   const [showFootprint, setShowFootprint] = useState(false);
   const [drawHint, setDrawHint] = useState<string | null>(null);
+  // Why a finish did not happen. A double-click on a two-corner ring used to
+  // commit nothing and say nothing, which reads exactly like a broken map.
+  const [drawNote, setDrawNote] = useState<string | null>(null);
 
   const dragIndexRef = useRef<number | null>(null);
   const circleDragRef = useRef<null | "center" | "radius">(null);
@@ -267,13 +283,49 @@ export default function MapPane({
       drawingRef.current = false;
       setDrawHint(null);
     }
+    setDrawNote(null);
     onModeChange(next);
+  };
+
+  // The polygon draws are the only ones that do not end themselves, so they are
+  // the only ones that need an end. Refusing a short ring out loud is the point:
+  // silence here is what made a slow double-click look like a dead map.
+  const finishDraw = () => {
+    const { spec, mode, onAoiChange } = stateRef.current;
+    if (mode !== "draw-polygon" && mode !== "append-polygon") return;
+    if (spec.aoi.length < 3) {
+      setDrawNote(`An area needs three corners — ${3 - spec.aoi.length} to go.`);
+      return;
+    }
+    onAoiChange(spec.aoi, spec.shape ?? null);
+    changeMode("idle");
+  };
+
+  // Escape and the Cancel button are the same act, so they are the same code. A
+  // shape mode cleared the area on the way in, so there is nothing to keep; a
+  // corner-adding mode found an area already there, so it keeps it.
+  const cancelDraw = () => {
+    const { spec, mode, onAoiChange } = stateRef.current;
+    if (mode === "draw-polygon" || mode === "draw-rectangle" || mode === "draw-circle") {
+      if (spec.aoi.length) onAoiChange([], null);
+    }
+    changeMode("idle");
   };
 
   // Latest props, readable from map handlers registered once on init. This must
   // be refreshed on every render: without it the handlers keep reading the spec
   // as it was at mount, and every click would see an empty area.
-  const latest = { spec, mode, onAoiChange, onHomeChange, onPoiChange, onOrbitRadiusChange, onModeChange: changeMode };
+  const latest = {
+    spec,
+    mode,
+    onAoiChange,
+    onHomeChange,
+    onPoiChange,
+    onOrbitRadiusChange,
+    onModeChange: changeMode,
+    finishDraw,
+    cancelDraw,
+  };
   const stateRef = useRef(latest);
   useEffect(() => {
     stateRef.current = latest;
@@ -325,6 +377,7 @@ export default function MapPane({
         // A press on a handle is an edit of a corner that exists, never a new
         // one: without this a click on a handle drops a second corner on top.
         if (onHandle(e.point)) return;
+        setDrawNote(null); // the operator is acting on the refusal; stop repeating it
         onAoiChange([...spec.aoi, p]);
         return;
       }
@@ -357,18 +410,18 @@ export default function MapPane({
       }
     });
 
-    // ponytail: a double-click delivers two click events before the dblclick
-    // fires, so the last 1-2 vertices are spurious clicks, not real corners.
+    // A double-click still finishes a draw, for the operator who already knows
+    // it does; the Finish button above the map is for the one who does not.
     map.on("dblclick", () => {
       const { mode, spec, onAoiChange, onModeChange } = stateRef.current;
       if (mode !== "draw-polygon" && mode !== "append-polygon") return;
-      let pts = spec.aoi;
-      if (pts.length >= 5) pts = pts.slice(0, -2);
-      else if (pts.length === 4) pts = pts.slice(0, -1);
-      if (pts.length >= 3) {
-        onAoiChange(pts);
-        onModeChange("idle");
+      const pts = trimDoubleClick(spec.aoi);
+      if (pts.length < 3) {
+        setDrawNote(`An area needs three corners — ${3 - pts.length} to go.`);
+        return;
       }
+      onAoiChange(pts);
+      onModeChange("idle");
     });
 
     // A corner handle is live wherever it is drawn. Arming the drag only in
@@ -519,19 +572,12 @@ export default function MapPane({
     });
 
     const onKeydown = (e: KeyboardEvent) => {
-      const { mode, spec, onAoiChange, onModeChange } = stateRef.current;
+      const { cancelDraw, finishDraw } = stateRef.current;
       if (e.key === "Escape") {
-        circleCenterRef.current = null;
-        drawingRef.current = false;
-        setDrawHint(null);
-        onModeChange("idle");
+        cancelDraw();
         return;
       }
-      if (e.key !== "Enter") return;
-      if ((mode === "draw-polygon" || mode === "append-polygon") && spec.aoi.length >= 3) {
-        onAoiChange(spec.aoi);
-        onModeChange("idle");
-      }
+      if (e.key === "Enter") finishDraw();
     };
     window.addEventListener("keydown", onKeydown);
 
@@ -666,15 +712,34 @@ export default function MapPane({
     poiMarkerRef.current.setLngLat(toLngLat(center)).addTo(map);
   }, [spec.mission_type, spec.orbit.center]);
 
+  // The outline says which mode the map is in. Teal and solid is a finished
+  // area a click leaves alone; amber and dashed is one still being drawn, where
+  // a click adds a corner. Without this the only difference on the map was the
+  // absence of the midpoint handles, which is far too quiet to read as a mode.
   useEffect(() => {
     const map = mapRef.current;
-    if (map) map.getCanvas().style.cursor = mode === "idle" ? "" : "crosshair";
+    if (!map) return;
+    map.getCanvas().style.cursor = mode === "idle" ? "" : "crosshair";
+    if (!map.getLayer("aoi-outline")) return;
+    const drawing = isDrawing(mode);
+    map.setPaintProperty("aoi-outline", "line-color", drawing ? "#e0a94f" : "#4fb8a8");
+    map.setPaintProperty("aoi-outline", "line-dasharray", drawing ? [2, 2] : undefined);
   }, [mode]);
 
   function toggleBasemap(next: "esri" | "osm") {
     setBasemap(next);
     mapRef.current?.setStyle(next === "esri" ? BASEMAP : BASEMAP_OSM);
   }
+
+  // What a click on the map does at this instant — not what it did a mode ago,
+  // and not what dragging a finished shape would do.
+  const corners = spec.aoi.length;
+  const clickMeaning =
+    mode === "draw-polygon" || mode === "append-polygon"
+      ? `Each click adds a corner — ${corners} so far, three needed.`
+      : mode === "draw-rectangle"
+        ? (corners === 0 ? "Click one corner." : (drawHint ?? "Click the opposite corner."))
+        : (drawHint ?? "Click the centre, then drag out the radius.");
 
   const footprintLabel = preview.footprint_across_m
     ? `${Math.round(preview.footprint_across_m)} × ${Math.round(preview.footprint_along_m)} m`
@@ -706,9 +771,19 @@ export default function MapPane({
           {showFootprint && footprintLabel ? footprintLabel : "Footprint"}
         </button>
       </div>
-      {drawHint && (
-        <div className={styles.homeControl}>
-          <button disabled>{drawHint}</button>
+      {isDrawing(mode) && (
+        <div className={styles.drawPanel}>
+          <div className={styles.drawTitle}>{drawModeLabel(mode)}</div>
+          <div className={styles.drawClick}>{clickMeaning}</div>
+          {drawNote && <div className={styles.drawNote}>{drawNote}</div>}
+          <div className={styles.drawActions}>
+            {(mode === "draw-polygon" || mode === "append-polygon") && (
+              <button onClick={finishDraw} disabled={spec.aoi.length < 3}>
+                Finish area
+              </button>
+            )}
+            <button onClick={cancelDraw}>Cancel</button>
+          </div>
         </div>
       )}
     </div>

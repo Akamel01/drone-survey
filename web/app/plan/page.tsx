@@ -60,8 +60,14 @@ export default function PlanPage() {
 
   // Choosing a shape starts a fresh area; every other mode leaves it alone, so
   // "Add points" can resume an existing polygon.
+  //
+  // Adding corners to a circle would grow `aoi` while `shape` still claimed a
+  // circle — a ring the circle handles would then overwrite from a radius that
+  // no longer describes it. The mode itself drops the circle, so the guard
+  // holds for any caller, not only for the one button that is disabled today.
   const selectMode = (m: DrawMode) => {
     if (m === "draw-polygon" || m === "draw-rectangle" || m === "draw-circle") setAoi([], null);
+    if (m === "append-polygon") setSpecState((s) => (s.shape ? { ...s, shape: null } : s));
     setMode(m);
   };
 

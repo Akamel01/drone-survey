@@ -4,7 +4,7 @@ import type { ReactNode } from "react";
 import { ensureSiteId, type MissionSpec, type MissionType, type TurnMode } from "@/lib/spec";
 import type { Preview } from "@/lib/mission";
 import type { SavedMission } from "@/lib/savedMissions";
-import type { DrawMode } from "./MapPane";
+import { isDrawing, type DrawMode } from "./MapPane";
 import SavedMissions from "./SavedMissions";
 import styles from "./Sidebar.module.css";
 
@@ -146,6 +146,10 @@ export default function Sidebar({
   // An empty preview caps nothing, so it must not read as a cap.
   const overridden = preview.photo_count > 0 && preview.capped_speed_ms < flight.speed_ms;
 
+  // A draw in progress is a different state from a finished area, and every
+  // control below that a click would mean something else in has to say so.
+  const drawing = isDrawing(mode);
+
   const rings = orbit.altitudes_m;
   const setRing = (i: number, v: number) =>
     setOrbit("altitudes_m", rings.map((a, j) => (j === i ? v : a)));
@@ -275,7 +279,9 @@ export default function Sidebar({
         </Section>
       ) : (
         <Section title="Area">
-          <div className={styles.groupLabel}>Shape</div>
+          <div className={styles.groupLabel}>
+            Shape{drawing ? " — drawing on the map" : ""}
+          </div>
           {/* While drawing, the selector shows the tool in use; once idle it shows
               what the area actually is, so a finished circle does not read as a
               polygon. A rectangle is four corners once drawn and indistinguishable
@@ -298,9 +304,17 @@ export default function Sidebar({
 
           <div className={styles.groupLabel}>Edit</div>
           <div className={styles.group}>
+            {/* Switching to "Add points" halfway through a shape was a silent
+                mode change, and the corners already placed made it look like
+                nothing had happened. Finish or cancel the draw first. */}
             <button
               className={mode === "append-polygon" ? "active" : ""}
-              disabled={spec.aoi.length < 3 || !!spec.shape}
+              disabled={(drawing && mode !== "append-polygon") || spec.aoi.length < 3 || !!spec.shape}
+              title={
+                drawing && mode !== "append-polygon"
+                  ? "Finish or cancel the shape you are drawing first"
+                  : undefined
+              }
               onClick={() => onModeChange("append-polygon")}
             >
               Add points
@@ -312,10 +326,22 @@ export default function Sidebar({
               Clear area
             </button>
           </div>
-          <div className={styles.hint}>
-            Drag inside the shape to move it whole. Drag a corner to reshape it, or an amber
-            midpoint to add one; right-click a corner to remove it.
-          </div>
+          {/* The reshape hint is false while drawing: there a map click adds a
+              corner, and the midpoint handles it names are not on screen. */}
+          {drawing ? (
+            <div className={styles.warnHint}>
+              {mode === "draw-polygon" || mode === "append-polygon"
+                ? "Each click on the map adds a corner. Finish the area from the panel on the map, or press Enter; Escape cancels."
+                : mode === "draw-rectangle"
+                  ? "Click one corner on the map, then the opposite one. Escape cancels."
+                  : "Click the centre on the map, then drag out the radius. Escape cancels."}
+            </div>
+          ) : (
+            <div className={styles.hint}>
+              Drag inside the shape to move it whole. Drag a corner to reshape it, or an amber
+              midpoint to add one; right-click a corner to remove it.
+            </div>
+          )}
 
           <div className={styles.readout}>
             <span>Area</span>
