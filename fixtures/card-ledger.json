@@ -68,7 +68,7 @@
     },
 
     "uncalibrated_card": {
-      "_why": "The pool is what is calibrated, never what is hoped for. Only 5 of 34 Cards are mapped today (#118).",
+      "_why": "The pool is what is calibrated, never what is hoped for. This Ledger's pool stops at WAYFINDER 5.",
       "card": "WAYFINDER 6",
       "expect_reason": "not calibrated"
     },

@@ -605,23 +605,6 @@ def _selftest() -> None:
             for card, part in group:  # two values, not three
                 assert isinstance(card, str) and "waypoints" in part
 
-        # Which Card a Mission goes into is no longer predicted from its place
-        # in the queue — it is the Reservation made at Dispatch (ADR 0022), so
-        # the queue-position prediction the fixture still carries is not
-        # asserted here any more. The calibrated pool itself is still a contract
-        # between the two sides, and is still checked.
-        fixture_path = HERE.parents[1] / "fixtures" / "store-records.json"
-        # These scripts are deployed to the host as a flat directory, not as a
-        # checkout, so the fixture is genuinely absent there. Skip it loudly
-        # rather than fail the whole self-check: the same table is asserted from
-        # the planner's own tests, which only ever run in a checkout, so a drift
-        # between the two rules is still caught.
-        if not fixture_path.is_file():
-            print(f"card-pool fixture absent ({fixture_path}); that check skipped")
-        else:
-            contract = json.loads(fixture_path.read_text())["card_prediction"]
-            assert [c for c, _ in cards()] == contract["pool"], cards()
-
         _ledger_fixture_check()
 
         # A queue that does not fit raises before anything is staged.
@@ -652,12 +635,13 @@ def _selftest() -> None:
             raise AssertionError("a Reservation that did not match the plan was accepted")
 
         # A Card reserved that this Controller does not have is refused by name.
+        beyond = f"WAYFINDER {len(cards()) + 1}"
         uncalibrated = b2_status.with_reservation(
-            {"pool": pool + ["WAYFINDER 9"], "holdings": {}}, ["WAYFINDER 9"], "spec.json", "t")
+            {"pool": pool + [beyond], "holdings": {}}, [beyond], "spec.json", "t")
         try:
             reserved_plan([(tmp / "spec.json", [{"name": "A"}])], uncalibrated)
         except b2_status.LedgerRefusal as e:
-            assert "WAYFINDER 9" in str(e) and "not calibrated" in str(e), e
+            assert beyond in str(e) and "not calibrated" in str(e), e
         else:
             raise AssertionError("a Card outside the calibrated pool was Loaded into")
     # The bootstrap: nothing else writes the pool, and without a pool the
