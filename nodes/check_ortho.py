@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import json
 import math
+import os
 import shutil
 import subprocess
 import sys
@@ -486,6 +487,90 @@ def check_reconstruct_cli_refuses_a_missing_input() -> None:
         print("[ok] reconstruct: entry point refuses a missing input and says so")
 
 
+def check_second_solve_hands_reconstruct_a_task() -> None:
+    """The seam between solve's second pass and the reconstruct chain, against a
+    stand-in NodeODM. It broke once without any check noticing: the Manifest's
+    "no ground control" fact sent the second pass down the CLI route, which left
+    no NodeODM task, so every reconstruct stage after it had nothing to restart.
+    Also pins the hand-off between reconstruct stages and the final removal."""
+    import http.server
+    import threading
+    import zipfile
+
+    calls = []
+    cameras = {"cam": {"projection_type": "brown", "width": 4, "height": 3,
+                       "focal_x": 0.7, "focal_y": 0.7, "c_x": 0.01, "c_y": 0.01}}
+
+    class FakeNodeODM(http.server.BaseHTTPRequestHandler):
+        def log_message(self, *a):
+            pass
+
+        def _send(self, body: bytes, ctype="application/json"):
+            self.send_response(200)
+            self.send_header("Content-Type", ctype)
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+        def do_GET(self):
+            calls.append(("GET", self.path, b""))
+            if self.path.endswith("/download/all.zip"):
+                import io
+                buf = io.BytesIO()
+                with zipfile.ZipFile(buf, "w") as zf:
+                    zf.writestr("cameras.json", json.dumps(cameras))
+                self._send(buf.getvalue(), "application/zip")
+            elif self.path.endswith("/output"):
+                self._send(b"[]")
+            else:
+                self._send(json.dumps({"status": {"code": 40}}).encode())
+
+        def do_POST(self):
+            body = self.rfile.read(int(self.headers.get("Content-Length", 0)))
+            calls.append(("POST", self.path, body))
+            reply = {"uuid": "task-1"} if self.path == "/task/new" else {"success": True}
+            self._send(json.dumps(reply).encode())
+
+    server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), FakeNodeODM)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    host = f"http://127.0.0.1:{server.server_address[1]}"
+    env = {**os.environ, "EXECUTION_CONTEXT": json.dumps({"ground_control_points": False})}
+    try:
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp = Path(tmp)
+            (tmp / "images").mkdir()
+            (tmp / "images" / "a.jpg").write_bytes(b"jpeg")
+            (tmp / "gcp_list.txt").write_text("")  # register's "no Anchors" file
+
+            def node(script, *args):
+                r = subprocess.run([PY, str(REPO_ROOT / "nodes" / script), *args],
+                                   capture_output=True, text=True, timeout=60, env=env)
+                check(f"{script} {args[-1]}: exits 0", r.returncode == 0, r.stdout + r.stderr)
+
+            node("solve/solve.py", "--in", str(tmp / "images"), "--gcp", str(tmp / "gcp_list.txt"),
+                 "--out", str(tmp / "solved"), "--host", host)
+            new = [body for method, path, body in calls if path == "/task/new"]
+            check("solve, second pass with no ground control: submits to NodeODM", len(new) == 1)
+            check("solve, second pass with no ground control: uploads no gcp_list.txt",
+                  new and b'filename="gcp_list.txt"' not in new[0])
+            task = json.loads((tmp / "solved" / "task.json").read_text()) if (tmp / "solved" / "task.json").is_file() else {}
+            check("solve, second pass: task.json names the real task and host",
+                  task.get("uuid") == "task-1" and task.get("host") == host, str(task))
+
+            node("reconstruct/reconstruct.py", "--in", str(tmp / "solved"), "--out", str(tmp / "dense"),
+                 "--rerun-from", "opensfm", "--end-with", "odm_filterpoints")
+            restarts = [json.loads(body)["uuid"] for method, path, body in calls if path == "/task/restart"]
+            check("reconstruct: restarts the task solve made", restarts == ["task-1"], str(restarts))
+            check("reconstruct: hands the task on to the next stage", (tmp / "dense" / "task.json").is_file())
+
+            node("reconstruct/reconstruct.py", "--in", str(tmp / "dense"), "--out", str(tmp / "report"),
+                 "--rerun-from", "odm_report", "--end-with", "odm_postprocess")
+            removed = [json.loads(body)["uuid"] for method, path, body in calls if path == "/task/remove"]
+            check("reconstruct, final stage: removes the task from NodeODM", removed == ["task-1"], str(removed))
+    finally:
+        server.shutdown()
+
+
 def main() -> None:
     check_latlon_to_utm()
     check_utm_round_trip()
@@ -495,6 +580,7 @@ def main() -> None:
     check_register_cli_no_anchors()
     check_register_cli_end_to_end(accepted)
     check_reconstruct_cli_refuses_a_missing_input()
+    check_second_solve_hands_reconstruct_a_task()
     check_bellus_real_projection()
     check_cog_validator()
 
