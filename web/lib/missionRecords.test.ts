@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import {
   deriveMissions,
   liveSpecKeys,
-  mergeLedger,
+  changeSurvived,
   missionNameProblem,
   missionNameTaken,
   missionProblem,
@@ -141,47 +141,33 @@ test("only current Missions count as live Spec keys, so a stale Card can be spot
 
 // ---------------------------------------------------------------------------
 
-test("the Ledger write keeps a reservation that landed while we were thinking", () => {
-  const started: CardLedger = { pool: ["A", "B"], holdings: {} };
-  const theirs = withReservation(started, ["B"], "specs/x/y/theirs.json", "t");
-  const ours = withReservation(started, ["A"], "specs/x/y/ours.json", "t");
-  const merged = mergeLedger(started, theirs, ours);
-  assert.equal(merged.ok, true);
-  if (!merged.ok) return;
-  assert.deepEqual(Object.keys(merged.ledger.holdings).sort(), ["A", "B"], "neither write is lost");
+test("a Reservation overwritten by another writer did not survive", () => {
+  const base: CardLedger = { pool: ["A", "B"], holdings: {} };
+  const ours = withReservation(base, ["A"], "specs/x/y/ours.json", "t");
+  const theirs = withReservation(base, ["B"], "specs/x/y/theirs.json", "t");
+  assert.equal(changeSurvived(base, ours, theirs), false, "their write, from before ours landed, erased ours");
 });
 
-test("two Dispatches racing for the same Card is refused, and says what to do", () => {
-  const started: CardLedger = { pool: ["A"], holdings: {} };
-  const theirs = withReservation(started, ["A"], "specs/x/y/theirs.json", "t");
-  const ours = withReservation(started, ["A"], "specs/x/y/ours.json", "t");
-  const merged = mergeLedger(started, theirs, ours);
-  assert.equal(merged.ok, false);
-  if (merged.ok) return;
-  assert.match(merged.reason, /A changed in the store/);
-  assert.match(merged.reason, /try again/i, "a refusal states what to do next");
+test("a later writer who kept our Reservation is not a conflict", () => {
+  const base: CardLedger = { pool: ["A", "B"], holdings: {} };
+  const ours = withReservation(base, ["A"], "specs/x/y/ours.json", "t");
+  const both = withReservation(ours, ["B"], "specs/x/y/theirs.json", "t");
+  assert.equal(changeSurvived(base, ours, both), true);
 });
 
-test("the host owns the calibrated pool; a stale planner copy never shrinks it", () => {
-  const started: CardLedger = { pool: ["A"], holdings: {} };
-  const latest: CardLedger = { pool: ["A", "B"], holdings: {}, verified_at: "t" };
-  const merged = mergeLedger(started, latest, started);
-  assert.equal(merged.ok, true);
-  if (!merged.ok) return;
-  assert.deepEqual(merged.ledger.pool, ["A", "B"]);
-  assert.equal(merged.ledger.verified_at, "t");
+test("the same Card given to someone else is our change lost", () => {
+  const base: CardLedger = { pool: ["A"], holdings: {} };
+  const ours = withReservation(base, ["A"], "specs/x/y/ours.json", "t");
+  const theirs = withReservation(base, ["A"], "specs/x/y/theirs.json", "t");
+  assert.equal(changeSurvived(base, ours, theirs), false);
 });
 
-test("our own release still applies when nobody else touched that Card", () => {
-  const started = withReservation({ pool: ["A"], holdings: {} }, ["A"], "specs/x/y/ours.json", "t");
-  const ours: CardLedger = { ...started, holdings: {} };
-  const merged = mergeLedger(started, started, ours);
-  assert.equal(merged.ok, true);
-  if (!merged.ok) return;
-  assert.deepEqual(merged.ledger.holdings, {});
+test("a release survives unless the old holding came back", () => {
+  const base = withReservation({ pool: ["A"], holdings: {} }, ["A"], "specs/x/y/ours.json", "t");
+  const released: CardLedger = { ...base, holdings: {} };
+  assert.equal(changeSurvived(base, released, released), true);
+  assert.equal(changeSurvived(base, released, base), false, "a stale copy written back undid the release");
 });
-
-// ---------------------------------------------------------------------------
 
 test("a Mission must belong to a chosen Site and carry its own short name", () => {
   const ok = { site: "Rehearsal Field", site_id: "rehearsal-1", name: "north half", date: "2026-09-23" };

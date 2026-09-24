@@ -22,6 +22,7 @@ import {
   checkedAgo,
   hostLines,
   rowView,
+  unreadableLine,
   type ActionName,
   type Figures,
   type MissionListRead,
@@ -315,6 +316,8 @@ export default function MissionList({ onEdit, onCopy, editingId = null, onRead }
             : ""}
         </p>
       )}
+
+      {unreadableLine(read?.unreadable) && <p className={styles.stop}>{unreadableLine(read?.unreadable)}</p>}
 
       {hostLines(read?.host).map((line) => (
         // A refused Load is about the Controller, not one row, so it is said

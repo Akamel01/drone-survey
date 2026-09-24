@@ -104,8 +104,13 @@ export async function POST(request: Request) {
 
     // Unmarking takes the Card back, which is only honest if it is still free.
     if (!flown) {
-      const taken = row.cards
-        .map((h) => ledger.holdings[h.card])
+      // The Cards it was written to, not only the ones the Ledger still says
+      // it holds: once a Card goes to another Mission this Mission's holding
+      // is gone from the Ledger, and "unmarked, it holds its Card again" was
+      // said while it held nothing (#152).
+      const had = new Set([...row.cards.map((h) => h.card), ...row.loaded_cards.map((c) => c.card)]);
+      const taken = [...had]
+        .map((card) => ledger.holdings[card])
         .filter((h) => h && h.spec_key !== specKey);
       if (taken.length) {
         return Response.json(

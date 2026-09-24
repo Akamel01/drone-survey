@@ -58,8 +58,16 @@ export function isSafeId(id: unknown): id is string {
   return typeof id === "string" && /^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$/.test(id);
 }
 
+/** A Dispatch stamp: the instant, to the second, then the Mission's own id so
+ *  two Missions Dispatched in one second never share a key (#152). Still sorts
+ *  by time, because the instant comes first. */
+export function dispatchStamp(at: Date, missionId: string): string {
+  const instant = at.toISOString().replace(/[-:]/g, "").replace(/\.\d+Z$/, "Z");
+  return `${instant}-${missionId.replace(/[^a-z0-9]/gi, "").slice(0, 8)}`;
+}
+
 /** Dispatch stamps sort lexically; this turns one back into an instant. */
 export function stampToIso(stamp: string): string {
-  const m = /^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})Z$/.exec(stamp);
+  const m = /^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})Z(?:-[a-z0-9]+)?$/i.exec(stamp);
   return m ? `${m[1]}-${m[2]}-${m[3]}T${m[4]}:${m[5]}:${m[6]}Z` : stamp;
 }

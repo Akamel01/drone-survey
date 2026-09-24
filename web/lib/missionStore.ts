@@ -12,7 +12,7 @@ import { authorize, b2Env, b2ReadEnv, downloadFile, listFiles, uploadFile, type 
 import { LEDGER_KEY, MISSIONS_PREFIX, SKIPPED_KEY, STATUS_KEY, missionKey } from "./keys.ts";
 import { EMPTY_LEDGER, type CardLedger } from "./model.ts";
 import type { Manifest } from "./missions.ts";
-import { mergeLedger, type MissionRecord } from "./missionRecords.ts";
+import { changeSurvived, isMissionRecord, sameLedger, type MissionRecord } from "./missionRecords.ts";
 
 /** The read session, the write session and the bucket, or a 503 response
  *  saying so. The write key cannot list, so reads go through the read pair --
@@ -62,20 +62,28 @@ export async function readManifest(read: B2Session, bucket: string): Promise<Man
   }
 }
 
-/** Every Mission in the store. One listing, then one download per record. */
-export async function readMissions(read: B2Session, bucket: string): Promise<MissionRecord[]> {
-  const files = await listFiles(read, MISSIONS_PREFIX);
-  const bodies = await Promise.all(
-    files.filter((f) => f.fileName.endsWith(".json")).map((f) => downloadFile(read, bucket, f.fileName)),
-  );
-  return bodies.flatMap((raw) => {
+/** Every Mission in the store. One listing, then one download per record.
+ *
+ *  A record that does not parse, or does not have a Mission's shape, is left
+ *  out and its key pushed onto `unreadable` if given: one hand-edited file
+ *  must neither hide every Mission nor vanish without a word (#152). */
+export async function readMissions(
+  read: B2Session,
+  bucket: string,
+  unreadable?: string[],
+): Promise<MissionRecord[]> {
+  const files = (await listFiles(read, MISSIONS_PREFIX)).filter((f) => f.fileName.endsWith(".json"));
+  const bodies = await Promise.all(files.map((f) => downloadFile(read, bucket, f.fileName)));
+  return bodies.flatMap((raw, i) => {
     if (!raw) return [];
     try {
-      return [JSON.parse(raw.toString()) as MissionRecord];
+      const record: unknown = JSON.parse(raw.toString());
+      if (isMissionRecord(record)) return [record];
     } catch {
-      // One hand-edited file that stopped parsing must not hide every Mission.
-      return [];
+      // Falls through to being reported.
     }
+    unreadable?.push(files[i].fileName);
+    return [];
   });
 }
 
@@ -92,16 +100,23 @@ export async function writeMission(write: B2Session, record: MissionRecord): Pro
   await uploadFile(write, missionKey(record.id), Buffer.from(JSON.stringify(record, null, 2)));
 }
 
+/** How long a Ledger write waits before checking it survived. Long enough for
+ *  another writer's upload, already in flight when ours landed, to land too. */
+const SETTLE_MS = Number(process.env.LEDGER_SETTLE_MS ?? 1000);
+
 /**
  * Change the Ledger without losing a write that landed while we were thinking.
  *
- * The Ledger is one file, and B2 has no compare-and-swap, so this follows the
- * pattern `scripts/backfill-summaries.ts` set: read, compute, re-read
- * immediately before writing, fold in what someone else wrote, and refuse
- * outright when the two cannot be reconciled. `mergeLedger` holds that rule
- * and is unit-tested; this is the I/O around it.
+ * The Ledger is one file and B2 has no compare-and-swap. So: read, decide,
+ * re-read just before writing -- and if anyone wrote meanwhile, decide again
+ * on what is there now -- then write, wait, and read back to check the change
+ * survived. Two Dispatches racing were both told they held a Card while one
+ * Reservation was silently overwritten (#152); now the loser decides again,
+ * against a Ledger that shows the winner.
  *
- * Returns the written Ledger, or a string saying what to do next.
+ * `change` must be pure: it is re-run on each fresh read.
+ *
+ * Returns the Ledger as read back, or a string saying what to do next.
  */
 export async function updateLedger(
   read: B2Session,
@@ -109,14 +124,27 @@ export async function updateLedger(
   bucket: string,
   change: (started: CardLedger) => CardLedger | string,
 ): Promise<CardLedger | string> {
-  const started = await readLedger(read, bucket);
-  const next = change(started);
-  if (typeof next === "string") return next;
-  const latest = await readLedger(read, bucket);
-  const merged = mergeLedger(started, latest, next);
-  if (!merged.ok) return merged.reason;
-  await uploadFile(write, LEDGER_KEY, Buffer.from(JSON.stringify(merged.ledger, null, 2)));
-  return merged.ledger;
+  // ponytail: this narrows the race to the settle window; only a store with
+  // compare-and-swap, or one writer, closes it.
+  for (let attempt = 0; attempt < 3; attempt++) {
+    let base = await readLedger(read, bucket);
+    let next = change(base);
+    if (typeof next === "string") return next;
+    const latest = await readLedger(read, bucket);
+    if (!sameLedger(latest, base)) {
+      base = latest;
+      next = change(base);
+      if (typeof next === "string") return next;
+    }
+    await uploadFile(write, LEDGER_KEY, Buffer.from(JSON.stringify(next, null, 2)));
+    if (SETTLE_MS > 0) await new Promise((r) => setTimeout(r, SETTLE_MS));
+    const after = await readLedger(read, bucket);
+    if (changeSurvived(base, next, after)) return after;
+  }
+  return (
+    "The Card Ledger kept changing while this was being written, so it could not be confirmed. " +
+    "Nothing is certain to have been kept: reload the Mission list and try again."
+  );
 }
 
 /**
