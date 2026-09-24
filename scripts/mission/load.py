@@ -56,7 +56,13 @@ DEFAULT_STATUS_CONFIG = Path.home() / ".config" / "wayfinder" / "b2-status.env"
 
 
 def unloaded_queue(specs: Path, record: Path) -> list[Path]:
-    """Every Collected Spec not yet Loaded and not withdrawn, oldest first.
+    """Every Collected Spec not yet Loaded and not withdrawn, in path order.
+
+    Path order is Site, then date, then Dispatch stamp. The order no longer
+    decides anything: each Spec goes into the Cards reserved for it at Dispatch
+    (ADR 0022), and one plug-in Loads the whole queue or none of it. It once
+    decided which Card each Spec got, and disagreed with the planner's own
+    numbering (#134).
 
     The host keeps no supersession rule of its own. It used to keep only the
     newest Spec per Site and date, which the planner does not: two Missions of
