@@ -5,13 +5,16 @@ import { staleCards } from "@/lib/model";
 import {
   deriveMissions,
   liveSpecKeys,
+  missionNameTaken,
   missionProblem,
+  siteNameTaken,
   type MissionRecord,
+  type MissionRow,
 } from "@/lib/missionRecords";
+import { hostReport } from "@/lib/missions";
 import {
   readLedger,
   readManifest,
-  readMission,
   readMissions,
   sessions,
   storeFailure,
@@ -58,6 +61,10 @@ export async function GET(request: Request) {
       // own labels are frozen at creation, so the planner is the only thing
       // that can say do not fly this (ADR 0022).
       stale_cards: staleCards(ledger, liveSpecKeys(all)),
+      // A refused Load is about the Controller, not one row, and the rows it
+      // held up cannot say so on their own: without this the list promised
+      // "plug in and it is written" while the host refused every minute (#162).
+      host: hostReport(manifest),
       now: Date.now(),
     });
   } catch (err) {
@@ -107,7 +114,32 @@ export async function POST(request: Request) {
   };
 
   try {
+    // Every branch answers from the whole set: a name is only taken relative
+    // to the other Missions and Sites, and the state comes from the shared
+    // derivation, which needs the whole set because supersession does.
+    const [records, manifest, ledger] = await Promise.all([
+      readMissions(s.read, s.bucket),
+      readManifest(s.read, s.bucket),
+      readLedger(s.read, s.bucket),
+    ]);
+    const rows = deriveMissions(records, manifest, ledger);
+
+    const otherSite = siteNameTaken(records, fields.site_id, fields.site);
+    if (otherSite) {
+      return Response.json(
+        {
+          error:
+            `There is already a Site called “${otherSite.site}”. Choose it from the Site list instead of ` +
+            "naming a new one -- two Sites with one name split their Captures between them.",
+          site: otherSite,
+        },
+        { status: 409 },
+      );
+    }
+
     if (body.id === undefined || body.id === null) {
+      const clash = nameClash(rows, { id: null, ...fields });
+      if (clash) return clash;
       const record: MissionRecord = {
         id: randomUUID(),
         created_at: now,
@@ -122,23 +154,9 @@ export async function POST(request: Request) {
     if (!isSafeId(body.id)) {
       return Response.json({ error: "That is not a Mission id. Reload the Mission list." }, { status: 400 });
     }
-    const existing = await readMission(s.read, s.bucket, body.id);
-    if (!existing) {
-      return Response.json(
-        { error: "That Mission is no longer in the store. Reload the Mission list and save it again." },
-        { status: 404 },
-      );
-    }
-
-    // The state, and what editing means from it, come from the shared
-    // derivation -- which needs the whole set, because supersession does.
-    const [records, manifest, ledger] = await Promise.all([
-      readMissions(s.read, s.bucket),
-      readManifest(s.read, s.bucket),
-      readLedger(s.read, s.bucket),
-    ]);
-    const row = deriveMissions(records, manifest, ledger).find((m) => m.id === existing.id);
-    if (!row) {
+    const existing = records.find((r) => r.id === body.id);
+    const row = rows.find((m) => m.id === body.id);
+    if (!existing || !row) {
       return Response.json(
         { error: "That Mission is no longer in the store. Reload the Mission list and save it again." },
         { status: 404 },
@@ -172,12 +190,37 @@ export async function POST(request: Request) {
       return Response.json({ mission: forked, forked_from: existing.id, superseded_on_dispatch: row.spec_key });
     }
 
+    // An edit in place that renames onto another live Mission would make it
+    // replaceable by this one; the fork above is the only deliberate replace.
+    const clash = nameClash(rows, { id: existing.id, ...fields });
+    if (clash) return clash;
     const updated: MissionRecord = { ...existing, ...fields, updated_at: now };
     await writeMission(s.write, updated);
     return Response.json({ mission: updated, forked_from: null });
   } catch (err) {
     return storeFailure(err);
   }
+}
+
+/** The refusal for a name another live Mission already has at this Site and
+ *  date, or null. The fork made by editing a Dispatched Mission never comes
+ *  here: replacing is its purpose (#167). */
+function nameClash(
+  rows: MissionRow[],
+  candidate: { id: string | null; site_id: string; date: string; name: string; site: string },
+): Response | null {
+  const other = missionNameTaken(rows, candidate);
+  if (!other) return null;
+  return Response.json(
+    {
+      error:
+        `“${other.name}” already exists at ${candidate.site} on ${candidate.date} (${other.state}). ` +
+        "Give this Mission a different name, or open that one and edit it -- a second Mission under the " +
+        "same Site, date and name would replace it when Dispatched.",
+      mission: other.id,
+    },
+    { status: 409 },
+  );
 }
 
 /**

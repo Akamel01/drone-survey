@@ -14,8 +14,8 @@
 // bug -- there is no "draft" and no "queued".
 
 import type { CardHolding, MissionState } from "./model.ts";
-import { missionNameProblem, type MissionRow } from "./missionRecords.ts";
-import type { LoadedCard } from "./missions.ts";
+import { missionNameProblem, sameName, type MissionRow } from "./missionRecords.ts";
+import type { HostDrift, HostNotice, LoadedCard } from "./missions.ts";
 
 /** The glossary's own words, capitalised for a heading and nothing more. */
 export const STATE_LABEL: Record<MissionState, string> = {
@@ -78,6 +78,11 @@ export interface Flight {
   card: string;
   /** The host has actually written this Card, rather than only reserved it. */
   written: boolean;
+  /** The point count this Card shows once opened, as the host wrote it. The
+   *  list on the Controller is frozen at the Card's creation, but the count
+   *  inside an opened Card is the file's own -- the one check the operator can
+   *  make that the Card is the one the planner means (#155). */
+  points: number | null;
   label: string;
 }
 
@@ -95,25 +100,28 @@ function flightLabel(flight: number, flights: number, card: string): string {
  * which states it once with the reason, rather than by a column of rows that
  * each say "no Card yet".
  */
-export function flights(cards: CardHolding[]): Flight[] {
-  return cards.map((h) => ({
-    flight: h.flight,
-    flights: h.flights,
-    card: h.card,
-    written: h.written_at != null,
-    label: flightLabel(h.flight, h.flights, h.card),
-  }));
+export function flights(cards: CardHolding[], loaded: LoadedCard[] = []): Flight[] {
+  return cards.map((h) => {
+    const wrote = loaded.find((c) => c.card === h.card);
+    return {
+      flight: h.flight,
+      flights: h.flights,
+      card: h.card,
+      written: h.written_at != null,
+      points: typeof wrote?.waypoints === "number" ? wrote.waypoints : null,
+      label: flightLabel(h.flight, h.flights, h.card),
+    };
+  });
 }
 
 /**
  * The disagreement between what the planner expected and what the host wrote.
  *
- * This is the only detector for flying the wrong Mission, because the
- * Controller cannot be asked: ADR 0016 measured that a Card's displayed name,
- * distance and point count are frozen at its creation, so a 62-waypoint
- * Mission still reads "900m(5)" there. A grey note is how that gets missed, so
- * where this returns a reason the row withholds "ready, open way finder 2"
- * entirely (ADR 0022).
+ * The Controller's list cannot be asked: a Card's name, distance and point
+ * count there are frozen at its creation, so a 62-waypoint Mission still reads
+ * "900m(5)" on it (ADR 0016). Only the count inside an opened Card is live. A
+ * grey note is how a difference gets missed, so where this returns a reason
+ * the row withholds "open way finder 2" entirely (ADR 0022).
  *
  * Null when they agree, or when there is nothing yet to compare.
  */
@@ -189,9 +197,11 @@ export function actionsFor(row: MissionRow): ActionName[] {
   switch (row.state) {
     case "planned":
       return ["Dispatch", "Edit", "Remove"];
+    // Nothing has reached the Controller yet, so it can still be withdrawn and
+    // cannot have been flown (#163, #165).
     case "dispatched":
-      return ["Withdraw", "Mark Flown", "Edit"];
     case "collected":
+      return ["Withdraw", "Edit"];
     case "loaded":
       return ["Mark Flown", "Edit"];
     case "flown":
@@ -214,6 +224,7 @@ export function rowView(
   row: MissionRow,
   figures: Figures | null,
   staleCards: CardHolding[] = [],
+  hostNotice: HostNotice | null = null,
 ): RowView {
   const stale = staleFor(row, staleCards);
   const mismatch = figuresMismatch(figures, row.loaded_cards);
@@ -221,28 +232,85 @@ export function rowView(
   if (stale.length) {
     blockers.push(
       `${stale.map((h) => h.card).join(", ")} holds a Mission that is no longer current. ` +
-        "Do not fly this. The Controller cannot tell you — its own labels are frozen at the " +
+        "Do not fly this. The Controller's list cannot tell you — its labels are frozen at the " +
         "Card's creation — so this line is the only warning there is.",
     );
   }
   if (mismatch) {
     blockers.push(
       `What was written to the Card does not match this Mission: ${mismatch}. ` +
-        "Do not fly it until that is explained: the Controller's own figures are frozen at the " +
-        "Card's creation, so nothing there can confirm which Mission is in it.",
+        "Do not fly it until that is explained.",
     );
   }
   return {
     state: row.state,
     stateLabel: STATE_LABEL[row.state],
-    headline: headlineFor(row, blockers),
+    headline: heldUp(row, hostNotice) ?? headlineFor(row, blockers),
     figures,
     reason: flightReason(figures),
-    flights: flights(row.cards),
+    flights: flights(row.cards, row.loaded_cards),
     blockers,
     disagreement: row.flown_disagreement,
     actions: actionsFor(row),
   };
+}
+
+/**
+ * The headline of a row the host is refusing to Load, or null.
+ *
+ * Without it the row went on saying "plug the Controller in and it is written"
+ * while the host refused every minute it was plugged in (#162). Only rows that
+ * have not reached the Controller can be held up; the refusal already says
+ * what to do.
+ */
+function heldUp(row: MissionRow, notice: HostNotice | null): Headline | null {
+  if (!notice || !row.spec_key || !notice.waiting.includes(row.spec_key)) return null;
+  if (row.state !== "dispatched" && row.state !== "collected") return null;
+  return {
+    tone: "stop",
+    text: "Not being Loaded",
+    detail: `The host refused the Load at ${when(notice.at)}. ${noticeReason(notice)}`,
+  };
+}
+
+function noticeReason(notice: HostNotice): string {
+  const why = notice.reason ?? notice.action ?? "it gave no reason.";
+  return why.charAt(0).toUpperCase() + why.slice(1);
+}
+
+/** "2026-09-24 09:02 UTC": the host writes UTC, and saying so beats guessing. */
+function when(at: string): string {
+  return /^\d{4}-\d\d-\d\dT\d\d:\d\d/.test(at) ? `${at.slice(0, 10)} ${at.slice(11, 16)} UTC` : at;
+}
+
+/** What the host is saying about the Controller as a whole, for above the
+ *  list. Empty when it is saying nothing. */
+export function hostLines(host: { notice: HostNotice | null; drift: HostDrift | null } | undefined): string[] {
+  const lines: string[] = [];
+  if (host?.notice) {
+    lines.push(`The host refused the last Load, at ${when(host.notice.at)}. ${noticeReason(host.notice)}`);
+  }
+  for (const d of host?.drift?.cards ?? []) {
+    lines.push(
+      `${d.card} does not hold what was Loaded into it (found ${d.found ?? "nothing"}). ` +
+        `Do not fly ${d.card} until its Mission is Dispatched and Loaded again.`,
+    );
+  }
+  return lines;
+}
+
+/** What to check inside a Card before flying it (#155). */
+function countCheck(fs: Flight[]): string {
+  const known = fs.filter((f) => f.points !== null);
+  if (known.length === 0) return "Open that Card by name — the Card's own label describes whatever it held before.";
+  const what =
+    fs.length === 1 && known.length === 1
+      ? `Open it and check it shows ${known[0].points} points before you fly.`
+      : "Open each Card and check it shows the points listed for it below before you fly.";
+  return (
+    `${what} A different number means Cards were renamed or remade since they were calibrated: ` +
+    "do not fly, and recalibrate them. The count on the Controller's list is not the check — only the one inside."
+  );
 }
 
 function headlineFor(row: MissionRow, blockers: string[]): Headline {
@@ -280,9 +348,7 @@ function headlineFor(row: MissionRow, blockers: string[]): Headline {
       return {
         tone: "go",
         text: `Open ${cardList(row.cards)}`,
-        detail:
-          "This Mission is on the Controller and its figures agree with the plan. " +
-          "Open that Card by name — the Card's own label describes whatever it held before.",
+        detail: countCheck(flights(row.cards, row.loaded_cards)),
       };
     case "flown":
       return {
@@ -296,7 +362,7 @@ function headlineFor(row: MissionRow, blockers: string[]): Headline {
       return {
         tone: "quiet",
         text: "Withdrawn",
-        detail: "Cancelled before it was Collected, so nothing reached the Controller and its Cards came back.",
+        detail: "Cancelled before it reached the Controller, so nothing was written and its Cards came back.",
       };
     default:
       return {
@@ -382,13 +448,22 @@ export function asOfStamp(at: number): string {
 export function saveProblem(
   spec: { site?: string; site_id?: string; date?: string },
   name: string,
+  sites: SiteChoice[] = [],
 ): string | null {
   if (!spec.site?.trim()) return "Choose the Site this Mission belongs to, or name a new one.";
+  const twin = siteTwin(sites, spec.site_id, spec.site);
+  if (twin) return `There is already a Site called “${twin.site}”. Choose it from the Site list instead.`;
   if (!spec.site_id?.trim()) return "This Site has no identifier yet. Name it, and one is assigned.";
   const badName = missionNameProblem(name);
   if (badName) return badName;
   if (!spec.date?.trim()) return "Give this Mission a date.";
   return null;
+}
+
+/** An existing Site with this name that is not this Site, or null. Two Sites
+ *  under one name split their Captures between them (#166). */
+export function siteTwin(sites: SiteChoice[], site_id: string | undefined, site: string): SiteChoice | null {
+  return sites.find((s) => s.site_id !== site_id && sameName(s.site, site)) ?? null;
 }
 
 /** What `POST /api/missions` just did, said plainly.
@@ -419,6 +494,9 @@ export interface MissionListRead {
   missions: MissionRow[];
   archived_count: number;
   stale_cards: CardHolding[];
+  /** What the host is saying about the Controller as a whole (#162). Absent
+   *  from a cache written before it existed. */
+  host?: { notice: HostNotice | null; drift: HostDrift | null };
   now: number;
 }
 

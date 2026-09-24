@@ -54,12 +54,15 @@ DEFAULT_STATUS_CONFIG = Path.home() / ".config" / "wayfinder" / "b2-status.env"
 
 
 def unloaded_queue(specs: Path, record: Path) -> list[Path]:
-    """Every Collected Spec not yet Loaded, oldest first — newest per Site/date.
+    """Every Collected Spec not yet Loaded and not withdrawn, oldest first.
 
-    Supersession is newest-wins per (Site, date): an older Dispatch the pilot
-    replaced is never Loaded behind its replacement's back — the Status tab
-    shows it as superseded once the newer one Loads. Dispatch timestamps are
-    the file names and sort lexically (ADR 0017).
+    The host keeps no supersession rule of its own. It used to keep only the
+    newest Spec per Site and date, which the planner does not: two Missions of
+    one Site on one day with different names are two deliberate flights (ADR
+    0021), and the older of them stayed Collected forever, holding its Card
+    (#161). Supersession is decided in the store, which puts a superseded Spec
+    on the skip list just as Withdraw does, and whether a Spec may Load is
+    decided by its Reservation.
     """
     found = sorted(specs.glob("*/*/*.json"), key=lambda f: f.relative_to(specs).as_posix())
     if not found:
@@ -74,16 +77,7 @@ def unloaded_queue(specs: Path, record: Path) -> list[Path]:
         return []
     done = set(json.loads(record.read_text()))
     waiting = [f for f in found if str(f) not in done]
-    # Per group, only the newest Dispatch is ever loadable: an older one stays
-    # unloaded while its replacement waits, and stays unloaded forever after
-    # its replacement has Loaded. Its state is visible in the Status tab.
-    newest: dict[tuple[str, str], Path] = {}
-    for f in found:
-        rel = f.relative_to(specs).parts
-        if len(rel) == 3:
-            newest[(rel[0], rel[1])] = f  # sorted oldest-first: last write wins
-    queue = sorted((f for f in newest.values() if str(f) not in done),
-                   key=lambda f: f.relative_to(specs).as_posix())
+    queue = list(waiting)
     # Apply per-run skip list if available locally (specs/_status/skipped.json).
     def _load_local_skipped() -> dict:
         p = specs / "_status" / "skipped.json"
@@ -116,10 +110,13 @@ def unloaded_queue(specs: Path, record: Path) -> list[Path]:
             else:
                 tails.add(str(s))
         queue = [f for f in queue if _tail(f) not in tails]
-    skipped = len(waiting) - len(queue)
-    if skipped:
-        print(f"{skipped} superseded Specs stay unloaded (a newer Dispatch of their Site/date goes first)")
     return queue
+
+
+def split_reserved(queue: list[Path], ledger: dict) -> tuple[list[Path], list[Path]]:
+    """(Specs holding a Reservation, Specs without one), each in queue order."""
+    held = [s for s in queue if b2_status.cards_for(ledger, spec_key(s))]
+    return held, [s for s in queue if s not in held]
 
 
 def cards() -> list[tuple[str, str]]:
@@ -549,7 +546,7 @@ def _selftest() -> None:
             raise AssertionError("a mismatched read-back was accepted")
         assert md5(live) == md5(tmp / "backup2" / f"{first_guid}.kmz")
 
-        # The queue: newest unloaded per Site/date, oldest group first.
+        # The queue: every unloaded Spec that is not withdrawn, oldest first.
         specs, record = tmp / "specs", tmp / "loaded.json"
         for stamp in ("20260913T090000Z", "20260913T140000Z"):
             f = specs / "site" / "2026-09-13" / f"{stamp}.json"
@@ -564,21 +561,20 @@ def _selftest() -> None:
         newer.parent.mkdir(parents=True)
         newer.write_text("{}")
         assert unloaded_queue(specs, record) == [newer]
-        # A superseded Dispatch in the same group never jumps the queue.
-        older = specs / "site" / "2026-09-14" / "20260914T070000Z.json"
-        older.write_text("{}")
-        assert unloaded_queue(specs, record) == [newer]
-        record.write_text(json.dumps(json.loads(record.read_text()) + [str(newer)]))
-        assert unloaded_queue(specs, record) == []  # replacement Loaded: the older one never follows
-
-        # Withdrawing the newest never promotes its superseded sibling (M-57-HOST trap).
-        record.write_text(json.dumps(json.loads(record.read_text())[:-1]))  # newer waits again
+        # Two Missions of one Site on one day are two flights, not a correction
+        # (ADR 0021): both wait, so both Load. The host used to keep only the
+        # newer, and the older stayed Collected forever holding its Card (#161).
+        other = specs / "site" / "2026-09-14" / "20260914T070000Z.json"
+        other.write_text("{}")
+        assert unloaded_queue(specs, record) == [other, newer]
+        # Supersession and withdrawal both reach the host as the skip list.
         (specs / "_status").mkdir(parents=True, exist_ok=True)
         (specs / "_status" / "skipped.json").write_text(
-            json.dumps({"specs/site/2026-09-14/20260914T080000Z.json": {"withdrawn_at": "2026-09-14T09:00:00Z"}}))
-        assert unloaded_queue(specs, record) == []  # withdrawn newest: the older sibling stays unloaded
+            json.dumps({"specs/site/2026-09-14/20260914T070000Z.json": {"withdrawn_at": "2026-09-14T09:00:00Z"}}))
+        assert unloaded_queue(specs, record) == [newer]
         (specs / "_status" / "skipped.json").unlink()
-        assert unloaded_queue(specs, record) == [newer]  # un-withdrawn / missing file: full queue
+        record.write_text(json.dumps(json.loads(record.read_text()) + [str(newer)]))
+        assert unloaded_queue(specs, record) == [other]  # a Loaded one never comes back
 
         # build() creates the directory it is handed: the queue path passes one
         # per Spec that does not exist yet, and only that path does.
@@ -659,8 +655,38 @@ def _selftest() -> None:
         _self.fetch_ledger = lambda cfg: {"pool": [c for c, _ in cards()], "holdings": {}}
         _self.publish_pool(Path("/nonexistent"))
         assert _written == {}, "an unchanged pool must not cost a write"
+        # An unreadable Ledger is never written over. It used to read as empty,
+        # and publishing the pool onto it erased every Reservation (#161).
+        def _unreadable(cfg):
+            raise LedgerUnreadable("store down")
+        _self.fetch_ledger = _unreadable
+        try:
+            _self.publish_pool(Path("/nonexistent"))
+        except LedgerUnreadable:
+            pass
+        else:
+            raise AssertionError("an unreadable Ledger was treated as empty")
+        assert _written == {}, "nothing may be written over a Ledger that was not read"
+
+        # The Ledger is written from a fresh read: a Reservation made while
+        # the Load ran survives the Load's own bookkeeping.
+        during = b2_status.with_reservation(
+            {"pool": ["way finder 1", "way finder 2"], "holdings": {}}, ["way finder 1"], "a.json", "t0")
+        dispatched_meanwhile = b2_status.with_reservation(during, ["way finder 2"], "b.json", "t1")
+        _self.fetch_ledger = lambda cfg: dispatched_meanwhile
+        _self.record_written(Path("/nonexistent"), {**during, "verified_at": "t2"}, {"way finder 1": "md5"})
+        assert _written["holdings"]["way finder 2"]["spec_key"] == "b.json", _written
+        assert _written["holdings"]["way finder 1"]["written_md5"] == "md5", _written
+        assert _written["verified_at"] == "t2", _written
     finally:
         _self.fetch_ledger, _self.publish_ledger = _fetch, _publish
+
+    # A Spec without a Reservation is set aside by name; it never holds up the
+    # reserved Specs beside it, which used to be refused with it (#161).
+    reserved_ledger = b2_status.with_reservation(
+        {"pool": ["way finder 1"], "holdings": {}}, ["way finder 1"], "b.json", "t")
+    assert split_reserved([Path("a.json"), Path("b.json")], reserved_ledger) == \
+        ([Path("b.json")], [Path("a.json")])
 
     # The survey only reports, so the one thing it must get right is when it
     # says creation order can be trusted. A Card sitting out of order has to be
@@ -694,7 +720,7 @@ def _selftest() -> None:
     print("load self-check: ok")
 
 
-def publish_pool(status_config: Path, ledger: dict | None = None) -> dict:
+def publish_pool(status_config: Path) -> dict:
     """Put the calibrated Card names into the Ledger, so the planner can reserve.
 
     Nothing else writes the pool. The planner reserves Cards at Dispatch and
@@ -708,15 +734,16 @@ def publish_pool(status_config: Path, ledger: dict | None = None) -> dict:
     the host because only the host can see the Controller (ADR 0022); this is
     where it says so.
     """
-    if ledger is None:
-        ledger = fetch_ledger(status_config)
     pool = [name for name, _ in cards()]
-    if ledger.get("pool") == pool:
-        return ledger
-    was = len(ledger.get("pool") or [])
-    ledger = {**ledger, "pool": pool}
-    publish_ledger(status_config, ledger)
-    print(f"published the Card pool to the Ledger: {len(pool)} Cards (was {was})")
+    was: list = []
+
+    def with_pool(ledger: dict) -> dict:
+        was[:] = ledger.get("pool") or []
+        return ledger if ledger.get("pool") == pool else {**ledger, "pool": pool}
+
+    ledger = update_ledger(status_config, with_pool)
+    if was != pool:
+        print(f"published the Card pool to the Ledger: {len(pool)} Cards (was {len(was)})")
     return ledger
 
 
@@ -784,16 +811,35 @@ def main() -> None:
         # Before anything else: the planner cannot reserve a Card it does not
         # know exists, and it is the only thing that reserves. Publishing the
         # pool here is what lets a store that has never seen one get started.
-        publish_pool(args.status_config)
+        try:
+            publish_pool(args.status_config)
+        except LedgerUnreadable as e:
+            print(f"{e}; the Card pool was not published")
 
         queue = unloaded_queue(SPECS, LOADED)
         if not queue:
             return  # nothing new; cron calls this every minute
         if not args.yes:
             sys.exit("this replaces the Missions in the way finder cards on the Controller; pass --yes")
+        try:
+            ledger = fetch_ledger(args.status_config)
+        except LedgerUnreadable as e:
+            reason = (f"{e}; nothing was touched. The Load waits until the Ledger can be read, "
+                      f"because it says which Card each Mission goes into.")
+            report_refusal(args.status_config, "card-ledger", queue, reason)
+            sys.exit(reason)
+        # A Spec Loads if and only if it holds a Reservation. One without is
+        # withdrawn, superseded, Flown, from before Reservations existed, or
+        # caught between its Spec and its Reservation being written -- none of
+        # which may hold up the Missions beside it (#161).
+        queue, unreserved = split_reserved(queue, ledger)
+        for s in unreserved:
+            print(f"skipped {spec_key(s)}: no Card is reserved for it, so it is not Loaded. "
+                  f"The Missions beside it are not held up.")
+        if not queue:
+            return
         if not mounted(MOUNT):
             remount(MOUNT)
-        ledger = fetch_ledger(args.status_config)
         ledger = verify_ledger(MOUNT / STORAGE, ledger, args.status_config)
         with tempfile.TemporaryDirectory() as tmp:
             entries = [(spec, build(spec, Path(tmp) / spec.stem)) for spec in queue]
@@ -805,7 +851,7 @@ def main() -> None:
                 sys.exit(str(e))
             except b2_status.LedgerRefusal as e:
                 report_refusal(args.status_config, "card-ledger", queue, str(e))
-                publish_ledger(args.status_config, ledger)  # the verification still happened
+                stamp_verified(args.status_config, ledger)  # the verification still happened
                 sys.exit(str(e))
         sheet = "\n".join(f"Open {card}: {part['name']} ({part['waypoints']} waypoints) [{spec.name}]"
                           for spec, card, part in loaded)
@@ -818,8 +864,7 @@ def main() -> None:
         # showed it as never Loaded.
         report_loaded(args.status_config,
                       [(spec_key(spec), group) for spec, group in _group_by_spec(loaded)])
-        publish_ledger(args.status_config, b2_status.merge_written(
-            ledger, {card: part["written_md5"] for _, card, part in loaded}, b2_status.utcnow()))
+        record_written(args.status_config, ledger, {card: part["written_md5"] for _, card, part in loaded})
         print(time.strftime("%Y-%m-%d %H:%M:%S"), ", ".join(str(s) for s in queue))
         print(sheet)
         print("Close and reopen each card's waypoint editor on the Controller to load it.")
@@ -832,22 +877,24 @@ def main() -> None:
         remount(MOUNT)
 
     backups = LOADS / stamp
-    ledger = fetch_ledger(args.status_config)
+    try:
+        ledger = fetch_ledger(args.status_config)
+    except LedgerUnreadable as e:
+        sys.exit(f"{e}; nothing was touched")
     ledger = verify_ledger(MOUNT / STORAGE, ledger, args.status_config)
     try:
         loaded = load(args.spec, MOUNT / STORAGE, backups,
                       fresh_mount=lambda: remount(MOUNT), ledger=ledger)
     except b2_status.LedgerRefusal as e:
         report_refusal(args.status_config, "card-ledger", [args.spec], str(e))
-        publish_ledger(args.status_config, ledger)  # the verification still happened
+        stamp_verified(args.status_config, ledger)  # the verification still happened
         sys.exit(str(e))
     sheet = "\n".join(f"Open {card}: {part['name']} ({part['waypoints']} waypoints)" for card, part in loaded)
     (backups / "cards.txt").write_text(sheet + "\n")
     done = json.loads(LOADED.read_text()) if LOADED.exists() else []
     LOADED.write_text(json.dumps(done + [str(args.spec)], indent=1))
     report_loaded(args.status_config, [(spec_key(args.spec), loaded)])
-    publish_ledger(args.status_config, b2_status.merge_written(
-        ledger, {card: part["written_md5"] for card, part in loaded}, b2_status.utcnow()))
+    record_written(args.status_config, ledger, {card: part["written_md5"] for card, part in loaded})
     print(time.strftime("%Y-%m-%d %H:%M:%S"), args.spec)
     print(sheet)
     print("Close and reopen each card's waypoint editor on the Controller to load it.")
@@ -878,24 +925,44 @@ def _store(status_config: Path) -> dict:
     return authorize(senv["B2_KEY_ID"], senv["B2_APP_KEY"])
 
 
-def fetch_ledger(status_config: Path) -> dict:
-    """The Card Ledger from the store.
+class LedgerUnreadable(Exception):
+    """The Ledger could not be read, which is not the same as an empty one."""
 
-    A Ledger that cannot be read comes back empty, loudly. That is not a
-    fallback: an empty Ledger means every Spec has no Reservation and is refused
-    by name, which is exactly what ADR 0022 asks for. The host never chooses
-    Cards for itself — doing so is the defect.
+
+def fetch_ledger(status_config: Path) -> dict:
+    """The Card Ledger from the store; an empty one only if it was never written.
+
+    A Ledger that cannot be read raises instead of coming back empty. It used to
+    come back empty, and every run then published the pool onto that empty
+    copy -- erasing every Reservation and every written Card on one failed
+    read, after which a Dispatch could be given a Card still holding an unflown
+    Mission (#161). The host never chooses Cards for itself, and never writes a
+    Ledger it did not read.
     """
     if not status_config.exists():
-        print(f"no status credentials at {status_config}; the Card Ledger could not be read")
-        return dict(b2_status.EMPTY_LEDGER)
+        raise LedgerUnreadable(f"no status credentials at {status_config}")
     try:
         sauth = _store(status_config)
         return b2_status.download_ledger(
             sauth["downloadUrl"], sauth["allowed"]["bucketName"], sauth["authorizationToken"])
     except (Exception, SystemExit) as e:
-        print(f"the Card Ledger could not be read ({e}); no Spec can be Loaded until it can")
-        return dict(b2_status.EMPTY_LEDGER)
+        raise LedgerUnreadable(f"the Card Ledger could not be read ({e})") from e
+
+
+def update_ledger(status_config: Path, change) -> dict:
+    """Apply change to the Ledger as it is now, and write it only if it changed.
+
+    Re-read immediately before writing, as the planner does: a Load takes long
+    enough for the operator to Dispatch in the middle of it, and writing back
+    the copy read at the start would erase that Reservation.
+    """
+    # ponytail: re-read narrows the lost-update window to milliseconds; the
+    # store has no compare-and-swap, so it cannot close it.
+    fresh = fetch_ledger(status_config)
+    changed = change(fresh)
+    if changed != fresh:
+        publish_ledger(status_config, changed)
+    return changed
 
 
 def publish_ledger(status_config: Path, ledger: dict) -> None:
@@ -912,6 +979,32 @@ def publish_ledger(status_config: Path, ledger: dict) -> None:
         print(f"the Card Ledger was not updated ({e}); the Load itself succeeded")
         return
     print("Updated the Card Ledger")
+
+
+def stamp_verified(status_config: Path, verified: dict) -> None:
+    """Carry this run's verified_at onto the Ledger as it is now."""
+    try:
+        update_ledger(status_config, lambda fresh: {**fresh, "verified_at": verified["verified_at"]}
+                      if "verified_at" in verified else fresh)
+    except LedgerUnreadable as e:
+        print(f"{e}; verified_at was not recorded")
+
+
+def record_written(status_config: Path, verified: dict, written: dict) -> None:
+    """Record the Cards this Load proved, onto the Ledger as it is now.
+
+    The Cards are already written and read back, so this is bookkeeping: loud
+    when it fails, never fatal, and never a write-back of the copy read before
+    the Load, which would erase a Reservation made while it ran.
+    """
+    at = b2_status.utcnow()
+    try:
+        update_ledger(status_config, lambda fresh: b2_status.merge_written(
+            {**fresh, **({"verified_at": verified["verified_at"]} if "verified_at" in verified else {})},
+            written, at))
+    except LedgerUnreadable as e:
+        print(f"{e}; the Cards were Loaded but the Ledger does not yet say so. The next plug-in "
+              f"verifies them against the Controller.")
 
 
 def verify_ledger(root: Path, ledger: dict, status_config: Path) -> dict:

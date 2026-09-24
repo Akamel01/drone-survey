@@ -13,6 +13,7 @@
 import {
   ARCHIVED_STATES,
   editBehaviour,
+  isLive,
   type CardHolding,
   type CardLedger,
   type MissionState,
@@ -99,6 +100,57 @@ export function supersessionGroup(r: {
   name: string;
 }): string {
   return `${r.site_id}\u0000${r.date}\u0000${r.name.trim().toLowerCase()}`;
+}
+
+/** A name as an operator reads it: case and spacing are not a difference. */
+export function sameName(a: string, b: string): boolean {
+  const norm = (x: string) => x.trim().replace(/\s+/g, " ").toLowerCase();
+  return norm(a) === norm(b);
+}
+
+/**
+ * Another Site already called this, or null.
+ *
+ * Two Sites with one name are two identical entries in the Site chooser, and
+ * the Captures split between them -- the accident ADR 0021 set out to end,
+ * reached by naming a "new" Site after an old one (#166). Each Site is
+ * compared by its latest label, because a renamed Site's older Missions still
+ * carry the name it used to have.
+ */
+export function siteNameTaken(
+  records: Pick<MissionRecord, "site_id" | "site" | "updated_at">[],
+  site_id: string,
+  site: string,
+): { site_id: string; site: string } | null {
+  const latest = new Map<string, { site: string; at: string }>();
+  for (const r of records) {
+    const seen = latest.get(r.site_id);
+    if (!seen || r.updated_at > seen.at) latest.set(r.site_id, { site: r.site, at: r.updated_at });
+  }
+  for (const [id, { site: label }] of latest) {
+    if (id !== site_id && sameName(label, site)) return { site_id: id, site: label };
+  }
+  return null;
+}
+
+/**
+ * A live Mission this one would silently replace, or null.
+ *
+ * Site, date and name together are a supersession group (ADR 0021): the newest
+ * Dispatch in it replaces the rest. That is the point of an Edit's fork, and
+ * the fork is exempt by not calling this. A Mission created fresh under a name
+ * already taken would replace the other one without anyone asking (#167).
+ */
+export function missionNameTaken(
+  rows: Pick<MissionRow, "id" | "site_id" | "date" | "name" | "state" | "archived">[],
+  candidate: { id?: string | null; site_id: string; date: string; name: string },
+): Pick<MissionRow, "id" | "name" | "state"> | null {
+  const group = supersessionGroup(candidate);
+  return (
+    rows.find(
+      (r) => r.id !== candidate.id && !r.archived && isLive(r.state) && supersessionGroup(r) === group,
+    ) ?? null
+  );
 }
 
 /** What the operator and the imagery each say, and whether they disagree. */

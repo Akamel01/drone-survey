@@ -10,8 +10,10 @@ import {
   figuresMismatch,
   flightReason,
   flights,
+  hostLines,
   metres,
   rowView,
+  saveProblem,
   sitesFrom,
   CACHE_KEY,
   cacheRead,
@@ -318,4 +320,80 @@ test("storage that refuses a write loses the fallback and nothing else", () => {
   assert.doesNotThrow(() =>
     cacheRead(refusing, { missions: [], archived_count: 0, stale_cards: [], now: 0 }, 1),
   );
+});
+
+// --- the operator's check inside the Card (#155) ------------------------------
+
+test("a Loaded Mission says how many points its Card must show once opened", () => {
+  const loaded = row({
+    state: "loaded",
+    spec_key: KEY,
+    cards: [holding({ card: "way finder 1", written_at: "t" })],
+    loaded_cards: [{ card: "way finder 1", name: "Ortho", waypoints: 184, path_length_m: 1426 }],
+  });
+  const view = rowView(loaded, { photo_count: 184, path_length_m: 1426, parts: 1 });
+  assert.equal(view.headline.text, "Open way finder 1");
+  assert.match(view.headline.detail, /check it shows 184 points before you fly/);
+  assert.match(view.headline.detail, /do not fly/);
+  assert.equal(view.flights[0].points, 184);
+});
+
+test("several Cards each carry their own count to check", () => {
+  const fs = flights(
+    [
+      holding({ card: "way finder 1", flight: 1, flights: 2, written_at: "t" }),
+      holding({ card: "way finder 2", flight: 2, flights: 2, written_at: "t" }),
+    ],
+    [
+      { card: "way finder 1", name: "a", waypoints: 101 },
+      { card: "way finder 2", name: "b", waypoints: 99 },
+    ],
+  );
+  assert.deepEqual(fs.map((f) => f.points), [101, 99]);
+});
+
+// --- nothing on the Controller yet (#163, #165) --------------------------------
+
+test("a Mission not yet on the Controller can be withdrawn and cannot be marked Flown", () => {
+  for (const state of ["dispatched", "collected"] as const) {
+    const actions = actionsFor(row({ state }));
+    assert.ok(actions.includes("Withdraw"), state);
+    assert.equal(actions.includes("Mark Flown"), false, state);
+  }
+  assert.equal(actionsFor(row({ state: "loaded" })).includes("Withdraw"), false);
+});
+
+// --- a Load the host refused (#162) --------------------------------------------
+
+const NOTICE = {
+  type: "card-ledger",
+  at: "2026-09-24T07:20:00Z",
+  waiting: [KEY],
+  reason: "no Card is reserved for specs/old.json; nothing was touched.",
+};
+
+test("a Collected row the host is refusing says so, instead of promising a Load", () => {
+  const collected = row({ state: "collected", spec_key: KEY, cards: [holding({ card: "way finder 1" })] });
+  const view = rowView(collected, FIGS, [], NOTICE);
+  assert.equal(view.headline.tone, "stop");
+  assert.equal(view.headline.text, "Not being Loaded");
+  assert.match(view.headline.detail, /No Card is reserved/);
+  assert.equal(rowView(collected, FIGS, [], null).headline.text, "Collected, not yet on the Controller");
+});
+
+test("a refusal is said above the list, and nothing is said without one", () => {
+  assert.match(hostLines({ notice: NOTICE, drift: null })[0], /refused the last Load/);
+  assert.deepEqual(hostLines({ notice: null, drift: null }), []);
+  assert.deepEqual(hostLines(undefined), []);
+  const drift = { at: "t", cards: [{ card: "way finder 3", expected: "a", found: "b" }] };
+  assert.match(hostLines({ notice: null, drift })[0], /Do not fly way finder 3/);
+});
+
+// --- one Site, one name (#166) -------------------------------------------------
+
+test("a new Site cannot take an existing Site's name, whatever its case or spacing", () => {
+  const sites = [{ site_id: "g-z2m4tx", site: "GeorgeTown2" }];
+  const spec = { site: " georgetown2 ", site_id: "g-new001", date: "2026-09-24" };
+  assert.match(saveProblem(spec, "Ortho", sites)!, /already a Site called “GeorgeTown2”/);
+  assert.equal(saveProblem({ ...spec, site_id: "g-z2m4tx" }, "Ortho", sites), null, "the Site itself is fine");
 });
