@@ -52,13 +52,13 @@ test("a success reports what the store did, in the glossary's words", () => {
   // about one (ADR 0022), so the message says which.
   const s = endAction(beginAction(IDLE, "Dispatch", "mission-a"), "Dispatch", "mission-a", {
     ok: true,
-    body: { key: "specs/field/2026-09-20/20260920T120000Z.json", cards: ["WAYFINDER 1", "WAYFINDER 2"] },
+    body: { key: "specs/field/2026-09-20/20260920T120000Z.json", cards: ["way finder 1", "way finder 2"] },
   });
   assert.equal(s.notice?.failed, false);
-  assert.equal(s.notice?.text, "Dispatched. WAYFINDER 1, WAYFINDER 2 are reserved for it.");
+  assert.equal(s.notice?.text, "Dispatched. way finder 1, way finder 2 are reserved for it.");
   assert.equal(
-    describeResult("Withdraw", { ok: true, body: { cards_released: ["WAYFINDER 1"] } }),
-    "Withdrawn. WAYFINDER 1 released.",
+    describeResult("Withdraw", { ok: true, body: { cards_released: ["way finder 1"] } }),
+    "Withdrawn. way finder 1 released.",
   );
   // Nothing is ever deleted, so the message must not say it was.
   assert.match(describeResult("Remove", { ok: true, body: { archived: "mission-a" } }), /archived, not deleted/);

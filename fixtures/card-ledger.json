@@ -11,18 +11,18 @@
   ],
 
   "ledger": {
-    "pool": ["WAYFINDER 1", "WAYFINDER 2", "WAYFINDER 3", "WAYFINDER 4", "WAYFINDER 5"],
+    "pool": ["way finder 1", "way finder 2", "way finder 3", "way finder 4", "way finder 5"],
     "holdings": {
-      "WAYFINDER 1": {
-        "card": "WAYFINDER 1",
+      "way finder 1": {
+        "card": "way finder 1",
         "spec_key": "specs/rehearsal-field/2026-09-17/20260917T014122Z.json",
         "flight": 1,
         "flights": 1,
         "reserved_at": "2026-09-17T01:41:22Z",
         "written_at": "2026-09-23T01:15:04Z"
       },
-      "WAYFINDER 2": {
-        "card": "WAYFINDER 2",
+      "way finder 2": {
+        "card": "way finder 2",
         "spec_key": "specs/rehearsal-field/2026-09-18/20260917T014442Z.json",
         "flight": 1,
         "flights": 1,
@@ -36,15 +36,15 @@
 
   "cases": {
     "available": {
-      "_why": "WAYFINDER 1 holds an unflown Mission. WAYFINDER 2 was flown, so it is reusable again.",
-      "expect": ["WAYFINDER 2", "WAYFINDER 3", "WAYFINDER 4", "WAYFINDER 5"]
+      "_why": "way finder 1 holds an unflown Mission. way finder 2 was flown, so it is reusable again.",
+      "expect": ["way finder 2", "way finder 3", "way finder 4", "way finder 5"]
     },
 
     "reserve_two": {
       "_why": "A Spec that splits into two Missions takes the first two available Cards.",
       "needed": 2,
       "expect_ok": true,
-      "expect_cards": ["WAYFINDER 2", "WAYFINDER 3"]
+      "expect_cards": ["way finder 2", "way finder 3"]
     },
 
     "reserve_more_than_free": {
@@ -52,37 +52,37 @@
       "needed": 5,
       "expect_ok": false,
       "expect_available": 4,
-      "expect_reason_mentions": ["WAYFINDER 1", "unflown"]
+      "expect_reason_mentions": ["way finder 1", "unflown"]
     },
 
     "release_on_withdraw": {
       "_why": "Withdrawing a Spec gives its Cards back. What it holds is no longer current.",
       "spec_key": "specs/rehearsal-field/2026-09-17/20260917T014122Z.json",
-      "expect_available_after": ["WAYFINDER 1", "WAYFINDER 2", "WAYFINDER 3", "WAYFINDER 4", "WAYFINDER 5"]
+      "expect_available_after": ["way finder 1", "way finder 2", "way finder 3", "way finder 4", "way finder 5"]
     },
 
     "flown_holding_survives_release": {
       "_why": "A Flown holding is the record of what was flown; releasing its Spec must not erase it.",
       "spec_key": "specs/rehearsal-field/2026-09-18/20260917T014442Z.json",
-      "expect_holding_kept": "WAYFINDER 2"
+      "expect_holding_kept": "way finder 2"
     },
 
     "uncalibrated_card": {
-      "_why": "The pool is what is calibrated, never what is hoped for. Only 5 of 34 Cards are mapped today (#118).",
-      "card": "WAYFINDER 6",
+      "_why": "The pool is what is calibrated, never what is hoped for. This Ledger's pool stops at way finder 5.",
+      "card": "way finder 6",
       "expect_reason": "not calibrated"
     },
 
     "drift": {
       "_why": "The Ledger says one thing, the Controller holds another. Reported, never quietly corrected.",
       "on_device": {
-        "WAYFINDER 1": "specs/rehearsal-field/2026-09-17/20260917T014122Z.json",
-        "WAYFINDER 2": "specs/somewhere-else/2026-09-01/20260901T000000Z.json",
-        "WAYFINDER 3": null
+        "way finder 1": "specs/rehearsal-field/2026-09-17/20260917T014122Z.json",
+        "way finder 2": "specs/somewhere-else/2026-09-01/20260901T000000Z.json",
+        "way finder 3": null
       },
       "expect_drift": [
         {
-          "card": "WAYFINDER 2",
+          "card": "way finder 2",
           "expected": "specs/rehearsal-field/2026-09-18/20260917T014442Z.json",
           "found": "specs/somewhere-else/2026-09-01/20260901T000000Z.json"
         }

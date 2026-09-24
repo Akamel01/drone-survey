@@ -24,8 +24,8 @@ const C = fixture.cases;
 
 test("a Card holding an unflown Mission is not available; a Flown one is", () => {
   assert.deepEqual(availableCards(LEDGER), C.available.expect);
-  assert.match(cardUnavailable(LEDGER, "WAYFINDER 1")!, /unflown/);
-  assert.equal(cardUnavailable(LEDGER, "WAYFINDER 2"), null, "Flown releases the Card");
+  assert.match(cardUnavailable(LEDGER, "way finder 1")!, /unflown/);
+  assert.equal(cardUnavailable(LEDGER, "way finder 2"), null, "Flown releases the Card");
 });
 
 test("a Card outside the calibrated pool cannot be reserved", () => {
@@ -72,7 +72,7 @@ test("reserving records the flight order, so a row can say flight 2 of 3", () =>
 test("a Card whose Mission is no longer current is stale, and only once written", () => {
   const live = new Set<string>();
   const stale = staleCards(LEDGER, live).map((h) => h.card);
-  assert.deepEqual(stale, ["WAYFINDER 1"], "the Flown one is not stale; the unflown written one is");
+  assert.deepEqual(stale, ["way finder 1"], "the Flown one is not stale; the unflown written one is");
 
   const reservedOnly = withReservation({ pool: ["A"], holdings: {} }, ["A"], "specs/x/y/z.json", "t");
   assert.deepEqual(

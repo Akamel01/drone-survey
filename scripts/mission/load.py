@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Load Mission Specs onto the Controller, into the WAYFINDER cards, over jmtpfs.
+"""Load Mission Specs onto the Controller, into the way finder cards, over jmtpfs.
 
 One plug-in Loads every waiting Spec into the Cards that were reserved for it at
 Dispatch, read from the Card Ledger in the store — never Cards chosen here, and
@@ -132,10 +132,15 @@ def pool_drift(root: Path) -> list[str]:
     """Every way the Card pool no longer matches what was calibrated.
 
     A Card is a Placeholder Mission the operator made by hand, and the slot GUID
-    is its identity — so a Placeholder deleted, added or remade since
-    `wayfinder_slots.json` was written shows up here. The file is not trusted on
-    its own: a Load into a Card that may no longer be what it was is the failure
+    is its identity — so a Placeholder deleted or remade since
+    `wayfinder_slots.json` was written shows up here, a remade one as the
+    disappearance of the GUID it used to have. The file is not trusted on its
+    own: a Load into a Card that may no longer be what it was is the failure
     this detector exists to prevent (ADR 0022).
+
+    A Placeholder the pool does not know about is **not** drift. The operator
+    keeps far more Placeholders than are calibrated — 38 on the Controller
+    against 5 calibrated — and calling those drift refused every Load (#118).
     """
     calibrated = {guid: name for name, guid in cards()}
     waypoint = root / WAYPOINT_DIR
@@ -143,10 +148,45 @@ def pool_drift(root: Path) -> list[str]:
         present = {d.name for d in waypoint.iterdir() if d.is_dir()}
     except OSError as e:
         return [f"could not read the Controller's Missions at {waypoint}: {e}"]
-    problems = [f"{calibrated[g]} ({g}) was calibrated but is no longer on the Controller"
-                for g in sorted(calibrated) if g not in present]
-    problems += [f"a Placeholder Mission the pool does not know about is on the Controller ({g})"
-                 for g in sorted(present - set(calibrated))]
+    return [f"{calibrated[g]} ({g}) was calibrated but is no longer on the Controller"
+            for g in sorted(calibrated) if g not in present]
+
+
+def survey(root: Path) -> list[tuple[int | None, str]]:
+    """(createTime, slot GUID) for every Placeholder Mission on the Controller.
+
+    createTime is the field DJI Fly keys a mission's stored name from, so the
+    order these were created in is the order the operator named them in -- if
+    the Placeholders were made one after another. That is a hypothesis, not a
+    fact, which is why this only reports; nothing is written from it. It is
+    checked against the Cards already calibrated by hand (ADR 0016) before any
+    of it is believed.
+    """
+    waypoint = root / WAYPOINT_DIR
+    rows = []
+    for d in sorted(waypoint.iterdir()):
+        if not d.is_dir():
+            continue
+        kmz = d / f"{d.name}.kmz"
+        if not kmz.exists():
+            continue  # DJI Fly keeps its own directories here (capability, map_preview)
+        rows.append((read_create_time(kmz), d.name))
+    return sorted(rows, key=lambda r: (r[0] is None, r[0]))
+
+
+def survey_disagrees(rows: list[tuple[int | None, str]]) -> list[str]:
+    """Where creation order and the hand-calibrated names disagree.
+
+    Empty means every Card calibrated by hand sits exactly where creation order
+    predicts it, which is the only evidence that would let the rest be named
+    the same way.
+    """
+    by_guid = {guid: name for name, guid in cards()}
+    known = [(i, by_guid[guid]) for i, (_, guid) in enumerate(rows) if guid in by_guid]
+    missing = [n for n in by_guid.values() if n not in [k for _, k in known]]
+    problems = [f"{n} is calibrated but is not on the Controller" for n in sorted(missing)]
+    problems += [f"{name} is {i + 1} in creation order, not {name.split()[-1]}"
+                 for i, name in known if str(i + 1) != name.split()[-1]]
     return problems
 
 
@@ -272,7 +312,7 @@ def load_all(entries: list[tuple[Path, list[dict]]], root: Path, backups: Path,
         # unflown Mission anyway (ADR 0022).
         waiting = ", ".join(spec.name for spec, _ in entries)
         raise b2_status.QueueOverflowError(
-            f"{total} parts waiting ({waiting}) but only {len(cards())} WAYFINDER cards; "
+            f"{total} parts waiting ({waiting}) but only {len(cards())} way finder cards; "
             f"nothing was touched. Dispatch fewer missions or clear a card, then replug.")
     changed = pool_drift(root)
     if changed:
@@ -350,8 +390,8 @@ def _ledger_fixture_check() -> None:
 
     # A Card holding an unflown Mission is not available; a Flown one is.
     assert b2_status.available_cards(ledger) == case["available"]["expect"]
-    assert "unflown" in b2_status.card_unavailable(ledger, "WAYFINDER 1")
-    assert b2_status.card_unavailable(ledger, "WAYFINDER 2") is None, "Flown releases the Card"
+    assert "unflown" in b2_status.card_unavailable(ledger, "way finder 1")
+    assert b2_status.card_unavailable(ledger, "way finder 2") is None, "Flown releases the Card"
 
     # A Card outside the calibrated pool cannot be reserved.
     assert b2_status.card_unavailable(ledger, case["uncalibrated_card"]["card"]) \
@@ -384,7 +424,7 @@ def _ledger_fixture_check() -> None:
     assert b2_status.available_cards(held) == []
 
     # A Card whose Mission is no longer current is stale, and only once written.
-    assert [h["card"] for h in b2_status.stale_cards(ledger, set())] == ["WAYFINDER 1"]
+    assert [h["card"] for h in b2_status.stale_cards(ledger, set())] == ["way finder 1"]
     reserved_only = b2_status.with_reservation({"pool": ["A"], "holdings": {}},
                                                ["A"], "specs/x/y/z.json", "t")
     assert b2_status.stale_cards(reserved_only, set()) == [], \
@@ -441,7 +481,7 @@ def _selftest() -> None:
 
         # The same Spec with a Reservation goes to the Card that was reserved.
         ledger = b2_status.with_reservation(
-            {"pool": pool, "holdings": {}}, ["WAYFINDER 1"], "spec.json", "2026-09-23T00:00:00Z")
+            {"pool": pool, "holdings": {}}, ["way finder 1"], "spec.json", "2026-09-23T00:00:00Z")
         loaded = load(tmp / "spec.json", root, tmp / "backup", ledger=ledger)
         assert [c for c, _ in loaded] == [first_card], loaded
         live = root / WAYPOINT_DIR / first_guid / f"{first_guid}.kmz"
@@ -453,34 +493,37 @@ def _selftest() -> None:
         # goes into the Ledger, and a Card the Ledger does not hold is never invented.
         written = b2_status.merge_written(
             ledger, {card: part["written_md5"] for card, part in loaded}, "2026-09-23T01:00:00Z")
-        assert written["holdings"]["WAYFINDER 1"]["written_md5"] == md5(live)
-        assert written["holdings"]["WAYFINDER 1"]["written_at"] == "2026-09-23T01:00:00Z"
+        assert written["holdings"]["way finder 1"]["written_md5"] == md5(live)
+        assert written["holdings"]["way finder 1"]["written_at"] == "2026-09-23T01:00:00Z"
 
         # Verifying against the Controller: the Card still holds what was written.
-        assert observe_cards(root, written) == {"WAYFINDER 1": "spec.json"}
+        assert observe_cards(root, written) == {"way finder 1": "spec.json"}
         assert b2_status.ledger_drift(written, observe_cards(root, written)) == []
         # A Reservation that has not been written is not evidence of anything:
         # the Controller still holds its own Placeholder, which is not drift.
-        reserved_only = b2_status.with_reservation(written, ["WAYFINDER 3"], "other.json", "t")
-        assert "WAYFINDER 3" not in observe_cards(root, reserved_only)
+        reserved_only = b2_status.with_reservation(written, ["way finder 3"], "other.json", "t")
+        assert "way finder 3" not in observe_cards(root, reserved_only)
         assert b2_status.ledger_drift(reserved_only, observe_cards(root, reserved_only)) == []
 
         # Something else in the Card: reported, never quietly corrected.
         live.write_bytes(b"a Mission this host did not write")
         seen = observe_cards(root, written)
-        assert seen["WAYFINDER 1"].startswith("unknown contents"), seen
+        assert seen["way finder 1"].startswith("unknown contents"), seen
         drifted = b2_status.ledger_drift(written, seen)
-        assert [d["card"] for d in drifted] == ["WAYFINDER 1"], drifted
-        assert drifted[0]["expected"] == "spec.json" and drifted[0]["found"] == seen["WAYFINDER 1"]
-        assert written["holdings"]["WAYFINDER 1"]["spec_key"] == "spec.json", \
+        assert [d["card"] for d in drifted] == ["way finder 1"], drifted
+        assert drifted[0]["expected"] == "spec.json" and drifted[0]["found"] == seen["way finder 1"]
+        assert written["holdings"]["way finder 1"]["spec_key"] == "spec.json", \
             "the Ledger keeps saying what was planned; drift is reported, not corrected"
 
         # The pool itself is checked, never trusted: a Placeholder Mission
-        # deleted or added since calibration refuses the Load before it starts.
+        # deleted since calibration refuses the Load before it starts.
         assert pool_drift(root) == []
+        # An uncalibrated Placeholder is ordinary. The operator keeps dozens of
+        # them and only a few are calibrated, so treating one as drift refused
+        # every Load on the real Controller (#118).
         stray = root / WAYPOINT_DIR / "E1E1E1E1-0000-0000-0000-000000000000"
         stray.mkdir()
-        assert any("does not know about" in p for p in pool_drift(root)), pool_drift(root)
+        assert pool_drift(root) == [], "an uncalibrated Placeholder is not drift"
         stray.rmdir()
         gone = root / WAYPOINT_DIR / cards()[-1][1]
         shutil.move(str(gone), str(tmp / "moved-away"))
@@ -550,34 +593,17 @@ def _selftest() -> None:
 
         # The shape report_loaded() is handed matches what _group_by_spec returns.
         grouped = _group_by_spec([
-            (specs / "a.json", "WAYFINDER 1", {"name": "A", "waypoints": 3}),
-            (specs / "a.json", "WAYFINDER 2", {"name": "A2", "waypoints": 2}),
-            (specs / "b.json", "WAYFINDER 3", {"name": "B", "waypoints": 7}),
+            (specs / "a.json", "way finder 1", {"name": "A", "waypoints": 3}),
+            (specs / "a.json", "way finder 2", {"name": "A2", "waypoints": 2}),
+            (specs / "b.json", "way finder 3", {"name": "B", "waypoints": 7}),
         ])
         assert [(spec.name, [c for c, _ in group]) for spec, group in grouped] == [
-            ("a.json", ["WAYFINDER 1", "WAYFINDER 2"]),
-            ("b.json", ["WAYFINDER 3"]),
+            ("a.json", ["way finder 1", "way finder 2"]),
+            ("b.json", ["way finder 3"]),
         ], grouped
         for _, group in grouped:
             for card, part in group:  # two values, not three
                 assert isinstance(card, str) and "waypoints" in part
-
-        # Which Card a Mission goes into is no longer predicted from its place
-        # in the queue — it is the Reservation made at Dispatch (ADR 0022), so
-        # the queue-position prediction the fixture still carries is not
-        # asserted here any more. The calibrated pool itself is still a contract
-        # between the two sides, and is still checked.
-        fixture_path = HERE.parents[1] / "fixtures" / "store-records.json"
-        # These scripts are deployed to the host as a flat directory, not as a
-        # checkout, so the fixture is genuinely absent there. Skip it loudly
-        # rather than fail the whole self-check: the same table is asserted from
-        # the planner's own tests, which only ever run in a checkout, so a drift
-        # between the two rules is still caught.
-        if not fixture_path.is_file():
-            print(f"card-pool fixture absent ({fixture_path}); that check skipped")
-        else:
-            contract = json.loads(fixture_path.read_text())["card_prediction"]
-            assert [c for c, _ in cards()] == contract["pool"], cards()
 
         _ledger_fixture_check()
 
@@ -586,7 +612,7 @@ def _selftest() -> None:
             load_all([(specs / "big.json", [{"name": "x", "waypoints": 1}] * (len(cards()) + 1))],
                      root, tmp / "backup3")
         except b2_status.QueueOverflowError as e:
-            assert "only" in str(e) and "WAYFINDER" in str(e), e
+            assert "only" in str(e) and "way finder" in str(e), e
         else:
             raise AssertionError("an overfull queue was accepted")
 
@@ -600,7 +626,7 @@ def _selftest() -> None:
         # A Reservation that does not match the plan the writer produced is
         # refused rather than truncated: one Card reserved, two Missions made.
         two_parts = b2_status.with_reservation(
-            {"pool": pool, "holdings": {}}, ["WAYFINDER 1"], "spec.json", "t")
+            {"pool": pool, "holdings": {}}, ["way finder 1"], "spec.json", "t")
         try:
             reserved_plan([(tmp / "spec.json", [{"name": "A"}, {"name": "B"}])], two_parts)
         except b2_status.LedgerRefusal as e:
@@ -609,12 +635,13 @@ def _selftest() -> None:
             raise AssertionError("a Reservation that did not match the plan was accepted")
 
         # A Card reserved that this Controller does not have is refused by name.
+        beyond = f"way finder {len(cards()) + 1}"
         uncalibrated = b2_status.with_reservation(
-            {"pool": pool + ["WAYFINDER 9"], "holdings": {}}, ["WAYFINDER 9"], "spec.json", "t")
+            {"pool": pool + [beyond], "holdings": {}}, [beyond], "spec.json", "t")
         try:
             reserved_plan([(tmp / "spec.json", [{"name": "A"}])], uncalibrated)
         except b2_status.LedgerRefusal as e:
-            assert "WAYFINDER 9" in str(e) and "not calibrated" in str(e), e
+            assert beyond in str(e) and "not calibrated" in str(e), e
         else:
             raise AssertionError("a Card outside the calibrated pool was Loaded into")
     # The bootstrap: nothing else writes the pool, and without a pool the
@@ -634,6 +661,35 @@ def _selftest() -> None:
         assert _written == {}, "an unchanged pool must not cost a write"
     finally:
         _self.fetch_ledger, _self.publish_ledger = _fetch, _publish
+
+    # The survey only reports, so the one thing it must get right is when it
+    # says creation order can be trusted. A Card sitting out of order has to be
+    # named, not averaged over.
+    with tempfile.TemporaryDirectory() as tmpdir:
+        import zipfile
+        root = Path(tmpdir)
+        guids = [g for _, g in cards()]
+
+        def _controller(order: list[str]) -> None:
+            for i, guid in enumerate(order):
+                d = root / WAYPOINT_DIR / guid
+                d.mkdir(parents=True, exist_ok=True)
+                with zipfile.ZipFile(d / f"{guid}.kmz", "w") as z:
+                    z.writestr("wpmz/template.kml",
+                               f"<wpml:createTime>{1_700_000_000_000 + i * 60_000}</wpml:createTime>")
+                    z.writestr("wpmz/waylines.wpml", "<kml/>")
+
+        _controller(guids)
+        rows = survey(root)
+        assert [g for _, g in rows] == guids, "the survey must report oldest first"
+        assert survey_disagrees(rows) == [], survey_disagrees(rows)
+
+        # Two Placeholders created in the other order: the survey must say so
+        # rather than let creation order name the remaining Cards.
+        shutil.rmtree(root / WAYPOINT_DIR)
+        _controller([guids[1], guids[0]] + guids[2:])
+        problems = survey_disagrees(survey(root))
+        assert any("way finder 1" in x for x in problems), problems
 
     print("load self-check: ok")
 
@@ -669,16 +725,40 @@ def main() -> None:
     p.add_argument("spec", nargs="?", type=Path, help="the Mission Spec to Load")
     p.add_argument("--newest", action="store_true",
                    help="Load every Collected Spec not yet Loaded, oldest first (what cron runs)")
-    p.add_argument("--yes", action="store_true", help="confirm replacing the WAYFINDER cards")
+    p.add_argument("--yes", action="store_true", help="confirm replacing the way finder cards")
     p.add_argument("--status-config", type=Path, default=DEFAULT_STATUS_CONFIG,
                    help="B2 status credentials env file (read specs/, write status/*)")
     p.add_argument("--selftest", action="store_true", help="run the offline self-check and exit")
+    p.add_argument("--survey", action="store_true",
+                   help="list every Placeholder Mission in creation order and check it against "
+                        "the Cards already calibrated; writes nothing")
     p.add_argument("--publish-pool", action="store_true",
                    help="write the calibrated Card names to the Ledger and exit; needs no Controller")
     args = p.parse_args()
 
     if args.selftest:
         _selftest()
+        return
+    if args.survey:
+        if not mounted(MOUNT):
+            remount(MOUNT)
+        rows = survey(MOUNT / STORAGE)
+        by_guid = {guid: name for name, guid in cards()}
+        print(f"{len(rows)} Placeholder Missions on the Controller, oldest first:\n")
+        for i, (created, guid) in enumerate(rows, 1):
+            when = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(created / 1000)) if created else "no createTime"
+            print(f"  {i:>3}  {when}  {guid}  {by_guid.get(guid, '')}")
+        problems = survey_disagrees(rows)
+        print()
+        if problems:
+            print("creation order does NOT predict the calibrated names:")
+            for problem in problems:
+                print(f"  {problem}")
+            print("\nCalibrate the rest by hand (ADR 0016). Nothing was written.")
+        else:
+            print(f"every calibrated Card sits where creation order predicts it "
+                  f"({len(by_guid)} of {len(rows)} checked). The rest can be named the same way, "
+                  f"but only after a marker Mission proves at least one of them on the screen.")
         return
     if args.publish_pool:
         # Seeding, and the recovery when calibration changes: no Controller is
@@ -710,7 +790,7 @@ def main() -> None:
         if not queue:
             return  # nothing new; cron calls this every minute
         if not args.yes:
-            sys.exit("this replaces the Missions in the WAYFINDER cards on the Controller; pass --yes")
+            sys.exit("this replaces the Missions in the way finder cards on the Controller; pass --yes")
         if not mounted(MOUNT):
             remount(MOUNT)
         ledger = fetch_ledger(args.status_config)
@@ -747,7 +827,7 @@ def main() -> None:
     if not args.spec or not args.spec.exists():
         sys.exit("name a Mission Spec file to Load")
     if not args.yes:
-        sys.exit("this replaces the Missions in the WAYFINDER cards on the Controller; pass --yes")
+        sys.exit("this replaces the Missions in the way finder cards on the Controller; pass --yes")
     if not mounted(MOUNT):
         remount(MOUNT)
 

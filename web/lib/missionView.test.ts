@@ -108,12 +108,12 @@ test("a Mission with no drawn area has no figures to state", () => {
 
 test("reserved Cards are named as flights, in order", () => {
   const held = [
-    holding({ card: "WAYFINDER 1", flight: 1, flights: 2 }),
-    holding({ card: "WAYFINDER 2", flight: 2, flights: 2, written_at: "t" }),
+    holding({ card: "way finder 1", flight: 1, flights: 2 }),
+    holding({ card: "way finder 2", flight: 2, flights: 2, written_at: "t" }),
   ];
   assert.deepEqual(
     flights(held).map((f) => f.label),
-    ["Flight 1 of 2 — WAYFINDER 1", "Flight 2 of 2 — WAYFINDER 2"],
+    ["Flight 1 of 2 — way finder 1", "Flight 2 of 2 — way finder 2"],
   );
   assert.deepEqual(
     flights(held).map((f) => f.written),
@@ -123,7 +123,7 @@ test("reserved Cards are named as flights, in order", () => {
 });
 
 test("a single flight is named by its Card alone, not \"Flight 1 of 1\"", () => {
-  assert.equal(flights([holding({ card: "WAYFINDER 3" })])[0].label, "WAYFINDER 3");
+  assert.equal(flights([holding({ card: "way finder 3" })])[0].label, "way finder 3");
 });
 
 test("before Dispatch no Card is named, because none is reserved yet", () => {
@@ -138,37 +138,37 @@ test("before Dispatch no Card is named, because none is reserved yet", () => {
 
 test("a point count that disagrees with what the host wrote is a mismatch", () => {
   const why = figuresMismatch(FIGS, [
-    { card: "WAYFINDER 1", name: "x", waypoints: 100 },
-    { card: "WAYFINDER 2", name: "y", waypoints: 60 },
+    { card: "way finder 1", name: "x", waypoints: 100 },
+    { card: "way finder 2", name: "y", waypoints: 60 },
   ]);
   assert.equal(why, "202 points planned, 160 written");
 });
 
 test("a distance within measurement noise is not a mismatch", () => {
   const agree = figuresMismatch(FIGS, [
-    { card: "WAYFINDER 1", name: "x", waypoints: 202, path_length_m: 2400 },
+    { card: "way finder 1", name: "x", waypoints: 202, path_length_m: 2400 },
   ]);
   assert.equal(agree, null, "two geodesic sums of one path differ slightly and always will");
   const differ = figuresMismatch(FIGS, [
-    { card: "WAYFINDER 1", name: "x", waypoints: 202, path_length_m: 1500 },
+    { card: "way finder 1", name: "x", waypoints: 202, path_length_m: 1500 },
   ]);
   assert.equal(differ, "2.37 km planned, 1.50 km written");
 });
 
 test("a host report with no figures is not evidence of a difference", () => {
-  assert.equal(figuresMismatch(FIGS, [{ card: "WAYFINDER 1", name: "x" }]), null);
-  assert.equal(figuresMismatch(null, [{ card: "WAYFINDER 1", name: "x", waypoints: 5 }]), null);
+  assert.equal(figuresMismatch(FIGS, [{ card: "way finder 1", name: "x" }]), null);
+  assert.equal(figuresMismatch(null, [{ card: "way finder 1", name: "x", waypoints: 5 }]), null);
   assert.equal(figuresMismatch(FIGS, []), null);
 });
 
-test("a mismatch withholds \"open WAYFINDER 2\" instead of noting it underneath", () => {
+test("a mismatch withholds \"open way finder 2\" instead of noting it underneath", () => {
   // A grey note on a row is how this gets missed; it must withhold the
   // affirmation (ADR 0022).
   const loaded = row({
     state: "loaded",
     spec_key: KEY,
-    cards: [holding({ card: "WAYFINDER 2", written_at: "t" })],
-    loaded_cards: [{ card: "WAYFINDER 2", name: "north half", waypoints: 9 }],
+    cards: [holding({ card: "way finder 2", written_at: "t" })],
+    loaded_cards: [{ card: "way finder 2", name: "north half", waypoints: 9 }],
   });
   const view = rowView(loaded, FIGS);
   assert.equal(view.headline.tone, "stop");
@@ -181,12 +181,12 @@ test("a Loaded Mission whose figures agree names the Card to open", () => {
   const loaded = row({
     state: "loaded",
     spec_key: KEY,
-    cards: [holding({ card: "WAYFINDER 2", written_at: "t" })],
-    loaded_cards: [{ card: "WAYFINDER 2", name: "north half", waypoints: 202, path_length_m: 2370 }],
+    cards: [holding({ card: "way finder 2", written_at: "t" })],
+    loaded_cards: [{ card: "way finder 2", name: "north half", waypoints: 202, path_length_m: 2370 }],
   });
   const view = rowView(loaded, FIGS);
   assert.equal(view.headline.tone, "go");
-  assert.equal(view.headline.text, "Open WAYFINDER 2");
+  assert.equal(view.headline.text, "Open way finder 2");
   assert.deepEqual(view.blockers, []);
 });
 
@@ -195,25 +195,25 @@ test("two Cards are both named in the affirmation", () => {
     state: "loaded",
     spec_key: KEY,
     cards: [
-      holding({ card: "WAYFINDER 1", flight: 1, flights: 2, written_at: "t" }),
-      holding({ card: "WAYFINDER 2", flight: 2, flights: 2, written_at: "t" }),
+      holding({ card: "way finder 1", flight: 1, flights: 2, written_at: "t" }),
+      holding({ card: "way finder 2", flight: 2, flights: 2, written_at: "t" }),
     ],
   });
-  assert.equal(rowView(loaded, null).headline.text, "Open WAYFINDER 1 and WAYFINDER 2");
+  assert.equal(rowView(loaded, null).headline.text, "Open way finder 1 and way finder 2");
 });
 
 // --- the stale Card alarm ---------------------------------------------------
 
 test("a stale Card is an alarm that says plainly not to fly", () => {
-  const stale = [holding({ card: "WAYFINDER 4", written_at: "t" })];
+  const stale = [holding({ card: "way finder 4", written_at: "t" })];
   const view = rowView(row({ state: "loaded", spec_key: KEY }), null, stale);
   assert.equal(view.headline.tone, "stop");
-  assert.match(view.blockers[0], /WAYFINDER 4 holds a Mission that is no longer current/);
+  assert.match(view.blockers[0], /way finder 4 holds a Mission that is no longer current/);
   assert.match(view.blockers[0], /Do not fly this/);
 });
 
 test("a stale Card belonging to another Spec is not this row's alarm", () => {
-  const stale = [holding({ card: "WAYFINDER 4", spec_key: "specs/other/1.json", written_at: "t" })];
+  const stale = [holding({ card: "way finder 4", spec_key: "specs/other/1.json", written_at: "t" })];
   assert.deepEqual(rowView(row({ state: "loaded", spec_key: KEY }), null, stale).blockers, []);
 });
 
@@ -228,11 +228,11 @@ test("a Planned Mission offers Dispatch and names no Card", () => {
 
 test("a Dispatched Mission says what it is waiting for, and can be withdrawn", () => {
   const view = rowView(
-    row({ state: "dispatched", spec_key: KEY, cards: [holding({ card: "WAYFINDER 1" })] }),
+    row({ state: "dispatched", spec_key: KEY, cards: [holding({ card: "way finder 1" })] }),
     FIGS,
   );
   assert.equal(view.headline.tone, "wait");
-  assert.match(view.headline.detail, /WAYFINDER 1 reserved/);
+  assert.match(view.headline.detail, /way finder 1 reserved/);
   assert.ok(view.actions.includes("Withdraw"));
 });
 
