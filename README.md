@@ -103,7 +103,7 @@ acts on it — from any browser, after a refresh or restart:
 - **States:** Draft (unsent working copy) → Dispatched (in the store; the RC
   need not be connected) → Queued (waiting behind an earlier dispatch) →
   Collected (on the host) → Loaded (on the Controller, with the exact
-  WAYFINDER card names and waypoint counts).
+  way finder card names and waypoint counts).
 - **Actions:** save the current plan as a draft, Dispatch a draft (works with
   the RC disconnected — the host picks it up on the next plug-in), delete a
   draft (a Dispatched Spec is immutable and can only be superseded), edit a

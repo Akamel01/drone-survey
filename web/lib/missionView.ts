@@ -112,7 +112,7 @@ export function flights(cards: CardHolding[]): Flight[] {
  * Controller cannot be asked: ADR 0016 measured that a Card's displayed name,
  * distance and point count are frozen at its creation, so a 62-waypoint
  * Mission still reads "900m(5)" there. A grey note is how that gets missed, so
- * where this returns a reason the row withholds "ready, open WAYFINDER 2"
+ * where this returns a reason the row withholds "ready, open way finder 2"
  * entirely (ADR 0022).
  *
  * Null when they agree, or when there is nothing yet to compare.
@@ -162,7 +162,7 @@ export type ActionName = "Dispatch" | "Withdraw" | "Mark Flown" | "Unmark Flown"
  */
 export interface Headline {
   tone: "go" | "stop" | "wait" | "quiet";
-  /** The prominent line. "Open WAYFINDER 2" when that is the honest answer. */
+  /** The prominent line. "Open way finder 2" when that is the honest answer. */
   text: string;
   /** The sentence under it, always present: a tone with no reason is a colour. */
   detail: string;

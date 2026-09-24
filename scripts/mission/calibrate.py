@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Calibrate the WAYFINDER Cards: which Controller folder is behind each name (ADR 0016).
+"""Calibrate the way finder Cards: which Controller folder is behind each name (ADR 0016).
 
 The names the operator sees live only in DJI Fly's private database, which USB
 cannot reach, so the link from a name to a folder has to be read off the
@@ -125,7 +125,7 @@ def match(readings: dict[int, int], counts: dict[str, int]) -> tuple[dict[str, s
         seen[n] = card
     if problems:
         raise ValueError("nothing was written:\n  " + "\n  ".join(problems))
-    slots = {f"WAYFINDER {card}": by_count[n] for card, n in sorted(readings.items())}
+    slots = {f"way finder {card}": by_count[n] for card, n in sorted(readings.items())}
     leftover = sorted(set(counts) - set(slots.values()))
     return slots, leftover
 
@@ -188,7 +188,7 @@ def _selftest() -> None:
 
     counts = {"A": 20, "B": 21, "C": 22}
     slots, leftover = match({1: 21, 2: 20}, counts)
-    assert slots == {"WAYFINDER 1": "B", "WAYFINDER 2": "A"} and leftover == ["C"]
+    assert slots == {"way finder 1": "B", "way finder 2": "A"} and leftover == ["C"]
     for bad in ({1: 13}, {1: 20, 2: 20}):  # misheard teen; two Cards one folder
         try:
             match(bad, counts)

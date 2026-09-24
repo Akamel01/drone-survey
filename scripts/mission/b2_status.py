@@ -31,7 +31,7 @@ NOTICE_KEY = "_notice"
 
 
 class QueueOverflowError(Exception):
-    """The waiting queue does not fit the WAYFINDER cards. Raised before any
+    """The waiting queue does not fit the way finder cards. Raised before any
     card is touched so the caller can report it and refuse atomically."""
 
 
@@ -292,21 +292,21 @@ def _selftest() -> None:
     merge_loaded(
         m,
         [("specs/f/2026-09-17/k.json",
-          [("WAYFINDER 1", {"name": "F", "waypoints": 32, "path_length_m": 828})])],
+          [("way finder 1", {"name": "F", "waypoints": 32, "path_length_m": 828})])],
         "t2",
     )
     assert m == {
         "specs/f/2026-09-17/k.json": {
             "loaded_at": "t2",
             "parts": 1,
-            "cards": [{"card": "WAYFINDER 1", "name": "F", "waypoints": 32, "path_length_m": 828}],
+            "cards": [{"card": "way finder 1", "name": "F", "waypoints": 32, "path_length_m": 828}],
         }
     }, m
 
     # 2b. A part from a writer that reported no distance still records a card.
     m = {}
-    merge_loaded(m, [("k", [("WAYFINDER 1", {"name": "F", "waypoints": 32})])], "t2")
-    assert m["k"]["cards"] == [{"card": "WAYFINDER 1", "name": "F", "waypoints": 32}], m
+    merge_loaded(m, [("k", [("way finder 1", {"name": "F", "waypoints": 32})])], "t2")
+    assert m["k"]["cards"] == [{"card": "way finder 1", "name": "F", "waypoints": 32}], m
 
     # 3. A Load never clobbers the collected_at underneath it.
     m = {"k": {"collected_at": "t0"}}
@@ -331,8 +331,8 @@ def _selftest() -> None:
     # 6. Drift is recorded while it lasts and cleared when it stops. Recorded,
     #    never corrected: the Ledger keeps saying what was planned.
     m = {}
-    merge_drift(m, [{"card": "WAYFINDER 2", "expected": "a", "found": "b"}], "t5")
-    assert m["_drift"]["cards"][0]["card"] == "WAYFINDER 2", m
+    merge_drift(m, [{"card": "way finder 2", "expected": "a", "found": "b"}], "t5")
+    assert m["_drift"]["cards"][0]["card"] == "way finder 2", m
     merge_drift(m, [], "t6")
     assert "_drift" not in m, m
 
