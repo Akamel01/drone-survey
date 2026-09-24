@@ -39,9 +39,10 @@ import register  # noqa: E402
 import export_cog  # noqa: E402
 import solve  # noqa: E402
 
-# odm_data_bellus's real ODM CLI project, present only on the compute host
+# The golden Capture (docs/research/golden-capture.md): odm_data_bellus's 122
+# images plus its surveyed gcp_list.txt, present only on the compute host
 # (BOUNDARIES: read-only, never written by this check or anything else here).
-BELLUS_PROJECT = Path.home() / "drone" / "datasets" / "code"
+BELLUS_PROJECT = Path.home() / "drone" / "golden" / "bellus-v1"
 
 # Measured, not guessed -- and NOT "a few tens of pixels" (#22 DONE
 # CRITERION #3's hope). Investigated rather than papered over: a real no-gcp
@@ -342,8 +343,9 @@ def check_bellus_real_projection():
     check."""
     images_dir = BELLUS_PROJECT / "images"
     gcp_path = BELLUS_PROJECT / "gcp_list.txt"
-    if not images_dir.is_dir() or not gcp_path.is_file():
-        _skip("check_bellus_real_projection", f"{BELLUS_PROJECT} not reachable (real dataset lives only on the compute host, see #22 BOUNDARIES)")
+    missing = [str(p) for p in (images_dir, gcp_path) if not p.exists()]
+    if missing:
+        _skip("check_bellus_real_projection", f"missing {', '.join(missing)} (real dataset lives only on the compute host, see #22 BOUNDARIES)")
         return
     if shutil.which("docker") is None:
         _skip("check_bellus_real_projection", "docker not on PATH")
