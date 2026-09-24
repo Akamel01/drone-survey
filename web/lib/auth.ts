@@ -29,8 +29,8 @@ export function authProblem(request: Request): Response | null {
     return Response.json(
       {
         error:
-          "That passphrase is not the one this deployment expects. Retype it in the bar along the " +
-          "bottom of the Plan tab; it is stored only in this browser.",
+          "That passphrase is not the one this deployment expects. Retype it in the box beside Save, " +
+          "along the bottom of the map; it is stored only in this browser.",
       },
       { status: 401 },
     );

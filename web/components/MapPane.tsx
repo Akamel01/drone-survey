@@ -339,6 +339,11 @@ export default function MapPane({
       zoom: START.zoom,
     });
     mapRef.current = map;
+    // MapLibre watches the window, not its own box. On a narrow screen the map
+    // is created hidden behind the Missions view, and a column beside it can
+    // change width; either way it would draw into a stale size -- or none.
+    const fit = new ResizeObserver(() => map.resize());
+    fit.observe(containerRef.current!);
     map.doubleClickZoom.disable();
     map.addControl(new ScaleControl({ unit: "metric" }), "bottom-left");
 
@@ -583,6 +588,7 @@ export default function MapPane({
 
     return () => {
       window.removeEventListener("keydown", onKeydown);
+      fit.disconnect();
       map.remove();
     };
   }, []);

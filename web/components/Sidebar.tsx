@@ -24,8 +24,6 @@ interface SidebarProps {
   /** The stored Mission the editor is working on, and its Mission Name. */
   editing: Editing;
   onNameChange: (name: string) => void;
-  /** The one Mission list, rendered here and identically on the status tab. */
-  missionList: ReactNode;
 }
 
 // Plain metric area: m² under a square kilometre, km² above.
@@ -131,7 +129,6 @@ export default function Sidebar({
   sites,
   editing,
   onNameChange,
-  missionList,
 }: SidebarProps) {
   const flight = spec.flight;
   const camera = spec.camera;
@@ -624,7 +621,6 @@ export default function Sidebar({
         </div>
       </Section>
 
-      <Section title="Missions">{missionList}</Section>
     </aside>
   );
 }

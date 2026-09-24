@@ -90,7 +90,7 @@ export async function POST(request: Request) {
     const bad = dispatchProblem(spec);
     if (bad) {
       return Response.json(
-        { error: `This Mission cannot be Dispatched: ${bad}. Fix it on the Plan tab and Dispatch again.` },
+        { error: `This Mission cannot be Dispatched: ${bad}. Fix it in the planner and Dispatch again.` },
         { status: 400 },
       );
     }
@@ -176,7 +176,7 @@ export async function POST(request: Request) {
       throw err;
     }
 
-    // The Status tab predicts nothing any more, but the host's own summaries
+    // The list predicts nothing any more, but the host's own summaries
     // file still carries the figures the list shows, so it is kept current.
     try {
       const existing = await downloadFile(s.read, s.bucket, SUMMARIES_KEY);
