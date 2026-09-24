@@ -17,7 +17,6 @@ import argparse
 import hashlib
 import json
 import os
-import re
 import sys
 import urllib.error
 import urllib.parse
@@ -93,23 +92,6 @@ def load_skipped(status_config: Path) -> set[str]:
         return set()
 
 
-def newest_per_site_date(file_names: list[str], pattern: re.Pattern) -> dict[tuple[str, str], str]:
-    """The one key per (Site, date) that Loading would actually use.
-
-    Timestamps sort lexically (ADR 0017), so within a group the newest key is
-    simply the lexically last file name once all names are sorted together —
-    no need to parse the timestamp itself.
-    """
-    latest: dict[tuple[str, str], str] = {}
-    for name in sorted(file_names):
-        m = pattern.match(name)
-        if not m:
-            continue
-        site, date, _ = m.groups()
-        latest[(site, date)] = name
-    return latest
-
-
 def verify_sha1(data: bytes, expected_hex: str) -> None:
     """Refuse to keep a download that doesn't match B2's own checksum of it."""
     actual = hashlib.sha1(data).hexdigest()
@@ -163,25 +145,12 @@ def report_collected(status_config: Path, keys: list[str]) -> None:
 
 
 def _selftest() -> None:
-    """Offline proof: supersession picks the lexically-newest key per Site/date,
-    and sha1 verification rejects a mismatched download. No network, no
-    credentials required — run directly:
+    """Offline proof: only Spec-shaped keys are Collected, and sha1 verification
+    rejects a mismatched download. No network, no credentials required:
 
         python3 scripts/mission/collect.py --selftest
     """
     pattern = spec_key_pattern("specs/")
-
-    # 1. Newest timestamp wins within a Site/date group; other groups untouched.
-    keys = [
-        "specs/rehearsal-field/2026-09-13/20260913T090000Z.json",
-        "specs/rehearsal-field/2026-09-13/20260913T140000Z.json",  # supersedes the 09:00 dispatch
-        "specs/rehearsal-field/2026-09-14/20260914T080000Z.json",
-        "specs/other-site/2026-09-13/20260913T100000Z.json",
-    ]
-    current = newest_per_site_date(keys, pattern)
-    assert current[("rehearsal-field", "2026-09-13")] == "specs/rehearsal-field/2026-09-13/20260913T140000Z.json"
-    assert current[("rehearsal-field", "2026-09-14")] == "specs/rehearsal-field/2026-09-14/20260914T080000Z.json"
-    assert current[("other-site", "2026-09-13")] == "specs/other-site/2026-09-13/20260913T100000Z.json"
 
     # 2. Anything not shaped like a Spec key (eg. the Site registry) is ignored.
     assert pattern.match("sites/rehearsal-field.json") is None
@@ -200,23 +169,6 @@ def _selftest() -> None:
         raise AssertionError("verify_sha1 accepted a mismatched hash")
 
     print("collect self-check: ok")
-
-    # Additional offline tests for M-57-HOST skipped.json behavior (withdrawal scenarios)
-    pattern = spec_key_pattern("specs/")
-    names = [
-        "specs/site/2026-09-13/20260913T090000Z.json",
-        "specs/site/2026-09-13/20260913T140000Z.json",
-        "specs/site/2026-09-14/20260914T080000Z.json",
-    ]
-    newest = newest_per_site_date(names, pattern)
-    # Case 1: withdraw newest via skipped.json; newest would be skipped, no promotion
-    skipped = {"specs/site/2026-09-13/20260913T140000Z.json"}
-    queue = [str(p) for p in newest.values() if str(p) not in skipped]
-    assert queue == ["specs/site/2026-09-14/20260914T080000Z.json"], queue
-    # Case 2: withdraw-after-collect: if newest is in the collected set, it is not promoted
-    record = {"specs/site/2026-09-13/20260913T140000Z.json"}
-    queue2 = [str(p) for p in newest.values() if str(p) not in skipped and str(p) not in record]
-    assert queue2 == ["specs/site/2026-09-14/20260914T080000Z.json"], queue2
 
 
 def main() -> None:
@@ -261,14 +213,11 @@ def main() -> None:
         new = [n for n in new if n not in skipped]
 
     if args.list:
-        current = newest_per_site_date(specs, pattern)
+        # No "superseded" tag: two Missions of one Site and day are two flights,
+        # and supersession is decided in the store, not by which key is newest.
         print(f"{len(specs)} Specs Dispatched, {len(new)} not yet Collected:")
         for name in sorted(specs):
-            site, date, _ = pattern.match(name).groups()
-            tags = ["new" if name in new else "collected"]
-            if current.get((site, date)) != name:
-                tags.append("superseded")
-            print(f"  {name}  [{', '.join(tags)}]")
+            print(f"  {name}  [{'new' if name in new else 'collected'}]")
         return
 
     if not new:

@@ -1,0 +1,10 @@
+{
+  "pipeline": "orthomosaic-invalid",
+  "nodes": [
+    {
+      "name": "ingest",
+      "command": ["echo", "{in.images}/data.txt"],
+      "outputs": {"images": "images"}
+    }
+  ]
+}

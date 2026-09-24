@@ -1,12 +1,23 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { DRAFTS_PREFIX, SKIPPED_KEY, STATUS_KEY, SUMMARIES_KEY, draftKey, makeSpecKey, parseSpecKey, stampToIso } from "./keys.ts";
+import {
+  DRAFTS_PREFIX,
+  SKIPPED_KEY,
+  STATUS_KEY,
+  SUMMARIES_KEY,
+  draftKey,
+  makeSpecKey,
+  parseSpecKey,
+  stampToIso,
+  dispatchStamp,
+  SPECS_PREFIX,
+} from "./keys.ts";
 
 test("makeSpecKey and parseSpecKey round-trip", () => {
-  const key = makeSpecKey("field", "2026-09-17", "20260917T000000Z");
+  const key = makeSpecKey("field", "2026-09-17", "20260917T000000Z", SPECS_PREFIX);
   assert.equal(key, "specs/field/2026-09-17/20260917T000000Z.json");
-  assert.deepEqual(parseSpecKey(key), {
+  assert.deepEqual(parseSpecKey(key, SPECS_PREFIX), {
     site: "field",
     date: "2026-09-17",
     stamp: "20260917T000000Z",
@@ -14,17 +25,17 @@ test("makeSpecKey and parseSpecKey round-trip", () => {
 });
 
 test("parseSpecKey accepts Spec keys and rejects everything else", () => {
-  assert.deepEqual(parseSpecKey("specs/field/2026-09-17/20260917T000000Z.json"), {
+  assert.deepEqual(parseSpecKey("specs/field/2026-09-17/20260917T000000Z.json", SPECS_PREFIX), {
     site: "field",
     date: "2026-09-17",
     stamp: "20260917T000000Z",
   });
-  assert.equal(parseSpecKey("specs/_drafts/abc.json"), null);
-  assert.equal(parseSpecKey("specs/_status/missions.json"), null);
-  assert.equal(parseSpecKey("specs/field/2026-09-17/20260917T000000Z.json.bak"), null);
-  assert.equal(parseSpecKey("specs/field/2026-09-17.json"), null);
-  assert.equal(parseSpecKey("other/field/2026-09-17/20260917T000000Z.json"), null);
-  assert.equal(parseSpecKey(""), null);
+  assert.equal(parseSpecKey("specs/_drafts/abc.json", SPECS_PREFIX), null);
+  assert.equal(parseSpecKey("specs/_status/missions.json", SPECS_PREFIX), null);
+  assert.equal(parseSpecKey("specs/field/2026-09-17/20260917T000000Z.json.bak", SPECS_PREFIX), null);
+  assert.equal(parseSpecKey("specs/field/2026-09-17.json", SPECS_PREFIX), null);
+  assert.equal(parseSpecKey("other/field/2026-09-17/20260917T000000Z.json", SPECS_PREFIX), null);
+  assert.equal(parseSpecKey("", SPECS_PREFIX), null);
 });
 
 test("draftKey and the status keys cannot be mistaken for Spec keys", () => {
@@ -38,6 +49,9 @@ test("draftKey and the status keys cannot be mistaken for Spec keys", () => {
 test("stampToIso turns a dispatch stamp into an instant", () => {
   assert.equal(stampToIso("20260917T004057Z"), "2026-09-17T00:40:57Z");
   assert.equal(stampToIso("not-a-stamp"), "not-a-stamp");
+  // A stamp carries its Mission's id so two in one second never share a key.
+  assert.equal(stampToIso("20260924T080000Z-1a2b3c4d"), "2026-09-24T08:00:00Z");
+  assert.equal(dispatchStamp(new Date("2026-09-24T08:00:00.123Z"), "1a2b3c4d-0000-4000-8000-000000000000"), "20260924T080000Z-1a2b3c4d");
 });
 
 // The committed fixture is the contract both languages read: if this grammar and
@@ -51,8 +65,8 @@ test("the golden key fixture parses exactly as the host's grammar does", () => {
     status_keys: { missions: string; skipped: string; summaries: string };
   };
   for (const entry of fixture.spec_keys) {
-    assert.deepEqual(parseSpecKey(entry.key), { site: entry.site, date: entry.date, stamp: entry.stamp }, entry.key);
-    assert.equal(makeSpecKey(entry.site, entry.date, entry.stamp), entry.key);
+    assert.deepEqual(parseSpecKey(entry.key, SPECS_PREFIX), { site: entry.site, date: entry.date, stamp: entry.stamp }, entry.key);
+    assert.equal(makeSpecKey(entry.site, entry.date, entry.stamp, SPECS_PREFIX), entry.key);
   }
   for (const key of fixture.not_spec_keys) {
     assert.equal(parseSpecKey(key), null, `${key} must not parse as a Spec`);

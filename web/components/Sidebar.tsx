@@ -1,11 +1,12 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { ensureSiteId, type MissionSpec, type MissionType, type TurnMode } from "@/lib/spec";
+import { newSiteId, type MissionSpec, type MissionType, type TurnMode } from "@/lib/spec";
 import type { Preview } from "@/lib/mission";
-import type { SavedMission } from "@/lib/savedMissions";
-import type { DrawMode } from "./MapPane";
-import SavedMissions from "./SavedMissions";
+import { MISSION_NAME_MAX, missionNameProblem } from "@/lib/missionRecords";
+import { siteTwin, type SiteChoice } from "@/lib/missionView";
+import type { Editing } from "@/app/plan/page";
+import { isDrawing, type DrawMode } from "./MapPane";
 import styles from "./Sidebar.module.css";
 
 interface SidebarProps {
@@ -15,9 +16,14 @@ interface SidebarProps {
   onModeChange: (m: DrawMode) => void;
   areaHa: number;
   preview: Preview;
-  savedMissions: SavedMission[];
-  onLoadMission: (spec: MissionSpec) => void;
-  onDeleteMission: (saved_at: string) => void;
+  /** The Sites already in the store. A Site is chosen from these, never typed
+   *  fresh: a Site is the unit a client buys work about, identified once at
+   *  onboarding, and typing a name per Mission was quietly creating a new one
+   *  every time (ADR 0021). */
+  sites: SiteChoice[];
+  /** The stored Mission the editor is working on, and its Mission Name. */
+  editing: Editing;
+  onNameChange: (name: string) => void;
 }
 
 // Plain metric area: m² under a square kilometre, km² above.
@@ -120,9 +126,9 @@ export default function Sidebar({
   onModeChange,
   areaHa,
   preview,
-  savedMissions,
-  onLoadMission,
-  onDeleteMission,
+  sites,
+  editing,
+  onNameChange,
 }: SidebarProps) {
   const flight = spec.flight;
   const camera = spec.camera;
@@ -140,6 +146,10 @@ export default function Sidebar({
 
   // An empty preview caps nothing, so it must not read as a cap.
   const overridden = preview.photo_count > 0 && preview.capped_speed_ms < flight.speed_ms;
+
+  // A draw in progress is a different state from a finished area, and every
+  // control below that a click would mean something else in has to say so.
+  const drawing = isDrawing(mode);
 
   const rings = orbit.altitudes_m;
   const setRing = (i: number, v: number) =>
@@ -270,7 +280,9 @@ export default function Sidebar({
         </Section>
       ) : (
         <Section title="Area">
-          <div className={styles.groupLabel}>Shape</div>
+          <div className={styles.groupLabel}>
+            Shape{drawing ? " — drawing on the map" : ""}
+          </div>
           {/* While drawing, the selector shows the tool in use; once idle it shows
               what the area actually is, so a finished circle does not read as a
               polygon. A rectangle is four corners once drawn and indistinguishable
@@ -293,9 +305,17 @@ export default function Sidebar({
 
           <div className={styles.groupLabel}>Edit</div>
           <div className={styles.group}>
+            {/* Switching to "Add points" halfway through a shape was a silent
+                mode change, and the corners already placed made it look like
+                nothing had happened. Finish or cancel the draw first. */}
             <button
               className={mode === "append-polygon" ? "active" : ""}
-              disabled={spec.aoi.length < 3 || !!spec.shape}
+              disabled={(drawing && mode !== "append-polygon") || spec.aoi.length < 3 || !!spec.shape}
+              title={
+                drawing && mode !== "append-polygon"
+                  ? "Finish or cancel the shape you are drawing first"
+                  : undefined
+              }
               onClick={() => onModeChange("append-polygon")}
             >
               Add points
@@ -307,10 +327,22 @@ export default function Sidebar({
               Clear area
             </button>
           </div>
-          <div className={styles.hint}>
-            Drag inside the shape to move it whole. Drag a corner to reshape it, or an amber
-            midpoint to add one; right-click a corner to remove it.
-          </div>
+          {/* The reshape hint is false while drawing: there a map click adds a
+              corner, and the midpoint handles it names are not on screen. */}
+          {drawing ? (
+            <div className={styles.warnHint}>
+              {mode === "draw-polygon" || mode === "append-polygon"
+                ? "Each click on the map adds a corner. Finish the area from the panel on the map, or press Enter; Escape cancels."
+                : mode === "draw-rectangle"
+                  ? "Click one corner on the map, then the opposite one. Escape cancels."
+                  : "Click the centre on the map, then drag out the radius. Escape cancels."}
+            </div>
+          ) : (
+            <div className={styles.hint}>
+              Drag inside the shape to move it whole. Drag a corner to reshape it, or an amber
+              midpoint to add one; right-click a corner to remove it.
+            </div>
+          )}
 
           <div className={styles.readout}>
             <span>Area</span>
@@ -555,13 +587,30 @@ export default function Sidebar({
         </Field>
       </Section>
 
-      <Section title="Identification">
-        <Field label="Site name" value={spec.site || "—"}>
+      <Section
+        title="Identification"
+        info="The Site is the place, chosen once and reused so its Captures accumulate under it. The Mission Name tells two Missions of one Site on one day apart."
+      >
+        <SiteField
+          sites={sites}
+          site={spec.site}
+          site_id={spec.site_id}
+          onChoose={(choice) => setSpec((s) => ({ ...s, site: choice.site, site_id: choice.site_id }))}
+        />
+        <Field label="Mission Name" value={editing.name.trim() || "—"}>
           <input
             type="text"
-            value={spec.site}
-            onChange={(e) => setSpec((s) => ensureSiteId({ ...s, site: e.target.value }))}
+            value={editing.name}
+            maxLength={MISSION_NAME_MAX}
+            placeholder="north half, orbit"
+            onChange={(e) => onNameChange(e.target.value)}
           />
+          <div className={styles.hint}>
+            {missionNameProblem(editing.name) ??
+              (editing.copied_from
+                ? `A copy of ${editing.copied_from}. Saving makes a new Mission; that one is not changed.`
+                : "Two Missions may share a Site and a date when their names differ — that is two deliberate flights, not a correction.")}
+          </div>
         </Field>
         <Field label="Date" value={spec.date || "—"}>
           <input type="date" value={spec.date} onChange={(e) => setSpec((s) => ({ ...s, date: e.target.value }))} />
@@ -572,9 +621,87 @@ export default function Sidebar({
         </div>
       </Section>
 
-      <Section title="Saved missions">
-        <SavedMissions missions={savedMissions} onLoad={onLoadMission} onDelete={onDeleteMission} />
-      </Section>
     </aside>
+  );
+}
+
+/**
+ * Choosing the Site, or naming a new one.
+ *
+ * The field this replaces was labelled "Site name" and typed fresh for every
+ * Mission, which minted a new Site id each time and broke Capture accumulation
+ * before the 3D Timelapse was ever built (ADR 0021). A new Site is still
+ * possible -- it is how the first one exists -- but it is a deliberate act with
+ * its own control, not what happens by default.
+ */
+function SiteField({
+  sites,
+  site,
+  site_id,
+  onChoose,
+}: {
+  sites: SiteChoice[];
+  site: string;
+  site_id?: string;
+  onChoose: (choice: SiteChoice) => void;
+}) {
+  const known = site_id != null && sites.some((s) => s.site_id === site_id);
+  const naming = !known;
+  const twin = naming ? siteTwin(sites, site_id, site) : null;
+  return (
+    <Field label="Site" value={site.trim() || "—"}>
+      <select
+        value={known ? (site_id as string) : "new"}
+        onChange={(e) => {
+          if (e.target.value === "new") {
+            onChoose({ site_id: newSiteId(""), site: "" });
+            return;
+          }
+          const chosen = sites.find((s) => s.site_id === e.target.value);
+          if (chosen) onChoose(chosen);
+        }}
+      >
+        {sites.map((s) => (
+          <option key={s.site_id} value={s.site_id}>
+            {s.site}
+          </option>
+        ))}
+        <option value="new">New Site…</option>
+      </select>
+      {naming && (
+        <input
+          type="text"
+          value={site}
+          placeholder="Name the new Site"
+          onChange={(e) =>
+            onChoose({
+              site: e.target.value,
+              // The id is minted once, when the Site first gets a name, and
+              // never again: renaming a Site must not change the place it is.
+              site_id: site_id && site.trim() ? site_id : newSiteId(e.target.value),
+            })
+          }
+        />
+      )}
+      {twin && (
+        // Naming a "new" Site after an existing one is the accident that
+        // splits a Site's Captures in two (#166). Offer the real one.
+        <div className={styles.hint}>
+          There is already a Site called “{twin.site}”.{" "}
+          <button type="button" onClick={() => onChoose(twin)}>
+            Use it
+          </button>
+        </div>
+      )}
+      <div className={styles.hint}>
+        {/* The hint follows whether this Site has an identifier, not whether it
+            is in the list: the list is empty when the store could not be read,
+            and telling the operator a Site they have flown before is about to
+            be created is exactly the confusion this field exists to end. */}
+        {site_id && site.trim()
+          ? `Identified as ${site_id}. Captures accumulate under it.`
+          : "A new Site is created when this Mission is saved. Its identifier never changes, even if the name does."}
+      </div>
+    </Field>
   );
 }

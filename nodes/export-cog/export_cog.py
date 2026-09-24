@@ -51,7 +51,19 @@ from pathlib import Path
 # bounding box is typically 40-70% valid. Tune per Site if one trips it honestly.
 MIN_VALID_FRACTION = 0.25
 
+# **Projection**: reproject to Web Mercator. ODM writes its orthophoto in the
+# Site's UTM zone (the golden run: EPSG:32617), and maplibre-cog-protocol
+# refuses anything else outright -- "COG projection EPSG:32617 ... is not
+# supported. Reproject to EPSG:3857 (Web Mercator)." -- so a COG that is valid
+# by every structural check still renders nothing in the client's viewer. The
+# COG driver's TARGET_SRS warps and rebuilds overviews in one pass. Delivery is
+# what this Node is for; anything measuring in metres should read ODM's own
+# output in its UTM zone rather than this file.
+COG_TARGET_SRS = "EPSG:3857"
+
 COG_CREATION_OPTIONS = [
+    "-co", f"TARGET_SRS={COG_TARGET_SRS}",
+    "-co", "RESAMPLING=BILINEAR",
     "-co", "COMPRESS=DEFLATE",
     "-co", "PREDICTOR=2",
     "-co", "BLOCKSIZE=512",
@@ -104,6 +116,14 @@ def validate_with_osgeo(path: Path) -> tuple[bool, str]:
     if ifd_offset is not None and int(ifd_offset) != 8:
         errors.append(f"main IFD offset is {ifd_offset}, expected 8")
 
+    # A structurally perfect COG in the wrong projection renders nothing: the
+    # client viewer's COG protocol refuses any CRS but Web Mercator. Checked
+    # against the written file rather than assumed from the creation option.
+    srs = ds.GetSpatialRef()
+    code = srs.GetAuthorityCode(None) if srs is not None else None
+    if code != COG_TARGET_SRS.split(":")[1]:
+        errors.append(f"projection is EPSG:{code}, not {COG_TARGET_SRS} -- the viewer will refuse it")
+
     return (len(errors) == 0), ("valid COG" if not errors else "; ".join(errors))
 
 
@@ -121,6 +141,11 @@ def validate_with_gdalinfo(path: Path) -> tuple[bool, str]:
         errors.append(f"IMAGE_STRUCTURE LAYOUT is {md.get('LAYOUT')!r}, not 'COG'")
     if bands and "overviews" not in bands[0]:
         errors.append("no overviews reported")
+    code = (info.get("stac", {}).get("proj:epsg")
+            or info.get("coordinateSystem", {}).get("wkt", ""))
+    wanted = COG_TARGET_SRS.split(":")[1]
+    if str(code) != wanted and f'"EPSG","{wanted}"' not in str(code):
+        errors.append(f"projection is not {COG_TARGET_SRS} -- the viewer will refuse it")
     return (len(errors) == 0), ("looks like a COG (gdalinfo layout check)" if not errors else "; ".join(errors))
 
 

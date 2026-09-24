@@ -216,27 +216,28 @@ def render_ortho_html() -> str:
 <div id="map"></div>
 <script>
 maplibregl.addProtocol('cog', MaplibreCOGProtocol.cogProtocol);
+const orthoUrl = new URL('ortho/orthomosaic.tif', location.href).href;
 const map = new maplibregl.Map({{
   container: 'map',
   style: {{
     version: 8,
     sources: {{
-      ortho: {{type: 'raster', url: 'cog://' + new URL('ortho/orthomosaic.tif', location.href).href, tileSize: 256}}
+      ortho: {{type: 'raster', url: 'cog://' + orthoUrl, tileSize: 256}}
     }},
     layers: [{{id: 'ortho', type: 'raster', source: 'ortho'}}]
   }},
   center: [0, 0],
   zoom: 1
 }});
-// The COG's own bounds arrive with its metadata; frame the Orthomosaic once they do.
-let framed = false;
-map.on('sourcedata', (e) => {{
-  const bounds = e.sourceId === 'ortho' && map.getSource('ortho').bounds;
-  if (bounds && !framed) {{
-    framed = true;
-    map.fitBounds(bounds, {{padding: 20, animate: false}});
-  }}
-}});
+// Frame the Orthomosaic. Ask the COG for its own extent rather than waiting for
+// the raster source to expose one: a 'sourcedata' handler reading
+// getSource('ortho').bounds never fired in practice, and the page then sat at
+// zoom 1 over the Atlantic showing a correct Bundle as a blank grey screen.
+// getCogMetadata is the protocol's own entry point and takes the plain URL,
+// without the cog:// scheme it strips internally.
+MaplibreCOGProtocol.getCogMetadata(orthoUrl)
+  .then((meta) => map.fitBounds(meta.bbox, {{padding: 20, animate: false}}))
+  .catch((err) => console.error('could not read the Orthomosaic extent', err));
 </script>
 </body>
 </html>

@@ -2,13 +2,17 @@
 """Report Collects and Loads to the cloud manifest the planner reads.
 
 The manifest is one small JSON object at specs/_status/missions.json, keyed by
-key: {collected_at, loaded_at, parts, cards: [{card, name, waypoints}]}. The
-host is its only writer; the planner only reads. Uploads use a dedicated
-status key (read specs/, write status/*) that collect.py/load.py take as
---status-config — never the read-only collect key, never the delivery key.
+key: {collected_at, loaded_at, parts, cards: [{card, name, waypoints,
+path_length_m}]}. The host is its only writer; the planner only reads, and
+compares those figures with what it predicted before the Load (#128). Uploads
+use a dedicated status key (read specs/, write status/*) that collect.py and
+load.py take as --status-config — never the read-only collect key, never the
+delivery key.
 
 Network only, no Controller: importing this file cannot touch a mount.
 """
+
+from __future__ import annotations
 
 import datetime
 import json
@@ -19,6 +23,7 @@ import b2  # noqa: E402  (one home for storage access)
 from pathlib import Path
 
 STATUS_KEY = keys.STATUS_KEY
+LEDGER_KEY = keys.LEDGER_KEY
 # Underscore-prefixed inside specs/ on purpose: store keys are confined to the
 # specs/ prefix, and collect.py's Spec pattern only matches three-segment
 # site/date/file keys, so the manifest is invisible to Collect.
@@ -26,8 +31,20 @@ NOTICE_KEY = "_notice"
 
 
 class QueueOverflowError(Exception):
-    """The waiting queue does not fit the WAYFINDER cards. Raised before any
+    """The waiting queue does not fit the way finder cards. Raised before any
     card is touched so the caller can report it and refuse atomically."""
+
+
+class LedgerRefusal(Exception):
+    """A Load the Card Ledger does not authorise: a Spec with no Reservation, a
+    Reservation that does not match what the writer produced, or a Card pool
+    that has changed since it was calibrated (ADR 0022).
+
+    Raised before any card is touched, so the refusal is atomic. The message
+    always states what the operator does next — a failure is never silent, and
+    the host never falls back to choosing Cards itself, because that is the
+    defect this exists to end.
+    """
 
 
 def utcnow() -> str:
@@ -59,8 +76,15 @@ def merge_loaded(manifest: dict, entries: list[tuple[str, list[tuple[str, dict]]
             {
                 "loaded_at": at,
                 "parts": len(loaded),
+                # path_length_m is the writer's own measurement of the file it
+                # wrote, under the same name summaries.json uses for the
+                # planner's prediction, so the two can be compared directly.
+                # The Controller's own card figures are frozen at Placeholder
+                # creation (ADR 0016), so this is the only distance the
+                # operator can trust.
                 "cards": [
-                    {"card": card, "name": part["name"], "waypoints": part["waypoints"]}
+                    {"card": card, "name": part["name"], "waypoints": part["waypoints"],
+                     **({"path_length_m": part["path_length_m"]} if "path_length_m" in part else {})}
                     for card, part in loaded
                 ],
             }
@@ -82,10 +106,174 @@ def merge_overflow(manifest: dict, keys: list[str], needed: int, have: int, at: 
     return manifest
 
 
+def merge_refusal(manifest: dict, kind: str, keys: list[str], reason: str, at: str) -> dict:
+    """Record a refusal the Ledger caused: nothing was Loaded, the Controller is
+    as it was, and the operator can see which Missions did not go and why.
+
+    `reason` is the whole refusal, because every refusal already states what to
+    do next — a failure is never silent, and never merely a code (ADR 0018).
+    """
+    manifest[NOTICE_KEY] = {"type": kind, "at": at, "waiting": keys, "reason": reason}
+    return manifest
+
+
+def merge_drift(manifest: dict, drift: list[dict], at: str) -> dict:
+    """Record where the Ledger and the Controller disagree. Reported against the
+    Load, never corrected: a difference here is the only evidence that a Card
+    holds something other than what was planned (ADR 0022)."""
+    if drift:
+        manifest["_drift"] = {"at": at, "cards": drift}
+    else:
+        manifest.pop("_drift", None)
+    return manifest
+
+
 def clear_notice(manifest: dict) -> dict:
     """A successful Load retires any past refusal."""
     manifest.pop(NOTICE_KEY, None)
     return manifest
+
+
+# ---------------------------------------------------------------------------
+# The Card Ledger (ADR 0022)
+#
+# The Python twin of web/lib/model.ts. Same rules, same names, same shapes, and
+# both sides assert against fixtures/card-ledger.json so they cannot drift.
+# Pure functions over plain data: no mount, no network, no Controller.
+# ---------------------------------------------------------------------------
+
+EMPTY_LEDGER: dict = {"pool": [], "holdings": {}}
+
+
+def card_unavailable(ledger: dict, card: str) -> str | None:
+    """Why a Card cannot be reused, or None when it can.
+
+    A Card is occupied by a Mission that has not been Flown. Withdrawing or
+    superseding that Mission releases it, because what it holds is no longer
+    current. The pool is what is calibrated, never what is hoped for.
+    """
+    if card not in ledger.get("pool", []):
+        return "not calibrated"
+    held = ledger.get("holdings", {}).get(card)
+    if not held or held.get("flown_at"):
+        return None
+    return (f"holds an unflown Mission ({held['spec_key']}, "
+            f"flight {held['flight']} of {held['flights']})")
+
+
+def available_cards(ledger: dict) -> list[str]:
+    return [c for c in ledger.get("pool", []) if card_unavailable(ledger, c) is None]
+
+
+def reserve_cards(ledger: dict, needed: int) -> dict:
+    """The outcome of asking for Cards at Dispatch: {"ok": True, "cards": [...]}
+    or a refusal naming what is in the way. The planner does the reserving; the
+    host holds this so both languages assert the same rule."""
+    free = available_cards(ledger)
+    if needed > len(free):
+        blocking = [(c, card_unavailable(ledger, c)) for c in ledger.get("pool", [])]
+        blocking = [(c, why) for c, why in blocking if why is not None]
+        reason = (f"no Cards are calibrated; {needed} needed" if not blocking else
+                  f"{needed} Cards needed, {len(free)} free. " +
+                  "; ".join(f"{c}: {why}" for c, why in blocking))
+        return {"ok": False, "reason": reason, "available": len(free), "needed": needed}
+    return {"ok": True, "cards": free[:needed]}
+
+
+def with_reservation(ledger: dict, cards: list[str], spec_key: str, reserved_at: str) -> dict:
+    """Claim Cards for a Spec's flights. Returns a new Ledger; never mutates."""
+    holdings = dict(ledger.get("holdings", {}))
+    for i, card in enumerate(cards):
+        holdings[card] = {"card": card, "spec_key": spec_key,
+                          "flight": i + 1, "flights": len(cards), "reserved_at": reserved_at}
+    return {**ledger, "holdings": holdings}
+
+
+def with_release(ledger: dict, spec_key: str) -> dict:
+    """Give back every Card held for a Spec — what Withdrawn and Superseded do.
+    A Flown holding is the record of what was flown and is left alone."""
+    holdings = {c: h for c, h in ledger.get("holdings", {}).items()
+                if not (h["spec_key"] == spec_key and not h.get("flown_at"))}
+    return {**ledger, "holdings": holdings}
+
+
+def cards_for(ledger: dict, spec_key: str) -> list[dict]:
+    """The Cards a Spec holds, in flight order. Empty means no Reservation."""
+    return sorted((h for h in ledger.get("holdings", {}).values() if h["spec_key"] == spec_key),
+                  key=lambda h: h["flight"])
+
+
+def stale_cards(ledger: dict, live_spec_keys: set[str]) -> list[dict]:
+    """A Card holding a Mission that is no longer current. The Controller cannot
+    report this — its own labels are frozen at creation (ADR 0016)."""
+    return [h for h in ledger.get("holdings", {}).values()
+            if h.get("written_at") and not h.get("flown_at") and h["spec_key"] not in live_spec_keys]
+
+
+def ledger_drift(ledger: dict, on_device: dict) -> list[dict]:
+    """Where the Ledger and the Controller disagree. Reported, never quietly
+    corrected. A Card the device was not asked about is not evidence."""
+    drift = []
+    for card in ledger.get("pool", []):
+        if card not in on_device:
+            continue
+        expected = (ledger.get("holdings", {}).get(card) or {}).get("spec_key")
+        found = on_device[card]
+        if expected != found:
+            drift.append({"card": card, "expected": expected, "found": found})
+    return drift
+
+
+def merge_written(ledger: dict, written: dict, at: str) -> dict:
+    """Stamp written_at on each holding the host verified by read-back.
+
+    `written` is {card: md5 of the file now on the Controller}. The md5 is what
+    lets the next plug-in say whether a Card still holds what was written: a
+    Load is only reported once its read-back has already matched.
+    """
+    holdings = dict(ledger.get("holdings", {}))
+    for card, digest in written.items():
+        if card not in holdings:
+            continue
+        holdings[card] = {**holdings[card], "written_at": at, "written_md5": digest}
+    return {**ledger, "holdings": holdings}
+
+
+def change_survived(base: dict, new: dict, after: dict) -> bool:
+    """Did our change to the Ledger survive what is in the store now? Only what
+    we changed is checked -- the twin of changeSurvived in web/lib/missionRecords.ts."""
+    for key in ("pool", "verified_at"):
+        if base.get(key) != new.get(key) and after.get(key) != new.get(key):
+            return False
+    held_base, held_new, held_after = base.get("holdings", {}), new.get("holdings", {}), after.get("holdings", {})
+    for card in set(held_base) | set(held_new):
+        if held_base.get(card) != held_new.get(card) and held_after.get(card) != held_new.get(card):
+            return False
+    return True
+
+
+def merge_verified(ledger: dict, at: str) -> dict:
+    """Stamp when the host last checked the Ledger against the Controller."""
+    return {**ledger, "verified_at": at}
+
+
+def download_ledger(download_url: str, bucket: str, token: str) -> dict:
+    """The Ledger so far; an empty one when the host has never written it.
+
+    An empty Ledger is not a licence to choose Cards: every Spec then has no
+    Reservation and is refused by name, which is the point (ADR 0022).
+    """
+    try:
+        found = json.loads(b2.download(download_url, bucket, LEDGER_KEY, token))
+    except FileNotFoundError:
+        return dict(EMPTY_LEDGER)
+    return {"pool": found.get("pool", []), "holdings": found.get("holdings", {}),
+            **({"verified_at": found["verified_at"]} if "verified_at" in found else {})}
+
+
+def upload_ledger(api_url: str, token: str, bucket_id: str, ledger: dict) -> None:
+    b2.upload(api_url, token, bucket_id, LEDGER_KEY,
+              json.dumps(ledger, indent=1, sort_keys=True).encode())
 
 
 def download_manifest(api_url: str, download_url: str, bucket: str, token: str) -> dict:
@@ -116,16 +304,22 @@ def _selftest() -> None:
     m = {}
     merge_loaded(
         m,
-        [("specs/f/2026-09-17/k.json", [("WAYFINDER 1", {"name": "F", "waypoints": 32})])],
+        [("specs/f/2026-09-17/k.json",
+          [("way finder 1", {"name": "F", "waypoints": 32, "path_length_m": 828})])],
         "t2",
     )
     assert m == {
         "specs/f/2026-09-17/k.json": {
             "loaded_at": "t2",
             "parts": 1,
-            "cards": [{"card": "WAYFINDER 1", "name": "F", "waypoints": 32}],
+            "cards": [{"card": "way finder 1", "name": "F", "waypoints": 32, "path_length_m": 828}],
         }
     }, m
+
+    # 2b. A part from a writer that reported no distance still records a card.
+    m = {}
+    merge_loaded(m, [("k", [("way finder 1", {"name": "F", "waypoints": 32})])], "t2")
+    assert m["k"]["cards"] == [{"card": "way finder 1", "name": "F", "waypoints": 32}], m
 
     # 3. A Load never clobbers the collected_at underneath it.
     m = {"k": {"collected_at": "t0"}}
@@ -139,8 +333,48 @@ def _selftest() -> None:
     clear_notice(m)
     assert "_notice" not in m, m
 
+    # 5. A Ledger refusal is recorded like any other: what did not go, and what
+    #    to do about it. A later success retires it.
+    m = {}
+    merge_refusal(m, "no-reservation", ["k"], "no Card is reserved for k; Dispatch it again.", "t4")
+    assert m["_notice"]["type"] == "no-reservation" and "Dispatch" in m["_notice"]["reason"], m
+    clear_notice(m)
+    assert "_notice" not in m, m
+
+    # 6. Drift is recorded while it lasts and cleared when it stops. Recorded,
+    #    never corrected: the Ledger keeps saying what was planned.
+    m = {}
+    merge_drift(m, [{"card": "way finder 2", "expected": "a", "found": "b"}], "t5")
+    assert m["_drift"]["cards"][0]["card"] == "way finder 2", m
+    merge_drift(m, [], "t6")
+    assert "_drift" not in m, m
+
+    # 7. written_at is only ever stamped on a Card the Ledger already holds, and
+    #    carries the md5 the read-back proved, so the next plug-in can check it.
+    led = with_reservation({"pool": ["A", "B"], "holdings": {}}, ["A"], "specs/s/d/k.json", "t0")
+    led = merge_written(led, {"A": "abc", "B": "def"}, "t7")
+    assert led["holdings"]["A"]["written_at"] == "t7" and led["holdings"]["A"]["written_md5"] == "abc"
+    assert "B" not in led["holdings"], "a Card with no holding is never invented by a write report"
+    # A field the planner added and this host does not know -- mission_id -- is
+    # carried through the host's own writes, never dropped (#152).
+    tagged = {"pool": ["A"], "holdings": {"A": {"card": "A", "spec_key": "k", "flight": 1, "flights": 1,
+                                                "reserved_at": "t", "mission_id": "m-1"}}}
+    assert merge_written(tagged, {"A": "abc"}, "t9")["holdings"]["A"]["mission_id"] == "m-1"
+    assert merge_verified(led, "t8")["verified_at"] == "t8"
+
     _fixture_check()
+    _change_survived_check()
     print("b2_status self-check: ok")
+
+
+def _change_survived_check() -> None:
+    base = {"pool": ["A", "B"], "holdings": {}}
+    ours = with_reservation(base, ["A"], "ours.json", "t")
+    theirs = with_reservation(base, ["B"], "theirs.json", "t")
+    both = with_reservation(ours, ["B"], "theirs.json", "t")
+    assert not change_survived(base, ours, theirs), "an overwrite from before ours landed erased ours"
+    assert change_survived(base, ours, both), "a later writer who kept ours is not a conflict"
+    assert not change_survived(base, {**base, "pool": ["A"]}, base), "a pool change undone is lost"
 
 
 def _fixture_check() -> None:
@@ -149,7 +383,15 @@ def _fixture_check() -> None:
     import json
     from pathlib import Path
 
-    fixture = json.loads((Path(__file__).resolve().parents[2] / "fixtures" / "store-records.json").read_text())
+    # Deployed to the host as a flat directory rather than a checkout, so the
+    # fixture is genuinely absent there. Skipping loudly beats failing the whole
+    # self-check: the web side asserts the same shapes and only runs in a
+    # checkout, so a disagreement between the two is still caught.
+    fixture_path = Path(__file__).resolve().parents[2] / "fixtures" / "store-records.json"
+    if not fixture_path.is_file():
+        print(f"record-shape fixture absent ({fixture_path}); that check skipped")
+        return
+    fixture = json.loads(fixture_path.read_text())
     key = next(iter(fixture["manifest"]))
     merged = merge_collected(json.loads(json.dumps(fixture["manifest"])),
                              ["specs/new/2026-09-17/20260917T100000Z.json"], "2026-09-17T10:00:00Z")

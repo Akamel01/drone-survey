@@ -1,12 +1,14 @@
 // One-off backfill: Specs Dispatched before dispatch-time summaries existed have
 // no entry in specs/_status/summaries.json, so the Status tab shows no point
-// count or distance for them. This recomputes those numbers from each Spec body
+// count or distance for them, and a summary written before part counts
+// existed leaves the Status tab unable to predict which card a waiting
+// Mission will Load into (#128). This recomputes those numbers from each Spec body
 // using the same preview() the planner uses — never a second implementation.
 //
 //   cd web && node --env-file=.env.local scripts/backfill-summaries.ts
 //
 // Reads Specs; writes only specs/_status/summaries.json. Safe to re-run: it
-// skips keys that already have a summary.
+// skips keys whose summary already carries a part count.
 import { authorize, b2Env, b2ReadEnv, downloadFile, listFiles, uploadFile } from "../lib/b2.ts";
 import { SPECS_PREFIX, SUMMARIES_KEY, parseSpecKey } from "../lib/keys.ts";
 import type { SpecSummary } from "../lib/missions.ts";
@@ -34,7 +36,11 @@ async function main(): Promise<void> {
   for (const f of files) {
     const key = f.fileName;
     if (!parseSpecKey(key)) continue; // drafts and _status are not Specs
-    if (summaries[key]) continue;
+    // A summary written before part counts existed is the whole reason the
+    // Status tab cannot predict a card for an already-Dispatched Mission, so
+    // "already has a summary" is not a reason to skip it -- "already has a
+    // part count" is.
+    if (summaries[key]?.parts != null) continue;
     const raw = await downloadFile(read, writeEnv.bucket, key);
     if (!raw) continue;
     let spec: MissionSpec;
@@ -49,20 +55,57 @@ async function main(): Promise<void> {
     const aoiPairs =
       Array.isArray(spec.aoi) && spec.aoi.every((p) => Array.isArray(p) && p.length >= 2);
     if (spec.mission_type !== "orbit" && !aoiPairs) {
-      console.error(`skipped (unexpected aoi shape): ${key}`);
+      // A Spec from before the current schema: its area is {lat,lng} objects
+      // and its flight settings are flat, with no gimbal pitch, margin passes,
+      // speed or battery. Points and distance cannot be derived from that
+      // without inventing the missing inputs, and a card prediction certainly
+      // cannot. Record why rather than skipping in silence — a blank row with
+      // no explanation is the failure this whole set of fixes is about.
+      summaries[key] = { unavailable: "Dispatched before the current Mission format" };
+      added++;
+      console.log(`no figures (pre-schema Spec)  ${key}`);
       continue;
     }
+    const had = summaries[key] != null;
     const p = preview(spec);
     summaries[key] = {
       photo_count: p.photo_count,
       path_length_m: Math.round(p.path_length_m * 100) / 100,
+      parts: p.parts,
     };
     added++;
-    console.log(`added ${p.photo_count} points · ${p.path_length_m.toFixed(1)} m  ${key}`);
+    console.log(`${had ? "filled in" : "added"} ${p.photo_count} points · ${p.path_length_m.toFixed(1)} m · ${p.parts} part(s)  ${key}`);
+  }
+
+  // This uploads the whole file, so anything written while the loop was running
+  // -- a Dispatch recording its own summary -- would be replaced by a copy that
+  // predates it. Re-read immediately before writing and fold in anything new,
+  // and refuse outright if a key we started with has gone. Recomputing is cheap;
+  // silently dropping another writer's record is not, and nothing downstream
+  // could tell that it happened.
+  const beforeKeys = new Set(Object.keys(summaries));
+  const latestRaw = await downloadFile(read, writeEnv.bucket, SUMMARIES_KEY);
+  const latest: Record<string, SpecSummary> = latestRaw
+    ? (JSON.parse(latestRaw.toString()) as Record<string, SpecSummary>)
+    : {};
+
+  const lost = Object.keys(latest).filter((k) => !beforeKeys.has(k) && summaries[k] == null);
+  let folded = 0;
+  for (const k of lost) {
+    summaries[k] = latest[k];
+    folded++;
+  }
+  const dropped = Object.keys(latest).filter((k) => summaries[k] == null);
+  if (dropped.length) {
+    console.error(`refusing to write: ${dropped.length} summaries would be lost, first ${dropped[0]}`);
+    process.exit(1);
   }
 
   await uploadFile(write, SUMMARIES_KEY, Buffer.from(JSON.stringify(summaries, null, 2)));
-  console.log(`summaries: ${Object.keys(summaries).length} total, ${added} added.`);
+  console.log(
+    `summaries: ${Object.keys(summaries).length} total, ${added} written` +
+      (folded ? `, ${folded} folded in from a concurrent write` : ""),
+  );
 }
 
 main().catch((err) => {

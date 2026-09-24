@@ -46,8 +46,10 @@ PLACEMENTS = {"local", "remote-3090", "rented"}
 
 # Every key the schema knows. A field nobody reads is a comment, not a schema:
 # an unknown key is a typo waiting to be silently ignored (see ADR 0006).
-TOP_KEYS = {"pipeline", "inputs", "nodes"}
-NODE_KEYS = {"name", "command", "inputs", "outputs", "placement", "image", "env", "notes"}
+TOP_KEYS = {"pipeline", "inputs", "nodes", "ground_control_points"}
+NODE_KEYS = {"name", "command", "inputs", "outputs", "placement", "image", "env", "notes", "cleanup_paths", "gpu",
+             "resumable"}
+# Ground control presence is a non-path top-level fact; validate its type if present.
 
 # {in.images} / {out.poses} — the only placeholders the Runner resolves.
 PLACEHOLDER_RE = re.compile(r"\{(in|out)\.([A-Za-z0-9_-]+)\}")
@@ -83,6 +85,12 @@ def validate(data: dict) -> list[str]:
         errors.append("'nodes' must be a non-empty list")
         return errors  # nothing below is checkable without it
 
+    # Optional: explicit ground-control-point declaration (non-path fact).
+    if "ground_control_points" in data:
+        val = data["ground_control_points"]
+        if not isinstance(val, bool):
+            errors.append("'ground_control_points' must be a boolean if present")
+
     seen: set[str] = set()
     for i, node in enumerate(nodes):
         where = f"nodes[{i}]"
@@ -115,6 +123,12 @@ def validate(data: dict) -> list[str]:
 
         if "image" in node and not isinstance(node["image"], str):
             errors.append(f"{where} ('{name}'): 'image' must be a string")
+        # GPU must be a boolean if present
+        if "gpu" in node:
+            if not isinstance(node["gpu"], bool):
+                errors.append(f"{where} ('{name}'): 'gpu' must be a boolean")
+        if "resumable" in node and not isinstance(node["resumable"], bool):
+            errors.append(f"{where} ('{name}'): 'resumable' must be a boolean")
 
         placement = node.get("placement", "local")
         if placement not in PLACEMENTS:
@@ -124,6 +138,25 @@ def validate(data: dict) -> list[str]:
         if not isinstance(outputs, dict) or not all(isinstance(v, str) for v in outputs.values()):
             errors.append(f"{where} ('{name}'): 'outputs' must be a string-to-string object")
             outputs = {}
+
+        # Declarative per-node cleanup specification (paths to remove after success)
+        cleanup_paths = node.get("cleanup_paths", [])
+        if cleanup_paths is not None:
+            if not isinstance(cleanup_paths, (list, tuple)):
+                errors.append(f"{where} ('{name}'): 'cleanup_paths' must be a list of strings")
+            else:
+                if not all(isinstance(p, str) for p in cleanup_paths):
+                    errors.append(f"{where} ('{name}'): all items in 'cleanup_paths' must be strings")
+                # Validate that cleanup targets stay within the node's workdir
+                # and do not reference absolute paths or go up the directory tree.
+                for p in cleanup_paths:
+                    if not isinstance(p, str):
+                        continue
+                    path_obj = Path(p)
+                    if path_obj.is_absolute() or ".." in path_obj.parts:
+                        errors.append(
+                            f"{where} ('{name}'): 'cleanup_paths' must be relative paths inside the node's workdir (no absolute or '..' components)"
+                        )
 
         inputs = node.get("inputs", {})
         if not isinstance(inputs, dict):
@@ -136,9 +169,19 @@ def validate(data: dict) -> list[str]:
             if ref["node"] not in seen:
                 errors.append(f"{where} ('{name}'): input '{key}' references unknown or later node '{ref['node']}'")
                 continue
-            producer = next(n for n in nodes[:i] if n.get("name") == ref["node"])
-            if ref["output"] not in producer.get("outputs", {}):
-                errors.append(f"{where} ('{name}'): input '{key}' references '{ref['node']}.{ref['output']}', which that node does not output")
+            producer = next((n for n in nodes[:i] if n.get("name") == ref["node"]), None)
+            if producer is None:
+                errors.append(
+                    f"{where} ('{name}'): input '{key}' references unknown producer '{ref['node']}'"
+                )
+                continue
+            # Enforce that inputs reference only declared outputs. Interior path allowances
+            # (e.g., '{in.solved}/poses.json') are no longer accepted by default.
+            producer_outputs = producer.get("outputs", {})
+            if ref["output"] not in producer_outputs:
+                errors.append(
+                    f"{where} ('{name}'): input '{key}' references '{ref['node']}.{ref['output']}', which that node does not output"
+                )
 
         # A placeholder that names nothing is a typo that would otherwise
         # surface on the first run of a long Pipeline, not here.
@@ -164,6 +207,15 @@ def validate(data: dict) -> list[str]:
                             f"{where} ('{name}'): malformed placeholder '{stray}' "
                             f"(expected {{in.<name>}} or {{out.<name>}})"
                         )
+                # Disallow interior file references like "{in.solved}/poses.json".
+                # Use explicit output keys instead (e.g. {in.poses}). This enforces
+                # resolving through the manifest's output wiring rather than embedding
+                # file names in the middle of a path.
+                interior_match = re.search(r"\{in\.[A-Za-z0-9_-]+\}/", arg)
+                if interior_match:
+                    errors.append(
+                        f"{where} ('{name}'): interior file references are not allowed; use an explicit output placeholder like '{{in.<name>}}' instead of '{{in.<name>}}/<file>'"
+                    )
 
     return errors
 

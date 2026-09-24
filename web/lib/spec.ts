@@ -102,6 +102,13 @@ export interface MissionSpec {
  *  cannot drift apart about them. What differs is only what a stage requires. */
 export type Gate = "draft" | "dispatch";
 
+/** The one rule for a Site name, shared by both gates and by the planner's Save
+ *  control, so the client refuses exactly what the server would (issue #123).
+ *  Whitespace is not a name: everything downstream identifies a Mission by it. */
+export function siteNameProblem(site: unknown): string | null {
+  return typeof site === "string" && site.trim() ? null : "no Site named";
+}
+
 export function specProblem(spec: unknown, gate: Gate): string | null {
   if (!spec || typeof spec !== "object") return gate === "draft" ? "Draft is not an object" : "not an object";
   const s = spec as MissionSpec;
@@ -112,13 +119,17 @@ export function specProblem(spec: unknown, gate: Gate): string | null {
     // gave before this module existed; they are pinned by tests, because
     // changing them changes what an operator can save.
     if (s.mission_type !== "grid" && s.mission_type !== "orbit") return "Draft has no mission type";
-    if (typeof s.site !== "string") return "Draft has no site name";
+    // A draft may be blank everywhere else, but not here: a nameless Mission
+    // has nothing downstream can identify it by (issue #123).
+    const unnamed = siteNameProblem(s.site);
+    if (unnamed) return unnamed;
     if (typeof s.date !== "string") return "Draft has no date";
     return null;
   }
   // Dispatch additionally requires a flyable plan, and the site id that becomes
   // a storage path segment is the server's trust boundary.
-  if (typeof s.site !== "string" || !s.site.trim()) return "no Site named";
+  const unnamed = siteNameProblem(s.site);
+  if (unnamed) return unnamed;
   if (s.site_id != null && !isValidSiteId(s.site_id)) return "Site id is not a safe identifier";
   if (typeof s.date !== "string" || !s.date.trim()) return "no date";
 

@@ -1,0 +1,245 @@
+/* One Mission, one card. The dense line this replaces is the design that
+   failed: it is read at the desk before leaving and again with the Controller
+   in hand, so the state and the next action have to carry from arm's length. */
+
+.list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  font-size: 12px;
+  color: var(--text-dim);
+}
+
+.bar button {
+  padding: 4px 10px;
+  font-size: 12px;
+}
+
+.age {
+  font-variant-numeric: tabular-nums;
+}
+
+.stale {
+  color: var(--warn);
+}
+
+.filter {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
+  cursor: pointer;
+}
+
+.quiet {
+  font-size: 12px;
+  color: var(--text-dim);
+}
+
+.card {
+  background: rgba(255, 255, 255, 0.045);
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  /* The tone lives on the left edge, not in the text colour: a whole card
+     tinted red is unreadable, and a grey note is how a mismatch gets missed. */
+  border-left-width: 4px;
+  border-radius: 10px;
+  padding: 14px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.35);
+  backdrop-filter: saturate(1.2) blur(8px);
+}
+
+.toneGo {
+  border-left-color: var(--accent);
+}
+
+.toneStop {
+  border-left-color: var(--danger);
+}
+
+.toneWait {
+  border-left-color: var(--warn);
+}
+
+.toneQuiet {
+  border-left-color: var(--border);
+}
+
+.editing {
+  outline: 1px solid var(--accent);
+}
+
+.head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 10px;
+}
+
+.title {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.site {
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--text-dim);
+  letter-spacing: 0;
+}
+
+.state {
+  flex: none;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-dim);
+}
+
+/* The answer, at the size of an answer. "Open way finder 2" is the whole point
+   of the screen, and it has to be legible without leaning in. */
+.headline {
+  margin: 10px 0 2px;
+  font-size: 18px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  line-height: 1.25;
+}
+
+.toneGo .headline {
+  color: var(--accent);
+}
+
+.toneStop .headline {
+  color: var(--danger);
+}
+
+.detail {
+  margin: 0 0 8px;
+  font-size: 12px;
+  color: var(--text-dim);
+  line-height: 1.55;
+}
+
+.stop {
+  margin: 0 0 8px;
+  font-size: 12px;
+  color: var(--danger);
+  line-height: 1.55;
+}
+
+.note {
+  margin: 0 0 8px;
+  font-size: 12px;
+  color: var(--warn);
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+}
+
+.flights {
+  margin: 0 0 4px;
+  padding: 0;
+  list-style: none;
+  font-family: var(--mono);
+  font-size: 13px;
+  line-height: 1.7;
+  color: var(--text-dim);
+}
+
+.flights .written {
+  color: var(--text);
+}
+
+.reason {
+  margin: 0 0 10px;
+  font-size: 12px;
+  color: var(--text-dim);
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.actions button {
+  padding: 5px 10px;
+  font-size: 12px;
+  transition: transform 100ms ease-out;
+}
+
+.actions button:active {
+  transform: scale(0.97);
+}
+
+.actions button:focus-visible,
+.more summary:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.editingNote {
+  font-size: 11px;
+  color: var(--accent);
+}
+
+.more {
+  margin-top: 10px;
+  font-size: 12px;
+  color: var(--text-dim);
+}
+
+.more summary {
+  cursor: pointer;
+}
+
+.more summary:hover {
+  color: var(--accent);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .actions button {
+    transition: none;
+  }
+  .actions button:active {
+    transform: none;
+  }
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  .card {
+    backdrop-filter: none;
+    background: var(--panel-raised);
+  }
+}
+
+@media (prefers-contrast: more) {
+  .card {
+    background: var(--panel-raised);
+    border-color: var(--text-dim);
+  }
+}
+
+/* What an action just did, when it worked. Plain text: amber is for something
+   that needs attention, and a success that looks like a warning gets a second
+   look it does not deserve (#164). */
+.done {
+  margin: 0 0 8px;
+  font-size: 12px;
+  color: var(--text-dim);
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+}

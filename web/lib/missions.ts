@@ -1,268 +1,84 @@
-import type { MissionSpec } from "./spec";
-import { parseSpecKey, stampToIso } from "./keys.ts";
-// Server-side mission records. Drafts live under specs/_drafts/<id>.json in
-// the same bucket as Specs; Dispatched Specs stay immutable under specs/ and
-// are only ever superseded, never edited or deleted (ADR 0016).
-
+// What the host reports about the Specs it has Collected and Loaded.
+//
+// This file used to join drafts, Spec keys and this manifest into rows at the
+// rendering layer, which is what produced a row per draft AND a row per Spec:
+// one Mission appeared twice, under two names, in two states, with two sets of
+// buttons (ADR 0021). That join is gone. A Mission's state is derived once, in
+// `missionRecords.ts`, from the store -- so what remains here is only the
+// shape of what the host writes, read by that derivation and by nothing else.
+//
 // Store keys live in ./keys — one home for the layout, imported here and by
 // every route, so a producer and a consumer cannot drift apart.
 
-export interface DraftRecord {
-  id: string;
-  created_at: string;
-  updated_at: string;
-  dispatched_key: string | null;
-  spec: MissionSpec;
-  /** Stamp of how many parts this draft will consume when dispatched. */
-  parts?: number;
-}
-
+/** One Card as the host reported writing it, with what it measured writing it.
+ *
+ *  The figures matter more than they look. A Card's name, distance and point
+ *  count on the Controller's list are frozen at its creation, but the point
+ *  count shown inside a Card, once opened, is the file's own -- so `waypoints`
+ *  is the number the operator checks before flying (#155). */
 export interface LoadedCard {
   card: string;
   name: string;
-  // Optional: real host cards carry a measured waypoint count; predicted cards
-  // do not yet have a value.
   waypoints?: number;
+  /** Flight distance of the Mission the host wrote into this Card, in metres. */
+  path_length_m?: number;
 }
 
+/** What the host says it has done with one Dispatched Spec. Written by the
+ *  host, never by the planner. */
 export interface ManifestEntry {
   collected_at?: string;
   loaded_at?: string;
   parts?: number;
   cards?: LoadedCard[];
+  /** When imagery for this Mission's Site and date arrived. Evidence the
+   *  system may infer Flown from; the operator's own mark is what decides it,
+   *  and where the two disagree both are shown (ADR 0021). */
+  imagery_at?: string;
 }
 
 export type Manifest = Record<string, ManifestEntry>;
 
-// Small action helpers used by the UI to decide which actions to present in the
-// mission status console (M-57 UI). These are lightweight, testable predicates
-// that rely only on the in-memory StatusRow shape.
-export function isDraftDeletable(row: StatusRow): boolean {
-  // Drafts are deletable only if they have not been dispatched yet.
-  // We keep the check minimal here and rely on server-side guards as well.
-  return row.kind === "draft" && row.state === "draft";
+/** A Load the host refused, as it wrote it under `_notice`. Every refusal
+ *  already states what to do next (ADR 0018); `action` is the older overflow
+ *  shape, `reason` the Ledger one. Retired by the next successful Load. */
+export interface HostNotice {
+  type: string;
+  at: string;
+  /** The Spec keys that were waiting when it refused. */
+  waiting: string[];
+  reason?: string;
+  action?: string;
 }
 
-export function isSpecWithdrawable(row: StatusRow): boolean {
-  // Only spec rows that are still in the host queue can be withdrawn.
-  return row.kind === "spec" && (row.state === "dispatched" || row.state === "queued");
+/** Cards whose contents disagree with the Ledger, as the host found them. */
+export interface HostDrift {
+  at: string;
+  cards: { card: string; expected: string; found: string | null }[];
 }
 
-export function isWithdrawn(row: StatusRow): boolean {
-  return row.kind === "spec" && row.state === "withdrawn";
-}
-
-// M-58: superseded state within joinStatus. In each Site/Date group,
-// among spec rows that are waiting (not yet collected), all older ones are
-// superseded by the newest waiting row. Drafts and non-spec rows are unaffected.
-// Extend MissionState to accommodate an explicit withdrawn overlay (M-57-API).
-export type MissionState = "draft" | "dispatched" | "queued" | "collected" | "loaded" | "superseded" | "withdrawn";
-
-export interface StatusRow {
-  kind: "draft" | "spec";
-  /** Draft id or full Spec key. */
-  id: string;
-  site: string;
-  date: string;
-  state: MissionState;
-  /** Lexical dispatch stamp for Specs; updated_at for drafts. */
-  stamp: string;
-  dispatched_key: string | null;
-  collected_at: string | null;
-  loaded_at: string | null;
-  cards: LoadedCard[];
-  /** Optional per-row parts hint from manifest (host-provided). */
-  parts?: number;
-  /** 1-based position among missions still waiting on the host, if waiting. */
-  queue: number | null;
-  /** The draft body, on draft rows only — the tab Dispatches and edits from it. */
-  spec?: MissionSpec;
-  /** Optional per-spec metrics if available from summaries.json. */
-  metrics?: { photo_count: number; path_length_m: number };
-  /** ISO instant this row's information is as of: draft update, dispatch stamp,
-   *  collect stamp, or load stamp, whichever is newest. */
-  updated: string;
-  /** Indicates that the assigned card set overflows the 5-card pool. */
-  overflow?: boolean;
-  /** Server-side computed human-friendly age from the row's timestamp. */
-  age?: string;
-  /** True when a waiting mission has sat longer than the 15-minute nudge. */
-  stale?: boolean;
-}
-
-// Lightweight per-spec metrics summary shape stored in summaries.json, to be
-// consumed by the UI without re-computing on polls.
-export interface SpecSummary {
-  photo_count: number;
-  path_length_m: number;
-}
-
-/** Pure join of drafts + Dispatched keys + host manifest into status rows. */
-export function joinStatus(
-  drafts: DraftRecord[],
-  specKeys: string[],
-  manifest: Manifest,
-  withdrawn: Record<string, unknown> = {},
-  summaries: Record<string, SpecSummary> = {},
-): StatusRow[] {
-  const rows: StatusRow[] = drafts.map((d) => ({
-    kind: "draft" as const,
-    id: d.id,
-    site: d.spec.site ?? "Untitled",
-    date: d.spec.date ?? "",
-    state: (d.dispatched_key ? "dispatched" : "draft") as MissionState,
-    stamp: d.updated_at,
-    dispatched_key: d.dispatched_key,
-    collected_at: null,
-    loaded_at: null,
-    cards: [],
-    queue: null,
-    spec: d.spec,
-    updated: d.updated_at,
-  }));
-
-  const specs = specKeys
-    .map((key) => ({ key, parsed: parseSpecKey(key) }))
-    .filter((s) => s.parsed !== null)
-    .sort((a, b) => (a.key < b.key ? -1 : 1));
-
-  const waiting = specs.filter(({ key }) => !manifest[key]?.collected_at);
-  for (const { key, parsed } of specs) {
-    const entry = manifest[key] ?? {};
-    // The head of the waiting line is what the host takes next: Dispatched.
-    // Everything behind it is Queued. Collected/Loaded come from the manifest.
-    const waitIndex = waiting.findIndex((w) => w.key === key);
-    rows.push({
-      kind: "spec",
-      id: key,
-      site: parsed!.site,
-      date: parsed!.date,
-      state:
-        entry.loaded_at ? "loaded" : entry.collected_at ? "collected" : waitIndex <= 0 ? "dispatched" : "queued",
-      stamp: parsed!.stamp,
-      dispatched_key: key,
-      collected_at: entry.collected_at ?? null,
-      loaded_at: entry.loaded_at ?? null,
-      cards: entry.cards ?? [],
-      // Expose how many parts this spec will consume when dispatched. This comes
-      // from the host manifest as part of the spec's materialisation.
-      parts: (entry.parts ?? 0) as number,
-      queue: waitIndex < 0 ? null : waitIndex + 1,
-      updated: entry.loaded_at ?? entry.collected_at ?? stampToIso(parsed!.stamp),
-      // A partial or hand-edited summary must not surface a half number: both
-      // fields must be finite, else the row shows nothing.
-      metrics:
-        summaries?.[key] &&
-        Number.isFinite(summaries[key].photo_count) &&
-        Number.isFinite(summaries[key].path_length_m)
-          ? { photo_count: summaries[key].photo_count, path_length_m: summaries[key].path_length_m }
-          : undefined,
-    });
-  }
-
-  // Canonical superseded handling (M-58): within each Site/Date group, among spec
-  // rows that are waiting (not yet collected), mark all but the newest by
-  // stamp as superseded. This preserves the newest actionable row and hides older
-  // superseded rows from the host queue view.
-  // 
-  // New behavior (M-58 repair): determine the newest spec per group across ALL
-  // spec rows, not just the waiting ones. This ensures that older waiting rows are
-  // superseded by the truly newest spec in the group, even if that newest spec has
-  // progressed to collected/loaded state.
-  const waitingRows = rows.filter((r) => r.kind === "spec" && (r.state === "dispatched" || r.state === "queued"));
-  const newestForGroup: Map<string, string> = new Map(); // group -> newest id across all spec rows
-  const allSpecRows = rows.filter((r) => r.kind === "spec");
-  for (const s of allSpecRows) {
-    const group = `${s.site}::${s.date}`;
-    const current = newestForGroup.get(group);
-    if (!current) {
-      newestForGroup.set(group, s.id);
-    } else {
-      const currentRow = rows.find((rr) => rr.id === current && rr.kind === "spec");
-      if (currentRow && s.stamp > currentRow.stamp) {
-        newestForGroup.set(group, s.id);
-      }
-    }
-  }
-  // Re-assign waiting rows: newest per group (by ALL spec rows) becomes dispatched
-  // with queue=1; older waiting become superseded. This also prepares for global
-  // renumbering in the next step.
-  for (const w of waitingRows) {
-    const group = `${w.site}::${w.date}`;
-    const newestId = newestForGroup.get(group);
-    if (newestId && w.id === newestId) {
-      w.state = ("dispatched" as MissionState);
-      w.queue = 1;
-    } else if (newestId) {
-      w.state = ("superseded" as MissionState);
-      w.queue = null;
-    }
-  }
-
-  // Withdrawn overlay: apply after superseded logic. Precedence per Contract-2:
-  // loaded > collected > withdrawn > superseded. Keys listed in `withdrawn`
-  // override superseded/queued/dispatched only; collected/loaded rows stay
-  // (withdraw of those is refused server-side; a stale marker must not resurrect).
-  if (withdrawn && typeof withdrawn === "object") {
-    for (const r of rows) {
-      if (r.kind === "spec" && Object.prototype.hasOwnProperty.call(withdrawn, r.id)) {
-        if (r.state === "collected" || r.state === "loaded") continue;
-        r.state = ("withdrawn" as MissionState);
-        r.queue = null;
-      }
-    }
-  }
-  // Global renumbering: renumber surviving heads (currently the ones with queue=1)
-  // oldest-first across all groups. Find all active heads and assign 1..N by stamp.
-  const activeHeads = rows.filter((r) => r.kind === "spec" && (r.state === "dispatched" || r.state === "queued") && r.queue !== null);
-  const sortedHeads = activeHeads.sort((a, b) => (a.stamp < b.stamp ? -1 : 1));
-  sortedHeads.forEach((r, idx) => {
-    r.queue = idx + 1;
-  });
-  // Cards are supplied by host manifest; do not fabricate WAYFINDER slots here.
-  // Just ensure cards array exists for each waiting row to keep UI stable.
-  const waitingOrdered = rows
-    .filter((r) => r.kind === "spec" && (r.state === "dispatched" || r.state === "queued") && r.queue !== null)
-    .sort((a, b) => (a.queue! - b.queue!));
-  waitingOrdered.forEach((w) => {
-    if (!w.cards) w.cards = [];
-  });
-  // Newest-first display order remains defined by stamp as before.
-  return rows.sort((a, b) => (a.stamp < b.stamp ? 1 : -1));
-}
-
-// A waiting mission the host has not picked up in 15 minutes is worth a nudge:
-// cron runs every minute, so anything older means the Controller is unplugged
-// or the host is quiet — both are the operator's call, hence a hint, not an alarm.
-const WAITING_WARN_MS = 15 * 60 * 1000;
-
-/** Server-side derivation of status rows: the clock that decides age and the
- *  staleness nudge is the server's, so two browsers cannot disagree. */
-export function deriveStatusRows(
-  drafts: DraftRecord[],
-  specKeys: string[],
-  manifest: Manifest,
-  withdrawn: Record<string, unknown> = {},
-  summaries: Record<string, SpecSummary> = {},
-  clock?: number,
-): StatusRow[] {
-  const rows = joinStatus(drafts, specKeys, manifest, withdrawn, summaries);
-  const now = typeof clock === "number" ? clock : Date.now();
-  const toAge = (iso: string) => {
-    const ms = now - Date.parse(iso);
-    if (!Number.isFinite(ms) || ms < 0) return "just now";
-    const min = Math.floor(ms / 60000);
-    if (min < 1) return "just now";
-    if (min < 60) return `${min} min ago`;
-    const h = Math.floor(min / 60);
-    if (h < 48) return `${h} h ago`;
-    return `${Math.floor(h / 24)} d ago`;
+/** What the host is saying about the Controller as a whole, rather than about
+ *  one Spec. The manifest carries both kinds in one file, under `_` keys. */
+export function hostReport(manifest: Manifest): { notice: HostNotice | null; drift: HostDrift | null } {
+  const raw = manifest as Record<string, unknown>;
+  const notice = raw._notice as HostNotice | undefined;
+  const drift = raw._drift as HostDrift | undefined;
+  return {
+    notice: notice && typeof notice.at === "string" && Array.isArray(notice.waiting) ? notice : null,
+    drift: drift && Array.isArray(drift.cards) && drift.cards.length > 0 ? drift : null,
   };
-  rows.forEach((r) => {
-    const ms = now - Date.parse(r.updated);
-    r.age = toAge(r.updated);
-    // The 15-minute nudge is a decision, not a label, so the server makes it.
-    r.stale = Number.isFinite(ms) && ms > WAITING_WARN_MS;
-  });
-  return rows;
+}
+
+/** Per-Spec figures the Dispatch route records, so the host and anything else
+ *  reading the store has them without re-deriving the geometry. */
+export interface SpecSummary {
+  photo_count?: number;
+  path_length_m?: number;
+  /** How many Missions the writer will split this Spec into — one Card each. */
+  parts?: number;
+  /** Why this Spec has no figures, when it has none. A Spec written before the
+   *  current schema carries no gimbal pitch, margin passes, speed or battery,
+   *  so its point count and distance cannot be derived without inventing the
+   *  inputs. Recording the reason keeps a blank from reading as a fault. */
+  unavailable?: string;
 }

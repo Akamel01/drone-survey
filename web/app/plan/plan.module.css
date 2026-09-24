@@ -1,5 +1,5 @@
 .page {
-  height: 100vh;
+  height: 100dvh;
   display: flex;
   flex-direction: column;
 }
@@ -8,4 +8,94 @@
   flex: 1;
   min-height: 0;
   display: flex;
+}
+
+/* Wide: Missions | Map | Settings, all at once. */
+.missions {
+  width: 340px;
+  flex: none;
+  overflow-y: auto;
+  background: var(--panel);
+  border-right: 1px solid var(--border);
+  padding: 16px;
+}
+
+.heading {
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-dim);
+  margin: 0 0 12px;
+}
+
+.map {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+}
+
+.settings {
+  flex: none;
+  display: flex;
+  min-height: 0;
+}
+
+.summary {
+  flex: none;
+}
+
+/* The switcher is for narrow screens only. */
+.views {
+  display: none;
+}
+
+/* Narrow: one column at a time, the whole width, chosen from the bar. Below
+   1000px the three columns would leave the map a sliver -- on a phone it was
+   30px wide, with the Mission list at the very bottom of the settings. */
+@media (max-width: 999px) {
+  .missions,
+  .map,
+  .settings {
+    display: none;
+    width: 100%;
+    flex: 1;
+    border: none;
+  }
+
+  .page[data-view="missions"] .missions,
+  .page[data-view="map"] .map,
+  .page[data-view="settings"] .settings {
+    display: flex;
+  }
+
+  .missions {
+    flex-direction: column;
+  }
+
+  /* The settings panel keeps its own scroll; it only loses its fixed width. */
+  .settings > * {
+    width: 100%;
+    border-left: none;
+  }
+
+  /* The figures and Save belong to editing. At the aircraft the Missions view
+     is for "which Card do I open", and a third of a phone spent on an editor's
+     controls pushes that answer off the screen. */
+  .page[data-view="missions"] .summary {
+    display: none;
+  }
+
+  .views {
+    display: flex;
+    flex: none;
+    gap: 8px;
+    padding: 8px 16px calc(8px + env(safe-area-inset-bottom));
+    background: var(--panel);
+    border-top: 1px solid var(--border);
+  }
+
+  .views button {
+    flex: 1;
+    padding: 10px 0;
+  }
 }

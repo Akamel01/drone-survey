@@ -1,0 +1,31 @@
+import { test } from "node:test";
+import assert from "node:assert/strict";
+
+import { bundleKey } from "./delivery.ts";
+
+test("a Bundle file resolves to the key publish.py wrote", () => {
+  assert.equal(bundleKey(["a6f18620d2de", "ortho.html"]), "bundles/a6f18620d2de/ortho.html");
+  assert.equal(
+    bundleKey(["a6f18620d2de", "ortho", "orthomosaic.tif"]),
+    "bundles/a6f18620d2de/ortho/orthomosaic.tif",
+  );
+});
+
+test("nothing escapes the bundles prefix", () => {
+  for (const attempt of [
+    ["..", "secret.json"],
+    ["a6f18620d2de", ".."],
+    ["a6f18620d2de", "..", "..", "specs", "site.json"],
+    ["a6f18620d2de", "ortho/../../x"],
+    ["a6f18620d2de", ""],
+    ["a6f18620d2de", `bad${String.fromCharCode(0)}name`],
+    ["a6f18620d2de", "-leading-dash-is-a-flag"],
+  ]) {
+    assert.equal(bundleKey(attempt), null, `should refuse ${JSON.stringify(attempt)}`);
+  }
+});
+
+test("a bare Bundle id addresses no file", () => {
+  assert.equal(bundleKey([]), null);
+  assert.equal(bundleKey(["a6f18620d2de"]), null);
+});

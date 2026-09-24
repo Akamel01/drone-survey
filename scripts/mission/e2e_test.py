@@ -1,6 +1,12 @@
 #!/usr/bin/env python3
 """End to end: a Mission Spec from the planner becomes a KMZ the aircraft can fly.
 
+This module is guarded by a minimum Python floor check (M8). If the host Python
+version is below the required floor (3.11), the test exits loudly with a clear
+message to fail fast on non-compliant hosts.
+"""
+"""End to end: a Mission Spec from the planner becomes a KMZ the aircraft can fly.
+
 Each piece is checked on its own elsewhere. This checks the seams, which is where
 the expensive failures live (design.md, "Verification: each Node, then the whole
 path"). It drives the real planner maths through node and the real writer through
@@ -13,6 +19,16 @@ import json
 import math
 import subprocess
 import sys
+
+# M8 floor check: host Python must be at least 3.11
+MIN_PY = (3, 11)
+if sys.version_info < MIN_PY:
+    print(
+        f"FATAL: Minimum Python {MIN_PY[0]}.{MIN_PY[1]} required for M8; current version is "
+        f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}",
+        file=sys.stderr,
+    )
+    sys.exit(3)
 import tempfile
 import zipfile
 from pathlib import Path
@@ -116,6 +132,9 @@ def waypoints_of(kmz):
         names = sorted(z.namelist())
         waylines = z.read("wpmz/waylines.wpml").decode()
         template = z.read("wpmz/template.kml").decode()
+    # The Controller parses both files; one that is not well-formed XML is a
+    # Mission it cannot open, whatever its waypoints say.
+    ElementTree.fromstring(template)
     root = ElementTree.fromstring(waylines)
     marks = []
     for pm in root.findall(".//kml:Placemark", NS):
@@ -360,6 +379,9 @@ def main():
     case("the rehearsal area, flown through each point", spec_for(small), expect_parts=1)
     case("a triangle, which must not be flown as its bounding box", spec_for(triangle), expect_parts=1)
     case("the same area, stopping at each point", spec_for(small, turn="stop"), expect_parts=1)
+    # A Site name holding a control character must still make a file the
+    # Controller can parse: XML cannot carry one even escaped (#152).
+    case("a Site name with a control character", {**spec_for(small), "site": "Bad\x01Name"}, expect_parts=1)
     case("an area too big for one Mission", spec_for(large))
 
     # The capture a nadir grid cannot produce: a subject seen from around it.

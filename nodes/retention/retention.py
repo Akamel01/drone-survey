@@ -54,7 +54,14 @@ def due(roots: list[Path], today: date) -> list[tuple[Path, str, date]]:
                 print(f"refusing {capture}: it contains date-named directories, "
                       f"so it is a container, not a Capture", file=sys.stderr)
                 continue
-            flown = date.fromisoformat(capture.name)
+            try:
+                flown = date.fromisoformat(capture.name)
+            except ValueError:
+                # Shaped like a date but not one (2025-13-45): report it and go
+                # on. It used to raise, so one piece of junk stopped the whole
+                # monthly sweep and every Capture behind it went undeleted (#98).
+                print(f"skipping {capture}: named like a date but is not one", file=sys.stderr)
+                continue
             if expiry(flown) <= today:
                 found.append((capture, capture.parent.name, flown))
     return found
@@ -95,7 +102,10 @@ def _selftest() -> None:
     assert expiry(date(2028, 2, 29)) == date(2029, 3, 1)
     with tempfile.TemporaryDirectory() as tmp:
         root, log = Path(tmp) / "captures", Path(tmp) / "log.jsonl"
-        for rel in ("site-a/2025-09-12", "site-a/2025-09-14", "site-b/2025-01-01", "site-b/notes"):
+        for rel in ("site-a/2025-09-12", "site-a/2025-09-14", "site-b/2025-01-01", "site-b/notes",
+                    # Junk named like a date, and a Site pointed at by mistake as
+                    # if it were one Capture: neither may stop or widen the sweep.
+                    "site-c/2025-13-45", "site-d/2025-01-01/2025-01-02"):
             (root / rel).mkdir(parents=True)
             (root / rel / "img.jpg").write_bytes(b"x" * 10)
         today = date(2026, 9, 13)
@@ -107,6 +117,9 @@ def _selftest() -> None:
         assert not (root / "site-a/2025-09-12").exists() and not (root / "site-b/2025-01-01").exists()
         assert (root / "site-a/2025-09-14").exists()  # one day short of its year
         assert (root / "site-b/notes").exists()  # not a Capture directory, never touched
+        assert (root / "site-c/2025-13-45").exists(), "a date-shaped junk name is skipped, not deleted"
+        assert (root / "site-d/2025-01-01/2025-01-02/img.jpg").exists(), \
+            "a directory holding date-named children is a container, and is refused"
         lines = [json.loads(l) for l in log.read_text().splitlines()]
         assert [l.get("site") for l in lines[:2]] == ["site-a", "site-b"] and lines[0]["bytes"] == 10
         assert lines[-1] == {"run": "2026-09-13", "deleted": 2}

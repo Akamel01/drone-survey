@@ -45,7 +45,7 @@ Fly-through starts the **north-west** corner; stop-at-point starts the
 - [ ] Plug the Linux host into the Controller. Run
       `python3 scripts/mission/load.py --newest --yes` (or let the plugged-in
       trigger do it) for the **fly-through** Spec first.
-- [ ] Read the printed sheet — it names the WAYFINDER card holding this
+- [ ] Read the printed sheet — it names the way finder card holding this
       flight. Open that card, close and reopen its waypoint editor so DJI
       Fly indexes the new file.
 - [ ] Watch the photo counter on the first pass. **A flown grid with no

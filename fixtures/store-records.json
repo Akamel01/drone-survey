@@ -14,21 +14,24 @@
       "parts": 2,
       "cards": [
         {
-          "card": "WAYFINDER 1",
+          "card": "way finder 1",
           "name": "Field north",
-          "waypoints": 32
+          "waypoints": 32,
+          "path_length_m": 421
         },
         {
-          "card": "WAYFINDER 2",
+          "card": "way finder 2",
           "name": "Field south",
-          "waypoints": 31
+          "waypoints": 31,
+          "path_length_m": 407
         }
       ]
     }
   },
   "summary": {
     "photo_count": 69,
-    "path_length_m": 828.0
+    "path_length_m": 828.0,
+    "parts": 2
   },
   "draft": {
     "id": "0193abcd",

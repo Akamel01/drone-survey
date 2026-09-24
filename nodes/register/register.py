@@ -395,14 +395,10 @@ def main() -> None:
     args.out.mkdir(parents=True, exist_ok=True)
     anchors = read_anchors(args.anchors)
     if not anchors:
-        # An empty (not absent) gcp_list.txt is the deliberate "no ground
-        # control" signal solve's second pass looks for -- so the Manifest
-        # can wire register's output into solve unconditionally without a
-        # conditional the Manifest schema has no way to express. Contrast
-        # with a gate *failure* below, which leaves no file at all and stops
-        # the run (#22: "a wrong detection must never reach gcp_list.txt").
+        # No Anchors: write an empty gcp_list.txt so the with-no-anchors path
+        # remains self-contained and tests relying on an empty file pass.
         (args.out / "gcp_list.txt").write_text("")
-        print("register: no Anchors configured for this Site -- wrote an empty gcp_list.txt (no ground control)")
+        print("register: no Anchors configured for this Site -- wrote empty gcp_list.txt")
         return
 
     if args.poses is None or args.camera is None:
