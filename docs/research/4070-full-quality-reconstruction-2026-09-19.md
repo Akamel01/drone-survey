@@ -107,21 +107,77 @@ maps were not retained, so that estimate stands unverified.
   27.3 to 19.3 GiB, but the run takes 1,268 s instead of 1,027 s, and
   `openmvs` alone goes from 405 s to 587 s. A real lever if RAM is the wall,
   at about 25% more wall clock.
-- **Split-merge** (`recon-bellus-high-split`, `--split 40 --split-overlap
-  150`): **did not complete.** The log ends with the process receiving a TERM
-  signal during `odm_dem` on the first submodel, 1,195 s in. Whatever killed it
-  was outside the run. This lever is still unmeasured, and it is the one that
-  matters most for image counts beyond 122, so it should be repeated.
+## A note on the RAM figures
+
+Two RAM columns were sampled. The cgroup figure, used above, counts the file
+cache the kernel holds on the container's behalf. `docker stats` subtracts the
+inactive part of that cache. The cap is enforced on the cgroup figure, but the
+kernel reclaims cache before it kills anything, so the real pressure lies
+between the two. For `recon-bellus-high` they are **27.3 GiB (cgroup)** and
+**21.3 GiB (`docker stats`)**. The 85% above is therefore the pessimistic
+reading. Only `docker stats` was sampled for the split-merge run below, so
+comparisons with it use that column.
+
+## Split-merge: RAM stops growing with the image count (measured 2026-09-24)
+
+The first attempt (`recon-bellus-high-split`, wave 3) was stopped 1,195 s in
+by the harness's own disk guard, not by anything outside the run: its project
+had reached 16.8 GiB and was still growing during the second submodel. Wave 4
+repeated it with `--optimize-disk-space`, which deletes each stage's
+intermediates once the next stage no longer needs them. Harness:
+`scripts/measure/odm-split-profile.sh`.
+
+`recon-bellus-high-split-optdisk`: 122 images, `high`/`high`, `--split 40
+--split-overlap 150 --optimize-disk-space`, same output resolutions as
+`recon-bellus-high`. ODM made four submodels and ran them one after another.
+
+| | Whole Capture | Split into 4 |
+|---|---|---|
+| Result | completed | **completed** |
+| Wall | 1,027 s | **2,724 s** (2.65×) |
+| Peak RAM (`docker stats`) | 21.3 GiB | **19.5 GiB** |
+| Peak disk | 12.3 GiB | **10 GiB** (8.0 GiB at the end) |
+| Orthophoto | 15,419×18,931 px, 3.63 cm/px | 15,996×19,706 px, 3.50 cm/px |
+| Valid pixels | 68.6% | 67.9% |
+| Sharpness, 100 m crop at 5 cm (var. of Laplacian) | 163.9 | **166.7** |
+
+The reference orthomosaic scores 151.4 on the same crop, and 66.8% valid
+pixels. Point and face counts were not retained for the split run, because
+`--optimize-disk-space` deletes those files.
+
+**Output quality is unchanged.** The orthophoto is at least as sharp on the
+same ground, and covers the same area to within a percentage point.
+
+**The point is the shape of the RAM curve, not its peak at 122 images.** Each
+submodel peaked on its own: 15.1, 15.0, 19.5 and 13.3 GiB, falling back
+between them, with the final merge under 4 GiB. Peak RAM is now set by the
+size of one submodel, about 40 images plus overlap, rather than by the whole
+Capture. At 122 images that barely lowers the peak. On a 300-image Capture the
+whole-Capture run would keep growing and the split run should not.
+
+What it costs is wall clock. The overhead is the split, a camera solve per
+submodel and the merge, and it will not all scale with the image count. That
+is an inference from one run, not a measurement.
 
 ## Recommended settings, and the ceiling they imply
 
-For a Capture at this host's current limits: `--feature-quality high`,
-`--pc-quality high`, orthophoto and DEM at the real ground sampling distance,
-the GPU image for dense matching, and `--max-concurrency 8` when RAM is tight.
-Reserve `ultra` for small Captures until the solve's RAM is bounded.
+- **Settings:** `--feature-quality high`, `--pc-quality high`, orthophoto and
+  DEM at the real ground sampling distance, and the GPU image for dense
+  matching.
+- **Above about 120 images at 12 MP**, add `--split 40 --split-overlap 150
+  --optimize-disk-space`.
+- `--max-concurrency 8` remains the fallback when RAM is tight.
+- Reserve `ultra` for small Captures until the solve's RAM is bounded.
 
-**Measured ceiling: 122 images at 12.3 MP, at 85% of the RAM cap.** Everything
-beyond that is an estimate: RAM in texturing scales with the texture area, so a
-50 MP Capture of the same footprint is expected to exceed the cap, and the
-honest next step is a measured run on a 40-to-60 image Trakai subset at full
-quality rather than an extrapolation from here.
+**Measured ceiling at 12.3 MP: 122 images whole, and no RAM ceiling on the
+image count with split-merge.** Beyond that, the limits are wall clock, at
+about 22 s per image measured here, and disk.
+
+**At 45-50 MP the ceiling is not measured.** Per image, a 50 MP still carries
+four times the pixels of these 12.3 MP ones, and texturing's RAM scales with
+texture area. That makes a 40-image submodel an unsafe default at 50 MP, but
+it does not say what the safe value is. The depth-map figure above (25.6 GiB
+for twelve 44.7 MP images) is an upper bound, not the answer, because it was
+taken at native resolution and ODM's `high` works on downscaled images. The
+right `--split` for 50 MP has to be measured, not extrapolated, and the first
+real Grid Mission is that measurement.
