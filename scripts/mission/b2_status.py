@@ -239,6 +239,19 @@ def merge_written(ledger: dict, written: dict, at: str) -> dict:
     return {**ledger, "holdings": holdings}
 
 
+def change_survived(base: dict, new: dict, after: dict) -> bool:
+    """Did our change to the Ledger survive what is in the store now? Only what
+    we changed is checked -- the twin of changeSurvived in web/lib/missionRecords.ts."""
+    for key in ("pool", "verified_at"):
+        if base.get(key) != new.get(key) and after.get(key) != new.get(key):
+            return False
+    held_base, held_new, held_after = base.get("holdings", {}), new.get("holdings", {}), after.get("holdings", {})
+    for card in set(held_base) | set(held_new):
+        if held_base.get(card) != held_new.get(card) and held_after.get(card) != held_new.get(card):
+            return False
+    return True
+
+
 def merge_verified(ledger: dict, at: str) -> dict:
     """Stamp when the host last checked the Ledger against the Controller."""
     return {**ledger, "verified_at": at}
@@ -342,10 +355,26 @@ def _selftest() -> None:
     led = merge_written(led, {"A": "abc", "B": "def"}, "t7")
     assert led["holdings"]["A"]["written_at"] == "t7" and led["holdings"]["A"]["written_md5"] == "abc"
     assert "B" not in led["holdings"], "a Card with no holding is never invented by a write report"
+    # A field the planner added and this host does not know -- mission_id -- is
+    # carried through the host's own writes, never dropped (#152).
+    tagged = {"pool": ["A"], "holdings": {"A": {"card": "A", "spec_key": "k", "flight": 1, "flights": 1,
+                                                "reserved_at": "t", "mission_id": "m-1"}}}
+    assert merge_written(tagged, {"A": "abc"}, "t9")["holdings"]["A"]["mission_id"] == "m-1"
     assert merge_verified(led, "t8")["verified_at"] == "t8"
 
     _fixture_check()
+    _change_survived_check()
     print("b2_status self-check: ok")
+
+
+def _change_survived_check() -> None:
+    base = {"pool": ["A", "B"], "holdings": {}}
+    ours = with_reservation(base, ["A"], "ours.json", "t")
+    theirs = with_reservation(base, ["B"], "theirs.json", "t")
+    both = with_reservation(ours, ["B"], "theirs.json", "t")
+    assert not change_survived(base, ours, theirs), "an overwrite from before ours landed erased ours"
+    assert change_survived(base, ours, both), "a later writer who kept ours is not a conflict"
+    assert not change_survived(base, {**base, "pool": ["A"]}, base), "a pool change undone is lost"
 
 
 def _fixture_check() -> None:

@@ -193,6 +193,19 @@ async function readSkipList(read: B2Session, bucket: string): Promise<Record<str
  *  none of them leave the operator without a next step. */
 export function storeFailure(err: unknown): Response {
   const detail = err instanceof Error ? err.message : "unknown";
+  // B2 answers 403 when the free tier's daily transaction cap is spent, or
+  // when a key cannot reach this bucket. "Try again" is the wrong advice for
+  // either: the cap resets at 00:00 UTC, and a key does not fix itself (#152).
+  if (/\b403\b/.test(detail)) {
+    return Response.json(
+      {
+        error:
+          `The store refused this request (${detail}). Either today's free transaction limit is used up -- ` +
+          "it resets at 00:00 UTC -- or the storage key cannot reach this bucket. Nothing was changed.",
+      },
+      { status: 503 },
+    );
+  }
   return Response.json(
     { error: `Could not reach the store: ${detail}. Nothing was changed; try again.` },
     { status: 502 },

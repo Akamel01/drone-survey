@@ -43,6 +43,8 @@ jobs:
           python3 scripts/mission/b2_status.py --selftest
           python3 scripts/mission/collect.py --selftest
           python3 scripts/mission/load.py --selftest
+          python3 scripts/mission/calibrate.py --selftest
+          python3 scripts/mission/kmz.py --selftest
       # ADR 0018: every Node carries a check, and the seam between Nodes runs
       # too. They are offline by construction, so they run here on every change.
       # check_head inspects image metadata with exiftool; Pillow builds its fixtures.

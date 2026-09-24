@@ -28,8 +28,10 @@ refused before anything is touched, never partially Loaded.
 from __future__ import annotations
 
 import argparse
+import fcntl
 import hashlib
 import json
+import os
 import shutil
 import subprocess
 import sys
@@ -281,12 +283,66 @@ def mounted(mount: Path) -> bool:
         return False
 
 
+class LoadFailed(Exception):
+    """A Load that stopped. The message says what was put back and what to do.
+
+    Raised rather than exiting, so every way a Load can fail reaches the
+    manifest and the planner's banner (#162). A bare exit reached only the cron
+    log, which is how a locked Controller or a failed read-back went unseen.
+    """
+
+
 def remount(mount: Path) -> None:
     """A fresh mount, so the read-back is what the Controller holds, not a cache."""
     subprocess.run(["fusermount", "-uz", str(mount)], capture_output=True)
     done = subprocess.run(["jmtpfs", str(mount)], capture_output=True, text=True)
     if not mounted(mount):
-        sys.exit(f"could not remount the Controller: {done.stderr.strip()}")
+        raise LoadFailed(
+            f"The Controller is plugged in but its storage cannot be read ({done.stderr.strip() or 'no storage'}). "
+            "Unlock it, and choose file transfer if it asks; the Load runs on its own once it can read it. "
+            "Nothing was touched.")
+
+
+CONTROLLER_LOCK = Path("/tmp/wayfinder-controller.lock")
+
+
+def controller_lock(path: Path = CONTROLLER_LOCK):
+    """Hold the Controller for this run, or refuse. Keep the returned file open.
+
+    Cron wraps collect-and-load in its own flock, but a Load started by hand
+    did not take it, so the two could write the same Cards at once (#152).
+    This is a different file from cron's: cron already holds that one while it
+    runs this script.
+    """
+    handle = open(path, "w")
+    try:
+        fcntl.flock(handle, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except BlockingIOError:
+        handle.close()
+        sys.exit("Another Load is writing to the Controller right now; nothing was touched. "
+                 "It finishes on its own -- check again in a minute.")
+    return handle
+
+
+def _restore(plan, waypoint: Path, backups: Path) -> list[str]:
+    """Put every planned Card back from its backup; the Cards that could not be."""
+    lost = []
+    for _, card, guid, _ in plan:
+        live = waypoint / guid / f"{guid}.kmz"
+        try:
+            live.unlink(missing_ok=True)
+            shutil.copyfile(backups / f"{guid}.kmz", live)
+        except OSError:
+            lost.append(card)
+    return lost
+
+
+def _put_back(lost: list[str], backups: Path) -> str:
+    if not lost:
+        return f"Every card was put back as it was (backups in {backups})."
+    return (f"{', '.join(lost)} could not be put back and may hold half a file: do not fly "
+            f"{'it' if len(lost) == 1 else 'them'}. Plug the Controller back in; the Load runs again "
+            f"from the start and rewrites {'it' if len(lost) == 1 else 'them'} (backups in {backups}).")
 
 
 def load_all(entries: list[tuple[Path, list[dict]]], root: Path, backups: Path,
@@ -337,23 +393,27 @@ def load_all(entries: list[tuple[Path, list[dict]]], root: Path, backups: Path,
                 with_create_time(Path(part["out"]), create_ms, stage)
             staged[guid] = stage
 
-        for _, card, guid, _ in plan:
-            live = waypoint / guid / f"{guid}.kmz"
-            live.unlink()  # a write onto an existing name can leave two objects
-            shutil.copyfile(staged[guid], live)
-
-        if fresh_mount:
-            fresh_mount()
-        bad = [card for _, card, guid, _ in plan
-               if not (waypoint / guid / f"{guid}.kmz").exists()
-               or md5(waypoint / guid / f"{guid}.kmz") != md5(staged[guid])]
-        if bad:
+        # Unplugged, locked or rebooted part-way through: whatever was written
+        # is put back, so a Load stays all or nothing even when it is cut off.
+        # It used to raise straight out, leaving the first Cards rewritten and
+        # the rest as they were.
+        try:
             for _, card, guid, _ in plan:
                 live = waypoint / guid / f"{guid}.kmz"
-                live.unlink(missing_ok=True)
-                shutil.copyfile(backups / f"{guid}.kmz", live)
-            sys.exit(f"read-back did not match for {', '.join(bad)}; every card was restored "
-                     f"from {backups}. Check the restore with a second Load attempt or --list.")
+                live.unlink()  # a write onto an existing name can leave two objects
+                shutil.copyfile(staged[guid], live)
+            if fresh_mount:
+                fresh_mount()
+            bad = [card for _, card, guid, _ in plan
+                   if not (waypoint / guid / f"{guid}.kmz").exists()
+                   or md5(waypoint / guid / f"{guid}.kmz") != md5(staged[guid])]
+        except (OSError, LoadFailed) as e:
+            raise LoadFailed(f"The Controller stopped answering part-way through the Load ({e}). "
+                             + _put_back(_restore(plan, waypoint, backups), backups)) from e
+        if bad:
+            raise LoadFailed(f"What the Controller holds did not match what was written, for {', '.join(bad)}. "
+                             + _put_back(_restore(plan, waypoint, backups), backups)
+                             + " Unplug and plug it in again to retry.")
         # The read-back is the evidence, so the hash it just proved is what goes
         # into the Ledger: a write is never reported that was not verified.
         for _, _, guid, part in plan:
@@ -535,16 +595,78 @@ def _selftest() -> None:
         assert pool_drift(root) == []
         shutil.copyfile(tmp / "backup" / f"{first_guid}.kmz", live)  # undo the drift fixture
 
-        # A read-back that does not match restores every card from its backup.
+        # A read-back that does not match restores every card from its backup,
+        # and says so in words the manifest can carry to the planner.
         def corrupt():
             live.write_bytes(b"not what was sent")
         try:
             load(tmp / "spec.json", root, tmp / "backup2", fresh_mount=corrupt, ledger=ledger)
-        except SystemExit as e:
-            assert "restored" in str(e), e
+        except LoadFailed as e:
+            assert "did not match" in str(e) and "put back" in str(e), e
         else:
             raise AssertionError("a mismatched read-back was accepted")
         assert md5(live) == md5(tmp / "backup2" / f"{first_guid}.kmz")
+
+        # Two Cards, and the Controller goes away after the first is written:
+        # the first is put back, so the Load stays all or nothing (#152).
+        second_card, second_guid = cards()[1]
+        second_live = root / WAYPOINT_DIR / second_guid / f"{second_guid}.kmz"
+        before = {first_guid: md5(live), second_guid: md5(second_live)}
+        two = b2_status.with_reservation(
+            {"pool": pool, "holdings": {}}, [first_card, second_card], "spec.json", "t")
+        real_copy, writes = shutil.copyfile, []
+
+        def unplugged_after_one(src, dst, *a, **k):
+            if Path(dst).parent.parent == root / WAYPOINT_DIR and Path(src).parent != tmp / "backup3":
+                writes.append(dst)
+                if len(writes) == 2:
+                    raise OSError(5, "Input/output error")
+            return real_copy(src, dst, *a, **k)
+        shutil.copyfile = unplugged_after_one
+        try:
+            load_all([(tmp / "spec.json", [dict(p) for p in [{"out": live, "name": "a", "waypoints": 1}] * 2])],
+                     root, tmp / "backup3", ledger=two)
+        except LoadFailed as e:
+            assert "stopped answering" in str(e) and "put back as it was" in str(e), e
+        else:
+            raise AssertionError("a Load cut off part-way reported nothing")
+        finally:
+            shutil.copyfile = real_copy
+        assert {first_guid: md5(live), second_guid: md5(second_live)} == before, \
+            "the Card written before the Controller went away was not put back"
+
+        # The last Card failing its read-back puts back the first as well.
+        def corrupt_last():
+            second_live.write_bytes(b"not what was sent")
+        try:
+            load_all([(tmp / "spec.json", [dict(p) for p in [{"out": live, "name": "a", "waypoints": 1}] * 2])],
+                     root, tmp / "backup4", fresh_mount=corrupt_last, ledger=two)
+        except LoadFailed as e:
+            assert second_card in str(e), e
+        else:
+            raise AssertionError("a mismatch on the last Card was accepted")
+        assert {first_guid: md5(live), second_guid: md5(second_live)} == before
+
+        # A Load started by hand while another holds the Controller is refused.
+        lock = tmp / "controller.lock"
+        first_hold = controller_lock(lock)
+        try:
+            controller_lock(lock)
+        except SystemExit as e:
+            assert "Another Load" in str(e), e
+        else:
+            raise AssertionError("two Loads could hold the Controller at once")
+        finally:
+            first_hold.close()
+        controller_lock(lock).close()  # free again once the first is done
+
+        # A refusal that has not changed is not written again every minute.
+        seen = tmp / "last-refusal.json"
+        assert refusal_is_news(seen, "locked", 1000.0)
+        seen.write_text(json.dumps({"reason": "locked", "at": 1000.0}))
+        assert not refusal_is_news(seen, "locked", 1060.0), "the same refusal a minute later is not news"
+        assert refusal_is_news(seen, "something else", 1060.0)
+        assert refusal_is_news(seen, "locked", 1000.0 + REPEAT_AFTER_S + 1), "it is said again after a while"
 
         # The queue: every unloaded Spec that is not withdrawn, oldest first.
         specs, record = tmp / "specs", tmp / "loaded.json"
@@ -643,16 +765,23 @@ def _selftest() -> None:
     # The bootstrap: nothing else writes the pool, and without a pool the
     # planner cannot reserve, so the host refuses every Spec forever. An empty
     # Ledger must therefore gain the calibrated Cards on an ordinary run.
+    import copy
     import load as _self  # the module object, to stand in for its store calls
+    _self.SETTLE_S = 0
     _written: dict = {}
+    _stored: dict = {"ledger": {"pool": [], "holdings": {}}}
     _fetch, _publish = _self.fetch_ledger, _self.publish_ledger
+
+    def _publish_to_store(cfg, ledger):
+        _written.clear()
+        _written.update(ledger)
+        _stored["ledger"] = copy.deepcopy(ledger)
     try:
-        _self.fetch_ledger = lambda cfg: {"pool": [], "holdings": {}}
-        _self.publish_ledger = lambda cfg, ledger: _written.update(ledger)
+        _self.fetch_ledger = lambda cfg: copy.deepcopy(_stored["ledger"])
+        _self.publish_ledger = _publish_to_store
         _self.publish_pool(Path("/nonexistent"))
         assert _written.get("pool") == [c for c, _ in cards()], _written
         _written.clear()
-        _self.fetch_ledger = lambda cfg: {"pool": [c for c, _ in cards()], "holdings": {}}
         _self.publish_pool(Path("/nonexistent"))
         assert _written == {}, "an unchanged pool must not cost a write"
         # An unreadable Ledger is never written over. It used to read as empty,
@@ -673,11 +802,28 @@ def _selftest() -> None:
         during = b2_status.with_reservation(
             {"pool": ["way finder 1", "way finder 2"], "holdings": {}}, ["way finder 1"], "a.json", "t0")
         dispatched_meanwhile = b2_status.with_reservation(during, ["way finder 2"], "b.json", "t1")
-        _self.fetch_ledger = lambda cfg: dispatched_meanwhile
+        _stored["ledger"] = copy.deepcopy(dispatched_meanwhile)
+        _self.fetch_ledger = lambda cfg: copy.deepcopy(_stored["ledger"])
         _self.record_written(Path("/nonexistent"), {**during, "verified_at": "t2"}, {"way finder 1": "md5"})
         assert _written["holdings"]["way finder 2"]["spec_key"] == "b.json", _written
         assert _written["holdings"]["way finder 1"]["written_md5"] == "md5", _written
         assert _written["verified_at"] == "t2", _written
+
+        # A planner write that lands on top of ours is seen on the read-back,
+        # and ours is made again against it rather than silently lost (#152).
+        _stored["ledger"] = copy.deepcopy(during)
+        overwrites = []
+
+        def _planner_overwrites_once(cfg, ledger):
+            _publish_to_store(cfg, ledger)
+            if not overwrites:
+                overwrites.append(1)
+                _stored["ledger"] = copy.deepcopy(dispatched_meanwhile)  # theirs, from before ours landed
+        _self.publish_ledger = _planner_overwrites_once
+        _self.record_written(Path("/nonexistent"), {**during, "verified_at": "t3"}, {"way finder 1": "md5b"})
+        final = _stored["ledger"]
+        assert final["holdings"]["way finder 1"]["written_md5"] == "md5b", final
+        assert final["holdings"]["way finder 2"]["spec_key"] == "b.json", "their Reservation kept too"
     finally:
         _self.fetch_ledger, _self.publish_ledger = _fetch, _publish
 
@@ -838,14 +984,22 @@ def main() -> None:
                   f"The Missions beside it are not held up.")
         if not queue:
             return
-        if not mounted(MOUNT):
-            remount(MOUNT)
+        _held = controller_lock()  # noqa: F841  (held until the process exits)
+        try:
+            if not mounted(MOUNT):
+                remount(MOUNT)
+        except LoadFailed as e:
+            report_refusal(args.status_config, "controller", queue, str(e))
+            sys.exit(str(e))
         ledger = verify_ledger(MOUNT / STORAGE, ledger, args.status_config)
         with tempfile.TemporaryDirectory() as tmp:
             entries = [(spec, build(spec, Path(tmp) / spec.stem)) for spec in queue]
             try:
                 loaded = load_all(entries, MOUNT / STORAGE, backups,
                                   fresh_mount=lambda: remount(MOUNT), ledger=ledger)
+            except LoadFailed as e:
+                report_refusal(args.status_config, "load-failed", queue, str(e))
+                sys.exit(str(e))
             except b2_status.QueueOverflowError as e:
                 report_overflow(args.status_config, queue, sum(len(p) for _, p in entries))
                 sys.exit(str(e))
@@ -873,8 +1027,12 @@ def main() -> None:
         sys.exit("name a Mission Spec file to Load")
     if not args.yes:
         sys.exit("this replaces the Missions in the way finder cards on the Controller; pass --yes")
-    if not mounted(MOUNT):
-        remount(MOUNT)
+    _held = controller_lock()  # noqa: F841  (held until the process exits)
+    try:
+        if not mounted(MOUNT):
+            remount(MOUNT)
+    except LoadFailed as e:
+        sys.exit(str(e))
 
     backups = LOADS / stamp
     try:
@@ -885,6 +1043,9 @@ def main() -> None:
     try:
         loaded = load(args.spec, MOUNT / STORAGE, backups,
                       fresh_mount=lambda: remount(MOUNT), ledger=ledger)
+    except LoadFailed as e:
+        report_refusal(args.status_config, "load-failed", [args.spec], str(e))
+        sys.exit(str(e))
     except b2_status.LedgerRefusal as e:
         report_refusal(args.status_config, "card-ledger", [args.spec], str(e))
         stamp_verified(args.status_config, ledger)  # the verification still happened
@@ -949,20 +1110,35 @@ def fetch_ledger(status_config: Path) -> dict:
         raise LedgerUnreadable(f"the Card Ledger could not be read ({e})") from e
 
 
+SETTLE_S = float(os.environ.get("LEDGER_SETTLE_S", "1"))
+
+
 def update_ledger(status_config: Path, change) -> dict:
-    """Apply change to the Ledger as it is now, and write it only if it changed.
+    """Apply change to the Ledger as it is now, write it only if it changed, and
+    check the write survived.
 
     Re-read immediately before writing, as the planner does: a Load takes long
     enough for the operator to Dispatch in the middle of it, and writing back
-    the copy read at the start would erase that Reservation.
+    the copy read at the start would erase that Reservation. Then read back
+    after a moment, because the store has no compare-and-swap: a planner write
+    in flight when ours landed can overwrite it, and ours can overwrite theirs
+    -- the planner checks its side the same way (#152).
     """
-    # ponytail: re-read narrows the lost-update window to milliseconds; the
-    # store has no compare-and-swap, so it cannot close it.
-    fresh = fetch_ledger(status_config)
-    changed = change(fresh)
-    if changed != fresh:
+    # ponytail: narrows the race to the settle window; only a store with
+    # compare-and-swap, or one writer, closes it.
+    for _ in range(3):
+        base = fetch_ledger(status_config)
+        changed = change(base)
+        if changed == base:
+            return changed
         publish_ledger(status_config, changed)
-    return changed
+        if SETTLE_S:
+            time.sleep(SETTLE_S)
+        after = fetch_ledger(status_config)
+        if b2_status.change_survived(base, changed, after):
+            return after
+    raise LedgerUnreadable("the Card Ledger kept changing while the host was writing it, "
+                           "so its change could not be confirmed")
 
 
 def publish_ledger(status_config: Path, ledger: dict) -> None:
@@ -1040,10 +1216,36 @@ def report_drift(status_config: Path, drift: list[dict]) -> None:
           else "Card Ledger agrees with the Controller")
 
 
+LAST_REFUSAL = LOADS / "last-refusal.json"
+REPEAT_AFTER_S = 30 * 60
+
+
+def refusal_is_news(record: Path, reason: str, now: float) -> bool:
+    """Whether this refusal is worth another write to the store.
+
+    Cron runs every minute while the Controller is plugged in, and a refusal
+    that does not change -- a locked Controller, a Ledger that cannot be read --
+    would otherwise spend a download and an upload every minute saying the same
+    thing. Said again after half an hour, so a stale banner is refreshed.
+    """
+    try:
+        last = json.loads(record.read_text())
+    except (OSError, ValueError):
+        return True
+    return last.get("reason") != reason or now - float(last.get("at", 0)) > REPEAT_AFTER_S
+
+
 def report_refusal(status_config: Path, kind: str, queue: list[Path], reason: str) -> None:
-    """Write a Ledger refusal into the manifest so the Status tab shows it
-    against the waiting Missions. Nothing was touched, so there is nothing to
-    roll back — but the operator must never learn of it only from a cron log."""
+    """Write a refusal into the manifest so the planner shows it above the
+    Missions it held up. Nothing was touched, or everything was put back -- but
+    the operator must never learn of it only from a cron log."""
+    if not refusal_is_news(LAST_REFUSAL, reason, time.time()):
+        return
+    try:
+        LAST_REFUSAL.parent.mkdir(parents=True, exist_ok=True)
+        LAST_REFUSAL.write_text(json.dumps({"reason": reason, "at": time.time()}))
+    except OSError:
+        pass
     if not status_config.exists():
         print(f"no status credentials at {status_config}; the refusal was not reported")
         return

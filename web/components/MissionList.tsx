@@ -11,6 +11,7 @@ import {
   isRunning,
   noteMissionsChanged,
   noticeShows,
+  safeStorage,
   settleNotice,
   type ActionResult,
   type ActionState,
@@ -79,6 +80,7 @@ export default function MissionList({ onEdit, onCopy, editingId = null, onRead }
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [showArchived, setShowArchived] = useState(false);
+  const [blocked, setBlocked] = useState(false);
   const [action, setAction] = useState<ActionState>(IDLE);
   // The clock the age is measured against, advanced on a timer rather than
   // read during render: a render is not an event, and a screen that re-reads
@@ -110,7 +112,8 @@ export default function MissionList({ onEdit, onCopy, editingId = null, onRead }
         setNow(at);
         setLive(true);
         setError(null);
-        cacheRead(localStorage, fresh, at);
+        const ls = safeStorage();
+        if (ls) cacheRead(ls, fresh, at);
         reportRead.current?.(fresh);
         return fresh;
       } else {
@@ -130,7 +133,8 @@ export default function MissionList({ onEdit, onCopy, editingId = null, onRead }
     // the live one, which is what the stamp on it is for.
     function fallBackToCache(why: string) {
       setError(why);
-      const cached = cachedRead(localStorage);
+      const ls = safeStorage();
+      const cached = ls ? cachedRead(ls) : null;
       if (cached) {
         setRead(cached.read);
         setReadAt(cached.read_at);
@@ -142,9 +146,12 @@ export default function MissionList({ onEdit, onCopy, editingId = null, onRead }
   }, []);
 
   useEffect(() => {
-    const key = localStorage.getItem(PASSPHRASE_KEY) ?? "";
+    const ls = safeStorage();
+    // null marks storage that is blocked outright: no passphrase can be kept.
+    const key = ls ? (ls.getItem(PASSPHRASE_KEY) ?? "") : null;
     // eslint-disable-next-line react-hooks/set-state-in-effect -- one-time client-only read of localStorage
-    setPassphrase(key);
+    setPassphrase(key ?? "");
+    setBlocked(key === null);
     if (!key) return;
     void load(key);
 
@@ -262,6 +269,15 @@ export default function MissionList({ onEdit, onCopy, editingId = null, onRead }
   const archivedCount = read?.archived_count ?? 0;
 
   if (passphrase === null) return <p className={styles.quiet}>Reading the Mission list…</p>;
+  if (blocked) {
+    return (
+      <p className={styles.stop}>
+        This browser is blocking storage for this page, so the Wayfinder passphrase cannot be kept and
+        the Mission list cannot be read. Allow site data for this page (it is off in some private
+        windows and strict privacy settings), then reload.
+      </p>
+    );
+  }
   if (passphrase === "") {
     return (
       <p className={styles.quiet}>

@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import type { MissionSpec } from "@/lib/spec";
 import type { Preview } from "@/lib/mission";
 import type { MissionRecord } from "@/lib/missionRecords";
+import { safeStorage } from "@/lib/actions";
 import { describeSave, saveProblem, type SiteChoice } from "@/lib/missionView";
 import { noteMissionsChanged } from "@/lib/actions";
 import type { Editing } from "@/app/plan/page";
@@ -47,13 +48,13 @@ export default function SummaryBar({ spec, preview, editing, onSaved, sites = []
   // server-rendered and first client-rendered HTML match.
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- one-time client-only read of localStorage
-    setPassphrase(localStorage.getItem(PASSPHRASE_KEY) ?? "");
+    setPassphrase(safeStorage()?.getItem(PASSPHRASE_KEY) ?? "");
   }, []);
 
   function updatePassphrase(v: string) {
     setPassphrase(v);
     try {
-      localStorage.setItem(PASSPHRASE_KEY, v);
+      safeStorage()?.setItem(PASSPHRASE_KEY, v);
     } catch {
       // Unavailable (private browsing, quota, disabled storage) — persistence
       // silently no-ops, and the Mission list says it cannot read the store.

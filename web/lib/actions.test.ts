@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { IDLE, beginAction, endAction, isRunning, describeResult, noticeShows, settleNotice } from "./actions.ts";
+import { IDLE, beginAction, endAction, isRunning, describeResult, noticeShows, safeStorage, settleNotice } from "./actions.ts";
 
 test("a press marks that one control busy, not every control", () => {
   const s = beginAction(IDLE, "Dispatch", "mission-a");
@@ -84,4 +84,20 @@ test("a notice goes once its row has moved on, and stays while it has not (#164)
   assert.equal(noticeShows(settled.notice!, "dispatched"), true);
   assert.equal(noticeShows(settled.notice!, "collected"), false, "stale once Collected");
   assert.equal(noticeShows(done.notice!, "planned"), true, "not yet settled: still shown");
+});
+
+test("storage blocked outright reads as no storage, not a crash (#152)", () => {
+  const had = Object.getOwnPropertyDescriptor(globalThis, "localStorage");
+  Object.defineProperty(globalThis, "localStorage", {
+    configurable: true,
+    get() {
+      throw new DOMException("The operation is insecure.", "SecurityError");
+    },
+  });
+  try {
+    assert.equal(safeStorage(), null);
+  } finally {
+    if (had) Object.defineProperty(globalThis, "localStorage", had);
+    else delete (globalThis as { localStorage?: unknown }).localStorage;
+  }
 });

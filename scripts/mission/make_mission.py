@@ -338,13 +338,21 @@ def orbit_rings(orbit, camera_interval, speed):
     }
 
 
+def xml_text(text: str) -> str:
+    """Text safe inside the Mission file. Escaping is not enough: XML 1.0 has no
+    way to carry most control characters at all, so a Site name holding one made
+    a file the Controller cannot read. The planner refuses them now (#152); this
+    covers Specs written before it did, or by hand."""
+    return escape("".join(ch for ch in text if ch in "\t\n\r" or ord(ch) >= 0x20 and ord(ch) != 0x7f))
+
+
 def write_kmz(path, name, pts, alt, speed, pitch, turn_mode, poi=None):
     now = int(time.time() * 1000)
     cfg = mission_config(speed)
     template = f"""<?xml version="1.0" encoding="UTF-8"?>
 <kml xmlns="http://www.opengis.net/kml/2.2" xmlns:wpml="{NS}">
   <Document>
-    <wpml:author>wayfinder: {escape(name)}</wpml:author>
+    <wpml:author>wayfinder: {xml_text(name)}</wpml:author>
     <wpml:createTime>{now}</wpml:createTime>
     <wpml:updateTime>{now}</wpml:updateTime>
 {cfg}

@@ -565,3 +565,12 @@ test("abuse: a second press that arrives after the first reserved is refused by 
   assert.match(String(r.body.error), /Dispatched a moment ago|only a Planned Mission/);
   assert.equal(held().length, 1);
 });
+
+test("storage: the daily transaction cap is named, with when it resets, not 'try again'", async () => {
+  await saved();
+  store.fail(/b2_list_file_names/, 403);
+  const r = await list();
+  assert.equal(r.status, 503);
+  assert.match(String(r.body.error), /free transaction limit/);
+  assert.match(String(r.body.error), /00:00 UTC/);
+});
