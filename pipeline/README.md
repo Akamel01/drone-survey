@@ -66,6 +66,17 @@ same Manifest against the same `--workdir` skips Nodes already `done` and
 resumes at the first incomplete one. A Node's non-zero exit stops the run
 immediately, unmodified, as the Runner's own exit code.
 
+A Node is marked `running` before it starts and `done` or `failed` after, so an
+attempt cut off by a crash or a reboot is still known as one. Before a Node
+runs, its declared outputs are deleted, so "it exists" afterwards means this run
+wrote it. A Node marked `"resumable": true` is the one exception: retried after
+its last attempt stopped, it keeps its declared directories -- where it keeps its
+progress -- while its declared files are still deleted, so the finished product
+is always this attempt's. A changed Manifest resets the state, so nothing ever
+resumes from an earlier Manifest's output (#105, #83). `fit-splat` is resumable;
+`reconstruct` is not yet, until ODM is shown to resume cleanly from a
+half-finished project.
+
 Only one run may be in progress at a time (#12): a lock file at
 `pipeline/.runner.lock` refuses a second concurrent run; a lock left by a
 killed process is cleared automatically once its PID is gone.

@@ -40,7 +40,8 @@
       "outputs": {
         "splat": "splat.ply",
         "report": "fit-report.json"
-      }
+      },
+      "resumable": true
     },
     {
       "name": "clean-splat",

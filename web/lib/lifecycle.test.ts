@@ -574,3 +574,75 @@ test("storage: the daily transaction cap is named, with when it resets, not 'try
   assert.match(String(r.body.error), /free transaction limit/);
   assert.match(String(r.body.error), /00:00 UTC/);
 });
+
+// ---------------------------------------------------------------------------
+// One rule for the buttons and the routes (#102)
+// ---------------------------------------------------------------------------
+
+/** A Mission brought to `state` through the real routes and the host's reports. */
+async function missionIn(state: MissionRow["state"]): Promise<string> {
+  const id = await saved({ name: `M-${state}` });
+  if (state === "planned") return id;
+  const sent = await dispatch(id);
+  assert.equal(sent.status, 200, `dispatching for ${state}: ${JSON.stringify(sent.body)}`);
+  const key = () => rowOf(id).then((r) => r.spec_key as string);
+  if (state === "dispatched") return id;
+  if (state === "withdrawn") {
+    const w = await withdraw(id);
+    assert.equal(w.status, 200, `withdrawing: ${JSON.stringify(w.body)}`);
+    return id;
+  }
+  if (state === "superseded") {
+    const fork = await save({ id, name: `M-${state}` });
+    const again = await dispatch((fork.body.mission as { id: string }).id);
+    assert.equal(again.status, 200, `dispatching the fork: ${JSON.stringify(again.body)}`);
+    return id;
+  }
+  hostCollects(await key());
+  if (state === "collected") return id;
+  hostLoads(await key());
+  if (state === "loaded") return id;
+  const f = await markFlown(id);
+  assert.equal(f.status, 200, `marking Flown: ${JSON.stringify(f.body)}`);
+  return id;
+}
+
+const ACT: Record<string, (id: string) => Promise<{ status: number; body: Json }>> = {
+  Dispatch: dispatch,
+  Withdraw: withdraw,
+  "Mark Flown": (id) => markFlown(id, true),
+  "Unmark Flown": (id) => markFlown(id, false),
+  Edit: async (id) => save({ id, name: (await rowOf(id)).name }),
+  Remove: async (id) =>
+    answer(await missions.DELETE(request("DELETE", undefined, "test-secret", `?id=${encodeURIComponent(id)}`))),
+};
+
+test("a row offers an action exactly when its route accepts it, in every state", async () => {
+  const { actionsFor } = await import("./missionView.ts");
+  const states: MissionRow["state"][] = [
+    "planned", "dispatched", "collected", "loaded", "flown", "withdrawn", "superseded",
+  ];
+  for (const state of states) {
+    for (const [action, act] of Object.entries(ACT)) {
+      store.files.clear();
+      pool(3);
+      const id = await missionIn(state);
+      const row = await rowOf(id);
+      assert.equal(row.state, state, `setting up ${state}`);
+      const offered = actionsFor(row).includes(action as never);
+      const r = await act(id);
+      // Pressing Mark Flown on a Flown row, Unmark on a Loaded one or Withdraw
+      // on a Withdrawn one is a harmless repeat: the route accepts it without
+      // the row offering it, and nothing changes.
+      const repeat =
+        (action === "Mark Flown" && state === "flown") ||
+        (action === "Unmark Flown" && state === "loaded") ||
+        (action === "Withdraw" && state === "withdrawn");
+      if (offered) assert.equal(r.status, 200, `${state}: ${action} is offered but refused: ${JSON.stringify(r.body)}`);
+      else if (!repeat) {
+        assert.equal(r.status, 409, `${state}: ${action} is not offered but accepted`);
+        assert.ok(String(r.body.error).length > 20, `${state}: ${action} refused without saying why`);
+      }
+    }
+  }
+});

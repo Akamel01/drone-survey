@@ -276,6 +276,15 @@ test("the list always says how old what it shows is", () => {
   assert.equal(checkedAgo(now - 4 * 60_000, now), "checked 4 min ago");
   assert.equal(checkedAgo(now - 3 * 3_600_000, now), "checked 3 h ago");
   assert.equal(checkedAgo(now - 5 * 86_400_000, now), "checked 5 d ago");
+  // The boundaries it promises (#94): each unit starts exactly where the last stops.
+  assert.equal(checkedAgo(now - 59_999, now), "checked just now");
+  assert.equal(checkedAgo(now - 60_000, now), "checked 1 min ago");
+  assert.equal(checkedAgo(now - 59 * 60_000, now), "checked 59 min ago");
+  assert.equal(checkedAgo(now - 60 * 60_000, now), "checked 1 h ago");
+  assert.equal(checkedAgo(now - 47 * 3_600_000, now), "checked 47 h ago");
+  assert.equal(checkedAgo(now - 48 * 3_600_000, now), "checked 2 d ago");
+  // A clock that runs ahead of the read is not a negative age.
+  assert.equal(checkedAgo(now + 5_000, now), "checked just now");
 });
 
 test("a cached read is stamped so it cannot be read as live", () => {

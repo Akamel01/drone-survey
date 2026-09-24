@@ -208,12 +208,32 @@ def run(manifest_path: Path, workdir: Path) -> None:
             # Remove this Node's declared outputs first, so "it exists" after the
             # run means this run wrote it: a stale file from an earlier Manifest
             # in the same workdir would otherwise let a silent Node pass.
+            #
+            # One exception, declared rather than lucky (#105): a Node marked
+            # "resumable", retried after its last attempt in this workdir stopped
+            # -- failed, or cut off by a crash or a reboot -- keeps its declared
+            # directories, because that is where it keeps its progress, and hours
+            # of Fitting are not thrown away on the retry. Declared files are
+            # still swept, so the finished product is always this attempt's. An
+            # earlier Manifest never counts: a changed Manifest resets the state,
+            # so its outputs are swept as before (#83).
+            resuming = node.get("resumable", False) and \
+                state["nodes"].get(name, {}).get("status") in ("running", "failed")
+            if resuming:
+                print(f"resume {name}: its last attempt stopped; it is resumable, so its declared "
+                      f"directories are kept for it to continue from")
             for declared in out.__dict__.values():
                 stale = Path(declared)
                 if stale.is_dir():
-                    shutil.rmtree(stale)
+                    if not resuming:
+                        shutil.rmtree(stale)
                 elif stale.exists():
                     stale.unlink()
+            # Recorded before it starts, so an attempt cut off by a crash is known
+            # as one: without this, a reboot left no trace and the retry swept
+            # everything the attempt had written.
+            state["nodes"][name] = {"status": "running"}
+            save_state(workdir, state)
 
             print(f"run {name}: {' '.join(command)}")
             # EXECUTION_CONTEXT carries the Manifest's own facts (was there ground
@@ -481,6 +501,80 @@ def _selftest() -> None:
         run(resumable, run_dir)  # resume: step1 must be skipped, not re-run
         assert counter.read_text() == "1", "a completed Node re-ran on resume"
         assert done_marker.exists(), "step3 should run once step2 passes"
+
+        # 5. A resumable Node keeps its progress across a retry; nothing else does
+        #    (#105). The Node appends a line to progress.txt in its declared
+        #    directory each attempt, writes its declared file, and fails until the
+        #    gate exists -- so the line count is how many attempts' work survived.
+        def fitting(name: str, resumable: bool, gate_path: Path) -> Path:
+            node = {
+                "name": "fit",
+                "command": [py, "-c",
+                            "import sys,pathlib; d=pathlib.Path(sys.argv[1]); d.mkdir(exist_ok=True); "
+                            "f=pathlib.Path(sys.argv[2]); fresh='fresh' if not f.exists() else 'left over'; "
+                            "open(d/'progress.txt','a').write(fresh+'\\n'); f.write_text('x'); "
+                            "sys.exit(0 if pathlib.Path(sys.argv[3]).exists() else 7)",
+                            "{out.ckpt}", "{out.final}", str(gate_path)],
+                "outputs": {"ckpt": "ckpt", "final": "final.txt"},
+            }
+            if resumable:
+                node["resumable"] = True
+            return _write(tmp / f"{name}.json", {"pipeline": name, "nodes": [node]})
+
+        def attempts(manifest: Path, run_dir: Path, gate_path: Path) -> list[str]:
+            gate_path.unlink(missing_ok=True)
+            try:
+                run(manifest, run_dir)
+            except SystemExit as e:
+                assert e.code == 7, e.code
+            gate_path.touch()
+            run(manifest, run_dir)
+            return (run_dir / "nodes" / "fit" / "ckpt" / "progress.txt").read_text().splitlines()
+
+        g = tmp / "fit-gate"
+        assert attempts(fitting("resumes", True, g), tmp / "run-res", g) == ["fresh", "fresh"], \
+            "a resumable Node's progress was swept on the retry, or its declared file was left over"
+        assert attempts(fitting("restarts", False, g), tmp / "run-nores", g) == ["fresh"], \
+            "a Node that is not resumable must start clean on a retry"
+
+        # A crash leaves no "failed" -- the Runner itself is gone -- and must still
+        # count as an attempt that stopped: the reboot #40's overnight runs face.
+        # The Node kills the Runner that started it, mid-attempt, for real.
+        crash_manifest = _write(tmp / "crash.json", {"pipeline": "crash", "nodes": [{
+            "name": "fit",
+            "resumable": True,
+            "command": [py, "-c",
+                        "import os,sys,signal,pathlib; d=pathlib.Path(sys.argv[1]); d.mkdir(exist_ok=True); "
+                        "open(d/'progress.txt','a').write('step\\n'); pathlib.Path(sys.argv[2]).write_text('x'); "
+                        "pathlib.Path(sys.argv[3]).exists() or os.kill(os.getppid(), signal.SIGKILL)",
+                        "{out.ckpt}", "{out.final}", str(g)],
+            "outputs": {"ckpt": "ckpt", "final": "final.txt"},
+        }]})
+        crash_dir = tmp / "run-crash"
+        g.unlink(missing_ok=True)
+        killed = subprocess.run([py, str(Path(__file__).resolve()), str(crash_manifest), "--workdir", str(crash_dir)],
+                                capture_output=True, text=True)
+        assert killed.returncode == -9, f"the Runner was meant to be killed: {killed.returncode} {killed.stderr}"
+        assert load_state(crash_dir)["nodes"]["fit"]["status"] == "running", \
+            "a Runner killed mid-attempt left no trace of the attempt"
+        g.touch()
+        run(crash_manifest, crash_dir)
+        lines = (crash_dir / "nodes" / "fit" / "ckpt" / "progress.txt").read_text().splitlines()
+        assert lines == ["step", "step"], f"an attempt cut off by a crash lost its progress: {lines}"
+
+        # A different Manifest never resumes from this one's leftovers (#83).
+        changed = crash_manifest
+        data = json.loads(changed.read_text())
+        data["nodes"][0]["notes"] = "changed"
+        changed.write_text(json.dumps(data))
+        state = load_state(crash_dir)
+        state["nodes"]["fit"] = {"status": "failed"}
+        save_state(crash_dir, state)
+        run(changed, crash_dir)
+        lines = (crash_dir / "nodes" / "fit" / "ckpt" / "progress.txt").read_text().splitlines()
+        assert lines == ["step"], f"a changed Manifest resumed from an earlier one's output: {lines}"
+        assert validate({"pipeline": "x", "nodes": [{"name": "a", "command": ["x"], "resumable": "yes"}]}), \
+            "'resumable' must be a boolean"
 
         # Lock: a run cannot start while another is already flagged in progress.
         acquire_lock()

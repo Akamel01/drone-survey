@@ -3,6 +3,7 @@ import { authProblem } from "@/lib/auth";
 import { isSafeId } from "@/lib/keys";
 import { staleCards } from "@/lib/model";
 import {
+  actionProblem,
   deriveMissions,
   liveSpecKeys,
   missionNameTaken,
@@ -165,17 +166,8 @@ export async function POST(request: Request) {
       );
     }
 
-    if (row.edit === "guarded") {
-      return Response.json(
-        {
-          error:
-            "This Mission is already Loaded, so a file for it is on the Controller. Withdrawing cannot reach it. " +
-            "Fly it or release its Card first, then plan a new Mission.",
-          state: row.state,
-        },
-        { status: 409 },
-      );
-    }
+    const notNow = actionProblem("Edit", row);
+    if (notNow) return Response.json({ error: notNow, state: row.state }, { status: 409 });
 
     if (row.edit === "supersede") {
       // Edit-and-redispatch is the model's native move (ADR 0021): the change
@@ -252,17 +244,8 @@ export async function DELETE(request: Request) {
     if (!row || !record) {
       return Response.json({ error: "That Mission is not in the store." }, { status: 404 });
     }
-    if (row.cards.length > 0 && row.state !== "flown") {
-      return Response.json(
-        {
-          error:
-            `This Mission still holds ${row.cards.map((c) => c.card).join(", ")}. ` +
-            "Withdraw it first -- that releases the Card -- then remove it.",
-          state: row.state,
-        },
-        { status: 409 },
-      );
-    }
+    const notNow = actionProblem("Remove", row);
+    if (notNow) return Response.json({ error: notNow, state: row.state }, { status: 409 });
     const archived: MissionRecord = {
       ...record,
       archived_at: record.archived_at ?? new Date().toISOString(),

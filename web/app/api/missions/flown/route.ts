@@ -1,6 +1,6 @@
 import { authProblem } from "@/lib/auth";
 import { isSafeId } from "@/lib/keys";
-import { deriveMissions, withFlownMark, type MissionRecord } from "@/lib/missionRecords";
+import { actionProblem, deriveMissions, withFlownMark, type MissionRecord } from "@/lib/missionRecords";
 import {
   readLedger,
   readManifest,
@@ -63,21 +63,12 @@ export async function POST(request: Request) {
         { status: 404 },
       );
     }
-    // Only a Mission on the Controller can have been flown. Marking one that
-    // was never written would release its Card for a flight that never ran
-    // (#163). Unmarking is the operator's override, so it is open wherever a
-    // mark could have been made.
-    if (row.state !== "loaded" && row.state !== "flown") {
-      return Response.json(
-        {
-          error:
-            `This Mission is ${row.state}, so it has not been written to the Controller and cannot have been ` +
-            "flown. It can be marked Flown once it is Loaded.",
-          state: row.state,
-        },
-        { status: 409 },
-      );
-    }
+    // Only a Mission on the Controller can have been flown (#163), and only a
+    // Flown one unmarked -- the same rule the row's buttons come from (#102).
+    // Pressing either twice is not refused: the second is a repeat, not a change.
+    const repeat = flown ? row.state === "flown" : row.state === "loaded";
+    const notNow = repeat ? null : actionProblem(flown ? "Mark Flown" : "Unmark Flown", row);
+    if (notNow) return Response.json({ error: notNow, state: row.state }, { status: 409 });
     if (!record.dispatched_key) {
       return Response.json(
         {
