@@ -118,7 +118,7 @@ LPIPS on 42 of 45. The medians agree: PSNR 22.09 against 22.05.
 
 What this does and does not show:
 
-- **It is a 6,000-step result.** 360 images are each seen about seventeen
+- **It is a 6,000-step result.** The 315 training images are each seen about nineteen
   times, and both scores are low in absolute terms. A production fit runs
   30,000 steps. Whether full resolution pulls ahead once the model has had
   time to use the extra detail is the open question. One overnight pair at
