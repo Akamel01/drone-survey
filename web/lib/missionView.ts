@@ -14,7 +14,16 @@
 // bug -- there is no "draft" and no "queued".
 
 import type { CardHolding, MissionState } from "./model.ts";
-import { SITE_NAME_MAX, UNPRINTABLE, missionNameProblem, sameName, type MissionRow } from "./missionRecords.ts";
+import {
+  ACTION_ORDER,
+  SITE_NAME_MAX,
+  UNPRINTABLE,
+  actionProblem,
+  missionNameProblem,
+  sameName,
+  type ActionName,
+  type MissionRow,
+} from "./missionRecords.ts";
 import type { HostDrift, HostNotice, LoadedCard } from "./missions.ts";
 
 /** The glossary's own words, capitalised for a heading and nothing more. */
@@ -157,8 +166,8 @@ export function staleFor(row: MissionRow, stale: CardHolding[]): CardHolding[] {
 // What the row leads with
 // ---------------------------------------------------------------------------
 
-/** The one action a row offers, named after the verb that causes the state. */
-export type ActionName = "Dispatch" | "Withdraw" | "Mark Flown" | "Unmark Flown" | "Edit" | "Copy" | "Remove";
+/** The actions a row offers, named after the verbs that cause the states. */
+export type { ActionName };
 
 /**
  * The headline of a row: the answer, then why, then what to press.
@@ -190,33 +199,10 @@ export interface RowView {
   actions: ActionName[];
 }
 
-/** What the operator may do to a Mission in this state. The server refuses the
- *  rest and says why; this only keeps a control from being offered for
- *  something that can never work. */
+/** What the operator may do to a Mission in this state: exactly what
+ *  `actionProblem` allows, which is also what every route enforces (#102). */
 export function actionsFor(row: MissionRow): ActionName[] {
-  // Copy is offered on every row: a new Mission that starts from this one,
-  // whatever became of it, is never a change to it.
-  return [...stateActions(row), "Copy"];
-}
-
-function stateActions(row: MissionRow): ActionName[] {
-  switch (row.state) {
-    case "planned":
-      return ["Dispatch", "Edit", "Remove"];
-    // Nothing has reached the Controller yet, so it can still be withdrawn and
-    // cannot have been flown (#163, #165).
-    case "dispatched":
-    case "collected":
-      return ["Withdraw", "Edit"];
-    case "loaded":
-      return ["Mark Flown", "Edit"];
-    case "flown":
-      return ["Unmark Flown", "Edit", "Remove"];
-    default:
-      // Withdrawn and Superseded are answered. Editing one is the model's
-      // native move: it makes a new Mission, and Dispatching that supersedes.
-      return ["Edit", "Remove"];
-  }
+  return ACTION_ORDER.filter((a) => actionProblem(a, row) === null);
 }
 
 /**

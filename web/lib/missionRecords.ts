@@ -45,7 +45,10 @@ export interface MissionRecord {
   /** The Spec key this Mission was Dispatched as, once it has been. */
   dispatched_key: string | null;
   dispatched_at?: string;
-  /** Cancelled before it was Collected. Archived, never deleted. */
+  /** The Missions this one's Dispatch replaced: the same Site, date and name,
+   *  Dispatched before it. Recorded at Dispatch, never inferred (#152). */
+  supersedes?: string[];
+  /** Cancelled before it reached the Controller. Archived, never deleted. */
   withdrawn_at?: string;
   /** Removed by the operator. Removing archives; it does not delete. */
   archived_at?: string;
@@ -153,6 +156,64 @@ export function missionNameTaken(
   );
 }
 
+/** Everything the operator can do to a Mission, in the order a row offers it. */
+export type ActionName = "Dispatch" | "Withdraw" | "Mark Flown" | "Unmark Flown" | "Edit" | "Remove" | "Copy";
+export const ACTION_ORDER: readonly ActionName[] = [
+  "Dispatch",
+  "Withdraw",
+  "Mark Flown",
+  "Unmark Flown",
+  "Edit",
+  "Remove",
+  "Copy",
+];
+
+/**
+ * Why this action cannot be taken on a Mission in this state, or null when it
+ * can. The one rule: a row offers exactly the actions this allows, and every
+ * route refuses the rest in these words (#102). The row and the route each
+ * kept their own copy, and they drifted -- a Loaded Mission offered Edit that
+ * its Save then refused.
+ *
+ * Only the state decides here. A refusal that depends on more than the state
+ * -- no Card free, a Card given away since -- stays in its route.
+ */
+export function actionProblem(action: ActionName, row: Pick<MissionRow, "state">): string | null {
+  const s = row.state;
+  switch (action) {
+    case "Dispatch":
+      return s === "planned"
+        ? null
+        : `This Mission is ${s}, and only a Planned Mission is Dispatched. To fly it again, Copy it: ` +
+            "that makes a new Mission to Dispatch.";
+    case "Withdraw":
+      if (s === "dispatched" || s === "collected") return null;
+      return s === "loaded"
+        ? "This Mission is already Loaded, so its file is on the Controller and withdrawing cannot reach it. " +
+            "Fly it and Mark it Flown, which releases its Card."
+        : `A ${s} Mission has nothing to withdraw: it was never Dispatched, or it is already history.`;
+    case "Mark Flown":
+      return s === "loaded"
+        ? null
+        : `This Mission is ${s}, so it has not been written to the Controller and cannot have been flown. ` +
+            "It can be marked Flown once it is Loaded.";
+    case "Unmark Flown":
+      return s === "flown" ? null : `This Mission is ${s}, not Flown, so there is nothing to unmark.`;
+    case "Edit":
+      return s === "loaded"
+        ? "This Mission is already Loaded, so a file for it is on the Controller and it cannot be changed. " +
+            "Copy it to plan a new Mission from it."
+        : null;
+    case "Remove":
+      if (s === "planned" || s === "flown" || s === "withdrawn" || s === "superseded") return null;
+      return s === "loaded"
+        ? "This Mission is on the Controller. Fly it and Mark it Flown, then remove it."
+        : "This Mission still holds its Card. Withdraw it first -- that releases the Card -- then remove it.";
+    case "Copy":
+      return null;
+  }
+}
+
 /** What the operator and the imagery each say, and whether they disagree. */
 function flownEvidence(
   record: MissionRecord,
@@ -238,27 +299,25 @@ export function deriveMissions(
     };
   });
 
-  // Within one Site, date and name, the newest Dispatched Mission replaces the
-  // ones before it. Replacement happens at Dispatch, not at saving: a Spec is
-  // never edited, so it is the new Spec that supersedes the earlier one, and a
-  // Mission still only Planned has not replaced anything yet.
+  // A Dispatch that replaced earlier Missions names them in `supersedes`, and
+  // that record is what makes them Superseded. It used to be inferred from
+  // age -- the newest Dispatch in a Site, date and name replacing the rest --
+  // which broke two ways: a tie in creation time was settled by a random id,
+  // and withdrawing the replacement brought the old Mission back to life
+  // although its Cards were already released and the host told to skip it
+  // (#152). What happened at Dispatch is a fact, so it is recorded, not guessed.
   //
   // A Flown Mission is history rather than a correction, and a Withdrawn one
   // was already answered, so neither is superseded by what came after it.
-  const replacedBy = new Map<string, MissionRow>();
-  for (const row of rows) {
-    // rows are oldest-first here, so the last writer into the map is newest.
-    if (row.spec_key && row.state !== "withdrawn") replacedBy.set(supersessionGroup(row), row);
-  }
-  const order = new Map(rows.map((r, i) => [r.id, i]));
-  for (const row of rows) {
-    const current = replacedBy.get(supersessionGroup(row));
-    if (!current || current.id === row.id) continue;
-    if (order.get(row.id)! > order.get(current.id)!) continue;
-    if (row.state === "flown" || row.state === "withdrawn") continue;
-    row.state = "superseded";
-    row.superseded_by = current.id;
-    row.edit = editBehaviour("superseded");
+  const byId = new Map(rows.map((r) => [r.id, r]));
+  for (const record of byAge) {
+    for (const oldId of record.supersedes ?? []) {
+      const old = byId.get(oldId);
+      if (!old || old.state === "flown" || old.state === "withdrawn") continue;
+      old.state = "superseded";
+      old.superseded_by = record.id;
+      old.edit = editBehaviour("superseded");
+    }
   }
 
   for (const row of rows) {

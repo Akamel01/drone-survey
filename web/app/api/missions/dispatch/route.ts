@@ -4,7 +4,7 @@ import { SUMMARIES_KEY, dispatchStamp, isSafeId, makeSpecKey } from "@/lib/keys"
 import { preview } from "@/lib/mission";
 import type { SpecSummary } from "@/lib/missions";
 import { reserveCards, withRelease, withReservation, type CardLedger } from "@/lib/model";
-import { deriveMissions, supersessionGroup, type MissionRecord } from "@/lib/missionRecords";
+import { actionProblem, deriveMissions, supersessionGroup, type MissionRecord } from "@/lib/missionRecords";
 import {
   addSkipped,
   readLedger,
@@ -66,18 +66,8 @@ export async function POST(request: Request) {
         { status: 404 },
       );
     }
-    if (row.state !== "planned") {
-      return Response.json(
-        {
-          error:
-            `This Mission is ${row.state}, and only a Planned Mission is Dispatched. ` +
-            "To change a Mission that has already been Dispatched, save it again -- that makes a new Mission, " +
-            "and Dispatching it supersedes this one.",
-          state: row.state,
-        },
-        { status: 409 },
-      );
-    }
+    const notNow = actionProblem("Dispatch", row);
+    if (notNow) return Response.json({ error: notNow, state: row.state }, { status: 409 });
 
     // The Spec carries the Site and date the Mission record holds: the record
     // is what the operator chose, and the two must not be able to disagree.
@@ -197,6 +187,7 @@ export async function POST(request: Request) {
 
     const dispatched: MissionRecord = {
       ...record,
+      ...(replaced.length ? { supersedes: replaced.map((m) => m.id) } : {}),
       dispatched_key: key,
       dispatched_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),

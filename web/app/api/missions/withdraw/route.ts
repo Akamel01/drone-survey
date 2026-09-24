@@ -1,7 +1,7 @@
 import { authProblem } from "@/lib/auth";
 import { isSafeId } from "@/lib/keys";
 import { withRelease } from "@/lib/model";
-import { deriveMissions, type MissionRecord } from "@/lib/missionRecords";
+import { actionProblem, deriveMissions, type MissionRecord } from "@/lib/missionRecords";
 import {
   addSkipped,
   readLedger,
@@ -63,19 +63,8 @@ export async function POST(request: Request) {
     if (row.state === "withdrawn") {
       return Response.json({ id, withdrawn_at: record.withdrawn_at, cards_released: [] });
     }
-    if (row.state !== "dispatched" && row.state !== "collected") {
-      return Response.json(
-        {
-          error:
-            row.state === "loaded"
-              ? "This Mission is already Loaded, so its file is on the Controller and withdrawing cannot reach it. " +
-                "Fly it and Mark it Flown, which releases its Card."
-              : `A ${row.state} Mission has nothing to withdraw: it was never Dispatched, or it is already history.`,
-          state: row.state,
-        },
-        { status: 409 },
-      );
-    }
+    const notNow = actionProblem("Withdraw", row);
+    if (notNow) return Response.json({ error: notNow, state: row.state }, { status: 409 });
 
     const specKey = row.spec_key as string;
     const at = new Date().toISOString();

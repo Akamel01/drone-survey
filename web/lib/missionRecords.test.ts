@@ -64,14 +64,37 @@ test("a withdrawn Mission is archived, not deleted, and never becomes superseded
   assert.equal(a.superseded_by, null);
 });
 
-test("a newer Dispatch supersedes the older Mission of the same Site, date and name", () => {
+test("a Dispatch that names what it replaced supersedes it", () => {
   const rows = deriveMissions([
     mission({ id: "a", dispatched_key: "specs/rehearsal-1/2026-09-23/1.json" }),
-    mission({ id: "bb", dispatched_key: "specs/rehearsal-1/2026-09-23/2.json" }),
+    mission({ id: "bb", dispatched_key: "specs/rehearsal-1/2026-09-23/2.json", supersedes: ["a"] }),
   ]);
   assert.equal(rows.find((r) => r.id === "a")!.state, "superseded");
   assert.equal(rows.find((r) => r.id === "a")!.superseded_by, "bb");
   assert.equal(rows.find((r) => r.id === "bb")!.state, "dispatched");
+});
+
+test("supersession is recorded, never guessed from age or from a random id", () => {
+  const at = "2026-09-23T00:00:00.000Z";
+  for (const [orig, fork] of [["a", "bb"], ["bb", "a"]]) {
+    const rows = deriveMissions([
+      mission({ id: orig, created_at: at, dispatched_key: "specs/rehearsal-1/2026-09-23/1.json" }),
+      mission({ id: fork, created_at: at, dispatched_key: "specs/rehearsal-1/2026-09-23/2.json", supersedes: [orig] }),
+    ]);
+    assert.equal(rows.find((r) => r.id === orig)!.state, "superseded", `${orig} replaced by ${fork}`);
+    assert.equal(rows.find((r) => r.id === fork)!.state, "dispatched");
+  }
+});
+
+test("withdrawing the replacement does not bring back what it replaced", () => {
+  // Its Cards were released and the host was told to skip it at the
+  // replacement's Dispatch; showing it live again would be a lie.
+  const rows = deriveMissions([
+    mission({ id: "a", dispatched_key: "specs/rehearsal-1/2026-09-23/1.json" }),
+    mission({ id: "bb", dispatched_key: "specs/rehearsal-1/2026-09-23/2.json", supersedes: ["a"], withdrawn_at: "t" }),
+  ]);
+  assert.equal(rows.find((r) => r.id === "a")!.state, "superseded");
+  assert.equal(rows.find((r) => r.id === "bb")!.state, "withdrawn");
 });
 
 test("a different Mission Name on the same Site and date is not a correction", () => {
@@ -134,7 +157,7 @@ test("marking Flown frees the Card, unmarking takes it back", () => {
 test("only current Missions count as live Spec keys, so a stale Card can be spotted", () => {
   const rows = deriveMissions([
     mission({ id: "a", dispatched_key: "specs/rehearsal-1/2026-09-23/1.json" }),
-    mission({ id: "bb", dispatched_key: "specs/rehearsal-1/2026-09-23/2.json" }),
+    mission({ id: "bb", dispatched_key: "specs/rehearsal-1/2026-09-23/2.json", supersedes: ["a"] }),
   ]);
   assert.deepEqual([...liveSpecKeys(rows)], ["specs/rehearsal-1/2026-09-23/2.json"]);
 });
@@ -212,4 +235,17 @@ test("a Mission that is history does not hold its name", () => {
     missionNameTaken(rows, { id: null, site_id: "rehearsal-1", date: "2026-09-23", name: "Ortho" }),
     null,
   );
+});
+
+test("a Planned fork is never superseded, even when it shares its original's creation instant", () => {
+  const at = "2026-09-24T08:00:00.000Z";
+  for (const ids of [["a", "b"], ["b", "a"]]) {
+    const [orig, fork] = ids;
+    const rows = deriveMissions([
+      mission({ id: orig, name: "Ortho", created_at: at, dispatched_key: "specs/rehearsal-1/2026-09-23/k.json" }),
+      mission({ id: fork, name: "Ortho", created_at: at }),
+    ]);
+    assert.equal(rows.find((r) => r.id === fork)?.state, "planned", `fork ${fork} after ${orig}`);
+    assert.equal(rows.find((r) => r.id === orig)?.state, "dispatched");
+  }
 });
