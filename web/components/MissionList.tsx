@@ -31,8 +31,7 @@ import {
 } from "@/lib/missionView";
 import styles from "./MissionList.module.css";
 
-// One Mission, one row, one state -- and one of this component, rendered in
-// both tabs.
+// One Mission, one row, one state.
 //
 // The screen it replaces joined three files at the rendering layer and emitted
 // a row per draft AND a row per Spec, so a Dispatched Mission appeared twice,
@@ -281,10 +280,8 @@ export default function MissionList({ onEdit, onCopy, editingId = null, onRead }
   if (passphrase === "") {
     return (
       <p className={styles.quiet}>
-        {/* Named by where it is, not by which tab is open: this component is
-            rendered in both, and only one of them has the map. */}
-        The Missions in the store appear here once the Wayfinder passphrase is typed into the bar
-        along the bottom of the Plan tab. It is typed once per browser and kept only there.
+        The Missions in the store appear here once the Wayfinder passphrase is typed into the box
+        beside Save, along the bottom of the map. It is typed once per browser and kept only there.
       </p>
     );
   }

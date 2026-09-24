@@ -107,41 +107,43 @@ export default function SummaryBar({ spec, preview, editing, onSaved, sites = []
 
   return (
     <div className={styles.wrap}>
-      <div className={styles.row}>
-        <Stat label="GSD" value={preview.gsd_cm.toFixed(2)} unit="cm/px" />
-        <Stat label="Photos" value={String(preview.photo_count)} />
-        {/* The same three numbers mean different things for an orbit, so they
-            are named for what they are rather than left quietly wrong. */}
-        <Stat label={isOrbit ? "Rings" : "Lines"} value={String(preview.line_count)} />
-        <Stat
-          label={isOrbit ? "Arc spacing" : "Fwd spacing"}
-          value={preview.fwd_spacing_m.toFixed(1)}
-          unit="m"
-        />
-        <Stat
-          label={isOrbit ? "Ring spacing" : "Side spacing"}
-          value={preview.side_spacing_m.toFixed(1)}
-          unit="m"
-        />
-        <Stat
-          label="Effective speed"
-          value={preview.capped_speed_ms.toFixed(1)}
-          unit="m/s"
-          warn={preview.capped_speed_ms < spec.flight.speed_ms}
-        />
-        <Stat label="Flight time" value={preview.flight_time_min.toFixed(1)} unit="min" />
-        <Stat
-          label={preview.parts > 1 ? "Flights" : "Flight"}
-          value={String(preview.parts)}
-          warn={preview.parts > 1}
-          title={
-            preview.part_minutes.length > 1
-              ? `Each flight returns home so the battery can be swapped: ${preview.part_minutes
-                  .map((m) => `${m.toFixed(1)} min`)
-                  .join(", ")}`
-              : undefined
-          }
-        />
+      <div className={styles.bar}>
+        <div className={styles.row}>
+          <Stat label="GSD" value={preview.gsd_cm.toFixed(2)} unit="cm/px" />
+          <Stat label="Photos" value={String(preview.photo_count)} />
+          {/* The same three numbers mean different things for an orbit, so they
+              are named for what they are rather than left quietly wrong. */}
+          <Stat label={isOrbit ? "Rings" : "Lines"} value={String(preview.line_count)} />
+          <Stat
+            label={isOrbit ? "Arc spacing" : "Fwd spacing"}
+            value={preview.fwd_spacing_m.toFixed(1)}
+            unit="m"
+          />
+          <Stat
+            label={isOrbit ? "Ring spacing" : "Side spacing"}
+            value={preview.side_spacing_m.toFixed(1)}
+            unit="m"
+          />
+          <Stat
+            label="Effective speed"
+            value={preview.capped_speed_ms.toFixed(1)}
+            unit="m/s"
+            warn={preview.capped_speed_ms < spec.flight.speed_ms}
+          />
+          <Stat label="Flight time" value={preview.flight_time_min.toFixed(1)} unit="min" />
+          <Stat
+            label={preview.parts > 1 ? "Flights" : "Flight"}
+            value={String(preview.parts)}
+            warn={preview.parts > 1}
+            title={
+              preview.part_minutes.length > 1
+                ? `Each flight returns home so the battery can be swapped: ${preview.part_minutes
+                    .map((m) => `${m.toFixed(1)} min`)
+                    .join(", ")}`
+                : undefined
+            }
+          />
+        </div>
         <div className={styles.actions}>
           <input
             type="password"

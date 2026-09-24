@@ -9,11 +9,18 @@ import MapPane, { type DrawMode } from "@/components/MapPane";
 import MissionList from "@/components/MissionList";
 import Sidebar from "@/components/Sidebar";
 import SummaryBar from "@/components/SummaryBar";
-import PlanNav from "@/components/PlanNav";
-import { EDIT_HANDOFF_KEY } from "./mission_status/page";
 import styles from "./plan.module.css";
 
-// The planner, and the one Mission list beside it.
+// The planner: the Missions, the map, and the settings of the Mission being
+// edited, on one screen (#151).
+//
+// There were two tabs -- Plan and Mission status -- for a reason that went
+// away when Missions moved into the store: they had been two lists of two
+// different things. On a wide screen all three columns show at once. On a
+// narrow one -- a phone at the aircraft, a tablet held upright -- one shows at
+// a time, chosen from a bar along the bottom, and it opens on the Missions,
+// because "which Card do I open?" is the question asked there. Nothing exists
+// at one width only: the narrow layout hides columns, it never removes them.
 //
 // Missions live in the shared store, not in browser local storage: the
 // operator lost sight of their saved Missions simply by opening a different
@@ -31,7 +38,17 @@ export interface Editing {
   copied_from?: string;
 }
 
+/** Which column a narrow screen shows. Wide screens show all three. */
+type View = "missions" | "map" | "settings";
+
+const VIEWS: { id: View; label: string }[] = [
+  { id: "missions", label: "Missions" },
+  { id: "map", label: "Map" },
+  { id: "settings", label: "Settings" },
+];
+
 export default function PlanPage() {
+  const [view, setView] = useState<View>("missions");
   const [spec, setSpecState] = useState<MissionSpec>(DEFAULT_SPEC);
   const [mode, setMode] = useState<DrawMode>("idle");
   // Off by default: the operator expects a number on every photo position to
@@ -43,27 +60,8 @@ export default function PlanPage() {
   const [sites, setSites] = useState<SiteChoice[]>([]);
 
   useEffect(() => {
-    // A Mission handed over from the Mission status tab for editing.
-    try {
-      const handoff = localStorage.getItem(EDIT_HANDOFF_KEY);
-      if (handoff) {
-        localStorage.removeItem(EDIT_HANDOFF_KEY);
-        const handed = JSON.parse(handoff) as { row: MissionRow; copy: boolean };
-        if (handed.copy) {
-          const { spec: copied, editing: e } = copyOf(handed.row, localDate(new Date()));
-          // eslint-disable-next-line react-hooks/set-state-in-effect -- one-time client-only read of localStorage
-          setSpecState(copied);
-          setEditing(e);
-        } else {
-          setSpecState(handed.row.spec);
-          setEditing({ id: handed.row.id, name: handed.row.name });
-        }
-        return;
-      }
-    } catch {
-      // A corrupt handoff is ignored; the planner opens as usual.
-    }
     // Today's date belongs to the client, never to the build: see DEFAULT_SPEC.
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- one-time client-only read of the clock
     setSpecState((s) => (s.date ? s : { ...s, date: localDate(new Date()) }));
   }, []);
 
@@ -93,24 +91,31 @@ export default function PlanPage() {
   // Editing a stored Mission loads its Spec and its Name. What the edit then
   // means is the store's decision, not the planner's: in place while Planned,
   // a new Mission that supersedes once Dispatched, refused once Loaded.
+  // On a narrow screen, opening a Mission moves to the map, where it is.
   const editMission = (row: MissionRow) => {
     setSpecState(row.spec);
     setEditing({ id: row.id, name: row.name });
+    setView("map");
   };
 
   const copyMission = (row: MissionRow) => {
     const { spec: copied, editing: e } = copyOf(row, localDate(new Date()));
     setSpecState(copied);
     setEditing(e);
+    setView("map");
   };
 
   const onListRead = (read: MissionListRead) => setSites(sitesFrom(read.missions));
 
   return (
-    <div className={styles.page}>
-      <PlanNav />
+    <div className={styles.page} data-view={view}>
       <div className={styles.top}>
-        <MapPane
+        <section className={styles.missions} aria-label="Missions">
+          <h2 className={styles.heading}>Missions</h2>
+          <MissionList onEdit={editMission} onCopy={copyMission} editingId={editing.id} onRead={onListRead} />
+        </section>
+        <section className={styles.map} aria-label="Map">
+          <MapPane
           spec={spec}
           preview={preview_}
           mode={mode}
@@ -123,8 +128,10 @@ export default function PlanPage() {
             setSpecState((s) => ({ ...s, orbit: { ...s.orbit, radius_m } }))
           }
           onModeChange={setMode}
-        />
-        <Sidebar
+          />
+        </section>
+        <section className={styles.settings} aria-label="Settings">
+          <Sidebar
           spec={spec}
           setSpec={setSpec}
           mode={mode}
@@ -134,16 +141,31 @@ export default function PlanPage() {
           sites={sites}
           editing={editing}
           onNameChange={(name) => setEditing((e) => ({ ...e, name }))}
-          missionList={<MissionList onEdit={editMission} onCopy={copyMission} editingId={editing.id} onRead={onListRead} />}
+          />
+        </section>
+      </div>
+      <div className={styles.summary}>
+        <SummaryBar
+          spec={spec}
+          preview={preview_}
+          editing={editing}
+          onSaved={(row) => setEditing({ id: row.id, name: row.name })}
+          sites={sites}
         />
       </div>
-      <SummaryBar
-        spec={spec}
-        preview={preview_}
-        editing={editing}
-        onSaved={(row) => setEditing({ id: row.id, name: row.name })}
-        sites={sites}
-      />
+      <nav className={styles.views} aria-label="Show">
+        {VIEWS.map((v) => (
+          <button
+            key={v.id}
+            type="button"
+            className={view === v.id ? "active" : undefined}
+            aria-pressed={view === v.id}
+            onClick={() => setView(v.id)}
+          >
+            {v.label}
+          </button>
+        ))}
+      </nav>
     </div>
   );
 }
