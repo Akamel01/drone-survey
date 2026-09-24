@@ -47,13 +47,15 @@ export async function GET(request: Request) {
   if (s instanceof Response) return s;
   const wantArchived = new URL(request.url).searchParams.get("archived") === "1";
   try {
+    const unreadable: string[] = [];
     const [records, manifest, ledger] = await Promise.all([
-      readMissions(s.read, s.bucket),
+      readMissions(s.read, s.bucket, unreadable),
       readManifest(s.read, s.bucket),
       readLedger(s.read, s.bucket),
     ]);
     const all = deriveMissions(records, manifest, ledger);
     return Response.json({
+      unreadable,
       missions: wantArchived ? all : all.filter((m) => !m.archived),
       archived_count: all.filter((m) => m.archived).length,
       ledger,

@@ -17,6 +17,12 @@
       "site": "other_site",
       "date": "2026-01-02",
       "stamp": "20260102T235959Z"
+    },
+    {
+      "key": "specs/g-z2m4tx/2026-09-24/20260924T080000Z-1a2b3c4d.json",
+      "site": "g-z2m4tx",
+      "date": "2026-09-24",
+      "stamp": "20260924T080000Z-1a2b3c4d"
     }
   ],
   "not_spec_keys": [

@@ -10,6 +10,7 @@ import {
   makeSpecKey,
   parseSpecKey,
   stampToIso,
+  dispatchStamp,
   SPECS_PREFIX,
 } from "./keys.ts";
 
@@ -48,6 +49,9 @@ test("draftKey and the status keys cannot be mistaken for Spec keys", () => {
 test("stampToIso turns a dispatch stamp into an instant", () => {
   assert.equal(stampToIso("20260917T004057Z"), "2026-09-17T00:40:57Z");
   assert.equal(stampToIso("not-a-stamp"), "not-a-stamp");
+  // A stamp carries its Mission's id so two in one second never share a key.
+  assert.equal(stampToIso("20260924T080000Z-1a2b3c4d"), "2026-09-24T08:00:00Z");
+  assert.equal(dispatchStamp(new Date("2026-09-24T08:00:00.123Z"), "1a2b3c4d-0000-4000-8000-000000000000"), "20260924T080000Z-1a2b3c4d");
 });
 
 // The committed fixture is the contract both languages read: if this grammar and

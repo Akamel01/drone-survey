@@ -14,7 +14,7 @@
 // bug -- there is no "draft" and no "queued".
 
 import type { CardHolding, MissionState } from "./model.ts";
-import { missionNameProblem, sameName, type MissionRow } from "./missionRecords.ts";
+import { SITE_NAME_MAX, UNPRINTABLE, missionNameProblem, sameName, type MissionRow } from "./missionRecords.ts";
 import type { HostDrift, HostNotice, LoadedCard } from "./missions.ts";
 
 /** The glossary's own words, capitalised for a heading and nothing more. */
@@ -305,6 +305,17 @@ export function hostLines(host: { notice: HostNotice | null; drift: HostDrift | 
   return lines;
 }
 
+/** Mission records the store holds but that could not be read -- named, and
+ *  left alone, so one hand-edited file neither hides the list nor vanishes. */
+export function unreadableLine(keys: string[] | undefined): string | null {
+  if (!keys?.length) return null;
+  return (
+    `${keys.length === 1 ? "One Mission record" : `${keys.length} Mission records`} in the store could not be read ` +
+    `and ${keys.length === 1 ? "is" : "are"} not shown: ${keys.join(", ")}. ` +
+    `${keys.length === 1 ? "It was" : "They were"} left untouched.`
+  );
+}
+
 /** What to check inside a Card before flying it (#155). */
 function countCheck(fs: Flight[]): string {
   const known = fs.filter((f) => f.points !== null);
@@ -457,6 +468,8 @@ export function saveProblem(
   sites: SiteChoice[] = [],
 ): string | null {
   if (!spec.site?.trim()) return "Choose the Site this Mission belongs to, or name a new one.";
+  if (UNPRINTABLE.test(spec.site)) return "A Site name cannot contain invisible control characters; retype it.";
+  if (spec.site.trim().length > SITE_NAME_MAX) return `A Site name is at most ${SITE_NAME_MAX} characters; shorten it.`;
   const twin = siteTwin(sites, spec.site_id, spec.site);
   if (twin) return `There is already a Site called “${twin.site}”. Choose it from the Site list instead.`;
   if (!spec.site_id?.trim()) return "This Site has no identifier yet. Name it, and one is assigned.";
@@ -531,6 +544,8 @@ export interface MissionListRead {
   /** What the host is saying about the Controller as a whole (#162). Absent
    *  from a cache written before it existed. */
   host?: { notice: HostNotice | null; drift: HostDrift | null };
+  /** Records in the store that could not be read as Missions, by key. */
+  unreadable?: string[];
   now: number;
 }
 

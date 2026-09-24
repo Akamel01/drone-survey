@@ -132,6 +132,9 @@ def waypoints_of(kmz):
         names = sorted(z.namelist())
         waylines = z.read("wpmz/waylines.wpml").decode()
         template = z.read("wpmz/template.kml").decode()
+    # The Controller parses both files; one that is not well-formed XML is a
+    # Mission it cannot open, whatever its waypoints say.
+    ElementTree.fromstring(template)
     root = ElementTree.fromstring(waylines)
     marks = []
     for pm in root.findall(".//kml:Placemark", NS):
@@ -376,6 +379,9 @@ def main():
     case("the rehearsal area, flown through each point", spec_for(small), expect_parts=1)
     case("a triangle, which must not be flown as its bounding box", spec_for(triangle), expect_parts=1)
     case("the same area, stopping at each point", spec_for(small, turn="stop"), expect_parts=1)
+    # A Site name holding a control character must still make a file the
+    # Controller can parse: XML cannot carry one even escaped (#152).
+    case("a Site name with a control character", {**spec_for(small), "site": "Bad\x01Name"}, expect_parts=1)
     case("an area too big for one Mission", spec_for(large))
 
     # The capture a nadir grid cannot produce: a subject seen from around it.

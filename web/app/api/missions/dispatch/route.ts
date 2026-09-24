@@ -1,6 +1,6 @@
 import { authProblem } from "@/lib/auth";
 import { downloadFile, uploadFile } from "@/lib/b2";
-import { SUMMARIES_KEY, isSafeId, makeSpecKey } from "@/lib/keys";
+import { SUMMARIES_KEY, dispatchStamp, isSafeId, makeSpecKey } from "@/lib/keys";
 import { preview } from "@/lib/mission";
 import type { SpecSummary } from "@/lib/missions";
 import { reserveCards, withRelease, withReservation, type CardLedger } from "@/lib/model";
@@ -116,7 +116,10 @@ export async function POST(request: Request) {
       );
     }
 
-    const stamp = new Date().toISOString().replace(/[-:]/g, "").replace(/\.\d+Z$/, "Z");
+    // The Mission's id in the key: two Missions of one Site and day Dispatched
+    // in the same second shared a key, so the second overwrote the first
+    // Spec, and withdrawing one released both their Cards (#152).
+    const stamp = dispatchStamp(new Date(), record.id);
     const key = makeSpecKey(record.site_id, record.date, stamp);
 
     // A superseded Spec is immutable and stays in the store, so the host must
@@ -139,6 +142,16 @@ export async function POST(request: Request) {
     const ledgerOrWhy = await updateLedger(s.read, s.write, s.bucket, (started: CardLedger) => {
       // Superseding releases what the older Specs held: what they hold is no
       // longer current (ADR 0022).
+      // A second press, from another window or a direct call, sees the first
+      // one's Reservation here and stops, rather than reserving a second Card
+      // and writing a second Spec the host would Load (#152).
+      const mine = Object.values(started.holdings).filter((h) => h.mission_id === record.id && !h.flown_at);
+      if (mine.length) {
+        return (
+          `This Mission was Dispatched a moment ago: ${mine.map((h) => h.card).join(", ")} ` +
+          `${mine.length === 1 ? "is" : "are"} reserved for it. Reload the Mission list.`
+        );
+      }
       let next = started;
       for (const old of replaced) next = withRelease(next, old.spec_key as string);
       const got = reserveCards(next, needed);
@@ -149,7 +162,7 @@ export async function POST(request: Request) {
         );
       }
       granted = got.cards;
-      return withReservation(next, got.cards, key, new Date().toISOString());
+      return withReservation(next, got.cards, key, new Date().toISOString(), record.id);
     });
     if (typeof ledgerOrWhy === "string") {
       return Response.json({ error: ledgerOrWhy, needed }, { status: 409 });

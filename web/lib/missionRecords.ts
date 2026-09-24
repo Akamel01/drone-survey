@@ -312,46 +312,41 @@ function same(a: CardHolding | undefined, b: CardHolding | undefined): boolean {
 }
 
 /**
- * Fold our intended Ledger into whatever the store holds now.
+ * Did our change to the Ledger survive what is in the store now?
  *
- * The Ledger is one file and B2 offers no compare-and-swap, so the only
- * defence is the one `scripts/backfill-summaries.ts` already uses: re-read
- * immediately before writing, keep what someone else wrote meanwhile, and
- * refuse outright rather than overwrite a change we cannot reconcile.
- *
- * `started` is the copy the caller read and computed against, `latest` is the
- * copy read again just before writing, `next` is what the caller wants.
- * A Card both sides changed is a genuine conflict -- two Dispatches racing for
- * the last Card -- and is refused, naming the Card and what to do.
- *
- * The pool and the verification stamp always come from `latest`: the host owns
- * both, and the planner must never un-calibrate a Card by writing a stale copy.
+ * The store has no compare-and-swap, so a write can be overwritten by another
+ * writer that read before it landed -- and both are told they succeeded. Two
+ * Dispatches racing lost a Reservation exactly that way (#152). Only the
+ * Cards we changed are checked: anything else in `after` is someone else's
+ * business, and a later writer who kept our change is not a conflict.
  */
-export function mergeLedger(started: CardLedger, latest: CardLedger, next: CardLedger): LedgerMerge {
-  const holdings: Record<string, CardHolding> = {};
-  const cards = new Set([
-    ...Object.keys(started.holdings),
-    ...Object.keys(latest.holdings),
-    ...Object.keys(next.holdings),
-  ]);
+export function changeSurvived(base: CardLedger, next: CardLedger, after: CardLedger): boolean {
+  const cards = new Set([...Object.keys(base.holdings), ...Object.keys(next.holdings)]);
   for (const card of cards) {
-    const theirs = latest.holdings[card];
-    const ours = next.holdings[card];
-    const base = started.holdings[card];
-    const theyChanged = !same(base, theirs);
-    const weChanged = !same(base, ours);
-    if (theyChanged && weChanged) {
-      return {
-        ok: false,
-        reason:
-          `${card} changed in the store while this change was being prepared. ` +
-          `Nothing was written. Reload the Mission list and try again.`,
-      };
-    }
-    const winner = theyChanged ? theirs : ours;
-    if (winner) holdings[card] = winner;
+    if (same(base.holdings[card], next.holdings[card])) continue;
+    if (!same(after.holdings[card], next.holdings[card])) return false;
   }
-  return { ok: true, ledger: { ...latest, holdings } };
+  return true;
+}
+
+/** Same Ledger, as a whole. */
+export function sameLedger(a: CardLedger, b: CardLedger): boolean {
+  return JSON.stringify(a) === JSON.stringify(b);
+}
+
+/** Whether a stored record has the shape a Mission must have. A record that
+ *  does not is shown as unreadable and left alone, rather than taking the whole
+ *  list down or vanishing from it (#152). */
+export function isMissionRecord(x: unknown): x is MissionRecord {
+  if (!x || typeof x !== "object") return false;
+  const r = x as Record<string, unknown>;
+  const text = ["id", "site_id", "site", "name", "date", "created_at", "updated_at"];
+  return (
+    text.every((k) => typeof r[k] === "string") &&
+    !!r.spec &&
+    typeof r.spec === "object" &&
+    (r.dispatched_key == null || typeof r.dispatched_key === "string")
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -363,9 +358,22 @@ export function mergeLedger(started: CardLedger, latest: CardLedger, next: CardL
  *  description. */
 export const MISSION_NAME_MAX = 40;
 
+/** The longest a Site name may be. It is written into every Mission file for
+ *  the Site and read on the Controller's screen; five hundred characters is
+ *  a paste accident, not a name. */
+export const SITE_NAME_MAX = 60;
+
 /** The one rule for a Mission Name, so the browser refuses exactly what the
  *  server would. Null when the name is usable. */
+/** Characters a name may not carry. Control characters make the Mission file
+ *  the Controller reads invalid XML (the Site's name is written into it), and
+ *  bidirectional overrides make one name display as another. */
+export const UNPRINTABLE = /[\u0000-\u001f\u007f\u202a-\u202e\u2066-\u2069]/;
+
 export function missionNameProblem(name: unknown): string | null {
+  if (typeof name === "string" && UNPRINTABLE.test(name)) {
+    return "A Mission Name cannot contain invisible control characters; retype it.";
+  }
   if (typeof name !== "string" || !name.trim()) {
     return "Give this Mission a short name -- \"north half\", \"orbit\" -- so it can be told apart from another for the same Site on the same day.";
   }
@@ -383,6 +391,12 @@ export function missionProblem(body: unknown): string | null {
   const m = body as Partial<MissionRecord>;
   const unnamedSite = siteNameProblem(m.site);
   if (unnamedSite) return "Choose the Site this Mission belongs to.";
+  if (typeof m.site === "string" && UNPRINTABLE.test(m.site)) {
+    return "A Site name cannot contain invisible control characters; retype it.";
+  }
+  if (typeof m.site === "string" && m.site.trim().length > SITE_NAME_MAX) {
+    return `A Site name is at most ${SITE_NAME_MAX} characters; shorten it.`;
+  }
   if (!isValidSiteId(m.site_id)) {
     return "Choose an existing Site for this Mission. A Site is identified once at onboarding and reused; typing a new name here creates a Site by accident and breaks Capture accumulation.";
   }

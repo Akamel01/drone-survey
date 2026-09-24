@@ -105,6 +105,19 @@ export function describeResult(label: string, result: ActionResult): string {
 // transaction unless something actually changed.
 export const MISSIONS_CHANGED_KEY = "drone-planner.missions-changed";
 
+/** This browser's storage, or null where even touching it throws -- a browser
+ *  set to block site data throws on the name `localStorage` itself, before
+ *  any call can be wrapped, and took the Mission list down with it (#152). */
+export function safeStorage(): Storage | null {
+  try {
+    const s = globalThis.localStorage;
+    s?.getItem("");
+    return s ?? null;
+  } catch {
+    return null;
+  }
+}
+
 export function noteMissionsChanged(): void {
   try {
     localStorage.setItem(MISSIONS_CHANGED_KEY, String(Date.now()));

@@ -67,7 +67,13 @@ export interface CardHolding {
   /** When the Card was reserved, and when the host actually wrote to it.
    *  A reservation with no written_at has not reached the Controller yet. */
   reserved_at: string;
+  /** The Mission that reserved it. A double-pressed Dispatch reads it back to
+   *  see that its own Mission already holds a Card (#152). Absent on
+   *  reservations made before it existed. */
+  mission_id?: string;
   written_at?: string;
+  /** The hash of what the host read back after writing this Card. */
+  written_md5?: string;
   /** Set once the Mission in this Card has been Flown -- the operator's mark,
    *  which is what decides it (ADR 0021). */
   flown_at?: string;
@@ -138,10 +144,18 @@ export function withReservation(
   cards: string[],
   spec_key: string,
   reserved_at: string,
+  mission_id?: string,
 ): CardLedger {
   const holdings = { ...ledger.holdings };
   cards.forEach((card, i) => {
-    holdings[card] = { card, spec_key, flight: i + 1, flights: cards.length, reserved_at };
+    holdings[card] = {
+      card,
+      spec_key,
+      flight: i + 1,
+      flights: cards.length,
+      reserved_at,
+      ...(mission_id ? { mission_id } : {}),
+    };
   });
   return { ...ledger, holdings };
 }
