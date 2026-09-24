@@ -47,7 +47,8 @@ PLACEMENTS = {"local", "remote-3090", "rented"}
 # Every key the schema knows. A field nobody reads is a comment, not a schema:
 # an unknown key is a typo waiting to be silently ignored (see ADR 0006).
 TOP_KEYS = {"pipeline", "inputs", "nodes", "ground_control_points"}
-NODE_KEYS = {"name", "command", "inputs", "outputs", "placement", "image", "env", "notes", "cleanup_paths", "gpu"}
+NODE_KEYS = {"name", "command", "inputs", "outputs", "placement", "image", "env", "notes", "cleanup_paths", "gpu",
+             "resumable"}
 # Ground control presence is a non-path top-level fact; validate its type if present.
 
 # {in.images} / {out.poses} — the only placeholders the Runner resolves.
@@ -126,6 +127,8 @@ def validate(data: dict) -> list[str]:
         if "gpu" in node:
             if not isinstance(node["gpu"], bool):
                 errors.append(f"{where} ('{name}'): 'gpu' must be a boolean")
+        if "resumable" in node and not isinstance(node["resumable"], bool):
+            errors.append(f"{where} ('{name}'): 'resumable' must be a boolean")
 
         placement = node.get("placement", "local")
         if placement not in PLACEMENTS:
