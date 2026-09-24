@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { DEFAULT_SPEC, type CircleShape, type MissionSpec } from "@/lib/spec";
 import { preview, areaHectares } from "@/lib/mission";
 import type { MissionRow } from "@/lib/missionRecords";
-import { sitesFrom, type MissionListRead, type SiteChoice } from "@/lib/missionView";
+import { copyOf, localDate, sitesFrom, type MissionListRead, type SiteChoice } from "@/lib/missionView";
 import MapPane, { type DrawMode } from "@/components/MapPane";
 import MissionList from "@/components/MissionList";
 import Sidebar from "@/components/Sidebar";
@@ -26,6 +26,9 @@ import styles from "./plan.module.css";
 export interface Editing {
   id: string | null;
   name: string;
+  /** Set while the editor holds an unsaved copy of another Mission, so the
+   *  operator can see that saving makes a new one. */
+  copied_from?: string;
 }
 
 export default function PlanPage() {
@@ -45,21 +48,23 @@ export default function PlanPage() {
       const handoff = localStorage.getItem(EDIT_HANDOFF_KEY);
       if (handoff) {
         localStorage.removeItem(EDIT_HANDOFF_KEY);
-        const { spec: handed, id, name } = JSON.parse(handoff) as {
-          spec: MissionSpec;
-          id: string;
-          name: string;
-        };
-        // eslint-disable-next-line react-hooks/set-state-in-effect -- one-time client-only read of localStorage
-        setSpecState(handed);
-        setEditing({ id, name });
+        const handed = JSON.parse(handoff) as { row: MissionRow; copy: boolean };
+        if (handed.copy) {
+          const { spec: copied, editing: e } = copyOf(handed.row, localDate(new Date()));
+          // eslint-disable-next-line react-hooks/set-state-in-effect -- one-time client-only read of localStorage
+          setSpecState(copied);
+          setEditing(e);
+        } else {
+          setSpecState(handed.row.spec);
+          setEditing({ id: handed.row.id, name: handed.row.name });
+        }
         return;
       }
     } catch {
       // A corrupt handoff is ignored; the planner opens as usual.
     }
     // Today's date belongs to the client, never to the build: see DEFAULT_SPEC.
-    setSpecState((s) => (s.date ? s : { ...s, date: new Date().toISOString().slice(0, 10) }));
+    setSpecState((s) => (s.date ? s : { ...s, date: localDate(new Date()) }));
   }, []);
 
   const setSpec = (updater: (s: MissionSpec) => MissionSpec) => setSpecState(updater);
@@ -93,6 +98,12 @@ export default function PlanPage() {
     setEditing({ id: row.id, name: row.name });
   };
 
+  const copyMission = (row: MissionRow) => {
+    const { spec: copied, editing: e } = copyOf(row, localDate(new Date()));
+    setSpecState(copied);
+    setEditing(e);
+  };
+
   const onListRead = (read: MissionListRead) => setSites(sitesFrom(read.missions));
 
   return (
@@ -123,7 +134,7 @@ export default function PlanPage() {
           sites={sites}
           editing={editing}
           onNameChange={(name) => setEditing((e) => ({ ...e, name }))}
-          missionList={<MissionList onEdit={editMission} editingId={editing.id} onRead={onListRead} />}
+          missionList={<MissionList onEdit={editMission} onCopy={copyMission} editingId={editing.id} onRead={onListRead} />}
         />
       </div>
       <SummaryBar

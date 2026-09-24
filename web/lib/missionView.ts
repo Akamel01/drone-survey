@@ -158,7 +158,7 @@ export function staleFor(row: MissionRow, stale: CardHolding[]): CardHolding[] {
 // ---------------------------------------------------------------------------
 
 /** The one action a row offers, named after the verb that causes the state. */
-export type ActionName = "Dispatch" | "Withdraw" | "Mark Flown" | "Unmark Flown" | "Edit" | "Remove";
+export type ActionName = "Dispatch" | "Withdraw" | "Mark Flown" | "Unmark Flown" | "Edit" | "Copy" | "Remove";
 
 /**
  * The headline of a row: the answer, then why, then what to press.
@@ -194,6 +194,12 @@ export interface RowView {
  *  rest and says why; this only keeps a control from being offered for
  *  something that can never work. */
 export function actionsFor(row: MissionRow): ActionName[] {
+  // Copy is offered on every row: a new Mission that starts from this one,
+  // whatever became of it, is never a change to it.
+  return [...stateActions(row), "Copy"];
+}
+
+function stateActions(row: MissionRow): ActionName[] {
   switch (row.state) {
     case "planned":
       return ["Dispatch", "Edit", "Remove"];
@@ -458,6 +464,34 @@ export function saveProblem(
   if (badName) return badName;
   if (!spec.date?.trim()) return "Give this Mission a date.";
   return null;
+}
+
+/** A date as the operator's own calendar has it, YYYY-MM-DD. `toISOString`
+ *  would give tomorrow's date every evening west of Greenwich. */
+export function localDate(d: Date): string {
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  const dd = String(d.getDate()).padStart(2, "0");
+  return `${d.getFullYear()}-${mm}-${dd}`;
+}
+
+/**
+ * A new Mission that starts as a copy of an existing one.
+ *
+ * Not an Edit: an Edit changes a Mission (in place, or by a fork that replaces
+ * it at Dispatch), and a Loaded one cannot be edited at all. A copy has no id,
+ * so saving it creates a Mission and replaces nothing -- the original is left
+ * exactly as it is, Flown, Loaded or otherwise. It keeps the Site and the
+ * Name, which is how a repeat Capture of a Site reads, and takes today's
+ * date, because a copy is a new flight.
+ */
+export function copyOf(
+  row: Pick<MissionRow, "spec" | "site" | "site_id" | "name" | "date">,
+  today: string,
+): { spec: MissionRow["spec"]; editing: { id: null; name: string; copied_from: string } } {
+  return {
+    spec: { ...row.spec, site: row.site, site_id: row.site_id, date: today },
+    editing: { id: null, name: row.name, copied_from: `${row.name}, ${row.site} ${row.date}` },
+  };
 }
 
 /** An existing Site with this name that is not this Site, or null. Two Sites

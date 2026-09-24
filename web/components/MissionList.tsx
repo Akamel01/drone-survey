@@ -59,6 +59,8 @@ interface MissionListProps {
    *  editing means from its state: in place while Planned, a new Mission that
    *  supersedes once Dispatched, refused once Loaded. */
   onEdit: (row: MissionRow) => void;
+  /** Start a new Mission from this one. The original is not touched. */
+  onCopy: (row: MissionRow) => void;
   /** The Mission the editor currently has open, so its row says so. */
   editingId?: string | null;
   /** Every good read, handed on. The planner needs the Sites already in the
@@ -67,7 +69,7 @@ interface MissionListProps {
   onRead?: (read: MissionListRead) => void;
 }
 
-export default function MissionList({ onEdit, editingId = null, onRead }: MissionListProps) {
+export default function MissionList({ onEdit, onCopy, editingId = null, onRead }: MissionListProps) {
   const [passphrase, setPassphrase] = useState<string | null>(null);
   const [read, setRead] = useState<MissionListRead | null>(null);
   const [readAt, setReadAt] = useState<number | null>(null);
@@ -235,9 +237,11 @@ export default function MissionList({ onEdit, editingId = null, onRead }: Missio
           );
         case "Edit":
           return onEdit(row);
+        case "Copy":
+          return onCopy(row);
       }
     },
-    [act, post, passphrase, onEdit],
+    [act, post, passphrase, onEdit, onCopy],
   );
 
   const all = useMemo(() => read?.missions ?? [], [read]);
@@ -407,8 +411,10 @@ function MissionCard({
               {f.label}
               {!f.written
                 ? " — reserved, not written yet"
-                : f.points !== null
-                  ? ` — shows ${f.points} points inside`
+                : f.points !== null && view.state === "loaded"
+                  ? // Only while it is there: once Flown the Card is free and
+                    // may hold the next Mission, so the count would mislead.
+                    ` — shows ${f.points} points inside`
                   : ""}
             </li>
           ))}
@@ -421,7 +427,7 @@ function MissionCard({
           <button
             key={name}
             onClick={() => onAction(name)}
-            disabled={busy && name !== "Edit"}
+            disabled={busy && name !== "Edit" && name !== "Copy"}
             className={name === "Dispatch" ? "primary" : undefined}
           >
             {running(name) ? `${name}…` : name}

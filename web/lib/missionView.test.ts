@@ -7,10 +7,12 @@ import {
   asOfStamp,
   cardList,
   checkedAgo,
+  copyOf,
   figuresMismatch,
   flightReason,
   flights,
   hostLines,
+  localDate,
   metres,
   rowView,
   saveProblem,
@@ -396,4 +398,27 @@ test("a new Site cannot take an existing Site's name, whatever its case or spaci
   const spec = { site: " georgetown2 ", site_id: "g-new001", date: "2026-09-24" };
   assert.match(saveProblem(spec, "Ortho", sites)!, /already a Site called “GeorgeTown2”/);
   assert.equal(saveProblem({ ...spec, site_id: "g-z2m4tx" }, "Ortho", sites), null, "the Site itself is fine");
+});
+
+// --- copying a Mission ----------------------------------------------------------
+
+test("every Mission can be copied, whatever became of it", () => {
+  for (const state of ["planned", "dispatched", "collected", "loaded", "flown", "withdrawn", "superseded"] as const) {
+    assert.ok(actionsFor(row({ state })).includes("Copy"), state);
+  }
+});
+
+test("a copy is a new Mission with today's date, the same Site and Name, and the original's plan", () => {
+  const flown = row({ state: "flown", name: "Ortho", site: "GeorgeTown2", site_id: "g-z2m4tx", date: "2026-09-24" });
+  const { spec, editing } = copyOf(flown, "2026-10-01");
+  assert.equal(editing.id, null, "no id: saving creates a Mission and replaces nothing");
+  assert.equal(editing.name, "Ortho");
+  assert.equal(spec.date, "2026-10-01");
+  assert.equal(spec.site_id, "g-z2m4tx");
+  assert.deepEqual(spec.aoi, flown.spec.aoi);
+  assert.match(editing.copied_from, /Ortho, GeorgeTown2 2026-09-24/);
+});
+
+test("today is the operator's calendar day, not Greenwich's", () => {
+  assert.equal(localDate(new Date(2026, 8, 24, 23, 30)), "2026-09-24");
 });
