@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { IDLE, beginAction, endAction, isRunning, describeResult } from "./actions.ts";
+import { IDLE, beginAction, endAction, isRunning, describeResult, noticeShows, settleNotice } from "./actions.ts";
 
 test("a press marks that one control busy, not every control", () => {
   const s = beginAction(IDLE, "Dispatch", "mission-a");
@@ -62,11 +62,26 @@ test("a success reports what the store did, in the glossary's words", () => {
   );
   // Nothing is ever deleted, so the message must not say it was.
   assert.match(describeResult("Remove", { ok: true, body: { archived: "mission-a" } }), /archived, not deleted/);
-  assert.equal(describeResult("Mark Flown", { ok: true, body: {} }), "Mark Flown: done");
+  // Mark Flown also answers with `cards`; it must not announce a Dispatch (#164).
+  assert.match(
+    describeResult("Mark Flown", { ok: true, body: { cards: [{ card: "way finder 1" }] } }),
+    /^Marked Flown/,
+  );
 });
 
 test("a result that arrives for something else does not free the running control", () => {
   const s = beginAction(IDLE, "Dispatch", "mission-a");
   const other = endAction(s, "Withdraw", "mission-b", { ok: true, body: {} });
   assert.deepEqual(other.running, { label: "Dispatch", on: "mission-a" });
+});
+
+test("a notice goes once its row has moved on, and stays while it has not (#164)", () => {
+  const done = endAction(beginAction(IDLE, "Dispatch", "m"), "Dispatch", "m", {
+    ok: true,
+    body: { cards: ["way finder 1"] },
+  });
+  const settled = settleNotice(done, "dispatched");
+  assert.equal(noticeShows(settled.notice!, "dispatched"), true);
+  assert.equal(noticeShows(settled.notice!, "collected"), false, "stale once Collected");
+  assert.equal(noticeShows(done.notice!, "planned"), true, "not yet settled: still shown");
 });

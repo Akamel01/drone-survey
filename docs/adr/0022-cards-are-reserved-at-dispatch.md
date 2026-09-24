@@ -82,3 +82,27 @@ is where to find it and the flight is what to do.
 **This is worth testing before it is trusted.** One defect of this shape means
 the class was never tested at all; #152 is that stress test, and it is scoped
 against this model rather than the one being replaced.
+
+## Amended 2026-09-24: what the field showed
+
+**The Controller can be asked, once, inside a Card.** The list's name, distance
+and point count are frozen at a Card's creation, but the point count shown
+inside an opened Card is the file's own. The operator confirmed it on the RC2,
+and calibration (#118) was done by reading it. So a Loaded row now names the
+count its Card must show — "Open way finder 1. Check it shows 184 points" —
+and says not to fly if it differs.
+
+**That is the answer to #155, renaming a Card.** A Placeholder keeps its folder
+when renamed, so a rename or a swap passes every check the host can make. The
+count checked inside the Card, at the moment of flying, catches it every flight.
+Recalibrating is `calibrate.py`, about ten minutes. A re-declaration screen and
+statistical detection were considered and not built: the count check covers
+both, at the point where the mistake would matter. Its known ceiling is two
+swapped Cards holding Missions with the same point count.
+
+**The host keeps no supersession rule of its own** (#161). It used to Load only
+the newest Spec per Site and date, which disagreed with the planner about two
+named Missions on one day, and it refused the whole Load for any Spec without a
+Reservation. It now Loads exactly the Specs that hold one; the rest are set
+aside by name. An unreadable Ledger is refused, never read as empty, because
+publishing onto an empty copy erased every Reservation.

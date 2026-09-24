@@ -131,6 +131,7 @@ export default function PlanPage() {
         preview={preview_}
         editing={editing}
         onSaved={(row) => setEditing({ id: row.id, name: row.name })}
+        sites={sites}
       />
     </div>
   );

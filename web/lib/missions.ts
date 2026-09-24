@@ -12,10 +12,10 @@
 
 /** One Card as the host reported writing it, with what it measured writing it.
  *
- *  The figures matter more than they look: ADR 0016 measured that a Card's own
- *  displayed name, distance and point count are frozen at its creation, so the
- *  Controller cannot confirm which Mission is in it. Comparing these against
- *  the planner's own figures is the only detector there is. */
+ *  The figures matter more than they look. A Card's name, distance and point
+ *  count on the Controller's list are frozen at its creation, but the point
+ *  count shown inside a Card, once opened, is the file's own -- so `waypoints`
+ *  is the number the operator checks before flying (#155). */
 export interface LoadedCard {
   card: string;
   name: string;
@@ -38,6 +38,36 @@ export interface ManifestEntry {
 }
 
 export type Manifest = Record<string, ManifestEntry>;
+
+/** A Load the host refused, as it wrote it under `_notice`. Every refusal
+ *  already states what to do next (ADR 0018); `action` is the older overflow
+ *  shape, `reason` the Ledger one. Retired by the next successful Load. */
+export interface HostNotice {
+  type: string;
+  at: string;
+  /** The Spec keys that were waiting when it refused. */
+  waiting: string[];
+  reason?: string;
+  action?: string;
+}
+
+/** Cards whose contents disagree with the Ledger, as the host found them. */
+export interface HostDrift {
+  at: string;
+  cards: { card: string; expected: string; found: string | null }[];
+}
+
+/** What the host is saying about the Controller as a whole, rather than about
+ *  one Spec. The manifest carries both kinds in one file, under `_` keys. */
+export function hostReport(manifest: Manifest): { notice: HostNotice | null; drift: HostDrift | null } {
+  const raw = manifest as Record<string, unknown>;
+  const notice = raw._notice as HostNotice | undefined;
+  const drift = raw._drift as HostDrift | undefined;
+  return {
+    notice: notice && typeof notice.at === "string" && Array.isArray(notice.waiting) ? notice : null,
+    drift: drift && Array.isArray(drift.cards) && drift.cards.length > 0 ? drift : null,
+  };
+}
 
 /** Per-Spec figures the Dispatch route records, so the host and anything else
  *  reading the store has them without re-deriving the geometry. */

@@ -16,6 +16,9 @@ export interface ActionNotice {
   on: ActionTarget;
   text: string;
   failed: boolean;
+  /** The row's state once the store was re-read after the action. The notice
+   *  is about getting there, so it goes once the row moves on (#164). */
+  state?: string;
 }
 
 export interface ActionState {
@@ -51,6 +54,19 @@ export function endAction(
   };
 }
 
+/** The notice stays only while the row is still where the action left it: a
+ *  "Dispatched" line under a row that has since been Collected is stale, and
+ *  reads as the current answer (#164). */
+export function noticeShows(notice: ActionNotice, rowState: string): boolean {
+  return notice.state === undefined || notice.state === rowState;
+}
+
+/** Stamp the notice with where the row landed, once the follow-up read is in. */
+export function settleNotice(state: ActionState, rowState: string | undefined): ActionState {
+  if (!state.notice || rowState === undefined) return state;
+  return { ...state, notice: { ...state.notice, state: rowState } };
+}
+
 export function isRunning(state: ActionState, label: string, on: ActionTarget): boolean {
   return state.running?.label === label && state.running?.on === on;
 }
@@ -62,9 +78,13 @@ export function describeResult(label: string, result: ActionResult): string {
     return `${label} failed: ${typeof why === "string" && why ? why : result.status}`;
   }
   const { body } = result;
-  // Named after what the endpoint actually reports, in the glossary's words.
-  // There is no "draft" and no "queued" (ADR 0021).
-  if (Array.isArray(body.cards) && body.cards.length > 0) {
+  // Named after the action pressed, then what the endpoint reports, in the
+  // glossary's words. There is no "draft" and no "queued" (ADR 0021). Keying on
+  // the body's shape alone made Mark Flown -- which also returns `cards` --
+  // announce "Dispatched" (#164).
+  if (label === "Mark Flown") return "Marked Flown. Its Card is free for the next Mission.";
+  if (label === "Unmark Flown") return "Unmarked. It holds its Card again.";
+  if (label === "Dispatch" && Array.isArray(body.cards) && body.cards.length > 0) {
     return `Dispatched. ${body.cards.join(", ")} ${body.cards.length === 1 ? "is" : "are"} reserved for it.`;
   }
   if (Array.isArray(body.cards_released)) {

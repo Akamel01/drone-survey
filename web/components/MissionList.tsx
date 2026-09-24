@@ -10,6 +10,8 @@ import {
   endAction,
   isRunning,
   noteMissionsChanged,
+  noticeShows,
+  settleNotice,
   type ActionResult,
   type ActionState,
 } from "@/lib/actions";
@@ -18,6 +20,7 @@ import {
   cacheRead,
   cachedRead,
   checkedAgo,
+  hostLines,
   rowView,
   type ActionName,
   type Figures,
@@ -88,7 +91,7 @@ export default function MissionList({ onEdit, editingId = null, onRead }: Missio
     reportRead.current = onRead;
   });
 
-  const load = useCallback(async (key: string) => {
+  const load = useCallback(async (key: string): Promise<MissionListRead | null> => {
     setLoading(true);
     try {
       // Always the whole list: `archived_count` and the archived rows come in
@@ -106,6 +109,7 @@ export default function MissionList({ onEdit, editingId = null, onRead }: Missio
         setError(null);
         cacheRead(localStorage, fresh, at);
         reportRead.current?.(fresh);
+        return fresh;
       } else {
         fallBackToCache(body.error ?? `The Mission list could not be read (HTTP ${res.status}).`);
       }
@@ -116,6 +120,7 @@ export default function MissionList({ onEdit, editingId = null, onRead }: Missio
     } finally {
       setLoading(false);
     }
+    return null;
 
     // Standing next to the aircraft with no signal, the last answer is worth
     // more than an empty screen -- but only if it can never be mistaken for
@@ -146,7 +151,9 @@ export default function MissionList({ onEdit, editingId = null, onRead }: Missio
     // 30-second poll once spent 2,880 of the day's transaction cap: do not
     // shorten this, and do not remove this note.
     const refresh = () => {
-      if (!document.hidden) void load(key);
+      if (document.hidden) return;
+      setAction((s) => ({ ...s, notice: null }));
+      void load(key);
     };
     document.addEventListener("visibilitychange", refresh);
     // A write from another window of this planner: react to the write instead
@@ -189,7 +196,8 @@ export default function MissionList({ onEdit, editingId = null, onRead }: Missio
       }
       inFlight.current = false;
       setAction((s) => endAction(s, label, on, result));
-      await load(passphrase);
+      const fresh = await load(passphrase);
+      setAction((s) => settleNotice(s, fresh?.missions.find((m) => m.id === on)?.state));
     },
     [passphrase, load],
   );
@@ -271,7 +279,14 @@ export default function MissionList({ onEdit, editingId = null, onRead }: Missio
           {readAt === null ? "not read yet" : checkedAgo(readAt, Math.max(now, readAt))}
           {!live && readAt !== null && <span className={styles.stale}> · {asOfStamp(readAt)}</span>}
         </span>
-        <button onClick={() => passphrase && load(passphrase)} disabled={loading}>
+        <button
+          onClick={() => {
+            if (!passphrase) return;
+            setAction((s) => ({ ...s, notice: null }));
+            void load(passphrase);
+          }}
+          disabled={loading}
+        >
           {loading ? "Checking…" : "Refresh"}
         </button>
         {archivedCount > 0 && (
@@ -297,8 +312,16 @@ export default function MissionList({ onEdit, editingId = null, onRead }: Missio
         </p>
       )}
 
+      {hostLines(read?.host).map((line) => (
+        // A refused Load is about the Controller, not one row, so it is said
+        // above them all -- and it stays until a Load succeeds (#162).
+        <p key={line} className={styles.stop} role="alert">
+          {line}
+        </p>
+      ))}
+
       {orphanNotice && (
-        <p className={notice.failed ? styles.stop : styles.note} role="status" aria-live="polite">
+        <p className={notice.failed ? styles.stop : styles.done} role="status" aria-live="polite">
           {notice.text}
         </p>
       )}
@@ -315,11 +338,11 @@ export default function MissionList({ onEdit, editingId = null, onRead }: Missio
         <MissionCard
           key={row.id}
           row={row}
-          view={rowView(row, figures.get(row.id) ?? null, read?.stale_cards ?? [])}
+          view={rowView(row, figures.get(row.id) ?? null, read?.stale_cards ?? [], read?.host?.notice ?? null)}
           editing={row.id === editingId}
           busy={action.running !== null}
           running={(name) => isRunning(action, name, row.id)}
-          notice={notice?.on === row.id ? notice : null}
+          notice={notice?.on === row.id && noticeShows(notice, row.state) ? notice : null}
           onAction={(name) => runAction(name, row)}
         />
       ))}
@@ -382,7 +405,11 @@ function MissionCard({
           {view.flights.map((f) => (
             <li key={f.flight} className={f.written ? styles.written : undefined}>
               {f.label}
-              {f.written ? "" : " — reserved, not written yet"}
+              {!f.written
+                ? " — reserved, not written yet"
+                : f.points !== null
+                  ? ` — shows ${f.points} points inside`
+                  : ""}
             </li>
           ))}
         </ul>
@@ -404,7 +431,7 @@ function MissionCard({
       </div>
 
       {notice && (
-        <p className={notice.failed ? styles.stop : styles.note} role="status" aria-live="polite">
+        <p className={notice.failed ? styles.stop : styles.done} role="status" aria-live="polite">
           {notice.text}
         </p>
       )}

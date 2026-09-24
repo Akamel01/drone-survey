@@ -4,7 +4,7 @@ import type { ReactNode } from "react";
 import { newSiteId, type MissionSpec, type MissionType, type TurnMode } from "@/lib/spec";
 import type { Preview } from "@/lib/mission";
 import { MISSION_NAME_MAX, missionNameProblem } from "@/lib/missionRecords";
-import type { SiteChoice } from "@/lib/missionView";
+import { siteTwin, type SiteChoice } from "@/lib/missionView";
 import type { Editing } from "@/app/plan/page";
 import { isDrawing, type DrawMode } from "./MapPane";
 import styles from "./Sidebar.module.css";
@@ -649,6 +649,7 @@ function SiteField({
 }) {
   const known = site_id != null && sites.some((s) => s.site_id === site_id);
   const naming = !known;
+  const twin = naming ? siteTwin(sites, site_id, site) : null;
   return (
     <Field label="Site" value={site.trim() || "—"}>
       <select
@@ -683,6 +684,16 @@ function SiteField({
             })
           }
         />
+      )}
+      {twin && (
+        // Naming a "new" Site after an existing one is the accident that
+        // splits a Site's Captures in two (#166). Offer the real one.
+        <div className={styles.hint}>
+          There is already a Site called “{twin.site}”.{" "}
+          <button type="button" onClick={() => onChoose(twin)}>
+            Use it
+          </button>
+        </div>
       )}
       <div className={styles.hint}>
         {/* The hint follows whether this Site has an identifier, not whether it

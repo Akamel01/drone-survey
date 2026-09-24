@@ -6,7 +6,9 @@ import {
   liveSpecKeys,
   mergeLedger,
   missionNameProblem,
+  missionNameTaken,
   missionProblem,
+  siteNameTaken,
   supersessionGroup,
   withFlownMark,
   type MissionRecord,
@@ -189,4 +191,39 @@ test("a Mission must belong to a chosen Site and carry its own short name", () =
   assert.match(missionProblem({ ...ok, date: "" })!, /date/);
   assert.match(missionNameProblem("x".repeat(41))!, /at most 40/);
   assert.equal(missionNameProblem("orbit"), null);
+});
+
+// --- names that must not collide (#166, #167) ----------------------------------
+
+test("a Site name is taken whatever its case or spacing, by another Site only", () => {
+  const records = [mission({ id: "a", site_id: "g-1", site: "GeorgeTown2" })];
+  assert.deepEqual(siteNameTaken(records, "g-2", " georgetown2 "), { site_id: "g-1", site: "GeorgeTown2" });
+  assert.equal(siteNameTaken(records, "g-1", "GeorgeTown2"), null, "a Site does not collide with itself");
+  assert.equal(siteNameTaken(records, "g-2", "Georgetown 3"), null);
+});
+
+test("a renamed Site is known by its latest name, not the one its old Missions carry", () => {
+  const records = [
+    mission({ id: "a", site_id: "g-1", site: "Old Name", updated_at: "2026-09-01T00:00:00Z" }),
+    mission({ id: "b", site_id: "g-1", site: "New Name", updated_at: "2026-09-20T00:00:00Z" }),
+  ];
+  assert.equal(siteNameTaken(records, "g-2", "Old Name"), null, "the old name is free again");
+  assert.ok(siteNameTaken(records, "g-2", "new name"));
+});
+
+test("a live Mission's Site, date and name cannot be taken by a new one", () => {
+  const rows = deriveMissions([mission({ id: "a", name: "Ortho" })]);
+  const fresh = { id: null, site_id: "rehearsal-1", date: "2026-09-23", name: " ortho " };
+  assert.equal(missionNameTaken(rows, fresh)?.id, "a");
+  assert.equal(missionNameTaken(rows, { ...fresh, name: "Facade" }), null, "a different name is a second flight");
+  assert.equal(missionNameTaken(rows, { ...fresh, date: "2026-09-24" }), null);
+  assert.equal(missionNameTaken(rows, { ...fresh, id: "a" }), null, "a Mission does not collide with itself");
+});
+
+test("a Mission that is history does not hold its name", () => {
+  const rows = deriveMissions([mission({ id: "a", name: "Ortho", archived_at: "2026-09-23T01:00:00Z" })]);
+  assert.equal(
+    missionNameTaken(rows, { id: null, site_id: "rehearsal-1", date: "2026-09-23", name: "Ortho" }),
+    null,
+  );
 });

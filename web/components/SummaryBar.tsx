@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import type { MissionSpec } from "@/lib/spec";
 import type { Preview } from "@/lib/mission";
 import type { MissionRecord } from "@/lib/missionRecords";
-import { describeSave, saveProblem } from "@/lib/missionView";
+import { describeSave, saveProblem, type SiteChoice } from "@/lib/missionView";
 import { noteMissionsChanged } from "@/lib/actions";
 import type { Editing } from "@/app/plan/page";
 import styles from "./SummaryBar.module.css";
@@ -18,6 +18,8 @@ interface SummaryBarProps {
    *  edited: a change to a Mission already Dispatched is a new Mission, because
    *  a Spec is never edited (ADR 0021). */
   onSaved: (mission: MissionRecord) => void;
+  /** The Sites already in the store, so a new Site cannot take one's name. */
+  sites?: SiteChoice[];
 }
 
 // Typed once per browser, never baked into the code: the passphrase is a
@@ -34,7 +36,7 @@ type SaveState =
   | { kind: "ok"; text: string }
   | { kind: "error"; text: string };
 
-export default function SummaryBar({ spec, preview, editing, onSaved }: SummaryBarProps) {
+export default function SummaryBar({ spec, preview, editing, onSaved, sites = [] }: SummaryBarProps) {
   const [copied, setCopied] = useState(false);
   const [passphrase, setPassphrase] = useState("");
   const [save, setSave] = useState<SaveState>({ kind: "idle" });
@@ -58,7 +60,7 @@ export default function SummaryBar({ spec, preview, editing, onSaved }: SummaryB
     }
   }
 
-  const problem = saveProblem(spec, editing.name);
+  const problem = saveProblem(spec, editing.name, sites);
 
   async function runSave() {
     if (problem || save.kind === "saving") return;

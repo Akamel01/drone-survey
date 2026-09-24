@@ -22,8 +22,11 @@ export const preferredRegion = "yyz1";
 /**
  * POST /api/missions/withdraw  { id }
  *
- * Refuses anything already Collected or Loaded: that is past the point a
- * withdrawal can reach, and says so.
+ * A Dispatched or Collected Mission can be withdrawn: neither has reached the
+ * Controller. The host re-reads the skip list at the start of every Load and
+ * Loads only Specs that hold a Reservation (#161), so releasing the Card stops
+ * a Collected Spec too (#165). A Loaded one is refused -- its file is already
+ * in the field, and withdrawing cannot reach it.
  */
 export async function POST(request: Request) {
   const denied = authProblem(request);
@@ -60,13 +63,13 @@ export async function POST(request: Request) {
     if (row.state === "withdrawn") {
       return Response.json({ id, withdrawn_at: record.withdrawn_at, cards_released: [] });
     }
-    if (row.state !== "dispatched") {
+    if (row.state !== "dispatched" && row.state !== "collected") {
       return Response.json(
         {
           error:
-            row.state === "collected" || row.state === "loaded"
-              ? `This Mission is already ${row.state}, which is past the point a withdrawal can reach. ` +
-                "Fly it, or release its Card once you know the Controller no longer needs it."
+            row.state === "loaded"
+              ? "This Mission is already Loaded, so its file is on the Controller and withdrawing cannot reach it. " +
+                "Fly it and Mark it Flown, which releases its Card."
               : `A ${row.state} Mission has nothing to withdraw: it was never Dispatched, or it is already history.`,
           state: row.state,
         },

@@ -63,6 +63,21 @@ export async function POST(request: Request) {
         { status: 404 },
       );
     }
+    // Only a Mission on the Controller can have been flown. Marking one that
+    // was never written would release its Card for a flight that never ran
+    // (#163). Unmarking is the operator's override, so it is open wherever a
+    // mark could have been made.
+    if (row.state !== "loaded" && row.state !== "flown") {
+      return Response.json(
+        {
+          error:
+            `This Mission is ${row.state}, so it has not been written to the Controller and cannot have been ` +
+            "flown. It can be marked Flown once it is Loaded.",
+          state: row.state,
+        },
+        { status: 409 },
+      );
+    }
     if (!record.dispatched_key) {
       return Response.json(
         {
