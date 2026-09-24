@@ -86,18 +86,50 @@ immediately with `CUDA error: too many resources requested for launch` — that
 kernel will not launch at that tile size on this card. A dead end, not a
 tuning knob.
 
-## The gap this report does not close
+## Scored: full resolution against half resolution (measured 2026-09-24)
 
-**The tiled run has no quality score.** It was launched with
-`--save_steps 999999`, so no checkpoint was written (its `train/` directory
-holds 40 KB), and the evaluator never ran against it. Its memory behaviour is
-measured; its fidelity is not. Nothing here yet proves tiled training at
-2,048 px matches whole-frame training on the same Capture, which is the claim
-the operator's "no reduced quality" rule actually depends on.
+The tiled run above was never scored. Wave 4 repeated it with checkpointing,
+next to a half-resolution control. Both trained to completion, but their
+scoring ran out of video memory at 45 MP, and the harness then deleted both
+checkpoints. Two changes followed. The evaluator now scores in 2,048 px
+blocks. PSNR is taken from the whole image's squared error, SSIM is averaged
+over the blocks weighted by pixel count, and LPIPS over 1,024 px blocks. And a
+checkpoint now survives a failed score. A 300-step smoke fit proved scoring at
+45 MP before either hour-long run started. Wave 4b is the result.
 
-The next run should be the same recipe with checkpointing on and the shared
-evaluator applied, against a half-resolution control scored the same way. Until
-that exists, "tiles win" is a memory result only.
+Both runs used the same recipe as above: MCMC, `cap-max 3000000`, `--packed`,
+6,000 steps. They were scored by the same evaluator on the same 45 held-out
+views, **both rendered and scored at the full 8,191×5,459**. The tiled trainer
+renders every tile of one whole image and accumulates the gradients before a
+single optimizer step, so a step covers one full image in both runs. The only
+differences are training resolution and tiling.
+
+| Run | Trained at | Wall | Allocated | Card | Host RAM | PSNR | SSIM | LPIPS |
+|---|---|---|---|---|---|---|---|---|
+| `fit-t-g2-tile2048-scored2` | full, 2,048 px tiles | 3,516 s | 6,936 MiB | 8,044 MiB | 8.6 GiB | **21.82** | 0.575 | 0.661 |
+| `fit-t-g2-df2-control2` | half, whole frames | **818 s** | 7,394 MiB | 8,714 MiB | 3.4 GiB | 21.59 | **0.584** | **0.630** |
+
+LPIPS is lower-is-better. Both runs reached the 3 M Gaussian cap.
+
+**At this budget, full-resolution training buys nothing measurable, and takes
+4.3 times as long.** PSNR moves 0.2 dB in its favour, but view by view it wins
+on 23 of 45, a coin toss. SSIM favours half resolution on 38 of 45 views, and
+LPIPS on 42 of 45. The medians agree: PSNR 22.09 against 22.05.
+
+What this does and does not show:
+
+- **It is a 6,000-step result.** 360 images are each seen about seventeen
+  times, and both scores are low in absolute terms. A production fit runs
+  30,000 steps. Whether full resolution pulls ahead once the model has had
+  time to use the extra detail is the open question. One overnight pair at
+  30,000 steps answers it: about five hours and one hour.
+- **Tiling and resolution move together here.** A whole-frame full-resolution
+  run would separate them, but it does not fit the card (`fit-t-g2-full`,
+  above). So a small cost from tiling itself cannot be ruled out, and it would
+  show up as exactly this pattern.
+- **Both fit the card.** Half resolution uses slightly *more* video memory,
+  because its whole frame is larger than one 2,048 px tile. Neither is close to
+  the 10 GiB ceiling.
 
 ## What to set today
 
@@ -105,10 +137,21 @@ that exists, "tiles win" is a memory result only.
   that finishes and one that does not, and it costs wall clock, which the
   operator has already said is the cheap resource.
 - **A real Site (300 images at 50 MP)**: gsplat, MCMC with an explicit
-  `cap-max`, `--packed`, tiled at 2,048 px, full resolution. Estimated from the
-  Trakai measurement, not measured: the per-image cost is bounded by the tile,
-  so the card should hold; host RAM and wall clock scale with image count, and
-  6,000 steps on 360 images took 57 minutes, so a 30,000-step production fit is
-  a five-to-six-hour overnight job.
-- **Do not lower image resolution to fit.** On this hardware it does not help:
-  the default runs failed at the same model size at every resolution tested.
+  `cap-max 3000000`, `--packed`, `PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True`.
+  - **Measured, not estimated:** 360 images at 44.7 MP fit the card either
+    way, at 8.0-8.7 GiB.
+  - **Resolution:** full resolution in 2,048 px tiles (`simple_trainer_tiles.py`,
+    `--data_factor 1 --tile_size 2048`) is the full-quality setting.
+    Half-resolution whole frames (`--data_factor 2`) scored as well at 6,000
+    steps in a quarter of the time. Take half resolution only if the
+    30,000-step pair confirms it.
+  - **Wall clock:** 30,000 steps is about five hours tiled at full resolution,
+    and about 70 minutes at half.
+- **Do not lower image resolution to *fit*.** On this hardware it does not
+  help memory: the uncapped default runs failed at the same model size at every
+  resolution tested. The cap is what makes a run fit. Resolution is a question
+  of quality and time only.
+
+Harness, committed in `scripts/measure/gsplat/`: `fit2.sh` (one measured run),
+`eval_splat.py` (the shared evaluator) and `q40-gsplat-937e299.patch` (the
+tiled trainer, verified to rebuild the exact files that ran).
