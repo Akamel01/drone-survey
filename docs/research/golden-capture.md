@@ -42,9 +42,11 @@ check at it.
 
 **OpenDroneMap's own `odm_data_bellus` sample**
 (`https://github.com/OpenDroneMap/odm_data_bellus`), 122 images, 12.3MP
-(Canon PowerShot S110), already present on the compute host at
-`~/drone/datasets/code/` with its own `gcp_list.txt` (not used by this run --
-see "No ground control" below).
+(Canon PowerShot S110), on the compute host at `~/drone/golden/bellus-v1/`
+(`images/` plus the dataset's own `gcp_list.txt`, not used by the Pipeline --
+see "No ground control" below). The original `~/drone/datasets/code/` copy
+was removed in the 2026-09-14 cleanup; `gcp_list.txt` was re-fetched from the
+dataset's repository on 2026-09-24.
 
 **It has real GPS on every frame** (checked: `exiftool -GPSLatitude
 -GPSLongitude` on all 122, none missing) and locked
@@ -262,3 +264,34 @@ measured against real Anchors, not left at its current placeholder, before
 trusting nearest-projection matching in production. Left open rather than
 tuned here: no real Anchors exist yet to measure the right value against
 (DONE CRITERION #5, unchanged).
+
+## Re-run, 2026-09-24
+
+The whole Manifest on today's `main`, nothing pre-seeded or skipped, to check
+nothing had regressed since the reference run. **It had.** The declared-facts
+refactor (#115) sent `solve`'s second pass down the CLI route whenever the
+Manifest declared no ground control, which left `reconstruct` no NodeODM task
+to restart. The run crashed in `reconstruct-dense`. Two more breaks sat behind
+it: `task.json` was no longer handed between the reconstruct stages, and the
+finished NodeODM task was never removed. All three were fixed in the same
+change, and `nodes/check_ortho.py` now drives that seam against a stand-in
+NodeODM.
+
+After the fix:
+
+| | Reference (2026-09-14) | Re-run (2026-09-24) |
+|---|---|---|
+| Nodes | 12/12 | 12/12 |
+| Wall clock | 902 s | 849 s |
+| Filter | kept 121/122 | kept 121/122 |
+| Mesh | 317,869 faces, 4.06 M points | 315,771 faces, 4.15 M points |
+| Orthomosaic | 11,001×13,680 px, 5 cm, EPSG:32617 | 10,814×13,560 px, 5 cm, EPSG:32617 |
+| COG | valid, 6 overviews | valid, 6 overviews |
+| Valid pixels | 66.5% | 67.6% |
+| NodeODM tasks left behind | 0 | 0 |
+
+The real-data projection check (`check_bellus_real_projection`) ran on the
+host against the re-fetched `gcp_list.txt`: errors of 10.1, 107.3, 175.9 and
+193.1 px, mean 121.6 px. That is within the 220 px tolerance and inside the
+spread of the earlier runs above.
+
