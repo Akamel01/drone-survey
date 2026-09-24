@@ -610,7 +610,9 @@ export default function Sidebar({
           />
           <div className={styles.hint}>
             {missionNameProblem(editing.name) ??
-              "Two Missions may share a Site and a date when their names differ — that is two deliberate flights, not a correction."}
+              (editing.copied_from
+                ? `A copy of ${editing.copied_from}. Saving makes a new Mission; that one is not changed.`
+                : "Two Missions may share a Site and a date when their names differ — that is two deliberate flights, not a correction.")}
           </div>
         </Field>
         <Field label="Date" value={spec.date || "—"}>

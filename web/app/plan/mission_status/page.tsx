@@ -23,12 +23,11 @@ export const EDIT_HANDOFF_KEY = "drone-planner.edit-mission";
 export default function MissionStatusPage() {
   const router = useRouter();
 
-  function editInPlanner(row: MissionRow) {
+  // A copy travels the same way as an edit, and the planner makes it a new
+  // Mission there, with its own date -- the day it is opened, not this one.
+  function openInPlanner(row: MissionRow, copy: boolean) {
     try {
-      localStorage.setItem(
-        EDIT_HANDOFF_KEY,
-        JSON.stringify({ spec: row.spec, id: row.id, name: row.name }),
-      );
+      localStorage.setItem(EDIT_HANDOFF_KEY, JSON.stringify({ row, copy }));
     } catch {
       // No storage: the planner still opens, just without the Mission.
     }
@@ -39,7 +38,7 @@ export default function MissionStatusPage() {
     <div className={styles.page}>
       <PlanNav />
       <div className={styles.body}>
-        <MissionList onEdit={editInPlanner} />
+        <MissionList onEdit={(row) => openInPlanner(row, false)} onCopy={(row) => openInPlanner(row, true)} />
       </div>
     </div>
   );
