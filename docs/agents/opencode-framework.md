@@ -12,8 +12,8 @@ so every change traces to an issue and a pull request.
 
 | Who | Does |
 |---|---|
-| **Operator** | Decides scope, judges anything that is a matter of taste, and merges during the trial |
-| **Claude Code** (orchestrator) | Writes tickets, picks the frontier, dispatches, reviews each pull request against its ticket, sends changes back, lands |
+| **Operator** | Decides scope and judges anything that is a matter of taste |
+| **Claude Code** (orchestrator) | Writes tickets, picks the frontier, dispatches, reviews each pull request against its ticket, sends changes back, and merges |
 | **opencode** (worker) | One session per ticket, running `/autoforge`: reads the ticket, plans, builds, tests, and opens one pull request that closes it |
 
 The orchestrator never does a ticket's work itself. When opencode cannot finish
@@ -40,7 +40,7 @@ tickets (to-tickets skill, ready-for-agent)
   → 1 pick      frontier: open, ready, every blocker closed, files don't overlap
   → 2 dispatch  dispatch.sh <issue> [base] — worktree oc/<issue>, opencode /autoforge
   → 3 review    PR against the ticket's acceptance criteria; feedback → same session
-  → 4 land      merge (operator during the trial); "Closes #N" closes the ticket
+  → 4 land      the orchestrator merges; "Closes #N" closes the ticket
 ```
 
 Each step's inputs, job, outputs and human check are in the skill's
@@ -76,8 +76,10 @@ proved itself it moves to a repository of its own.
   UI theme and Showcase tickets are cut from its branch
   (`claude/ui-redesign-video-specs-e0a912`), because their "Read first"
   documents are there. Their pull requests still target `main`.
-- **Who merges**: the operator, during the trial. The orchestrator reviews
-  first and says what it checked.
+- **Who merges**: the orchestrator, once its review passes and the checks are
+  green, in the order the tickets' "Blocked by" implies (operator's decision,
+  2026-09-25). A ticket whose result is a matter of taste is shown to the
+  operator before it merges.
 - **Checks**: `npm test`, `npm run lint` and `npm run build` in `web/`; the
   `--selftest` of every script a change touches; whatever the ticket adds.
 - **Parallel runs**: only tickets whose "What to build" names different files.
