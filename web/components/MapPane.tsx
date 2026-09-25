@@ -8,10 +8,12 @@ import {
   type GeoJSONSource,
   type MapMouseEvent,
   type MapLayerMouseEvent,
+  type MapLayerTouchEvent,
+  type MapTouchEvent,
 } from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 import { BASEMAP, BASEMAP_OSM } from "@/lib/basemap";
-import { insertCorner, moveCorner, removeCorner, trimDoubleClick } from "@/lib/aoi";
+import { insertCorner, isTap, moveCorner, removeCorner, trimDoubleClick } from "@/lib/aoi";
 import { circlePolygon, geodesicM } from "@/lib/mission";
 import type { CircleShape, MissionSpec } from "@/lib/spec";
 import type { Preview } from "@/lib/mission";
@@ -50,6 +52,9 @@ interface MapPaneProps {
   onPoiChange: (center: [number, number]) => void;
   onOrbitRadiusChange: (radiusM: number) => void;
   onModeChange: (mode: DrawMode) => void;
+  /** Corner selected by tapping it on touch, for the Remove corner button. */
+  selectedCorner: number | null;
+  onSelectedCornerChange: (i: number | null) => void;
 }
 
 const START = { lat: 49.1891, lon: -122.8396, zoom: 16 };
@@ -208,6 +213,10 @@ function addLayers(map: MaplibreMap) {
     paint: { "circle-radius": 5, "circle-color": "#4fb8a8", "circle-stroke-width": 1.5, "circle-stroke-color": "#06110f" },
   });
 
+  // Hit layer for touch input: a 44px target over the same source, invisible.
+  // It shares the vertices source, so it can never drift out of sync with it.
+  map.addLayer({ id: "aoi-vertices-hit", type: "circle", source: "aoi-vertices", paint: { "circle-radius": 22, "circle-color": "#00000000", "circle-opacity": 0 } });
+
   // Smaller, amber handles distinct from the teal vertices: click to insert.
   map.addSource("aoi-midpoints", { type: "geojson", data: fc([]) });
   map.addLayer({
@@ -222,6 +231,8 @@ function addLayers(map: MaplibreMap) {
       "circle-stroke-color": "#06110f",
     },
   });
+  // Hit layer for touch input on midpoints: same source, invisible 44px target.
+  map.addLayer({ id: "aoi-midpoints-hit", type: "circle", source: "aoi-midpoints", paint: { "circle-radius": 22, "circle-color": "#00000000", "circle-opacity": 0 } });
 
   // A circle — and an orbit — is edited as a centre and a radius.
   map.addSource("circle-handles", { type: "geojson", data: fc([]) });
@@ -231,6 +242,8 @@ function addLayers(map: MaplibreMap) {
     source: "circle-handles",
     paint: { "circle-radius": 6, "circle-color": "#4fb8a8", "circle-stroke-width": 2, "circle-stroke-color": "#06110f" },
   });
+  // Hit layer for touch input on circle handles: same source, invisible 44px target.
+  map.addLayer({ id: "circle-handles-hit", type: "circle", source: "circle-handles", paint: { "circle-radius": 22, "circle-color": "#00000000", "circle-opacity": 0 } });
 }
 
 function labelMarker(text: string, background: string): HTMLElement {
@@ -253,12 +266,15 @@ export default function MapPane({
   onPoiChange,
   onOrbitRadiusChange,
   onModeChange,
+  selectedCorner,
+  onSelectedCornerChange,
 }: MapPaneProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<MaplibreMap | null>(null);
   const homeMarkerRef = useRef<Marker | null>(null);
   const poiMarkerRef = useRef<Marker | null>(null);
   const endMarkersRef = useRef<Marker[]>([]);
+  const dragLockRef = useRef(false);
   const numberMarkersRef = useRef<Marker[]>([]);
   const [basemap, setBasemap] = useState<"esri" | "osm">("esri");
   const [showFootprint, setShowFootprint] = useState(false);
@@ -270,6 +286,10 @@ export default function MapPane({
   const dragIndexRef = useRef<number | null>(null);
   const circleDragRef = useRef<null | "center" | "radius">(null);
   const circleCenterRef = useRef<LL | null>(null);
+  // Touch press bookkeeping: where the finger landed and which handle it armed,
+  // so touchend can tell a tap (selects the corner) from a drag (moves it).
+  const touchStartRef = useRef<{ x: number; y: number; index: number; kind: "vertex" | "midpoint" | "circle" | "fill" } | null>(null);
+  const touchMovedRef = useRef(false);
   const shapeDragRef = useRef<null | { start: LL; aoi: LL[]; shape: CircleShape | null }>(null);
   // True while a shape is being rubber-banded, so the data push below leaves the
   // live preview alone instead of overwriting it from the committed spec.
@@ -284,6 +304,7 @@ export default function MapPane({
       setDrawHint(null);
     }
     setDrawNote(null);
+    onSelectedCornerChange(null);
     onModeChange(next);
   };
 
@@ -325,6 +346,8 @@ export default function MapPane({
     onModeChange: changeMode,
     finishDraw,
     cancelDraw,
+    selectedCorner,
+    onSelectedCornerChange,
   };
   const stateRef = useRef(latest);
   useEffect(() => {
@@ -359,10 +382,85 @@ export default function MapPane({
 
     // The editing handles sit on top of everything else, so anything that reacts
     // to a press on the map has to know when the press was really on a handle.
-    const onHandle = (point: MapMouseEvent["point"]) =>
-      map.getLayer("aoi-vertices") !== undefined &&
-      map.queryRenderedFeatures(point, { layers: ["aoi-vertices", "aoi-midpoints", "circle-handles"] })
-        .length > 0;
+    // The mouse keeps the exact pre-touch query; touch adds the invisible hit
+    // layers, which must never widen what the mouse grabs.
+    const VISIBLE_HANDLES = ["aoi-vertices", "aoi-midpoints", "circle-handles"];
+    const TOUCH_HANDLES = [...VISIBLE_HANDLES, "aoi-vertices-hit", "aoi-midpoints-hit", "circle-handles-hit"];
+    const handlesAt = (point: MapMouseEvent["point"], layers: string[]) =>
+      map.getLayer("aoi-vertices") !== undefined && map.queryRenderedFeatures(point, { layers }).length > 0;
+    const onHandle = (point: MapMouseEvent["point"]) => handlesAt(point, VISIBLE_HANDLES);
+    const onTouchHandle = (point: MapMouseEvent["point"]) => handlesAt(point, TOUCH_HANDLES);
+
+    // One press-and-drag core for mouse and touch. The event wrappers translate
+    // their event into plain data and call these, so neither input owns the
+    // logic and the two paths cannot drift apart.
+    const holdMap = () => {
+      map.dragPan.disable();
+      map.getCanvas().style.cursor = "grabbing";
+    };
+    const startVertexDrag = (index: number) => {
+      dragIndexRef.current = index;
+      holdMap();
+    };
+    const startMidpointDrag = (edge: number, at: LL) => {
+      const { spec, onAoiChange } = stateRef.current;
+      onAoiChange(insertCorner(spec.aoi, edge, at), spec.shape);
+      dragIndexRef.current = edge + 1;
+      holdMap();
+    };
+    const startCircleDrag = (kind: "center" | "radius") => {
+      circleDragRef.current = kind;
+      holdMap();
+    };
+    const startShapeDrag = (at: LL) => {
+      const { spec } = stateRef.current;
+      shapeDragRef.current = { start: at, aoi: spec.aoi, shape: spec.shape ?? null };
+      holdMap();
+    };
+    // Where the finger presses down, so touchend can tell a tap (selects the
+    // corner) from a drag (moves it). Mouse needs none of this.
+    const noteTouchStart = (
+      x: number,
+      y: number,
+      index: number,
+      kind: "vertex" | "midpoint" | "circle" | "fill",
+    ) => {
+      touchStartRef.current = { x, y, index, kind };
+      touchMovedRef.current = false;
+    };
+    // The drag-move core: circle handles, whole-shape moves and corner drags
+    // all land here with a map position, whichever input produced it.
+    const moveDragged = (p: LL) => {
+      const { spec, onAoiChange, onPoiChange, onOrbitRadiusChange } = stateRef.current;
+      if (circleDragRef.current) {
+        if (spec.mission_type === "orbit" && spec.orbit.center) {
+          if (circleDragRef.current === "center") onPoiChange(p);
+          else onOrbitRadiusChange(Math.max(5, Math.round(geodesicM(spec.orbit.center, p))));
+        } else if (spec.shape) {
+          const s = spec.shape;
+          if (circleDragRef.current === "center") {
+            onAoiChange(circlePolygon(p, s.radius_m), { ...s, center: p });
+          } else {
+            const radius_m = Math.max(1, geodesicM(s.center, p));
+            onAoiChange(circlePolygon(s.center, radius_m), { ...s, radius_m });
+          }
+        }
+        return;
+      }
+      if (shapeDragRef.current) {
+        const d = shapeDragRef.current;
+        const dLat = p[0] - d.start[0];
+        const dLon = p[1] - d.start[1];
+        const moved = d.aoi.map(([la, lo]) => [la + dLat, lo + dLon] as LL);
+        onAoiChange(
+          moved,
+          d.shape ? { ...d.shape, center: [d.shape.center[0] + dLat, d.shape.center[1] + dLon] } : null,
+        );
+        return;
+      }
+      if (dragIndexRef.current === null) return;
+      onAoiChange(moveCorner(spec.aoi, dragIndexRef.current, p), spec.shape);
+    };
 
     map.on("click", (e: MapMouseEvent) => {
       const { mode, spec, onAoiChange, onHomeChange, onPoiChange, onModeChange } = stateRef.current;
@@ -436,30 +534,50 @@ export default function MapPane({
     map.on("mousedown", "aoi-vertices", (e: MapLayerMouseEvent) => {
       if (!e.features?.length) return;
       e.preventDefault();
-      dragIndexRef.current = e.features[0].properties!.index as number;
-      map.dragPan.disable();
-      map.getCanvas().style.cursor = "grabbing";
+      startVertexDrag(e.features[0].properties!.index as number);
+    });
+
+    // Touch variant: hit area for vertices
+    map.on("touchstart", "aoi-vertices-hit", (e: MapLayerTouchEvent) => {
+      if (dragLockRef.current || !e.features?.length) return;
+      dragLockRef.current = true;
+      e.preventDefault();
+      const index = e.features[0].properties!.index as number;
+      noteTouchStart(e.point.x, e.point.y, index, "vertex");
+      startVertexDrag(index);
     });
 
     // Clicking a midpoint inserts a vertex there, then hands straight over to the
     // existing drag machinery so a click drops it and a drag positions it.
     map.on("mousedown", "aoi-midpoints", (e: MapLayerMouseEvent) => {
-      const { spec, onAoiChange } = stateRef.current;
       if (!e.features?.length) return;
       e.preventDefault();
+      startMidpointDrag(e.features[0].properties!.edgeIndex as number, [e.lngLat.lat, e.lngLat.lng]);
+    });
+
+    // Touch variant: hit area for midpoints
+    map.on("touchstart", "aoi-midpoints-hit", (e: MapLayerTouchEvent) => {
+      if (dragLockRef.current || !e.features?.length) return;
+      dragLockRef.current = true;
+      e.preventDefault();
       const edge = e.features[0].properties!.edgeIndex as number;
-      onAoiChange(insertCorner(spec.aoi, edge, [e.lngLat.lat, e.lngLat.lng]), spec.shape);
-      dragIndexRef.current = edge + 1;
-      map.dragPan.disable();
-      map.getCanvas().style.cursor = "grabbing";
+      noteTouchStart(e.point.x, e.point.y, edge + 1, "midpoint");
+      startMidpointDrag(edge, [e.lngLat.lat, e.lngLat.lng]);
     });
 
     map.on("mousedown", "circle-handles", (e: MapLayerMouseEvent) => {
       if (stateRef.current.mode !== "idle" || !e.features?.length) return;
       e.preventDefault();
-      circleDragRef.current = e.features[0].properties!.kind as "center" | "radius";
-      map.dragPan.disable();
-      map.getCanvas().style.cursor = "grabbing";
+      startCircleDrag(e.features[0].properties!.kind as "center" | "radius");
+    });
+
+    // Touch variant: hit area for circle handles
+    map.on("touchstart", "circle-handles-hit", (e: MapLayerTouchEvent) => {
+      if (dragLockRef.current || stateRef.current.mode !== "idle" || !e.features?.length) return;
+      dragLockRef.current = true;
+      e.preventDefault();
+      noteTouchStart(e.point.x, e.point.y, -1, "circle");
+      startCircleDrag(e.features[0].properties!.kind as "center" | "radius");
     });
 
     // Dragging inside the shape moves the whole thing. The handles sit on top of
@@ -469,13 +587,19 @@ export default function MapPane({
       if (mode !== "idle" || spec.mission_type === "orbit" || spec.aoi.length < 3) return;
       if (onHandle(e.point)) return;
       e.preventDefault();
-      shapeDragRef.current = {
-        start: [e.lngLat.lat, e.lngLat.lng],
-        aoi: spec.aoi,
-        shape: spec.shape ?? null,
-      };
-      map.dragPan.disable();
-      map.getCanvas().style.cursor = "grabbing";
+      startShapeDrag([e.lngLat.lat, e.lngLat.lng]);
+    });
+
+    // Touch variant: a finger inside the shape moves the whole thing, like the
+    // mouse. A tap without movement ends the drag with nothing moved.
+    map.on("touchstart", "aoi-fill", (e: MapLayerTouchEvent) => {
+      const { mode, spec } = stateRef.current;
+      if (dragLockRef.current || mode !== "idle" || spec.mission_type === "orbit" || spec.aoi.length < 3) return;
+      if (onTouchHandle(e.point)) return;
+      dragLockRef.current = true;
+      e.preventDefault();
+      noteTouchStart(e.point.x, e.point.y, -1, "fill");
+      startShapeDrag([e.lngLat.lat, e.lngLat.lng]);
     });
 
     map.on("contextmenu", "aoi-vertices", (e: MapLayerMouseEvent) => {
@@ -488,7 +612,7 @@ export default function MapPane({
     });
 
     map.on("mousemove", (e: MapMouseEvent) => {
-      const { spec, mode, onAoiChange, onPoiChange, onOrbitRadiusChange } = stateRef.current;
+      const { spec, mode } = stateRef.current;
       const p: LL = [e.lngLat.lat, e.lngLat.lng];
       const src = (id: string) => map.getSource(id) as GeoJSONSource | undefined;
 
@@ -513,39 +637,13 @@ export default function MapPane({
         return;
       }
 
-      if (circleDragRef.current) {
-        if (spec.mission_type === "orbit" && spec.orbit.center) {
-          if (circleDragRef.current === "center") onPoiChange(p);
-          else onOrbitRadiusChange(Math.max(5, Math.round(geodesicM(spec.orbit.center, p))));
-        } else if (spec.shape) {
-          const s = spec.shape;
-          if (circleDragRef.current === "center") {
-            onAoiChange(circlePolygon(p, s.radius_m), { ...s, center: p });
-          } else {
-            const radius_m = Math.max(1, geodesicM(s.center, p));
-            onAoiChange(circlePolygon(s.center, radius_m), { ...s, radius_m });
-          }
-        }
-        return;
-      }
-
-      if (shapeDragRef.current) {
-        const d = shapeDragRef.current;
-        const dLat = p[0] - d.start[0];
-        const dLon = p[1] - d.start[1];
-        const moved = d.aoi.map(([la, lo]) => [la + dLat, lo + dLon] as LL);
-        onAoiChange(
-          moved,
-          d.shape ? { ...d.shape, center: [d.shape.center[0] + dLat, d.shape.center[1] + dLon] } : null,
-        );
-        return;
-      }
-
-      if (dragIndexRef.current === null) return;
-      onAoiChange(moveCorner(spec.aoi, dragIndexRef.current, p), spec.shape);
+      moveDragged(p);
     });
 
     const endDrag = () => {
+      // The re-entry lock always clears, even when nothing was armed: a touch
+      // refused up front must not lock touch out afterwards.
+      dragLockRef.current = false;
       if (dragIndexRef.current === null && circleDragRef.current === null && shapeDragRef.current === null) {
         return;
       }
@@ -556,7 +654,34 @@ export default function MapPane({
       map.getCanvas().style.cursor = stateRef.current.mode === "idle" ? "" : "crosshair";
     };
     map.on("mouseup", endDrag);
-    for (const layer of ["aoi-vertices", "aoi-midpoints", "circle-handles"]) {
+    // A touch that never moved is a tap on a corner: select it for the Remove
+    // corner button instead of dragging it. Anything else ends the drag.
+    map.on("touchend", () => {
+      const start = touchStartRef.current;
+      touchStartRef.current = null;
+      if (start && !touchMovedRef.current && (start.kind === "vertex" || start.kind === "midpoint")) {
+        touchMovedRef.current = false;
+        dragIndexRef.current = null;
+        circleDragRef.current = null;
+        shapeDragRef.current = null;
+        dragLockRef.current = false;
+        map.dragPan.enable();
+        map.getCanvas().style.cursor = stateRef.current.mode === "idle" ? "" : "crosshair";
+        // Selecting is an edit-mode act: while drawing, a tap stays a no-op so
+        // it can never arm the Remove button mid-draw.
+        if (stateRef.current.mode === "idle") stateRef.current.onSelectedCornerChange(start.index);
+        return;
+      }
+      touchMovedRef.current = false;
+      endDrag();
+    });
+    map.on("touchcancel", () => {
+      touchStartRef.current = null;
+      touchMovedRef.current = false;
+      endDrag();
+      map.getCanvas().style.cursor = stateRef.current.mode === "idle" ? "" : "crosshair";
+    });
+    for (const layer of ["aoi-vertices", "aoi-midpoints", "circle-handles", "aoi-vertices-hit", "aoi-midpoints-hit", "circle-handles-hit"]) {
       map.on("mouseenter", layer, () => {
         map.getCanvas().style.cursor = "grab";
       });
@@ -574,6 +699,22 @@ export default function MapPane({
       if (shapeDragRef.current === null) {
         map.getCanvas().style.cursor = stateRef.current.mode === "idle" ? "" : "crosshair";
       }
+    });
+
+    // Touch move handling runs the same drag-move core as the mouse, with one
+    // extra gate above it: a finger that has barely moved is a tap, not a drag.
+    map.on("touchmove", (e: MapTouchEvent) => {
+      const x = e.point.x;
+      const y = e.point.y;
+      const p: LL = [e.lngLat.lat, e.lngLat.lng];
+      // Hold the corner still so touchend can select it instead of shifting it
+      // by a pixel.
+      const start = touchStartRef.current;
+      if (start && !touchMovedRef.current) {
+        if (isTap(x - start.x, y - start.y)) return;
+        touchMovedRef.current = true;
+      }
+      moveDragged(p);
     });
 
     const onKeydown = (e: KeyboardEvent) => {
@@ -603,6 +744,15 @@ export default function MapPane({
 
     if (!drawingRef.current) set("aoi", isOrbit ? fc([]) : polygonGeoJSON(spec.aoi));
     set("aoi-vertices", isOrbit || spec.shape ? fc([]) : pointsGeoJSON(spec.aoi, (i) => ({ index: i })));
+    // The tapped corner reads selected in amber; the rest stay teal.
+    if (map.getLayer("aoi-vertices")) {
+      map.setPaintProperty("aoi-vertices", "circle-color", [
+        "case",
+        ["==", ["get", "index"], selectedCorner ?? -1],
+        "#e0a44f",
+        "#4fb8a8",
+      ]);
+    }
     // Hidden while a shape is being drawn: there, a click on the map appends a
     // corner, and an insert handle sitting on the outline would make the two
     // indistinguishable. The corner handles carry no such ambiguity, so they
@@ -789,6 +939,27 @@ export default function MapPane({
               </button>
             )}
             <button onClick={cancelDraw}>Cancel</button>
+          </div>
+        </div>
+      )}
+      {/* Remove-corner action panel appears only when idle and a valid corner is selected. */}
+      {mode === "idle" && selectedCorner != null && spec.mission_type !== "orbit" && !spec.shape && (
+        <div className={styles.drawPanel}>
+          <div className={styles.drawTitle}>Remove corner</div>
+          <div className={styles.drawHint}>Tap the corner on the map to remove. Corners must remain at least three.</div>
+          <div className={styles.drawActions}>
+            <button
+              onClick={() => {
+                const newAoi = removeCorner(spec.aoi, selectedCorner);
+                if (newAoi !== spec.aoi) onAoiChange(newAoi, spec.shape);
+                onSelectedCornerChange(null);
+              }}
+              disabled={selectedCorner == null || selectedCorner >= spec.aoi.length || spec.aoi.length <= 3}
+              title={selectedCorner == null ? "Tap a corner on the map first" : `Remove corner ${selectedCorner + 1}`}
+            >
+              {selectedCorner == null ? "Remove corner" : `Remove corner ${selectedCorner + 1}`}
+            </button>
+            <button onClick={() => onSelectedCornerChange(null)}>Cancel</button>
           </div>
         </div>
       )}

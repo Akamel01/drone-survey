@@ -1,89 +1,101 @@
 :root {
-  --bg: #0b0d0f;
-  --panel: #131619;
-  --panel-raised: #1b1f23;
-  --border: #2a2f34;
-  --text: #d8dcdf;
-  --text-dim: #8a9096;
-  --accent: #4fb8a8;
-  --warn: #e0a94f;
-  --danger: #e0704f;
+  --sky-top:#496C81;
+  --sky-mid:#7C99AD;
+  --sky-low:#AABBCA;
+  --canopy-900:#0A0E0F;
+  --canopy-700:#161C1B;
+  --canopy-500:#27312D;
+  --haze:#788B92;
+  --glass-smoke:rgb(40 44 46 / 0.55);
+  --glass-clear:rgb(255 255 255 / 0.14);
+  --glass-clear-strong:rgb(255 255 255 / 0.22);
+  --glass-edge:rgb(255 255 255 / 0.14);
+  --scrim-bottom:linear-gradient(transparent,#0A0908);
+  --panel-light:#E7EDEF;
+  --panel-light-alt:#E0E2E4;
+  --chip:#D6DBDE;
+  --pill-active:#DEE0E4;
+  --ink:#0B0B0C;
+  --ink-2:#666C6C;
+  --on-glass:#FFFFFF;
+  --on-glass-2:rgb(255 255 255 / 0.85);
+  --on-glass-3:rgb(255 255 255 / 0.60);
+  --on-glass-4:rgb(255 255 255 / 0.45);
+  --black:#000000;
+  --badge-blue:#1C618A;
+  --warn:#E0A94F;
+  --danger:#E0704F;
+  --dur-press:120ms;
+  --dur-fast:150ms;
+  --dur-base:250ms;
+  --dur-slow:400ms;
+  --dur-count:900ms;
+/* motion tokens */
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-emphasised: cubic-bezier(0.3, 0.7, 0.2, 1);
+  --ease-in: cubic-bezier(0.4, 0, 1, 1);
+  --ease-count: cubic-bezier(0.3, 0.1, 0.3, 1);
+  --stagger: 90ms;
+/* font stacks */
   --mono: "SF Mono", ui-monospace, "Cascadia Code", Consolas, monospace;
   --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
 }
 
-* {
-  box-sizing: border-box;
-}
-
-html,
-body {
-  height: 100%;
-}
+html, body { height: 100%; }
+* { box-sizing: border-box; }
 
 body {
   margin: 0;
-  background: var(--bg);
-  color: var(--text);
+  background: var(--canopy-900);
+  color: var(--on-glass-2);
   font-family: var(--sans);
   font-size: 14px;
+  line-height: 1.5;
 }
 
-input,
-select,
-button {
+input, select, button {
   font-family: inherit;
   font-size: inherit;
   color: inherit;
 }
 
-.mono {
-  font-family: var(--mono);
-  font-variant-numeric: tabular-nums;
-}
+.glass-smoke { background: linear-gradient(180deg, rgb(255 255 255 / 0.06), transparent 60%), var(--glass-smoke); backdrop-filter: blur(20px) saturate(120%); color: var(--on-glass); box-shadow: inset 0 1px 0 var(--glass-edge), inset 0 0 0 1px rgb(255 255 255 / 0.06); -webkit-backdrop-filter: blur(20px) saturate(120%); }
+.glass-clear { background: linear-gradient(180deg, rgb(255 255 255 / 0.06), transparent 60%), var(--glass-clear); backdrop-filter: blur(20px) saturate(120%); color: var(--on-glass); -webkit-backdrop-filter: blur(20px) saturate(120%); }
+.glass-clear-strong { background: linear-gradient(180deg, rgb(255 255 255 / 0.22), transparent 60%), var(--glass-clear-strong); color: var(--on-glass); backdrop-filter: blur(20px) saturate(120%); -webkit-backdrop-filter: blur(20px) saturate(120%); }
 
-button {
-  background: var(--panel-raised);
-  border: 1px solid var(--border);
-  color: var(--text);
-  padding: 6px 10px;
-  border-radius: 4px;
-  cursor: pointer;
-}
+.panel-light { background: var(--panel-light); border: none; box-shadow: none; }
+.panel-light-alt { background: var(--panel-light-alt); border: none; box-shadow: none; }
+.chip { background: var(--chip); padding: 4px 8px; border-radius:999px; display:inline-block; }
 
-button:hover {
-  border-color: var(--accent);
-}
+button { background: var(--glass-clear); color: var(--on-glass); border: 1px solid var(--glass-edge); padding: 6px 10px; border-radius: 999px; cursor: pointer; }
+button:hover { filter: brightness(1.04); }
+button.active { background: var(--pill-active); color: var(--ink); }
+button.primary { background: var(--pill-active); color: var(--ink); font-weight: 600; border: none; }
+button:disabled { opacity: 0.5; cursor: default; }
 
-button.active {
-  background: var(--accent);
-  border-color: var(--accent);
-  color: #06110f;
-}
+input[type="range"] { width: 100%; }
+input[type="number"], input[type="text"], input[type="date"], select {
+  background: var(--glass-clear); border: 1px solid var(--glass-edge); border-radius: 12px; padding: 4px 6px; color: var(--on-glass); width: 100%; }
 
-button.primary {
-  background: var(--accent);
-  border-color: var(--accent);
-  color: #06110f;
-  font-weight: 600;
-}
+:focus-visible { outline: 2px solid #fff; outline-offset: 2px; box-shadow: 0 0 0 4px rgba(0,0,0,.35); }
 
-button:disabled {
-  opacity: 0.5;
-  cursor: default;
-}
+/* no global transitions; reduced-motion guard only */
+@media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
 
-input[type="range"] {
-  width: 100%;
+/* fallbacks when transparency or backdrop-filter is not available */
+@supports not (backdrop-filter: blur(20px)) {
+  .glass-smoke { background: #2B3033; border-color: rgba(255,255,255,0.25); }
+  .glass-clear { background: #5A7B8B; border-color: rgba(255,255,255,0.25); }
+  .panel-light { background: var(--panel-light); }
 }
-
-input[type="number"],
-input[type="text"],
-input[type="date"],
-select {
-  background: var(--bg);
-  border: 1px solid var(--border);
-  border-radius: 4px;
-  padding: 4px 6px;
-  width: 100%;
+@media (prefers-contrast: more) {
+  :root { --on-glass-3: rgb(255 255 255 / 0.85); --on-glass-4: rgb(255 255 255 / 0.85); }
+  .glass-smoke, .glass-clear, .panel-light { border: 1px solid #fff; }
 }
+@media (prefers-reduced-transparency: reduce) {
+  .glass-smoke { background: #2B3033; border-color: rgba(255,255,255,0.25); backdrop-filter: none; -webkit-backdrop-filter: none; }
+  .glass-clear { background: #5A7B8B; border-color: rgba(255,255,255,0.25); backdrop-filter: none; -webkit-backdrop-filter: none; }
+  .panel-light { background: var(--panel-light); border: none; backdrop-filter: none; -webkit-backdrop-filter: none; }
+}
+/* tabular numerals for figures */
+.mono { font-family: var(--mono); font-variant-numeric: tabular-nums; }

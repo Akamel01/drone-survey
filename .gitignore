@@ -35,6 +35,9 @@ tools/
 !docs/**/*.jpg
 !docs/**/*.png
 
+# ...and the versioned hero scene cuts
+!web/public/hero/**
+
 # ...and committed Pipeline input fixtures (small)
 !fixtures/showcase/sky-plate.png
 
