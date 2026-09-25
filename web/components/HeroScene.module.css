@@ -21,6 +21,11 @@
   .scene {
     display: none;
   }
+
+  /* The map-cannot-load fallback: this one scene is asked for on wide too. */
+  .sceneWide {
+    display: block;
+  }
 }
 
 .birds {

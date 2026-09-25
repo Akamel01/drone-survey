@@ -55,6 +55,9 @@ interface MapPaneProps {
   /** Corner selected by tapping it on touch, for the Remove corner button. */
   selectedCorner: number | null;
   onSelectedCornerChange: (i: number | null) => void;
+  /** A source-level map failure — in practice the basemap tiles — so the page
+   *  can fall back to the hero scene. */
+  onBasemapError?: () => void;
 }
 
 const START = { lat: 49.1891, lon: -122.8396, zoom: 16 };
@@ -268,6 +271,7 @@ export default function MapPane({
   onModeChange,
   selectedCorner,
   onSelectedCornerChange,
+  onBasemapError,
 }: MapPaneProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<MaplibreMap | null>(null);
@@ -348,6 +352,7 @@ export default function MapPane({
     cancelDraw,
     selectedCorner,
     onSelectedCornerChange,
+    onBasemapError,
   };
   const stateRef = useRef(latest);
   useEffect(() => {
@@ -371,8 +376,15 @@ export default function MapPane({
     map.addControl(new ScaleControl({ unit: "metric" }), "bottom-left");
 
     // A map that fails to add a source otherwise fails silently, and the data
-    // push below just returns early for ever. Say so instead.
-    map.on("error", (e) => console.error("[map]", e.error?.message ?? e));
+    // push below just returns early for ever. Say so instead. A failure tied to
+    // a source means its tiles never arrived, which is the page's cue to show
+    // the hero scene instead of an empty map.
+    map.on("error", (e) => {
+      console.error("[map]", e.error?.message ?? e);
+      // MapLibre puts `sourceId` on the event when a source's tiles fail,
+      // though its ErrorEvent type does not declare it.
+      if ((e as { sourceId?: string }).sourceId) stateRef.current.onBasemapError?.();
+    });
     if (process.env.NODE_ENV !== "production") {
       (window as unknown as { __map?: MaplibreMap }).__map = map;
     }

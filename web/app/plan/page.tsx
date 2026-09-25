@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { DEFAULT_SPEC, type CircleShape, type MissionSpec } from "@/lib/spec";
 import { preview, areaHectares } from "@/lib/mission";
 import type { MissionRow } from "@/lib/missionRecords";
@@ -48,8 +48,44 @@ const VIEWS: { id: View; label: string }[] = [
   { id: "settings", label: "Settings" },
 ];
 
+/** The tab bar's line icons: list, map, sliders (spec § 8 — 24 px, 1.5 stroke,
+ *  round caps, sized and stroked by the tab bar's own CSS). */
+function ViewIcon({ view }: { view: View }) {
+  if (view === "missions") {
+    return (
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <path d="M9 6h11M9 12h11M9 18h11" />
+        <path d="M4 6h.01M4 12h.01M4 18h.01" />
+      </svg>
+    );
+  }
+  if (view === "map") {
+    return (
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <path d="M9 4 3 6.5v13L9 17l6 2.5 6-2.5v-13L15 6.5 9 4Z" />
+        <path d="M9 4v13M15 6.5v13" />
+      </svg>
+    );
+  }
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M4 8h9M17 8h3M4 16h4M12 16h8" />
+      <circle cx="15" cy="8" r="2" />
+      <circle cx="10" cy="16" r="2" />
+    </svg>
+  );
+}
+
 export default function PlanPage() {
   const [view, setView] = useState<View>("missions");
+  // Wide screens: both floating panels start open, and folding one away is the
+  // operator's choice. Narrow screens switch whole views from the tab bar; the
+  // fold buttons are not shown there.
+  const [missionsOpen, setMissionsOpen] = useState(true);
+  const [settingsOpen, setSettingsOpen] = useState(true);
+  // The map has no surface without its basemap. Offline is the browser's own
+  // signal, plus MapPane reporting tiles that failed while it still said online.
+  const [noNetwork, setNoNetwork] = useState(false);
   const [spec, setSpecState] = useState<MissionSpec>(DEFAULT_SPEC);
   const [mode, setMode] = useState<DrawMode>("idle");
   // Off by default: the operator expects a number on every photo position to
@@ -67,6 +103,20 @@ export default function PlanPage() {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- one-time client-only read of the clock
     setSpecState((s) => (s.date ? s : { ...s, date: localDate(new Date()) }));
   }, []);
+
+  useEffect(() => {
+    const offline = () => setNoNetwork(true);
+    const online = () => setNoNetwork(false);
+    if (!navigator.onLine) offline();
+    addEventListener("offline", offline);
+    addEventListener("online", online);
+    return () => {
+      removeEventListener("offline", offline);
+      removeEventListener("online", online);
+    };
+  }, []);
+
+  const handleBasemapError = useCallback(() => setNoNetwork(true), []);
 
   const setSpec = (updater: (s: MissionSpec) => MissionSpec) => setSpecState(updater);
   const setAoi = (aoi: [number, number][], shape: CircleShape | null = null) => {
@@ -115,11 +165,29 @@ export default function PlanPage() {
   const onListRead = (read: MissionListRead) => setSites(sitesFrom(read.missions));
 
   return (
-    <div className={styles.page} data-view={view}>
+    <div
+      className={styles.page}
+      data-view={view}
+      data-network={noNetwork ? "offline" : "online"}
+      data-missions={missionsOpen ? "open" : "closed"}
+      data-settings={settingsOpen ? "open" : "closed"}
+    >
       <div className={styles.top}>
-        <section className={styles.missions} aria-label="Missions">
+        <section id="missions-panel" className={`${styles.missions} glass-smoke`} aria-label="Missions">
           <HeroScene playing={view === "missions"} />
-          <h2 className={styles.heading}>Missions</h2>
+          <div className={styles.panelHead}>
+            <h2 className={styles.heading}>Missions</h2>
+            <button
+              type="button"
+              className={styles.collapse}
+              aria-expanded={missionsOpen}
+              aria-controls="missions-panel"
+              aria-label="Collapse Missions"
+              onClick={() => setMissionsOpen(false)}
+            >
+              ‹
+            </button>
+          </div>
           <MissionList onEdit={editMission} onCopy={copyMission} editingId={editing.id} onRead={onListRead} />
         </section>
         <section className={styles.map} aria-label="Map">
@@ -138,9 +206,36 @@ export default function PlanPage() {
           onModeChange={setMode}
           selectedCorner={selectedCorner}
           onSelectedCornerChange={setSelectedCorner}
+          onBasemapError={handleBasemapError}
           />
+          {noNetwork && (
+            <div className={styles.noNetwork}>
+              <HeroScene playing showOnWide />
+              <div className={styles.cornerTL}>
+                <span>Mission Control</span>
+                <span>No network</span>
+              </div>
+              <div className={styles.cornerTR}>Basemap unavailable</div>
+              <div className={styles.cornerBR}>Esri satellite imagery</div>
+              <p className={`glass-smoke ${styles.offlineStatement}`}>The map needs a connection.</p>
+            </div>
+          )}
         </section>
-        <section className={styles.settings} aria-label="Settings">
+        <section id="settings-panel" className={`${styles.settings} glass-smoke`} aria-label="Settings">
+          <HeroScene variant="still" playing={false} />
+          <div className={styles.panelHead}>
+            <h2 className={styles.heading}>Settings</h2>
+            <button
+              type="button"
+              className={styles.collapse}
+              aria-expanded={settingsOpen}
+              aria-controls="settings-panel"
+              aria-label="Collapse Settings"
+              onClick={() => setSettingsOpen(false)}
+            >
+              ›
+            </button>
+          </div>
           <Sidebar
           spec={spec}
           setSpec={setSpec}
@@ -154,7 +249,7 @@ export default function PlanPage() {
           />
         </section>
       </div>
-      <div className={styles.summary}>
+      <div className={`glass-smoke ${styles.summary}`}>
         <SummaryBar
           spec={spec}
           preview={preview_}
@@ -163,6 +258,30 @@ export default function PlanPage() {
           sites={sites}
         />
       </div>
+      {!missionsOpen && (
+        <button
+          type="button"
+          className={`glass-smoke ${styles.edgeTab} ${styles.edgeTabLeft}`}
+          aria-expanded={false}
+          aria-controls="missions-panel"
+          aria-label="Expand Missions"
+          onClick={() => setMissionsOpen(true)}
+        >
+          ›
+        </button>
+      )}
+      {!settingsOpen && (
+        <button
+          type="button"
+          className={`glass-smoke ${styles.edgeTab} ${styles.edgeTabRight}`}
+          aria-expanded={false}
+          aria-controls="settings-panel"
+          aria-label="Expand Settings"
+          onClick={() => setSettingsOpen(true)}
+        >
+          ‹
+        </button>
+      )}
       <nav className={styles.views} aria-label="Show">
         {VIEWS.map((v) => (
           <button
@@ -172,7 +291,8 @@ export default function PlanPage() {
             aria-pressed={view === v.id}
             onClick={() => setView(v.id)}
           >
-            {v.label}
+            <ViewIcon view={v.id} />
+            <span>{v.label}</span>
           </button>
         ))}
       </nav>

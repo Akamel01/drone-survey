@@ -10,12 +10,12 @@
   display: flex;
 }
 
-/* Wide: Missions | Map | Settings, all at once. */
+/* Wide: Missions | Map | Settings, all at once. The panel's smoke glass comes
+   from the global `glass-smoke` class; only layout lives here. */
 .missions {
   width: 340px;
   flex: none;
   overflow-y: auto;
-  background: var(--canopy-700);
   border-right: 1px solid var(--glass-edge);
   padding: 16px;
   /* Positioning context for the hero scene; UI-3 owns the restyle. */
@@ -30,6 +30,13 @@
   margin: 0 0 12px;
 }
 
+/* A panel's title and its fold-away control. */
+.panelHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
 .map {
   flex: 1;
   min-width: 0;
@@ -39,7 +46,15 @@
 .settings {
   flex: none;
   display: flex;
+  flex-direction: column;
   min-height: 0;
+}
+
+/* The Sidebar is the one child that scrolls; the header sits above it. */
+.settings > :last-child {
+  flex: 1;
+  min-height: 0;
+  height: auto;
 }
 
 .summary {
@@ -48,6 +63,11 @@
 
 /* The switcher is for narrow screens only. */
 .views {
+  display: none;
+}
+
+/* The wide-screen, map-cannot-load fallback; hidden everywhere by default. */
+.noNetwork {
   display: none;
 }
 
@@ -72,8 +92,6 @@
 
   .missions {
     flex-direction: column;
-    /* Transparent slot so the hero shows through; the list keeps its own glass. */
-    background: transparent;
     border: none;
   }
 
@@ -83,10 +101,38 @@
     z-index: 1;
   }
 
-  /* The settings panel keeps its own scroll; it only loses its fixed width. */
-  .settings > * {
+  /* These panels are the hero scene's frame, not glass over a map: the still
+     shows through, so the global smoke glass is overridden back off. */
+  .page .missions,
+  .page .settings {
+    background: transparent;
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+    box-shadow: none;
+  }
+
+  /* The pre-blurred still sits behind the panel. */
+  .settings {
+    position: relative;
+  }
+
+  .settings > :not(:first-child) {
+    position: relative;
+    z-index: 1;
+  }
+
+  /* The settings panel keeps its own scroll; it only loses its fixed width and
+     the opaque background that would hide the still. */
+  .page .settings > :not(:first-child) {
+    background: transparent;
     width: 100%;
     border-left: none;
+  }
+
+  /* Folding is a wide-screen affordance; on a phone the tab bar is the switch. */
+  .collapse,
+  .edgeTab {
+    display: none;
   }
 
   /* The figures and Save belong to editing. At the aircraft the Missions view
@@ -96,17 +142,232 @@
     display: none;
   }
 
+  /* The reference's tab bar: line icons over a bottom scrim, no labels lost
+     (§ 8, § 11). */
   .views {
     display: flex;
     flex: none;
     gap: 8px;
     padding: 8px 16px calc(8px + env(safe-area-inset-bottom));
-    background: var(--canopy-700);
-    border-top: 1px solid var(--glass-edge);
+    background: var(--scrim-bottom);
+    border-top: none;
   }
 
   .views button {
     flex: 1;
-    padding: 10px 0;
+    min-height: 48px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 2px;
+    padding: 4px 0;
+    background: transparent;
+    border: none;
+    border-radius: 12px;
+    color: var(--on-glass-3);
+    font-size: 11px;
+    line-height: 1;
+  }
+
+  .views button svg {
+    width: 24px;
+    height: 24px;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.5;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+
+  /* Active is carried by icon and label, not a filled pill. */
+  .views button.active {
+    background: transparent;
+    color: var(--on-glass);
+    font-weight: 600;
+  }
+}
+
+/* Wide: the map is the surface; Missions, Settings and the Summary float over
+   it as smoke glass, inset 12 px (spec § 7 and § 10). Panels fold to their
+   edges, and the Summary spans the gap between them. */
+@media (min-width: 1000px) {
+  .page {
+    position: relative;
+    /* Current panel widths, so the Summary can size itself around them. */
+    --missions-w: 340px;
+    --settings-w: 360px;
+  }
+
+  .page[data-missions="closed"] {
+    --missions-w: 0px;
+  }
+
+  .page[data-settings="closed"] {
+    --settings-w: 0px;
+  }
+
+  .top {
+    position: absolute;
+    inset: 0;
+    display: block;
+  }
+
+  .map {
+    position: absolute;
+    inset: 0;
+  }
+
+  .missions,
+  .settings {
+    position: absolute;
+    top: 12px;
+    bottom: 12px;
+    z-index: 2;
+    border: none;
+    border-radius: 20px;
+  }
+
+  .missions {
+    left: 12px;
+    width: var(--missions-w);
+  }
+
+  .settings {
+    right: 12px;
+    width: var(--settings-w);
+    overflow: hidden;
+  }
+
+  .page[data-missions="closed"] .missions,
+  .page[data-settings="closed"] .settings {
+    display: none;
+  }
+
+  /* The map is the photograph; the panels' content must not paint over the
+     glass that sits on it. */
+  .page .settings > :not(:first-child) {
+    background: transparent;
+    border-left: none;
+  }
+
+  .summary {
+    position: absolute;
+    bottom: 12px;
+    left: calc(var(--missions-w) + 36px);
+    right: calc(var(--settings-w) + 36px);
+    z-index: 2;
+    border-radius: 20px;
+    padding: 8px 12px;
+  }
+
+  .page .summary > * {
+    background: transparent;
+    border-top: none;
+    padding: 0;
+  }
+
+  /* A folded panel leaves a tab at its edge to bring it back. */
+  .collapse {
+    width: 32px;
+    height: 32px;
+    padding: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 10px;
+    font-size: 16px;
+    line-height: 1;
+  }
+
+  .edgeTab {
+    position: absolute;
+    top: 50%;
+    transform: translateY(-50%);
+    z-index: 3;
+    width: 28px;
+    height: 56px;
+    padding: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 14px;
+    font-size: 18px;
+    line-height: 1;
+  }
+
+  .edgeTabLeft {
+    left: 12px;
+  }
+
+  .edgeTabRight {
+    right: 12px;
+  }
+
+  /* Without its basemap the map has no surface: the chrome gives way to the
+     hero scene and one line saying why. */
+  .page[data-network="offline"] .missions,
+  .page[data-network="offline"] .settings,
+  .page[data-network="offline"] .summary,
+  .page[data-network="offline"] .edgeTab {
+    display: none;
+  }
+
+  .noNetwork {
+    position: absolute;
+    inset: 0;
+    z-index: 2;
+    overflow: hidden;
+  }
+
+  .page[data-network="offline"] .noNetwork {
+    display: block;
+  }
+
+  /* Editorial corner labels over the scene: the tool's name and the failure
+     top-left, the missing layer and its credit smaller to the right. */
+  .cornerTL {
+    position: absolute;
+    top: 20px;
+    left: 20px;
+    z-index: 1;
+    display: flex;
+    flex-direction: column;
+    color: var(--on-glass);
+    font-size: 17px;
+    line-height: 1.3;
+  }
+
+  .cornerTR,
+  .cornerBR {
+    position: absolute;
+    right: 20px;
+    z-index: 1;
+    color: var(--on-glass-2);
+    font-size: 11px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    text-align: right;
+  }
+
+  .cornerTR {
+    top: 20px;
+  }
+
+  .cornerBR {
+    bottom: 20px;
+  }
+
+  .offlineStatement {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    margin: 0;
+    padding: 12px 20px;
+    border-radius: 20px;
+    color: var(--on-glass);
+    font-size: 17px;
+    white-space: nowrap;
   }
 }
