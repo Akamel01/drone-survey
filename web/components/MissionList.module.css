@@ -14,7 +14,7 @@
   align-items: center;
   gap: 10px;
   font-size: 12px;
-  color: var(--text-dim);
+  color: var(--ink-2);
 }
 
 .bar button {
@@ -40,7 +40,7 @@
 
 .quiet {
   font-size: 12px;
-  color: var(--text-dim);
+  color: var(--ink-2);
 }
 
 .card {
@@ -56,7 +56,7 @@
 }
 
 .toneGo {
-  border-left-color: var(--accent);
+  border-left-color: var(--on-glass);
 }
 
 .toneStop {
@@ -68,11 +68,11 @@
 }
 
 .toneQuiet {
-  border-left-color: var(--border);
+  border-left-color: var(--glass-edge);
 }
 
 .editing {
-  outline: 1px solid var(--accent);
+  outline: 1px solid var(--on-glass);
 }
 
 .head {
@@ -96,7 +96,7 @@
 .site {
   font-size: 12px;
   font-weight: 400;
-  color: var(--text-dim);
+  color: var(--ink-2);
   letter-spacing: 0;
 }
 
@@ -105,7 +105,7 @@
   font-size: 11px;
   text-transform: uppercase;
   letter-spacing: 0.06em;
-  color: var(--text-dim);
+  color: var(--ink-2);
 }
 
 /* The answer, at the size of an answer. "Open way finder 2" is the whole point
@@ -119,7 +119,7 @@
 }
 
 .toneGo .headline {
-  color: var(--accent);
+  color: var(--ink);
 }
 
 .toneStop .headline {
@@ -129,7 +129,7 @@
 .detail {
   margin: 0 0 8px;
   font-size: 12px;
-  color: var(--text-dim);
+  color: var(--ink-2);
   line-height: 1.55;
 }
 
@@ -155,17 +155,17 @@
   font-family: var(--mono);
   font-size: 13px;
   line-height: 1.7;
-  color: var(--text-dim);
+  color: var(--ink-2);
 }
 
 .flights .written {
-  color: var(--text);
+  color: var(--on-glass-2);
 }
 
 .reason {
   margin: 0 0 10px;
   font-size: 12px;
-  color: var(--text-dim);
+  color: var(--ink-2);
 }
 
 .actions {
@@ -187,19 +187,19 @@
 
 .actions button:focus-visible,
 .more summary:focus-visible {
-  outline: 2px solid var(--accent);
+  outline: 2px solid var(--on-glass);
   outline-offset: 2px;
 }
 
-.editingNote {
-  font-size: 11px;
-  color: var(--accent);
-}
+ .editingNote {
+   font-size: 11px;
+   color: var(--ink);
+ }
 
 .more {
   margin-top: 10px;
   font-size: 12px;
-  color: var(--text-dim);
+  color: var(--ink-2);
 }
 
 .more summary {
@@ -207,7 +207,7 @@
 }
 
 .more summary:hover {
-  color: var(--accent);
+  color: var(--ink);
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -222,14 +222,14 @@
 @media (prefers-reduced-transparency: reduce) {
   .card {
     backdrop-filter: none;
-    background: var(--panel-raised);
+    background: var(--canopy-700);
   }
 }
 
 @media (prefers-contrast: more) {
   .card {
-    background: var(--panel-raised);
-    border-color: var(--text-dim);
+    background: var(--canopy-700);
+    border-color: var(--ink);
   }
 }
 
@@ -239,7 +239,7 @@
 .done {
   margin: 0 0 8px;
   font-size: 12px;
-  color: var(--text-dim);
+  color: var(--ink-2);
   line-height: 1.55;
   overflow-wrap: anywhere;
 }

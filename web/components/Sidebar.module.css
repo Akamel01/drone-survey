@@ -3,8 +3,8 @@
   flex: none;
   height: 100%;
   overflow-y: auto;
-  background: var(--panel);
-  border-left: 1px solid var(--border);
+  background: var(--canopy-700);
+  border-left: 1px solid var(--glass-edge);
   padding: 16px;
 }
 
@@ -14,7 +14,7 @@
   position: relative;
   margin-bottom: 24px;
   padding-bottom: 20px;
-  border-bottom: 1px solid var(--border);
+  border-bottom: 1px solid var(--glass-edge);
 }
 
 .section:last-child {
@@ -27,7 +27,7 @@
   font-size: 12px;
   text-transform: uppercase;
   letter-spacing: 0.08em;
-  color: var(--text-dim);
+  color: var(--ink-2);
   margin: 0 0 12px;
 }
 
@@ -41,9 +41,9 @@
   width: 15px;
   height: 15px;
   margin-left: 6px;
-  border: 1px solid var(--border);
+  border: 1px solid var(--glass-edge);
   border-radius: 50%;
-  color: var(--text-dim);
+  color: var(--ink-2);
   font-size: 10px;
   font-style: italic;
   text-transform: none;
@@ -65,11 +65,11 @@
   right: 0;
   z-index: 5;
   padding: 9px 11px;
-  background: var(--panel-raised);
+  background: var(--canopy-700);
   border: 1px solid var(--warn);
   border-radius: 5px;
   box-shadow: 0 8px 20px rgba(0, 0, 0, 0.45);
-  color: var(--text);
+  color: var(--on-glass-2);
   font: 400 12px/1.55 var(--sans);
   font-style: normal;
   text-transform: none;
@@ -110,16 +110,16 @@
 }
 
 .fieldHead label {
-  color: var(--text-dim);
+  color: var(--ink-2);
 }
 
 .value {
-  color: var(--text);
+  color: var(--on-glass-2);
 }
 
 .hint {
   font-size: 12px;
-  color: var(--text-dim);
+  color: var(--ink-2);
   margin-top: 2px;
 }
 
@@ -141,10 +141,10 @@
 .segmented {
   display: flex;
   width: 100%;
-  border: 1px solid var(--border);
+  border: 1px solid var(--glass-edge);
   border-radius: 6px;
   overflow: hidden;
-  background: var(--bg);
+  background: var(--canopy-700);
 }
 
 .segment,
@@ -154,23 +154,24 @@
   border-radius: 0;
   padding: 7px 8px;
   background: transparent;
-  color: var(--text-dim);
+  color: var(--ink-2);
   transition: background 120ms ease-out, color 120ms ease-out;
 }
 
 .segment + .segment,
 .segment + .segmentOn,
 .segmentOn + .segment {
-  border-left: 1px solid var(--border);
+  border-left: 1px solid var(--glass-edge);
 }
 
 .segment:hover {
-  color: var(--text);
-  background: var(--panel-raised);
+  color: var(--on-glass-2);
+  background: var(--canopy-700);
 }
 
 .segmentOn {
-  background: var(--accent);
+  background: #fff;
+  color: var(--ink);
   color: #06110f;
   font-weight: 600;
 }
@@ -179,7 +180,7 @@
   font-size: 11px;
   text-transform: uppercase;
   letter-spacing: 0.06em;
-  color: var(--text-dim);
+  color: var(--ink-2);
   margin: 14px 0 6px;
 }
 
@@ -211,14 +212,14 @@
 }
 
 .ringUnit {
-  color: var(--text-dim);
+  color: var(--ink-2);
   font-size: 12px;
 }
 
 .readout {
   display: flex;
   justify-content: space-between;
-  color: var(--text-dim);
+  color: var(--ink-2);
 }
 
 .note {

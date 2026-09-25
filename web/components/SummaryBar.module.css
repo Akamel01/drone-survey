@@ -1,7 +1,7 @@
 .wrap {
   flex: none;
-  background: var(--panel);
-  border-top: 1px solid var(--border);
+  background: var(--canopy-700);
+  border-top: 1px solid var(--glass-edge);
   padding: 10px 16px;
 }
 
@@ -33,7 +33,7 @@
   font-size: 11px;
   text-transform: uppercase;
   letter-spacing: 0.06em;
-  color: var(--text-dim);
+  color: var(--ink-2);
 }
 
 .statValue {
@@ -83,7 +83,7 @@
 
 .dispatchOk {
   margin-top: 8px;
-  color: var(--accent);
+  color: var(--ink);
   font-size: 12px;
   font-family: var(--mono);
 }
