@@ -263,7 +263,7 @@ export default function HeroScene({ playing, variant = "live" }: HeroSceneProps)
   return (
     <div className={styles.scene} aria-hidden="true">
       {/* eslint-disable-next-line @next/next/no-img-element -- poster under video, versioned static */}
-      <img src={pick.poster} alt="" />
+      <img src={active ? pick.poster : undefined} alt="" />
       <video
         ref={videoRef}
         muted
@@ -271,7 +271,7 @@ export default function HeroScene({ playing, variant = "live" }: HeroSceneProps)
         autoPlay
         loop
         preload={active ? "metadata" : "none"}
-        poster={pick.poster}
+        poster={active ? pick.poster : undefined}
         src={active ? pick.src : undefined}
       />
       <BirdLayer playing={playing} />
