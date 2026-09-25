@@ -46,6 +46,24 @@ often to probe rather than a predicted reset:
 When every model is out, dispatch waits for the earliest probe instead of
 failing. `status.sh` lists which models are out and until when.
 
+**The watcher.** A limit can be hit by the ticket's main session or by any of
+its autoforge child sessions, and in the middle of a run. `watch.py`, one per
+machine and started by `dispatch.sh`, tails opencode's own log
+(`~/.local/share/opencode/log/opencode.log`), where every session, main or
+child, reports its provider errors with the model that failed:
+- An explicit quota message ("quota", "daily", "usage limit", "credits", a
+  region or plan refusal) marks the model at once.
+- Rate-limit and outage errors mark it only when they keep coming for 15
+  minutes. Throttling is normal under load: on 2026-09-25 three parallel
+  sessions logged 11 `Rate limit exceeded. Please retry after a brief wait.`
+  errors on Muse in ten minutes, and all of them cleared through opencode's own
+  retry.
+
+On a mark, the watcher stops every `opencode run` on that model. Each
+`dispatch.sh` sees the mark and continues its session on the next model. Its
+decisions are logged in `~/.opencode-runs/_models/watch.log`, and
+`python3 watch.py --selftest` tests them without spending tokens.
+
 **Capabilities.** The registry (`models.json` in the skill) holds each model's
 window, output limit, reasoning variant (`high` for both) and strengths.
 autoforge's own registry has both models too, so its per-task budgets use their
@@ -80,7 +98,8 @@ the work, and state kept as files, never only in a conversation.
 | The skill: `SKILL.md` (entry and routing), `CONTEXT.md` (the four steps) | `~/.claude/skills/opencode-orchestrate/` | Catalog, contract |
 | The dispatch prompt | `…/templates/prompt.md` | Factory |
 | The model registry | `…/models.json` | Factory |
-| Each model's quota state | `~/.opencode-runs/_models/` | Product |
+| Each model's quota state, and the watcher's log | `~/.opencode-runs/_models/` | Product |
+| The quota watcher | `…/scripts/watch.py` | Factory |
 | `dispatch.sh`, `status.sh` | `…/scripts/` | Factory |
 | One run: `prompt.md`, `events.jsonl`, `log`, `session`, `model`, `status` | `~/.opencode-runs/<owner>-<repo>/<issue>/` | Product, one record per ticket |
 | The ticket's working copy, branch `oc/<issue>` | `~/.opencode-runs/<owner>-<repo>/<issue>/worktree/` | Product |
