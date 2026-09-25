@@ -58,7 +58,14 @@ interface MapPaneProps {
   /** A source-level map failure — in practice the basemap tiles — so the page
    *  can fall back to the hero scene. */
   onBasemapError?: () => void;
+  /** The basemap's tiles are flowing again, so the page can drop its fallback. */
+  onBasemapLoaded?: () => void;
 }
+
+/** The source ids the basemaps in `lib/basemap.ts` carry. Error and sourcedata
+ *  events identify a source but not a layer, so this is what says the basemap
+ *  itself failed — or came back. */
+const isBasemap = (id?: string) => id === "esri" || id === "osm";
 
 const START = { lat: 49.1891, lon: -122.8396, zoom: 16 };
 type LL = [number, number];
@@ -272,6 +279,7 @@ export default function MapPane({
   selectedCorner,
   onSelectedCornerChange,
   onBasemapError,
+  onBasemapLoaded,
 }: MapPaneProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<MaplibreMap | null>(null);
@@ -353,6 +361,7 @@ export default function MapPane({
     selectedCorner,
     onSelectedCornerChange,
     onBasemapError,
+    onBasemapLoaded,
   };
   const stateRef = useRef(latest);
   useEffect(() => {
@@ -383,7 +392,12 @@ export default function MapPane({
       console.error("[map]", e.error?.message ?? e);
       // MapLibre puts `sourceId` on the event when a source's tiles fail,
       // though its ErrorEvent type does not declare it.
-      if ((e as { sourceId?: string }).sourceId) stateRef.current.onBasemapError?.();
+      if (isBasemap((e as { sourceId?: string }).sourceId)) stateRef.current.onBasemapError?.();
+    });
+    // The same source delivering tiles again is the page's cue to drop the
+    // fallback, instead of staying on it until reload.
+    map.on("sourcedata", (e) => {
+      if (isBasemap(e.sourceId) && e.isSourceLoaded) stateRef.current.onBasemapLoaded?.();
     });
     if (process.env.NODE_ENV !== "production") {
       (window as unknown as { __map?: MaplibreMap }).__map = map;

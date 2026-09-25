@@ -83,9 +83,12 @@ export default function PlanPage() {
   // fold buttons are not shown there.
   const [missionsOpen, setMissionsOpen] = useState(true);
   const [settingsOpen, setSettingsOpen] = useState(true);
-  // The map has no surface without its basemap. Offline is the browser's own
-  // signal, plus MapPane reporting tiles that failed while it still said online.
-  const [noNetwork, setNoNetwork] = useState(false);
+  // The map has no surface without its basemap. Two independent signals: the
+  // browser's own, which clears when it clears; and MapPane's, which latches
+  // on a tile failure and only clears when tiles flow again.
+  const [offline, setOffline] = useState(false);
+  const [mapFailed, setMapFailed] = useState(false);
+  const noNetwork = offline || mapFailed;
   const [spec, setSpecState] = useState<MissionSpec>(DEFAULT_SPEC);
   const [mode, setMode] = useState<DrawMode>("idle");
   // Off by default: the operator expects a number on every photo position to
@@ -105,18 +108,19 @@ export default function PlanPage() {
   }, []);
 
   useEffect(() => {
-    const offline = () => setNoNetwork(true);
-    const online = () => setNoNetwork(false);
-    if (!navigator.onLine) offline();
-    addEventListener("offline", offline);
-    addEventListener("online", online);
+    const goOffline = () => setOffline(true);
+    const goOnline = () => setOffline(false);
+    if (!navigator.onLine) goOffline();
+    addEventListener("offline", goOffline);
+    addEventListener("online", goOnline);
     return () => {
-      removeEventListener("offline", offline);
-      removeEventListener("online", online);
+      removeEventListener("offline", goOffline);
+      removeEventListener("online", goOnline);
     };
   }, []);
 
-  const handleBasemapError = useCallback(() => setNoNetwork(true), []);
+  const handleBasemapError = useCallback(() => setMapFailed(true), []);
+  const handleBasemapLoaded = useCallback(() => setMapFailed(false), []);
 
   const setSpec = (updater: (s: MissionSpec) => MissionSpec) => setSpecState(updater);
   const setAoi = (aoi: [number, number][], shape: CircleShape | null = null) => {
@@ -207,16 +211,18 @@ export default function PlanPage() {
           selectedCorner={selectedCorner}
           onSelectedCornerChange={setSelectedCorner}
           onBasemapError={handleBasemapError}
+          onBasemapLoaded={handleBasemapLoaded}
           />
           {noNetwork && (
             <div className={styles.noNetwork}>
               <HeroScene playing showOnWide />
               <div className={styles.cornerTL}>
-                <span>Mission Control</span>
-                <span>No network</span>
+                <span>Mission</span>
+                <span>Control</span>
               </div>
-              <div className={styles.cornerTR}>Basemap unavailable</div>
-              <div className={styles.cornerBR}>Esri satellite imagery</div>
+              <div className={styles.cornerTR}>No network</div>
+              <div className={styles.cornerBL}>Esri World Imagery</div>
+              <div className={styles.cornerBR}>OpenStreetMap</div>
               <p className={`glass-smoke ${styles.offlineStatement}`}>The map needs a connection.</p>
             </div>
           )}

@@ -180,8 +180,9 @@
     stroke-linejoin: round;
   }
 
-  /* Active is carried by icon and label, not a filled pill. */
-  .views button.active {
+  /* Active is carried by icon and label, not a filled pill. The class is a
+     literal in the JSX, so it must be global or Modules' hash never matches. */
+  .views button:global(.active) {
     background: transparent;
     color: var(--on-glass);
     font-weight: 600;
@@ -324,8 +325,8 @@
     display: block;
   }
 
-  /* Editorial corner labels over the scene: the tool's name and the failure
-     top-left, the missing layer and its credit smaller to the right. */
+  /* Editorial corner labels over the scene: the tool's name top-left, the
+     failure top-right, the layer credits along the bottom. */
   .cornerTL {
     position: absolute;
     top: 20px;
@@ -338,9 +339,9 @@
     line-height: 1.3;
   }
 
-  .cornerTR,
-  .cornerBR {
+  .cornerTR {
     position: absolute;
+    top: 20px;
     right: 20px;
     z-index: 1;
     color: var(--on-glass-2);
@@ -350,12 +351,24 @@
     text-align: right;
   }
 
-  .cornerTR {
-    top: 20px;
+  .cornerBL,
+  .cornerBR {
+    position: absolute;
+    bottom: 16px;
+    z-index: 1;
+    color: var(--on-glass);
+    font-size: 11px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+  }
+
+  .cornerBL {
+    left: 20px;
   }
 
   .cornerBR {
-    bottom: 20px;
+    right: 20px;
+    text-align: right;
   }
 
   .offlineStatement {

@@ -265,7 +265,7 @@ export default function HeroScene({ playing, variant = "live", showOnWide = fals
   }
 
   return (
-    <div className={styles.scene} aria-hidden="true">
+    <div className={sceneClass} aria-hidden="true">
       {/* eslint-disable-next-line @next/next/no-img-element -- poster under video, versioned static */}
       <img src={active ? pick.poster : undefined} alt="" />
       <video
