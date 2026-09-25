@@ -7,6 +7,7 @@ import { MISSION_NAME_MAX, missionNameProblem } from "@/lib/missionRecords";
 import { siteTwin, type SiteChoice } from "@/lib/missionView";
 import type { Editing } from "@/app/plan/page";
 import { isDrawing, type DrawMode } from "./MapPane";
+import { removeCorner } from "@/lib/aoi";
 import styles from "./Sidebar.module.css";
 
 interface SidebarProps {
@@ -24,6 +25,9 @@ interface SidebarProps {
   /** The stored Mission the editor is working on, and its Mission Name. */
   editing: Editing;
   onNameChange: (name: string) => void;
+  /** Corner tapped on the map, waiting on the Remove corner button. */
+  selectedCorner: number | null;
+  onSelectedCornerChange: (i: number | null) => void;
 }
 
 // Plain metric area: m² under a square kilometre, km² above.
@@ -129,6 +133,8 @@ export default function Sidebar({
   sites,
   editing,
   onNameChange,
+  selectedCorner,
+  onSelectedCornerChange,
 }: SidebarProps) {
   const flight = spec.flight;
   const camera = spec.camera;
@@ -340,14 +346,36 @@ export default function Sidebar({
           ) : (
             <div className={styles.hint}>
               Drag inside the shape to move it whole. Drag a corner to reshape it, or an amber
-              midpoint to add one; right-click a corner to remove it.
+              midpoint to add one; right-click a corner to remove it. On touch: drag a handle
+              with your fingertip, or tap a corner and then Remove corner.
             </div>
           )}
 
-          <div className={styles.readout}>
-            <span>Area</span>
-            <span className="mono">{formatArea(areaHa)}</span>
-          </div>
+        <div className={styles.readout}>
+          <span>Area</span>
+          <span className="mono">{formatArea(areaHa)}</span>
+        </div>
+        <div className={styles.actionsRow}>
+          <button
+            onClick={() => {
+              // Remove the tapped corner; removeCorner refuses below three.
+              if (selectedCorner === null) return;
+              const newAoi = removeCorner(spec.aoi, selectedCorner);
+              if (newAoi !== spec.aoi) {
+                setSpec((s) => ({ ...s, aoi: newAoi }));
+              }
+              onSelectedCornerChange(null);
+            }}
+            disabled={selectedCorner === null || selectedCorner >= spec.aoi.length}
+            title={
+              selectedCorner === null
+                ? "Tap a corner on the map first"
+                : `Remove corner ${selectedCorner + 1}`
+            }
+          >
+            {selectedCorner === null ? "Remove corner" : `Remove corner ${selectedCorner + 1}`}
+          </button>
+        </div>
           <div className={styles.readout}>
             <span>{spec.shape ? "Radius" : "Corners"}</span>
             <span className="mono">
