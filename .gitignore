@@ -35,8 +35,14 @@ tools/
 !docs/**/*.jpg
 !docs/**/*.png
 
+# ...and committed Pipeline input fixtures (small)
+!fixtures/showcase/sky-plate.png
+
 # OS / editor / python
 .DS_Store
 __pycache__/
 *.pyc
 .claude/settings.local.json
+
+# Agent-run artifacts — never in git
+.autoforge/
