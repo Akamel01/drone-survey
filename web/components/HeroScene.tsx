@@ -143,7 +143,7 @@ function BirdLayer({ playing }: { playing: boolean }) {
 export default function HeroScene({ playing, variant = "live" }: HeroSceneProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [reduced, setReduced] = useState(false);
-  const [pick, setPick] = useState({ key: "", poster: "/hero/v1/hero-tall-poster-1440.jpg", src: "" });
+  const [pick, setPick] = useState<{ key: string; poster?: string; src?: string }>({ key: "" });
 
   // Live reduced-motion signal: poster only, no video, no birds.
   useEffect(() => {
@@ -184,16 +184,28 @@ export default function HeroScene({ playing, variant = "live" }: HeroSceneProps)
     return () => video.removeEventListener("loadeddata", setRate);
   }, [pick.src]);
 
+  // Wide screens hide the scene in CSS (display:none ≥1000px): no source
+  // there either, so a desktop visit fetches nothing until UI-3 shows it.
+  const [wide, setWide] = useState(false);
+  useEffect(() => {
+    const mq = matchMedia("(min-width: 1000px)");
+    const onChange = () => setWide(mq.matches);
+    onChange();
+    mq.addEventListener("change", onChange);
+    return () => mq.removeEventListener("change", onChange);
+  }, []);
+  const active = playing && !wide;
+
   // Play only while the Missions view is on screen and the page is visible.
   useEffect(() => {
     const video = videoRef.current;
     if (!video) return;
-    if (!playing || document.hidden) {
+    if (!active || document.hidden) {
       video.pause();
       return;
     }
     video.play().catch(() => {});
-  }, [playing, pick.src]);
+  }, [active, pick.src]);
 
   useEffect(() => {
     const onHide = () => {
@@ -230,7 +242,7 @@ export default function HeroScene({ playing, variant = "live" }: HeroSceneProps)
   }, [playing]);
 
   if (variant === "still") {
-    const blur = pick.poster.replace("-poster-1440.jpg", "-blur.jpg");
+    const blur = pick.poster?.replace("-poster-1440.jpg", "-blur.jpg");
     return (
       <div className={styles.scene} aria-hidden="true">
         {/* eslint-disable-next-line @next/next/no-img-element -- versioned static, no optimizer */}
@@ -258,9 +270,9 @@ export default function HeroScene({ playing, variant = "live" }: HeroSceneProps)
         playsInline
         autoPlay
         loop
-        preload="metadata"
+        preload={active ? "metadata" : "none"}
         poster={pick.poster}
-        src={pick.src}
+        src={active ? pick.src : undefined}
       />
       <BirdLayer playing={playing} />
       <div className={styles.scrim} />
