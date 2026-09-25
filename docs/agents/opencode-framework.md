@@ -72,10 +72,9 @@ proved itself it moves to a repository of its own.
 
 ## This repository's rules
 
-- **Base branch**: `main`. Until the planning pull request #175 merges, the
-  UI theme and Showcase tickets are cut from its branch
-  (`claude/ui-redesign-video-specs-e0a912`), because their "Read first"
-  documents are there. Their pull requests still target `main`.
+- **Base branch**: `main`. (#177 and #179 were cut from the planning branch
+  before #175 merged; #175 was merged with a merge commit so their diffs stay
+  clean.)
 - **Who merges**: the orchestrator, once its review passes and the checks are
   green, in the order the tickets' "Blocked by" implies (operator's decision,
   2026-09-25). A ticket whose result is a matter of taste is shown to the
