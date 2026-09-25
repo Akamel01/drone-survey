@@ -44,7 +44,7 @@ function BirdLayer({ playing }: { playing: boolean }) {
 
   useEffect(() => {
     const layer = ref.current;
-    if (!layer || !playing || document.hidden) return;
+    if (!layer || !playing) return;
     let flock: Bird[] = [];
     let raf = 0;
     let last = 0;
@@ -111,7 +111,6 @@ function BirdLayer({ playing }: { playing: boolean }) {
         return !gone;
       });
     };
-    raf = requestAnimationFrame(step);
     const onHide = () => {
       if (document.hidden) {
         cancelAnimationFrame(raf);
@@ -124,6 +123,12 @@ function BirdLayer({ playing }: { playing: boolean }) {
       }
     };
     document.addEventListener("visibilitychange", onHide);
+    if (document.hidden) {
+      return () => {
+        document.removeEventListener("visibilitychange", onHide);
+      };
+    }
+    raf = requestAnimationFrame(step);
     return () => {
       cancelAnimationFrame(raf);
       document.removeEventListener("visibilitychange", onHide);
