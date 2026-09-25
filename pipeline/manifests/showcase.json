@@ -1,0 +1,77 @@
+{
+  "pipeline": "showcase",
+  "inputs": {
+    "reconstruction": "reconstruction",
+    "boundary": "boundary.json",
+    "sky": "sky.png"
+  },
+  "nodes": [
+    {
+      "name": "cut-island",
+      "placement": "local",
+      "command": [
+        "python3", "nodes/cut-island/cut_island.py",
+        "--reconstruction", "{in.reconstruction}",
+        "--boundary", "{in.boundary}",
+        "--out-island", "{out.island}",
+        "--out-report", "{out.cut_report}"
+      ],
+      "outputs": {"island": "island", "cut_report": "cut-report.json"},
+      "notes": "Runs on host python3 (no image key, M1). Reads the C6 boundary and the Reconstruction read-only, trims to the polygon and writes the C1 island dir + C2 cut-report.json the gate re-hashes."
+    },
+    {
+      "name": "render",
+      "placement": "local",
+      "image": "drone-render-showcase:blender-5.2.2",
+      "gpu": true,
+      "command": [
+        "blender", "-b", "--factory-startup", "-P", "nodes/render/render_island.py", "--",
+        "{in.island}", "{out.raw_wide}", "{out.raw_tall}"
+      ],
+      "inputs": {"island": {"node": "cut-island", "output": "island"}},
+      "outputs": {"raw_wide": "raw-wide.png", "raw_tall": "raw-tall.png"},
+      "notes": "Pinned Blender 5.2.2 image, gpu: true (C3/C4). The Runner mounts only the workdir and passes no working directory, so the Node script travels baked in the image at this exact relative path (WORKDIR /work). Both stills come from one scene."
+    },
+    {
+      "name": "grade",
+      "placement": "local",
+      "command": [
+        "python3", "nodes/grade/grade.py",
+        "--in-wide", "{in.raw_wide}",
+        "--in-tall", "{in.raw_tall}",
+        "--sky", "{in.sky}",
+        "--out-wide", "{out.still_wide}",
+        "--out-tall", "{out.still_tall}"
+      ],
+      "inputs": {
+        "raw_wide": {"node": "render", "output": "raw_wide"},
+        "raw_tall": {"node": "render", "output": "raw_tall"}
+      },
+      "outputs": {"still_wide": "still-wide.png", "still_tall": "still-tall.png"},
+      "notes": "Names only the render Node's raw outputs plus the C5 sky input, never the Reconstruction or island dir (D4): Grading cannot alter a Reconstruction by construction."
+    },
+    {
+      "name": "check-showcase",
+      "placement": "local",
+      "command": [
+        "python3", "nodes/check-showcase/gate.py",
+        "--raw-wide", "{in.raw_wide}",
+        "--raw-tall", "{in.raw_tall}",
+        "--cut-report", "{in.cut_report}",
+        "--reconstruction", "{in.reconstruction}",
+        "--graded-wide", "{in.still_wide}",
+        "--graded-tall", "{in.still_tall}",
+        "--out-verdict", "{out.verdict}"
+      ],
+      "inputs": {
+        "raw_wide": {"node": "render", "output": "raw_wide"},
+        "raw_tall": {"node": "render", "output": "raw_tall"},
+        "cut_report": {"node": "cut-island", "output": "cut_report"},
+        "still_wide": {"node": "grade", "output": "still_wide"},
+        "still_tall": {"node": "grade", "output": "still_tall"}
+      },
+      "outputs": {"verdict": "verdict.json"},
+      "notes": "Gate (C7): measures C4 on the render Node's raw RGBA stills (the alpha mask) and re-hashes the Reconstruction against the C2 report; the graded stills are only the optional sanity pair. Exits non-zero on failure, which stops the run; verdict.json is a declared output, so a gate that writes nothing fails too."
+    }
+  ]
+}
