@@ -6,6 +6,7 @@ import { preview, areaHectares } from "@/lib/mission";
 import type { MissionRow } from "@/lib/missionRecords";
 import { copyOf, localDate, sitesFrom, type MissionListRead, type SiteChoice } from "@/lib/missionView";
 import MapPane, { type DrawMode } from "@/components/MapPane";
+import HeroScene from "@/components/HeroScene";
 import MissionList from "@/components/MissionList";
 import Sidebar from "@/components/Sidebar";
 import SummaryBar from "@/components/SummaryBar";
@@ -117,6 +118,7 @@ export default function PlanPage() {
     <div className={styles.page} data-view={view}>
       <div className={styles.top}>
         <section className={styles.missions} aria-label="Missions">
+          <HeroScene playing={view === "missions"} />
           <h2 className={styles.heading}>Missions</h2>
           <MissionList onEdit={editMission} onCopy={copyMission} editingId={editing.id} onRead={onListRead} />
         </section>
