@@ -77,6 +77,17 @@
   display: none;
 }
 
+/* Announced, never seen. */
+.srOnly {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
 /* Narrow: one column at a time, the whole width, chosen from the bar. Below
    1000px the three columns would leave the map a sliver -- on a phone it was
    30px wide, with the Mission list at the very bottom of the settings. */
@@ -222,6 +233,9 @@
   .map {
     position: absolute;
     inset: 0;
+    /* Its own stacking context, under the glass: MapLibre's scale and
+       attribution are z-index 2 and would otherwise paint over the panels. */
+    z-index: 0;
   }
 
   .missions,

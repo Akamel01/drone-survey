@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { DEFAULT_SPEC, type CircleShape, type MissionSpec } from "@/lib/spec";
 import { preview, areaHectares } from "@/lib/mission";
 import type { MissionRow } from "@/lib/missionRecords";
@@ -41,6 +41,9 @@ export interface Editing {
 
 /** Which column a narrow screen shows. Wide screens show all three. */
 type View = "missions" | "map" | "settings";
+
+/** The control focus moves to when a panel folds or unfolds. */
+type FoldFocus = "missions-collapse" | "missions-tab" | "settings-collapse" | "settings-tab";
 
 const VIEWS: { id: View; label: string }[] = [
   { id: "missions", label: "Missions" },
@@ -85,10 +88,14 @@ export default function PlanPage() {
   const [settingsOpen, setSettingsOpen] = useState(true);
   // The map has no surface without its basemap. Two independent signals: the
   // browser's own, which clears when it clears; and MapPane's, which latches
-  // on a tile failure and only clears when tiles flow again.
+  // on a tile failure and clears when tiles flow again or the browser comes
+  // back (MapLibre does not always retry failed tiles on its own).
   const [offline, setOffline] = useState(false);
   const [mapFailed, setMapFailed] = useState(false);
   const noNetwork = offline || mapFailed;
+  // The wide-screen fallback only: below 1000px it would be a hidden 0x0
+  // surface, and its hero scene would still decode a video and animate.
+  const [wide, setWide] = useState(false);
   const [spec, setSpecState] = useState<MissionSpec>(DEFAULT_SPEC);
   const [mode, setMode] = useState<DrawMode>("idle");
   // Off by default: the operator expects a number on every photo position to
@@ -101,6 +108,14 @@ export default function PlanPage() {
   // one page load is one storage transaction rather than two.
   const [sites, setSites] = useState<SiteChoice[]>([]);
 
+  const collapseMissions = useRef<HTMLButtonElement>(null);
+  const collapseSettings = useRef<HTMLButtonElement>(null);
+  const expandMissions = useRef<HTMLButtonElement>(null);
+  const expandSettings = useRef<HTMLButtonElement>(null);
+  // The control a fold is about to create, focused once it is on screen. Null
+  // on first mount: the page must not steal focus on load.
+  const foldFocus = useRef<FoldFocus | null>(null);
+
   useEffect(() => {
     // Today's date belongs to the client, never to the build: see DEFAULT_SPEC.
     // eslint-disable-next-line react-hooks/set-state-in-effect -- one-time client-only read of the clock
@@ -109,7 +124,11 @@ export default function PlanPage() {
 
   useEffect(() => {
     const goOffline = () => setOffline(true);
-    const goOnline = () => setOffline(false);
+    const goOnline = () => {
+      setOffline(false);
+      // The tile latch must clear too: MapLibre may not re-request on its own.
+      setMapFailed(false);
+    };
     if (!navigator.onLine) goOffline();
     addEventListener("offline", goOffline);
     addEventListener("online", goOnline);
@@ -119,8 +138,41 @@ export default function PlanPage() {
     };
   }, []);
 
+  useEffect(() => {
+    const mq = matchMedia("(min-width: 1000px)");
+    const onChange = () => setWide(mq.matches);
+    onChange();
+    mq.addEventListener("change", onChange);
+    return () => mq.removeEventListener("change", onChange);
+  }, []);
+
+  // Folding swaps a control for its replacement; focus follows so a keyboard
+  // user is not dropped at the top of the document (spec § 10).
+  useEffect(() => {
+    const target = foldFocus.current;
+    if (!target) return;
+    foldFocus.current = null;
+    const el: Record<FoldFocus, HTMLButtonElement | null> = {
+      "missions-collapse": collapseMissions.current,
+      "missions-tab": expandMissions.current,
+      "settings-collapse": collapseSettings.current,
+      "settings-tab": expandSettings.current,
+    };
+    el[target]?.focus();
+  }, [missionsOpen, settingsOpen]);
+
   const handleBasemapError = useCallback(() => setMapFailed(true), []);
   const handleBasemapLoaded = useCallback(() => setMapFailed(false), []);
+
+  const foldMissions = (open: boolean) => {
+    foldFocus.current = open ? "missions-collapse" : "missions-tab";
+    setMissionsOpen(open);
+  };
+
+  const foldSettings = (open: boolean) => {
+    foldFocus.current = open ? "settings-collapse" : "settings-tab";
+    setSettingsOpen(open);
+  };
 
   const setSpec = (updater: (s: MissionSpec) => MissionSpec) => setSpecState(updater);
   const setAoi = (aoi: [number, number][], shape: CircleShape | null = null) => {
@@ -182,12 +234,13 @@ export default function PlanPage() {
           <div className={styles.panelHead}>
             <h2 className={styles.heading}>Missions</h2>
             <button
+              ref={collapseMissions}
               type="button"
               className={styles.collapse}
               aria-expanded={missionsOpen}
               aria-controls="missions-panel"
               aria-label="Collapse Missions"
-              onClick={() => setMissionsOpen(false)}
+              onClick={() => foldMissions(false)}
             >
               ‹
             </button>
@@ -213,7 +266,7 @@ export default function PlanPage() {
           onBasemapError={handleBasemapError}
           onBasemapLoaded={handleBasemapLoaded}
           />
-          {noNetwork && (
+          {noNetwork && wide && (
             <div className={styles.noNetwork}>
               <HeroScene playing showOnWide />
               <div className={styles.cornerTL}>
@@ -232,12 +285,13 @@ export default function PlanPage() {
           <div className={styles.panelHead}>
             <h2 className={styles.heading}>Settings</h2>
             <button
+              ref={collapseSettings}
               type="button"
               className={styles.collapse}
               aria-expanded={settingsOpen}
               aria-controls="settings-panel"
               aria-label="Collapse Settings"
-              onClick={() => setSettingsOpen(false)}
+              onClick={() => foldSettings(false)}
             >
               ›
             </button>
@@ -255,6 +309,10 @@ export default function PlanPage() {
           />
         </section>
       </div>
+      {/* The network switch is otherwise silent to assistive tech. */}
+      <p className={styles.srOnly} role="status">
+        {noNetwork ? "The map needs a connection." : ""}
+      </p>
       <div className={`glass-smoke ${styles.summary}`}>
         <SummaryBar
           spec={spec}
@@ -266,24 +324,26 @@ export default function PlanPage() {
       </div>
       {!missionsOpen && (
         <button
+          ref={expandMissions}
           type="button"
           className={`glass-smoke ${styles.edgeTab} ${styles.edgeTabLeft}`}
           aria-expanded={false}
           aria-controls="missions-panel"
           aria-label="Expand Missions"
-          onClick={() => setMissionsOpen(true)}
+          onClick={() => foldMissions(true)}
         >
           ›
         </button>
       )}
       {!settingsOpen && (
         <button
+          ref={expandSettings}
           type="button"
           className={`glass-smoke ${styles.edgeTab} ${styles.edgeTabRight}`}
           aria-expanded={false}
           aria-controls="settings-panel"
           aria-label="Expand Settings"
-          onClick={() => setSettingsOpen(true)}
+          onClick={() => foldSettings(true)}
         >
           ‹
         </button>
