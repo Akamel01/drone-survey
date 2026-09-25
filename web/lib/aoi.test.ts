@@ -83,7 +83,7 @@ test("a draw too short to finish is left untrimmed", () => {
   assert.equal(trimDoubleClick(three), three);
   assert.equal(trimDoubleClick([]).length, 0);
 });
-// Tap-vs-drag displacement predicate (M1): a touch that moves less than
+// Tap-vs-drag displacement predicate: a touch that moves less than TAP_PX
 // TAP_PX is a tap (selects a corner); anything more is a drag.
 test("isTap treats displacement within TAP_PX as a tap", () => {
   assert.equal(isTap(0, 0), true);

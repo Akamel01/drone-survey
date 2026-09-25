@@ -48,9 +48,8 @@ export function trimDoubleClick(aoi: LL[]): LL[] {
   if (aoi.length === 4) return aoi.slice(0, -1);
   return aoi;
 }
-// Touch gesture helpers for area-of-interest editing (M1)
-// Exposed for unit tests and downstream usage (M2 relies on isTap to
-// distinguish taps from drags when selecting corners).
+// Touch gesture helpers for area-of-interest editing. isTap is pure so the
+// map handlers and the unit tests share one definition of a tap.
 export const TAP_PX = 8;
 
 /**

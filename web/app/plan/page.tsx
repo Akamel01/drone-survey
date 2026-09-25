@@ -55,7 +55,7 @@ export default function PlanPage() {
   // crowd the map, and they are right at 400 positions.
   const [showNumbers, setShowNumbers] = useState(false);
   const [editing, setEditing] = useState<Editing>({ id: null, name: "" });
-  // Corner tapped on the map, waiting on the Sidebar's Remove corner button.
+  // Corner tapped on the map, waiting on the on-map Remove corner button.
   const [selectedCorner, setSelectedCorner] = useState<number | null>(null);
   // The Sites already in the store. Taken from the Mission list's own read, so
   // one page load is one storage transaction rather than two.
@@ -149,8 +149,6 @@ export default function PlanPage() {
           sites={sites}
           editing={editing}
           onNameChange={(name) => setEditing((e) => ({ ...e, name }))}
-          selectedCorner={selectedCorner}
-          onSelectedCornerChange={setSelectedCorner}
           />
         </section>
       </div>
