@@ -203,13 +203,13 @@ lighter cuts of the master. [`cuts.sh`](../../scripts/hero/cuts.sh) makes them:
 
 | File | Tall | Wide | For |
 |---|---|---|---|
-| 4K/120 master, HEVC | 31.6 MB | 22.8 MB | Archive; source of every cut |
-| 4K/120 master, AV1 | 29.9 MB | 22.9 MB | Archive |
+| 4K/120 master, HEVC | 31.4 MB | 22.8 MB | Archive; source of every cut |
+| 4K/120 master, AV1 | 30.2 MB | 22.9 MB | Archive |
 | 4K/60 AV1 | — | 9.9 MB | Wide screens ≥ 2560 device px across |
-| 1440p/60 AV1 | 8.1 MB | 6.4 MB | Chrome, Firefox, Apple chips with AV1 decode |
+| 1440p/60 AV1 | 8.4 MB | 6.4 MB | Chrome, Firefox, Apple chips with AV1 decode |
 | 1440p/60 HEVC | 9.5 MB | 7.0 MB | Safari on everything else |
 | 1080p/30 H.264 | 7.8 MB | 6.2 MB | Last resort |
-| Poster, 1440p JPEG | 187 KB | 181 KB | Under the video; reduced motion; Low Power Mode |
+| Poster, 1440p JPEG | 189 KB | 181 KB | Under the video; reduced motion; Low Power Mode |
 | Blurred still | 41 KB | 46 KB | Deeper levels (Settings, sheets) |
 
 A 120 fps cut for 120 Hz desktops is possible from the same master; it was not

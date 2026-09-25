@@ -126,7 +126,7 @@
     if (video.dataset.name === key) return;
     video.dataset.name = key;
     const av1 = big ? `${name}-4k60-av1.mp4` : `${name}-1440p60-av1.mp4`;
-    const src = [[av1, `video/mp4; codecs="av01.0.${big ? 13 : 12}M.08"`], [`${name}-1440p60-hevc.mp4`, 'video/mp4; codecs="hvc1"'], [`${name}.mp4`, "video/mp4"]]
+    const src = [[av1, `video/mp4; codecs="av01.0.${big ? 13 : 12}M.08"`], [`${name}-1440p60-hevc.mp4`, 'video/mp4; codecs="hvc1"'], [`${name}-1080p30-h264.mp4`, "video/mp4"]]
       .find(([, type]) => video.canPlayType(type))[0];
     // ponytail: the artifact host breaks Safari's ranged video requests, so the preview downloads the whole
     // file and plays it from memory. Production serves the files itself (with Range support) and uses <source>.
