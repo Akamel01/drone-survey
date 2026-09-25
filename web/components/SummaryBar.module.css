@@ -50,6 +50,20 @@
   flex: none;
 }
 
+/* The wide-screen summary floats between the two open panels, so it can be
+   narrower than one line. Let the two groups take a line each instead of
+   crushing the figures to nothing; full width, nothing wraps. */
+@media (min-width: 1000px) {
+  .bar {
+    flex-wrap: wrap;
+  }
+
+  .actions {
+    flex: 0 1 auto;
+    flex-wrap: wrap;
+  }
+}
+
 @media (max-width: 999px) {
   .bar {
     flex-direction: column;
