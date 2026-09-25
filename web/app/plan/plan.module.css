@@ -15,8 +15,8 @@
   width: 340px;
   flex: none;
   overflow-y: auto;
-  background: var(--panel);
-  border-right: 1px solid var(--border);
+  background: var(--canopy-700);
+  border-right: 1px solid var(--glass-edge);
   padding: 16px;
 }
 
@@ -24,7 +24,7 @@
   font-size: 12px;
   text-transform: uppercase;
   letter-spacing: 0.08em;
-  color: var(--text-dim);
+  color: var(--on-glass-3);
   margin: 0 0 12px;
 }
 
@@ -90,8 +90,8 @@
     flex: none;
     gap: 8px;
     padding: 8px 16px calc(8px + env(safe-area-inset-bottom));
-    background: var(--panel);
-    border-top: 1px solid var(--border);
+    background: var(--canopy-700);
+    border-top: 1px solid var(--glass-edge);
   }
 
   .views button {
