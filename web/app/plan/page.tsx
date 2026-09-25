@@ -55,6 +55,8 @@ export default function PlanPage() {
   // crowd the map, and they are right at 400 positions.
   const [showNumbers, setShowNumbers] = useState(false);
   const [editing, setEditing] = useState<Editing>({ id: null, name: "" });
+  // Corner tapped on the map, waiting on the on-map Remove corner button.
+  const [selectedCorner, setSelectedCorner] = useState<number | null>(null);
   // The Sites already in the store. Taken from the Mission list's own read, so
   // one page load is one storage transaction rather than two.
   const [sites, setSites] = useState<SiteChoice[]>([]);
@@ -66,8 +68,12 @@ export default function PlanPage() {
   }, []);
 
   const setSpec = (updater: (s: MissionSpec) => MissionSpec) => setSpecState(updater);
-  const setAoi = (aoi: [number, number][], shape: CircleShape | null = null) =>
+  const setAoi = (aoi: [number, number][], shape: CircleShape | null = null) => {
+    // Any geometry change can shift corner indices, so a tap selection never
+    // survives one. Selecting happens after the change, never before.
+    setSelectedCorner(null);
     setSpecState((s) => ({ ...s, aoi, shape }));
+  };
   const setHome = (home: [number, number]) => setSpecState((s) => ({ ...s, home }));
   const setPoi = (center: [number, number]) =>
     setSpecState((s) => ({ ...s, orbit: { ...s.orbit, center } }));
@@ -128,6 +134,8 @@ export default function PlanPage() {
             setSpecState((s) => ({ ...s, orbit: { ...s.orbit, radius_m } }))
           }
           onModeChange={setMode}
+          selectedCorner={selectedCorner}
+          onSelectedCornerChange={setSelectedCorner}
           />
         </section>
         <section className={styles.settings} aria-label="Settings">

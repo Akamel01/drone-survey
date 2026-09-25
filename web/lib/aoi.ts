@@ -48,3 +48,15 @@ export function trimDoubleClick(aoi: LL[]): LL[] {
   if (aoi.length === 4) return aoi.slice(0, -1);
   return aoi;
 }
+// Touch gesture helpers for area-of-interest editing. isTap is pure so the
+// map handlers and the unit tests share one definition of a tap.
+export const TAP_PX = 8;
+
+/**
+ * Determine whether a touch gesture is a tap based on displacement.
+ * Uses Euclidean distance against a small threshold.
+ */
+export function isTap(dx: number, dy: number): boolean {
+  const dist = Math.hypot(dx, dy);
+  return dist <= TAP_PX;
+}

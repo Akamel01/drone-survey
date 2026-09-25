@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { insertCorner, moveCorner, removeCorner, trimDoubleClick, type LL } from "./aoi.ts";
+import { insertCorner, isTap, moveCorner, removeCorner, TAP_PX, trimDoubleClick, type LL } from "./aoi.ts";
 
 const square: LL[] = [
   [0, 0],
@@ -82,4 +82,23 @@ test("a draw too short to finish is left untrimmed", () => {
   const three = square.slice(0, 3);
   assert.equal(trimDoubleClick(three), three);
   assert.equal(trimDoubleClick([]).length, 0);
+});
+// Tap-vs-drag displacement predicate: a touch that moves less than TAP_PX
+// TAP_PX is a tap (selects a corner); anything more is a drag.
+test("isTap treats displacement within TAP_PX as a tap", () => {
+  assert.equal(isTap(0, 0), true);
+  assert.equal(isTap(5, 0), true);
+  assert.equal(isTap(0, 7), true);
+});
+
+test("isTap treats displacement at the boundary as a tap", () => {
+  assert.equal(isTap(TAP_PX, 0), true);
+  assert.equal(isTap(0, TAP_PX), true);
+  assert.equal(isTap(5.65, 5.65), true);
+});
+
+test("isTap treats displacement over the threshold as a drag", () => {
+  assert.equal(isTap(TAP_PX + 0.01, 0), false);
+  assert.equal(isTap(0, TAP_PX + 0.01), false);
+  assert.equal(isTap(TAP_PX + 1, TAP_PX + 1), false);
 });

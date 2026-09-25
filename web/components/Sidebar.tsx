@@ -340,20 +340,19 @@ export default function Sidebar({
           ) : (
             <div className={styles.hint}>
               Drag inside the shape to move it whole. Drag a corner to reshape it, or an amber
-              midpoint to add one; right-click a corner to remove it.
+              midpoint to add one; right-click a corner to remove it. On touch: drag a handle
+              with your fingertip, or tap a corner and then Remove corner.
             </div>
           )}
 
-          <div className={styles.readout}>
-            <span>Area</span>
-            <span className="mono">{formatArea(areaHa)}</span>
-          </div>
-          <div className={styles.readout}>
-            <span>{spec.shape ? "Radius" : "Corners"}</span>
-            <span className="mono">
-              {spec.shape ? `${Math.round(spec.shape.radius_m)} m` : spec.aoi.length}
-            </span>
-          </div>
+        <div className={styles.readout}>
+          <span>Area</span>
+          <span className="mono">{formatArea(areaHa)}</span>
+        </div>
+        <div className={styles.readout}>
+          <span>{spec.shape ? "Radius" : "Corners"}</span>
+          <span className="mono">{spec.shape ? `${Math.round(spec.shape.radius_m)} m` : spec.aoi.length}</span>
+        </div>
         </Section>
       )}
 
