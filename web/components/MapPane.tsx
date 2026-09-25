@@ -388,11 +388,27 @@ export default function MapPane({
     // push below just returns early for ever. Say so instead. A failure tied to
     // a source means its tiles never arrived, which is the page's cue to show
     // the hero scene instead of an empty map.
+    let gone = false;
+    let tileRetryAt = 0;
     map.on("error", (e) => {
       console.error("[map]", e.error?.message ?? e);
       // MapLibre puts `sourceId` on the event when a source's tiles fail,
       // though its ErrorEvent type does not declare it.
-      if (isBasemap((e as { sourceId?: string }).sourceId)) stateRef.current.onBasemapError?.();
+      if (isBasemap((e as { sourceId?: string }).sourceId)) {
+        stateRef.current.onBasemapError?.();
+        // MapLibre does not re-request tiles that errored, so a transient
+        // failure -- a 5xx, a DNS blip, a blocked route -- would strand the
+        // fallback until reload even though the network recovered. Reissuing
+        // the same style with `diff: false` makes it ask for the tiles again;
+        // the overlays re-add themselves on the resulting `style.load`.
+        // Throttled so a persistently failing tile cannot spin in a retry loop.
+        if (Date.now() - tileRetryAt > 30_000) {
+          tileRetryAt = Date.now();
+          setTimeout(() => {
+            if (!gone) map.setStyle(map.getStyle(), { diff: false });
+          }, 5_000);
+        }
+      }
     });
     // The same source delivering tiles again is the page's cue to drop the
     // fallback, instead of staying on it until reload.
@@ -754,6 +770,7 @@ export default function MapPane({
     window.addEventListener("keydown", onKeydown);
 
     return () => {
+      gone = true;
       window.removeEventListener("keydown", onKeydown);
       fit.disconnect();
       map.remove();
