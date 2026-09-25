@@ -18,6 +18,8 @@
   background: var(--panel);
   border-right: 1px solid var(--border);
   padding: 16px;
+  /* Positioning context for the hero scene; UI-3 owns the restyle. */
+  position: relative;
 }
 
 .heading {
@@ -70,6 +72,15 @@
 
   .missions {
     flex-direction: column;
+    /* Transparent slot so the hero shows through; the list keeps its own glass. */
+    background: transparent;
+    border: none;
+  }
+
+  /* The hero sits behind the list. */
+  .missions > :not(:first-child) {
+    position: relative;
+    z-index: 1;
   }
 
   /* The settings panel keeps its own scroll; it only loses its fixed width. */

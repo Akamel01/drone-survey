@@ -1,0 +1,47 @@
+.scene {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  background: var(--sky-top, #496c81);
+  pointer-events: none;
+}
+
+.scene video,
+.scene img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: 100% 60%;
+}
+
+/* The phone's Missions view only: wide screens show the map instead. */
+@media (min-width: 1000px) {
+  .scene {
+    display: none;
+  }
+}
+
+.birds {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+}
+
+.bird {
+  position: absolute;
+  left: 0;
+  top: 0;
+  will-change: transform;
+}
+
+/* Bottom scrim per spec §4.1: the lowest ~20% darkened so the tab bar reads. */
+.scrim {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 20%;
+  background: linear-gradient(transparent, rgb(10 9 8 / 0.8));
+}
