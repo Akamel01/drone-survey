@@ -167,8 +167,10 @@ function arrowImage(): ImageData {
 }
 
 function addLayers(map: MaplibreMap) {
-  if (map.getSource("aoi")) return; // already added for this style
+  // The icon lives on the style, not on our sources, so a style reissue (the
+  // basemap retry) drops it; restore it before the source guard returns.
   if (!map.hasImage("flight-arrow")) map.addImage("flight-arrow", arrowImage());
+  if (map.getSource("aoi")) return; // already added for this style
 
   map.addSource("aoi", { type: "geojson", data: fc([]) });
   map.addLayer({ id: "aoi-fill", type: "fill", source: "aoi", paint: { "fill-color": "#4fb8a8", "fill-opacity": 0.18 } });
