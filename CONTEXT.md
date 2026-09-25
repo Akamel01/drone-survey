@@ -192,6 +192,13 @@ A sequence of reconstructions of one Site from successive Captures, presented so
 that change over time is visible.
 _Avoid_: timelapse (ambiguous with plain video), 4D
 
+**Showcase**:
+A looping film of one Site's Reconstruction cut out as a floating island, turning
+slowly in a Graded sky. A cinematic deliverable: rendered from the Reconstruction
+and Graded, never altering it. The planner's hero scene looks the same but is not
+a Showcase: it was generated, not rendered from a Reconstruction.
+_Avoid_: hero video, reel, turntable, fly-through
+
 ### Reconstruction
 
 **Reconstruction**:

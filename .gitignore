@@ -31,6 +31,10 @@ tools/
 *.blend
 *.blend[0-9]*
 
+# ...except figures that documents embed
+!docs/**/*.jpg
+!docs/**/*.png
+
 # OS / editor / python
 .DS_Store
 __pycache__/
