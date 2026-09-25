@@ -33,7 +33,7 @@
   font-size: 11px;
   text-transform: uppercase;
   letter-spacing: 0.06em;
-  color: var(--ink-2);
+  color: var(--on-glass-3);
 }
 
 .statValue {
@@ -83,7 +83,7 @@
 
 .dispatchOk {
   margin-top: 8px;
-  color: var(--ink);
+  color: var(--on-glass);
   font-size: 12px;
   font-family: var(--mono);
 }

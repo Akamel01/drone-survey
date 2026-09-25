@@ -27,7 +27,7 @@
   font-size: 12px;
   text-transform: uppercase;
   letter-spacing: 0.08em;
-  color: var(--ink-2);
+  color: var(--on-glass-3);
   margin: 0 0 12px;
 }
 
@@ -43,7 +43,7 @@
   margin-left: 6px;
   border: 1px solid var(--glass-edge);
   border-radius: 50%;
-  color: var(--ink-2);
+  color: var(--on-glass-3);
   font-size: 10px;
   font-style: italic;
   text-transform: none;
@@ -110,7 +110,7 @@
 }
 
 .fieldHead label {
-  color: var(--ink-2);
+  color: var(--on-glass-3);
 }
 
 .value {
@@ -119,7 +119,7 @@
 
 .hint {
   font-size: 12px;
-  color: var(--ink-2);
+  color: var(--on-glass-3);
   margin-top: 2px;
 }
 
@@ -154,7 +154,7 @@
   border-radius: 0;
   padding: 7px 8px;
   background: transparent;
-  color: var(--ink-2);
+  color: var(--on-glass-3);
   transition: background 120ms ease-out, color 120ms ease-out;
 }
 
@@ -171,16 +171,21 @@
 
 .segmentOn {
   background: #fff;
-  color: var(--ink);
+  color: var(--on-glass);
   color: #06110f;
   font-weight: 600;
+}
+/* P1/P5: align with new tokens */
+.segmentOn {
+  background: var(--pill-active);
+  color: var(--on-glass);
 }
 
 .groupLabel {
   font-size: 11px;
   text-transform: uppercase;
   letter-spacing: 0.06em;
-  color: var(--ink-2);
+  color: var(--on-glass-3);
   margin: 14px 0 6px;
 }
 
@@ -212,14 +217,14 @@
 }
 
 .ringUnit {
-  color: var(--ink-2);
+  color: var(--on-glass-3);
   font-size: 12px;
 }
 
 .readout {
   display: flex;
   justify-content: space-between;
-  color: var(--ink-2);
+  color: var(--on-glass-3);
 }
 
 .note {

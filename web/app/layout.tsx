@@ -2,8 +2,6 @@ import type { Metadata } from "next";
 import { Manrope } from 'next/font/google';
 import "./globals.css";
 
-// M3: Self-host Manrope fonts via next/font/google
-// We pin weights 500 and 700 as required; 400/600 arrivals are reserved for future tickets.
 const manrope = Manrope({
   subsets: ['latin'],
   weight: ['500', '700'],
