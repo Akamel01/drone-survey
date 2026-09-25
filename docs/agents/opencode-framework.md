@@ -21,17 +21,40 @@ a ticket, the orchestrator writes why on the ticket and tells the operator.
 
 ## Models
 
-opencode uses these models in this order. When one runs out of tokens, the same
-session continues on the next, so no context is lost:
+| | Muse Spark 1.3 free | DeepSeek V4.1 Flash |
+|---|---|---|
+| Provider, id | OpenCode Zen, `opencode/muse-spark-1.3-contributor-free` | OpenCode Go, `opencode-go/deepseek-v4.1-flash` |
+| Cost | Free | $0.15 in / $0.60 out per million tokens, against Go's quotas |
+| Quota | Daily | 5-hour, weekly and monthly |
+| Window, output | 1M, 131k | 1M, 384k |
+| Strengths | Reasoning; reads images, video and PDF, so it can check UI screenshots itself | Reasoning up to "max"; very large output; reads images |
+| Used | Every session while it has quota | Only while Muse is out |
 
-1. **Muse Spark 1.3 free**, from OpenCode Zen: `opencode/muse-spark-1.3-contributor-free`
-2. **DeepSeek V4.1 Flash**, from OpenCode Go: `opencode-go/deepseek-v4.1-flash`
+**The rule: Muse whenever it is available, otherwise DeepSeek.** Each call to
+`dispatch.sh` takes the first model in the registry that is not marked out of
+quota. When a model runs out mid-ticket, the same session continues on the
+next one, so no context is lost.
 
-Every call starts at the first model again, because free quotas reset and a
-model that is still exhausted fails in seconds. The order lives in one place:
-the `OC_MODELS` default in `dispatch.sh`. `/autoforge` normally pins its child
-agents to other models; the dispatch prompt overrides that for the run, without
-editing opencode's own configuration.
+**Quota memory.** A model that runs out is marked in
+`~/.opencode-runs/_models/` with the time it is worth trying again, and the
+provider's message. Reset times are not published, so the quota cycle sets how
+often to probe rather than a predicted reset:
+- Muse: every 60 minutes.
+- DeepSeek: every 30 minutes; 12 hours when its message says weekly, 24 hours
+  when it says monthly.
+
+When every model is out, dispatch waits for the earliest probe instead of
+failing. `status.sh` lists which models are out and until when.
+
+**Capabilities.** The registry (`models.json` in the skill) holds each model's
+window, output limit, reasoning variant (`high` for both) and strengths.
+autoforge's own registry has both models too, so its per-task budgets use their
+real 1M windows (an 80k cap) instead of a 19k fallback.
+
+**Every autoforge role inherits the session's model.** Five of its agents used
+to pin `gpt-5-nano`. The pins were removed and its model policy says `inherit`,
+so child agents follow the same quota rule as the session. A backup of the
+earlier autoforge configuration is in `~/.config/opencode/_backup-2026-09-25/`.
 
 ## The loop
 
@@ -56,6 +79,8 @@ the work, and state kept as files, never only in a conversation.
 |---|---|---|
 | The skill: `SKILL.md` (entry and routing), `CONTEXT.md` (the four steps) | `~/.claude/skills/opencode-orchestrate/` | Catalog, contract |
 | The dispatch prompt | `…/templates/prompt.md` | Factory |
+| The model registry | `…/models.json` | Factory |
+| Each model's quota state | `~/.opencode-runs/_models/` | Product |
 | `dispatch.sh`, `status.sh` | `…/scripts/` | Factory |
 | One run: `prompt.md`, `events.jsonl`, `log`, `session`, `model`, `status` | `~/.opencode-runs/<owner>-<repo>/<issue>/` | Product, one record per ticket |
 | The ticket's working copy, branch `oc/<issue>` | `~/.opencode-runs/<owner>-<repo>/<issue>/worktree/` | Product |
@@ -90,8 +115,8 @@ proved itself it moves to a repository of its own.
 - Ten tickets have landed through it, and at most one of them needed more than
   one round of review feedback.
 - A model switch has happened for real, mid-ticket, and the session carried on.
-  Until then the token-exhaustion check matches on wording, not on a message
-  seen in practice.
+  Until then the quota check matches on wording, not on a message seen in
+  practice; the first real one gets pinned in `dispatch.sh`.
 - No run has lost its state: each can be resumed from its folder alone.
 
 Then the skill moves to its own repository and this document becomes a pointer
