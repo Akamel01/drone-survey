@@ -129,6 +129,31 @@ proved itself it moves to a repository of its own.
 - **Tickets opencode does not take**: those labelled `ready-for-human`, and
   research tickets marked deferred (#195).
 
+## Cloud sessions
+
+A Claude Code session on the web starts in a fresh container with none of the
+operator's machine in it. `.claude/settings.json` declares the plugins every
+session gets: caveman, ponytail, impeccable, taste-skill, frontend-design and
+Matt Pocock's skills. `.claude/hooks/cloud-setup.sh` runs at startup in cloud
+sessions only and installs the rest:
+
+- `rsync`, `jq` and `gh`; opencode at a pinned version;
+- autoforge from `Akamel01/autoforge-opencode`, through its own `install.sh`;
+- the opencode-orchestrate skill, from the same repository once it is there;
+- any declared plugin the session did not install by itself.
+
+Its log is `~/.cache/cloud-setup.log`. It prints only what the session still
+lacks, and Claude Code adds that to the session's context.
+
+The environment's settings supply what no file can:
+- `OPENCODE_API_KEY`, the one key opencode reads for both Zen and Go;
+- network access to `opencode.ai`, where both providers' APIs live.
+
+GitHub needs no token. The session's proxy authenticates REST calls to
+`api.github.com` itself, and refuses GraphQL, so `gh pr create`,
+`gh issue view` and the rest of gh's porcelain fail in a cloud session; only
+`gh api` REST calls work.
+
 ## Proven when
 
 - Ten tickets have landed through it, and at most one of them needed more than
