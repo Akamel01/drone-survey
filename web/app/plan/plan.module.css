@@ -36,7 +36,8 @@
 .viewTitle {
   margin: 0 0 12px;
   font-family: var(--display), var(--sans);
-  font-size: 28px;
+  /* Spec § 6, "Screen title": 34/1.1/700 exactly -- no CSS token for it yet. */
+  font-size: 34px;
   line-height: 1.1;
   font-weight: 700;
   color: var(--on-glass);

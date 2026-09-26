@@ -72,3 +72,24 @@ test("a write reaches every subscriber, in this tab, without a storage event", (
 test("the key is the one the rest of the app already reads and writes under", () => {
   assert.equal(PASSPHRASE_KEY, "drone-planner.wayfinder-key");
 });
+
+test("a write that throws (quota, private mode) still reaches every subscriber", () => {
+  // getItem works (so `safeStorage()` accepts it), but setItem does not --
+  // the shape a full quota or private browsing actually takes.
+  const throwing = {
+    getItem: () => null,
+    setItem: () => {
+      throw new DOMException("The quota has been exceeded.", "QuotaExceededError");
+    },
+  } as unknown as Storage;
+  const seen: string[] = [];
+  const stop = subscribePassphrase((v) => seen.push(v));
+  try {
+    withStorage(throwing, () => {
+      writePassphrase("kept in memory only");
+    });
+  } finally {
+    stop();
+  }
+  assert.deepEqual(seen, ["kept in memory only"], "the field typed into still shows it, and so does the other");
+});
