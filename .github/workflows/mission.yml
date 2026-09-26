@@ -58,6 +58,7 @@ jobs:
           python3 nodes/check_ortho.py --allow-skips
           python3 nodes/check_splat.py
           python3 nodes/check_head.py
+          python3 nodes/check_showcase.py
           python3 pipeline/runner.py --selftest
           python3 nodes/retention/retention.py --selftest
           python3 nodes/check_retention.py
