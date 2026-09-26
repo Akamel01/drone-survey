@@ -5,7 +5,7 @@ import type { MissionSpec } from "@/lib/spec";
 import type { Preview } from "@/lib/mission";
 import type { MissionRecord } from "@/lib/missionRecords";
 import { safeStorage } from "@/lib/actions";
-import { describeSave, saveProblem, type SiteChoice } from "@/lib/missionView";
+import { describeSave, flightTimeDelta, saveProblem, type SiteChoice } from "@/lib/missionView";
 import { noteMissionsChanged } from "@/lib/actions";
 import type { Editing } from "@/app/plan/page";
 import styles from "./SummaryBar.module.css";
@@ -108,54 +108,67 @@ export default function SummaryBar({ spec, preview, editing, onSaved, sites = []
   return (
     <div className={styles.wrap}>
       <div className={styles.bar}>
-        <div className={styles.row}>
-          <Stat label="GSD" value={preview.gsd_cm.toFixed(2)} unit="cm/px" />
-          <Stat label="Photos" value={String(preview.photo_count)} />
-          {/* The same three numbers mean different things for an orbit, so they
-              are named for what they are rather than left quietly wrong. */}
-          <Stat label={isOrbit ? "Rings" : "Lines"} value={String(preview.line_count)} />
-          <Stat
-            label={isOrbit ? "Arc spacing" : "Fwd spacing"}
-            value={preview.fwd_spacing_m.toFixed(1)}
-            unit="m"
-          />
-          <Stat
-            label={isOrbit ? "Ring spacing" : "Side spacing"}
-            value={preview.side_spacing_m.toFixed(1)}
-            unit="m"
-          />
-          <Stat
-            label="Effective speed"
-            value={preview.capped_speed_ms.toFixed(1)}
-            unit="m/s"
-            warn={preview.capped_speed_ms < spec.flight.speed_ms}
-          />
-          <Stat label="Flight time" value={preview.flight_time_min.toFixed(1)} unit="min" />
-          <Stat
-            label={preview.parts > 1 ? "Flights" : "Flight"}
-            value={String(preview.parts)}
-            warn={preview.parts > 1}
-            title={
-              preview.part_minutes.length > 1
-                ? `Each flight returns home so the battery can be swapped: ${preview.part_minutes
-                    .map((m) => `${m.toFixed(1)} min`)
-                    .join(", ")}`
-                : undefined
-            }
-          />
+        <div className={styles.figures}>
+          {/* One number leads (spec § 8): flight time, with the per-battery
+              split named in words underneath it instead of hiding in a hover
+              title (#183). */}
+          <div className={styles.lead}>
+            <span className={styles.leadLabel}>Flight time</span>
+            <div className={styles.leadRow}>
+              <span className={styles.leadFigure}>{preview.flight_time_min.toFixed(1)}</span>
+              <span className={styles.leadUnit}>min</span>
+            </div>
+            <p className={styles.leadDelta}>{flightTimeDelta(preview.parts, preview.part_minutes)}</p>
+          </div>
+          <div className={styles.tiles}>
+            <Tile label="GSD" value={preview.gsd_cm.toFixed(2)} unit="cm/px" />
+            <Tile label="Photos" value={String(preview.photo_count)} />
+            {/* The same three numbers mean different things for an orbit, so
+                they are named for what they are rather than left quietly
+                wrong. */}
+            <Tile label={isOrbit ? "Rings" : "Lines"} value={String(preview.line_count)} />
+            <Tile
+              label={preview.parts > 1 ? "Flights" : "Flight"}
+              value={String(preview.parts)}
+              warn={preview.parts > 1}
+            />
+          </div>
+          <div className={styles.quiet}>
+            <QuietStat
+              label={isOrbit ? "Arc spacing" : "Fwd spacing"}
+              value={preview.fwd_spacing_m.toFixed(1)}
+              unit="m"
+            />
+            <QuietStat
+              label={isOrbit ? "Ring spacing" : "Side spacing"}
+              value={preview.side_spacing_m.toFixed(1)}
+              unit="m"
+            />
+            <QuietStat
+              label="Effective speed"
+              value={preview.capped_speed_ms.toFixed(1)}
+              unit="m/s"
+              warn={preview.capped_speed_ms < spec.flight.speed_ms}
+            />
+          </div>
         </div>
         <div className={styles.actions}>
-          <input
-            type="password"
-            className={styles.passphrase}
-            placeholder="Wayfinder passphrase"
-            // The secret shared with the store, typed once per browser and held
-            // there — not a DJI or Wayfinder account.
-            aria-label="Store passphrase"
-            title="Shared secret, typed once per browser and stored only here"
-            value={passphrase}
-            onChange={(e) => updatePassphrase(e.target.value)}
-          />
+          <div className={styles.passphraseWrap}>
+            <input
+              type="password"
+              className={styles.passphrase}
+              placeholder="Wayfinder passphrase"
+              // The secret shared with the store, typed once per browser and
+              // held there — not a DJI or Wayfinder account.
+              aria-label="Store passphrase"
+              aria-describedby="summary-passphrase-hint"
+              value={passphrase}
+              onChange={(e) => updatePassphrase(e.target.value)}
+            />
+            <p className={styles.passphraseHint} id="summary-passphrase-hint">
+              Shared secret, typed once per browser and held only here.
+            </p>
+          </div>
           <button
             className="primary"
             onClick={runSave}
@@ -164,8 +177,12 @@ export default function SummaryBar({ spec, preview, editing, onSaved, sites = []
           >
             {save.kind === "saving" ? "Saving…" : editing.id ? "Save Mission" : "Save new Mission"}
           </button>
-          <button onClick={copy}>{copied ? "Copied" : "Copy spec"}</button>
-          <button onClick={() => downloadMission(spec, editing.name)}>Download Mission Spec</button>
+          <button className="glass-clear" onClick={copy}>
+            {copied ? "Copied" : "Copy spec"}
+          </button>
+          <button className="glass-clear" onClick={() => downloadMission(spec, editing.name)}>
+            Download Mission Spec
+          </button>
         </div>
       </div>
       {problem && <div className={styles.dispatchError}>Save: {problem}</div>}
@@ -195,23 +212,28 @@ function downloadMission(spec: MissionSpec, name: string) {
   URL.revokeObjectURL(url);
 }
 
-function Stat({
-  label,
-  value,
-  unit,
-  warn,
-  title,
-}: {
-  label: string;
-  value: string;
-  unit?: string;
-  warn?: boolean;
-  title?: string;
-}) {
+/** One of the four boxed figures: GSD, Photos, Lines/Rings, Flights (spec's
+ *  metric tile, § 8). Flight time itself leads above these instead of sitting
+ *  among them (spec § 2 rule 4: one number leads). */
+function Tile({ label, value, unit, warn }: { label: string; value: string; unit?: string; warn?: boolean }) {
   return (
-    <div className={styles.stat} title={title}>
-      <span className={styles.label}>{label}</span>
-      <span className={`mono ${styles.statValue} ${warn ? styles.warn : ""}`}>
+    <div className={styles.tile}>
+      <span className={styles.tileLabel}>{label}</span>
+      <span className={`mono ${styles.tileValue} ${warn ? styles.warn : ""}`}>
+        {value}
+        {unit ? ` ${unit}` : ""}
+      </span>
+    </div>
+  );
+}
+
+/** Spacing and speed: figures the operator checks less often than the four
+ *  tiles, so they read as a quieter row rather than competing with them. */
+function QuietStat({ label, value, unit, warn }: { label: string; value: string; unit?: string; warn?: boolean }) {
+  return (
+    <div className={styles.quietStat}>
+      <span className={styles.quietLabel}>{label}</span>
+      <span className={`mono ${styles.quietValue} ${warn ? styles.warn : ""}`}>
         {value}
         {unit ? ` ${unit}` : ""}
       </span>

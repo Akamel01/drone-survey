@@ -517,6 +517,21 @@ export function describeSave(body: {
   );
 }
 
+/**
+ * The line under the summary's flight-time figure: how many flights the
+ * Mission takes, and what each one costs.
+ *
+ * The per-battery split used to exist only as a hover title on the Flights
+ * figure, unreachable by touch or by a screen reader (#183). Stating it here
+ * puts it in the one figure the operator is already looking at.
+ */
+export function flightTimeDelta(parts: number, partMinutes: number[]): string {
+  const label = `${parts} flight${parts === 1 ? "" : "s"}`;
+  const minutes =
+    partMinutes.length > 1 ? partMinutes.map((m) => m.toFixed(1)).join(" + ") : (partMinutes[0] ?? 0).toFixed(1);
+  return `${label} · ${minutes} min`;
+}
+
 // ---------------------------------------------------------------------------
 // The last read, kept for when the store cannot be reached
 // ---------------------------------------------------------------------------

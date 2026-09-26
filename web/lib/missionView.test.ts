@@ -10,6 +10,7 @@ import {
   copyOf,
   figuresMismatch,
   flightReason,
+  flightTimeDelta,
   flights,
   hostLines,
   localDate,
@@ -430,4 +431,18 @@ test("a copy is a new Mission with today's date, the same Site and Name, and the
 
 test("today is the operator's calendar day, not Greenwich's", () => {
   assert.equal(localDate(new Date(2026, 8, 24, 23, 30)), "2026-09-24");
+});
+
+// --- the summary's flight-time delta (#183) --------------------------------
+
+test("the delta line names every flight's own time, not just the total", () => {
+  assert.equal(flightTimeDelta(2, [11.2, 9.8]), "2 flights · 11.2 + 9.8 min");
+});
+
+test("one battery states its own minutes rather than repeating a plural", () => {
+  assert.equal(flightTimeDelta(1, [21.0]), "1 flight · 21.0 min");
+});
+
+test("no drawn area yet has nothing to add up, and still reads as a sentence", () => {
+  assert.equal(flightTimeDelta(0, []), "0 flights · 0.0 min");
 });
