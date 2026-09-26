@@ -258,12 +258,16 @@ function addLayers(map: MaplibreMap) {
   map.addLayer({ id: "circle-handles-hit", type: "circle", source: "circle-handles", paint: { "circle-radius": 22, "circle-color": "#00000000", "circle-opacity": 0 } });
 }
 
+// The overlay colours (background here, plus the fixed text/border ink) are
+// untouched by the theme -- they have to read on satellite imagery whatever
+// the chrome around them looks like. Only the shape (a full pill, not a
+// corner-rounded box) and the type follow the new system.
 function labelMarker(text: string, background: string): HTMLElement {
   const el = document.createElement("div");
   el.textContent = text;
-  el.style.cssText = `background:${background};color:#06110f;font:600 10px/1 var(--mono, monospace);
-    letter-spacing:0.06em;padding:4px 6px;border-radius:4px;border:1px solid #06110f;white-space:nowrap;
-    transform:translateY(-14px);pointer-events:none`;
+  el.style.cssText = `background:${background};color:#06110f;font:600 11px/1 var(--mono, monospace);
+    letter-spacing:0.04em;padding:4px 10px;border-radius:999px;border:1px solid #06110f;white-space:nowrap;
+    font-variant-numeric:tabular-nums;transform:translateY(-14px);pointer-events:none`;
   return el;
 }
 
@@ -949,23 +953,33 @@ export default function MapPane({
   return (
     <div className={styles.wrap}>
       <div ref={containerRef} className={styles.map} />
-      <div className={styles.basemapToggle}>
-        <button className={basemap === "esri" ? "active" : ""} onClick={() => toggleBasemap("esri")}>
+      <div className={styles.basemapToggle} role="group" aria-label="Map display">
+        <button
+          className={`${styles.pill} ${basemap === "esri" ? "active" : ""}`}
+          aria-pressed={basemap === "esri"}
+          onClick={() => toggleBasemap("esri")}
+        >
           Satellite
         </button>
-        <button className={basemap === "osm" ? "active" : ""} onClick={() => toggleBasemap("osm")}>
+        <button
+          className={`${styles.pill} ${basemap === "osm" ? "active" : ""}`}
+          aria-pressed={basemap === "osm"}
+          onClick={() => toggleBasemap("osm")}
+        >
           OSM
         </button>
         {/* Near what it affects: display options for the map live on the map. */}
         <button
-          className={showNumbers ? "active" : ""}
+          className={`${styles.pill} ${showNumbers ? "active" : ""}`}
+          aria-pressed={showNumbers}
           onClick={() => onShowNumbersChange(!showNumbers)}
           title="Number each photo position in capture order"
         >
           Numbers
         </button>
         <button
-          className={showFootprint ? "active" : ""}
+          className={`${styles.pill} ${showFootprint ? "active" : ""}`}
+          aria-pressed={showFootprint}
           onClick={() => setShowFootprint(!showFootprint)}
           title={`What one photograph covers at this altitude${footprintLabel ? `: ${footprintLabel}` : ""}`}
         >
@@ -973,10 +987,14 @@ export default function MapPane({
         </button>
       </div>
       {isDrawing(mode) && (
-        <div className={styles.drawPanel}>
+        <div className={`${styles.drawPanel} glass-smoke`}>
           <div className={styles.drawTitle}>{drawModeLabel(mode)}</div>
           <div className={styles.drawClick}>{clickMeaning}</div>
-          {drawNote && <div className={styles.drawNote}>{drawNote}</div>}
+          {drawNote && (
+            <div className={styles.drawNote} aria-live="polite">
+              {drawNote}
+            </div>
+          )}
           <div className={styles.drawActions}>
             {(mode === "draw-polygon" || mode === "append-polygon") && (
               <button onClick={finishDraw} disabled={spec.aoi.length < 3}>
@@ -989,7 +1007,7 @@ export default function MapPane({
       )}
       {/* Remove-corner action panel appears only when idle and a valid corner is selected. */}
       {mode === "idle" && selectedCorner != null && spec.mission_type !== "orbit" && !spec.shape && (
-        <div className={styles.drawPanel}>
+        <div className={`${styles.drawPanel} glass-smoke`}>
           <div className={styles.drawTitle}>Remove corner</div>
           <div className={styles.drawHint}>Tap the corner on the map to remove. Corners must remain at least three.</div>
           <div className={styles.drawActions}>
