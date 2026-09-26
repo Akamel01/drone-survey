@@ -16,6 +16,7 @@ import {
   type ActionResult,
   type ActionState,
 } from "@/lib/actions";
+import { readPassphrase, subscribePassphrase, writePassphrase } from "@/lib/passphrase";
 import {
   asOfStamp,
   cacheRead,
@@ -43,11 +44,9 @@ import styles from "./MissionList.module.css";
 // reach them -- the old screen's rules lived inside its JSX, which is why
 // nothing could assert that a mismatch withheld the affirmation.
 
-const PASSPHRASE_KEY = "drone-planner.wayfinder-key";
-
-/** The tone of an answer, carried on the card's left edge rather than by
+/** The tone of an answer, carried on the row's left edge rather than by
  *  tinting its text: a grey note is how a mismatch gets missed, and a whole
- *  card in red is unreadable. */
+ *  row in red is unreadable. */
 const TONE: Record<RowView["headline"]["tone"], string> = {
   go: styles.toneGo,
   stop: styles.toneStop,
@@ -72,6 +71,11 @@ interface MissionListProps {
 
 export default function MissionList({ onEdit, onCopy, editingId = null, onRead }: MissionListProps) {
   const [passphrase, setPassphrase] = useState<string | null>(null);
+  // True until the first good read, whatever is typed meanwhile: the field
+  // asking for the passphrase must not vanish mid-keystroke just because the
+  // value it is bound to briefly went from empty to something (plan decision
+  // 17). It only steps aside once the store has actually answered.
+  const [gate, setGate] = useState(true);
   const [read, setRead] = useState<MissionListRead | null>(null);
   const [readAt, setReadAt] = useState<number | null>(null);
   /** False while showing the last cached read instead of a live one. */
@@ -111,6 +115,7 @@ export default function MissionList({ onEdit, onCopy, editingId = null, onRead }
         setNow(at);
         setLive(true);
         setError(null);
+        setGate(false);
         const ls = safeStorage();
         if (ls) cacheRead(ls, fresh, at);
         reportRead.current?.(fresh);
@@ -138,21 +143,44 @@ export default function MissionList({ onEdit, onCopy, editingId = null, onRead }
         setRead(cached.read);
         setReadAt(cached.read_at);
         setLive(false);
+        setGate(false);
       } else {
         setLive(true);
       }
     }
   }, []);
 
+  // True only for the passphrase already on file when this mounted, so that
+  // one loads at once, the way it always did. Consumed by the first pass of
+  // the effect below, whichever value that turns out to be -- so a passphrase
+  // that arrives by typing, with nothing stored before it, still waits out the
+  // debounce like any later edit rather than firing on its first keystroke.
+  const instant = useRef(false);
+
+  // Resolved once: what is already on file, and -- from here on -- whatever
+  // any field showing the passphrase writes, wherever it was typed (shared
+  // with the Summary's own field; `lib/passphrase.ts` is the mechanism).
   useEffect(() => {
-    const ls = safeStorage();
-    // null marks storage that is blocked outright: no passphrase can be kept.
-    const key = ls ? (ls.getItem(PASSPHRASE_KEY) ?? "") : null;
+    const initial = readPassphrase();
     // eslint-disable-next-line react-hooks/set-state-in-effect -- one-time client-only read of localStorage
-    setPassphrase(key ?? "");
-    setBlocked(key === null);
-    if (!key) return;
-    void load(key);
+    setPassphrase(initial ?? "");
+    setBlocked(initial === null);
+    setGate(!initial);
+    instant.current = !!initial;
+    return subscribePassphrase(setPassphrase);
+  }, []);
+
+  // Loads with the current passphrase and keeps the list fresh while one is
+  // known. Firing this on every keystroke -- typed here or in the Summary's
+  // field, now that the two agree live -- would spend a store transaction per
+  // character, so a value that changes after the page has settled waits half
+  // a second before it is used.
+  useEffect(() => {
+    if (!passphrase) return;
+    const key = passphrase;
+    const wait = instant.current ? 0 : 500;
+    instant.current = false;
+    const debounce = setTimeout(() => void load(key), wait);
 
     // Every poll costs a Class C transaction on the storage account, and this
     // page is left open for hours. Five minutes is fresh enough for a pipeline
@@ -176,15 +204,17 @@ export default function MissionList({ onEdit, onCopy, editingId = null, onRead }
     // Ageing the "checked N min ago" label is not a poll and asks the store
     // for nothing; it only keeps the screen from claiming to be fresher than
     // it is while the operator reads it.
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- ages a label against the clock, not a fetch
     setNow(Date.now());
     const clock = setInterval(() => setNow(Date.now()), 30000);
     return () => {
+      clearTimeout(debounce);
       clearInterval(poll);
       clearInterval(clock);
       document.removeEventListener("visibilitychange", refresh);
       window.removeEventListener("storage", onWrite);
     };
-  }, [load]);
+  }, [passphrase, load]);
 
   // The five-minute poll is far too slow to be an action's feedback, so every
   // action reports its own outcome on the row it was pressed on and re-reads
@@ -277,12 +307,33 @@ export default function MissionList({ onEdit, onCopy, editingId = null, onRead }
       </p>
     );
   }
-  if (passphrase === "") {
+  if (gate) {
     return (
-      <p className={styles.quiet}>
-        The Missions in the store appear here once the Wayfinder passphrase is typed into the box
-        beside Save, along the bottom of the map. It is typed once per browser and kept only there.
-      </p>
+      <form
+        className={styles.gate}
+        onSubmit={(e) => {
+          e.preventDefault();
+          if (passphrase) void load(passphrase);
+        }}
+      >
+        <p className={styles.gateText}>
+          Type the Wayfinder passphrase to read the Missions in the store. It is typed once per browser
+          and kept only here — the same field as the one beside Save.
+        </p>
+        <input
+          type="password"
+          className={styles.gateInput}
+          placeholder="Wayfinder passphrase"
+          aria-label="Wayfinder passphrase"
+          value={passphrase}
+          onChange={(e) => writePassphrase(e.target.value)}
+          autoFocus
+        />
+        <button type="submit" className="primary" disabled={!passphrase || loading}>
+          {loading ? "Checking…" : "Show Missions"}
+        </button>
+        {error && <p className={styles.stop}>{error.replace(/\.?$/, ".")}</p>}
+      </form>
     );
   }
 
@@ -308,16 +359,16 @@ export default function MissionList({ onEdit, onCopy, editingId = null, onRead }
           {loading ? "Checking…" : "Refresh"}
         </button>
         {archivedCount > 0 && (
-          <label className={styles.filter}>
-            <input
-              type="checkbox"
-              checked={showArchived}
-              onChange={(e) => setShowArchived(e.target.checked)}
-            />
-            {/* Withdrawn, Superseded and Flown are archived, never deleted, so
-                they are behind a filter rather than absent (ADR 0021). */}
-            Show {archivedCount} archived (Withdrawn, Superseded, Flown)
-          </label>
+          // Withdrawn, Superseded and Flown are archived, never deleted, so
+          // they are behind a filter rather than absent (ADR 0021).
+          <button
+            type="button"
+            className={`${styles.filter} ${showArchived ? "active" : ""}`}
+            aria-pressed={showArchived}
+            onClick={() => setShowArchived((v) => !v)}
+          >
+            Show {archivedCount} archived
+          </button>
         )}
       </div>
 
@@ -355,7 +406,7 @@ export default function MissionList({ onEdit, onCopy, editingId = null, onRead }
       )}
 
       {visible.map((row) => (
-        <MissionCard
+        <Row
           key={row.id}
           row={row}
           view={rowView(row, figures.get(row.id) ?? null, read?.stale_cards ?? [], read?.host?.notice ?? null)}
@@ -371,9 +422,9 @@ export default function MissionList({ onEdit, onCopy, editingId = null, onRead }
 }
 
 /** One Mission: its state and its next action first, everything else beneath.
- *  A card rather than a dense line, because this is read at the desk before
+ *  A row rather than a dense line, because this is read at the desk before
  *  leaving and again with the Controller in hand (ADR 0021). */
-function MissionCard({
+function Row({
   row,
   view,
   editing,
@@ -391,7 +442,7 @@ function MissionCard({
   onAction: (name: ActionName) => void;
 }) {
   return (
-    <article className={`${styles.card} ${TONE[view.headline.tone]} ${editing ? styles.editing : ""}`}>
+    <article className={`${styles.row} glass-smoke ${TONE[view.headline.tone]} ${editing ? styles.editing : ""}`}>
       <header className={styles.head}>
         <h3 className={styles.title}>
           {row.name}
@@ -399,7 +450,7 @@ function MissionCard({
             {row.site} · {row.date}
           </span>
         </h3>
-        <span className={`mono ${styles.state}`}>{view.stateLabel}</span>
+        <span className={`mono ${styles.chip}`}>{view.stateLabel}</span>
       </header>
 
       {/* The answer first: this screen exists to say whether the Mission will

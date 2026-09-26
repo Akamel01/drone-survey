@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import type { MissionSpec } from "@/lib/spec";
 import type { Preview } from "@/lib/mission";
 import type { MissionRecord } from "@/lib/missionRecords";
-import { safeStorage } from "@/lib/actions";
+import { readPassphrase, subscribePassphrase, writePassphrase } from "@/lib/passphrase";
 import { describeSave, saveProblem, type SiteChoice } from "@/lib/missionView";
 import { noteMissionsChanged } from "@/lib/actions";
 import type { Editing } from "@/app/plan/page";
@@ -22,10 +22,6 @@ interface SummaryBarProps {
   /** The Sites already in the store, so a new Site cannot take one's name. */
   sites?: SiteChoice[];
 }
-
-// Typed once per browser, never baked into the code: the passphrase is a
-// secret the operator holds, not something the planner should ship with.
-const PASSPHRASE_KEY = "drone-planner.wayfinder-key";
 
 // Saving is the planner's only write. Dispatch, Withdraw, Flown and Remove all
 // live on the Mission's own row, where its state is: the screen that failed had
@@ -45,20 +41,20 @@ export default function SummaryBar({ spec, preview, editing, onSaved, sites = []
   const isOrbit = spec.mission_type === "orbit";
 
   // Empty on the server (no localStorage there), filled in after mount, so the
-  // server-rendered and first client-rendered HTML match.
+  // server-rendered and first client-rendered HTML match. From here on this
+  // field and the Missions view's own (plan decision 17) are one value: typed
+  // into either, kept by `lib/passphrase.ts`, and echoed to both live.
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- one-time client-only read of localStorage
-    setPassphrase(safeStorage()?.getItem(PASSPHRASE_KEY) ?? "");
+    setPassphrase(readPassphrase() ?? "");
+    return subscribePassphrase(setPassphrase);
   }, []);
 
   function updatePassphrase(v: string) {
-    setPassphrase(v);
-    try {
-      safeStorage()?.setItem(PASSPHRASE_KEY, v);
-    } catch {
-      // Unavailable (private browsing, quota, disabled storage) — persistence
-      // silently no-ops, and the Mission list says it cannot read the store.
-    }
+    // Persists (or silently no-ops where storage is unavailable) and notifies
+    // the Missions view's field; that subscription is what sets `passphrase`
+    // here too, so this field's own state does not need setting directly.
+    writePassphrase(v);
   }
 
   const problem = saveProblem(spec, editing.name, sites);

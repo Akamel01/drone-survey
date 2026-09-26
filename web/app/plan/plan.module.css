@@ -30,6 +30,18 @@
   margin: 0 0 12px;
 }
 
+/* The Missions view's own screen title (spec § 6, § 15 "Mission row"):
+   display face, top-left, the size of an answer rather than a caption. UI-4
+   owns this one instance; the Settings panel keeps `.heading` above. */
+.viewTitle {
+  margin: 0 0 12px;
+  font-family: var(--display), var(--sans);
+  font-size: 28px;
+  line-height: 1.1;
+  font-weight: 700;
+  color: var(--on-glass);
+}
+
 /* A panel's title and its fold-away control. */
 .panelHead {
   display: flex;
