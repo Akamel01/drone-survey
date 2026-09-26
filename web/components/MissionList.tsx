@@ -1,8 +1,9 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import { preview } from "@/lib/mission";
 import type { MissionRow } from "@/lib/missionRecords";
+import Sheet from "./Sheet";
 import {
   IDLE,
   MISSIONS_CHANGED_KEY,
@@ -85,6 +86,15 @@ export default function MissionList({ onEdit, onCopy, editingId = null, onRead }
   const [showArchived, setShowArchived] = useState(false);
   const [blocked, setBlocked] = useState(false);
   const [action, setAction] = useState<ActionState>(IDLE);
+  // The row a sheet is open about, and whether it is open, held apart: the
+  // row is kept through the close animation so the sheet has something to
+  // show while it fades, rather than going blank a frame before it is gone.
+  const [confirmRow, setConfirmRow] = useState<MissionRow | null>(null);
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [detailsRow, setDetailsRow] = useState<MissionRow | null>(null);
+  const [detailsOpen, setDetailsOpen] = useState(false);
+  const removeHeadingId = useId();
+  const detailsHeadingId = useId();
   // The clock the age is measured against, advanced on a timer rather than
   // read during render: a render is not an event, and a screen that re-reads
   // the clock whenever React happens to re-run it cannot be trusted to say
@@ -263,23 +273,31 @@ export default function MissionList({ onEdit, onCopy, editingId = null, onRead }
         case "Unmark Flown":
           return act(name, row.id, () => post("/api/missions/flown", { id: row.id, flown: false }));
         case "Remove":
-          if (!window.confirm(`Remove “${row.name}”? It is archived, not deleted — nothing is lost.`)) {
-            return;
-          }
-          return act(name, row.id, () =>
-            fetch(`/api/missions?id=${encodeURIComponent(row.id)}`, {
-              method: "DELETE",
-              headers: { "x-wayfinder-key": passphrase ?? "" },
-            }),
-          );
+          // Asks in a sheet, never the browser's own confirm box (spec § 8,
+          // § 14) -- the words are the same ones that box used to show.
+          setConfirmRow(row);
+          setConfirmOpen(true);
+          return;
         case "Edit":
           return onEdit(row);
         case "Copy":
           return onCopy(row);
       }
     },
-    [act, post, passphrase, onEdit, onCopy],
+    [act, post, onEdit, onCopy],
   );
+
+  const confirmRemove = useCallback(() => {
+    if (!confirmRow) return;
+    const row = confirmRow;
+    setConfirmOpen(false);
+    void act("Remove", row.id, () =>
+      fetch(`/api/missions?id=${encodeURIComponent(row.id)}`, {
+        method: "DELETE",
+        headers: { "x-wayfinder-key": passphrase ?? "" },
+      }),
+    );
+  }, [act, confirmRow, passphrase]);
 
   const all = useMemo(() => read?.missions ?? [], [read]);
   // The planner's own figures, derived from each Mission's Spec. They are one
@@ -415,8 +433,58 @@ export default function MissionList({ onEdit, onCopy, editingId = null, onRead }
           running={(name) => isRunning(action, name, row.id)}
           notice={notice?.on === row.id && noticeShows(notice, row.state) ? notice : null}
           onAction={(name) => runAction(name, row)}
+          onDetails={() => {
+            setDetailsRow(row);
+            setDetailsOpen(true);
+          }}
         />
       ))}
+
+      <Sheet open={confirmOpen} onClose={() => setConfirmOpen(false)} labelledBy={removeHeadingId}>
+        {confirmRow && (
+          <>
+            <h3 id={removeHeadingId} className={styles.sheetTitle}>
+              Remove “{confirmRow.name}”?
+            </h3>
+            <p className={styles.sheetText}>It is archived, not deleted — nothing is lost.</p>
+            <div className={styles.sheetActions}>
+              <button type="button" onClick={() => setConfirmOpen(false)}>
+                Cancel
+              </button>
+              <button type="button" className="primary" onClick={confirmRemove}>
+                Remove
+              </button>
+            </div>
+          </>
+        )}
+      </Sheet>
+
+      <Sheet open={detailsOpen} onClose={() => setDetailsOpen(false)} labelledBy={detailsHeadingId}>
+        {detailsRow && (
+          <div className={`panel-light ${styles.detailsPanel}`}>
+            <h3 id={detailsHeadingId} className={styles.detailsTitle}>
+              {detailsRow.name}
+            </h3>
+            <div className={`${styles.detailsLine} mono`}>{detailsRow.spec_key ?? detailsRow.id}</div>
+            {detailsRow.collected_at && (
+              <div className={styles.detailsLine}>Collected {detailsRow.collected_at}</div>
+            )}
+            {detailsRow.loaded_at && <div className={styles.detailsLine}>Loaded {detailsRow.loaded_at}</div>}
+            {detailsRow.flown_evidence_at && (
+              <div className={styles.detailsLine}>Imagery arrived {detailsRow.flown_evidence_at}</div>
+            )}
+            {detailsRow.superseded_by && (
+              <div className={styles.detailsLine}>Superseded by the Mission saved after it.</div>
+            )}
+            {detailsRow.edit === "guarded" && (
+              <div className={styles.detailsLine}>
+                Editing is guarded: a file for this Mission is already on the Controller, and withdrawing
+                cannot reach it.
+              </div>
+            )}
+          </div>
+        )}
+      </Sheet>
     </div>
   );
 }
@@ -432,6 +500,7 @@ function Row({
   running,
   notice,
   onAction,
+  onDetails,
 }: {
   row: MissionRow;
   view: RowView;
@@ -440,6 +509,7 @@ function Row({
   running: (name: ActionName) => boolean;
   notice: { text: string; failed: boolean } | null;
   onAction: (name: ActionName) => void;
+  onDetails: () => void;
 }) {
   return (
     <article className={`${styles.row} glass-smoke ${TONE[view.headline.tone]} ${editing ? styles.editing : ""}`}>
@@ -509,24 +579,11 @@ function Row({
         </p>
       )}
 
-      <details className={styles.more}>
-        <summary>Details</summary>
-        <div className={`${styles.detail} mono`}>{row.spec_key ?? row.id}</div>
-        {row.collected_at && <div className={styles.detail}>Collected {row.collected_at}</div>}
-        {row.loaded_at && <div className={styles.detail}>Loaded {row.loaded_at}</div>}
-        {row.flown_evidence_at && (
-          <div className={styles.detail}>Imagery arrived {row.flown_evidence_at}</div>
-        )}
-        {row.superseded_by && (
-          <div className={styles.detail}>Superseded by the Mission saved after it.</div>
-        )}
-        {row.edit === "guarded" && (
-          <div className={styles.detail}>
-            Editing is guarded: a file for this Mission is already on the Controller, and withdrawing
-            cannot reach it.
-          </div>
-        )}
-      </details>
+      {/* The old disclosure's contents now live in a sheet, on a light panel
+          (spec § 8, § 14) -- this only opens it. */}
+      <button type="button" className={styles.more} onClick={onDetails}>
+        Details
+      </button>
     </article>
   );
 }
