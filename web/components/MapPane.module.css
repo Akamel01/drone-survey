@@ -24,6 +24,35 @@
   margin-right: calc(var(--settings-w, 0px) + 24px);
 }
 
+/* At >=1000px the Summary bar also floats along the bottom, spanning the same
+   centre strip these controls sit above -- clearing the side panels is not
+   enough, since the Summary itself is between them. --summary-h is measured
+   from the Summary's real rendered box (plan/page.tsx), not guessed, because
+   its height is content-driven and changing under UI-6; the fallback is 0 so
+   nothing shifts before that measurement lands on first paint. */
+@media (min-width: 1000px) {
+  .wrap :global(.maplibregl-ctrl-bottom-left .maplibregl-ctrl),
+  .wrap :global(.maplibregl-ctrl-bottom-right .maplibregl-ctrl-attrib) {
+    margin-bottom: calc(var(--summary-h, 0px) + 24px);
+  }
+}
+
+/* Scale bar, restyled minimally to the new type and radius (spec §6, §7)
+   instead of MapLibre's default black-bordered white square. Kept opaque
+   with dark ink so it stays legible over any basemap, the same reasoning as
+   the pills; a border only on three sides keeps it reading as a ruler. */
+.wrap :global(.maplibregl-ctrl-scale) {
+  background: var(--panel-light-alt);
+  border: 1.5px solid var(--ink);
+  border-top: none;
+  border-radius: 0 0 6px 6px;
+  color: var(--ink);
+  font: 500 11px/1.4 var(--mono, monospace);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.02em;
+  padding: 1px 6px 2px;
+}
+
 /* Both float on the map itself, so they must stay clear of the Missions and
    Settings glass panels when those are open, not just of the viewport edge.
    --missions-w / --settings-w are set on .page (plan.module.css) and cascade
@@ -118,6 +147,19 @@
   gap: 6px;
 }
 
+/* Below 1000px there are no side panels for --missions-w to hold it clear of,
+   and the display pills claim the same top-left corner -- covering "OSM" and
+   half of "Numbers" while drawing, and hit-testing over them too, so they
+   were not reachable (screenshots, ui-7 review). --toggle-h is the pill row's
+   own measured height (MapPane.tsx), one or two lines depending on wrap, so
+   the panel starts under it at any width or label length instead of guessing
+   a fixed offset. */
+@media (max-width: 999px) {
+  .drawPanel {
+    top: calc(var(--toggle-h, 0px) + 20px);
+  }
+}
+
 .drawTitle {
   font: 500 12px/1.3 var(--sans);
   letter-spacing: 0.06em;
@@ -149,6 +191,16 @@
   display: flex;
   gap: 8px;
   margin-top: 4px;
+}
+
+/* Finish area / Cancel / Remove corner otherwise inherit the global button's
+   ~6px padding, well under the 44px touch target (spec §11), same as .pill. */
+.drawActions button {
+  min-height: 44px;
+  padding: 0 16px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 
 /* Take-off, not the orbit subject: those are different things and the subject

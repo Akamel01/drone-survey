@@ -112,6 +112,8 @@ export default function PlanPage() {
   const collapseSettings = useRef<HTMLButtonElement>(null);
   const expandMissions = useRef<HTMLButtonElement>(null);
   const expandSettings = useRef<HTMLButtonElement>(null);
+  const pageRef = useRef<HTMLDivElement>(null);
+  const summaryRef = useRef<HTMLDivElement>(null);
   // The control a fold is about to create, focused once it is on screen. Null
   // on first mount: the page must not steal focus on load.
   const foldFocus = useRef<FoldFocus | null>(null);
@@ -144,6 +146,21 @@ export default function PlanPage() {
     onChange();
     mq.addEventListener("change", onChange);
     return () => mq.removeEventListener("change", onChange);
+  }, []);
+
+  // The Summary bar's real height, as a variable the map's own bottom
+  // controls (UI-7) read to clear it -- it shares the bottom band with them
+  // on a wide screen, and its height is content-driven (UI-6 is reshaping
+  // that content), so a measured value is the only one that stays true.
+  useEffect(() => {
+    const page = pageRef.current;
+    const summary = summaryRef.current;
+    if (!page || !summary) return;
+    const ro = new ResizeObserver(([entry]) => {
+      page.style.setProperty("--summary-h", `${entry.target.getBoundingClientRect().height}px`);
+    });
+    ro.observe(summary);
+    return () => ro.disconnect();
   }, []);
 
   // Folding swaps a control for its replacement; focus follows so a keyboard
@@ -222,6 +239,7 @@ export default function PlanPage() {
 
   return (
     <div
+      ref={pageRef}
       className={styles.page}
       data-view={view}
       data-network={noNetwork ? "offline" : "online"}
@@ -313,7 +331,7 @@ export default function PlanPage() {
       <p className={styles.srOnly} role="status">
         {noNetwork ? "The map needs a connection." : ""}
       </p>
-      <div className={`glass-smoke ${styles.summary}`}>
+      <div ref={summaryRef} className={`glass-smoke ${styles.summary}`}>
         <SummaryBar
           spec={spec}
           preview={preview_}

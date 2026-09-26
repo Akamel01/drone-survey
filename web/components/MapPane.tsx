@@ -287,6 +287,8 @@ export default function MapPane({
   onBasemapError,
   onBasemapLoaded,
 }: MapPaneProps) {
+  const wrapRef = useRef<HTMLDivElement>(null);
+  const toggleRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<MaplibreMap | null>(null);
   const homeMarkerRef = useRef<Marker | null>(null);
@@ -312,6 +314,22 @@ export default function MapPane({
   // True while a shape is being rubber-banded, so the data push below leaves the
   // live preview alone instead of overwriting it from the committed spec.
   const drawingRef = useRef(false);
+
+  // The display-pill row's real height, read by the drawing / remove-corner
+  // panel below 1000px wide (MapPane.module.css) so it starts under the pills
+  // instead of over them -- the row can be one or two lines depending on how
+  // the footprint label wraps, so a measured value is the only one that stays
+  // true at every width and every label length.
+  useEffect(() => {
+    const wrap = wrapRef.current;
+    const toggle = toggleRef.current;
+    if (!wrap || !toggle) return;
+    const ro = new ResizeObserver(() => {
+      wrap.style.setProperty("--toggle-h", `${toggle.getBoundingClientRect().height}px`);
+    });
+    ro.observe(toggle);
+    return () => ro.disconnect();
+  }, []);
 
   // Leaving a draw mode half-finished must not leave the shape behind, so every
   // mode change discards it. An effect on `mode` would cost a second render.
@@ -951,9 +969,9 @@ export default function MapPane({
     : "";
 
   return (
-    <div className={styles.wrap}>
+    <div ref={wrapRef} className={styles.wrap}>
       <div ref={containerRef} className={styles.map} />
-      <div className={styles.basemapToggle} role="group" aria-label="Map display">
+      <div ref={toggleRef} className={styles.basemapToggle} role="group" aria-label="Map display">
         <button
           className={`${styles.pill} ${basemap === "esri" ? "active" : ""}`}
           aria-pressed={basemap === "esri"}
