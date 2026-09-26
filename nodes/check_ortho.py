@@ -457,6 +457,104 @@ def check_cog_validator():
         check("export-cog: refuses a mostly-empty Orthomosaic", r.returncode != 0 and "floor" in r.stderr, r.stderr)
 
 
+# #174's review: valid_fraction()'s except-RuntimeError branch (export_cog.py,
+# ~line 170) only runs where `from osgeo import gdal` succeeds, which is only
+# true inside this Node's own GDAL Docker image (module docstring). CI
+# installs `gdal-bin` (.github/workflows/mission.yml), which gives the
+# setup-python interpreter no osgeo -- so check_cog_validator above, run
+# there, only ever exercises the gdalinfo-subprocess fallback and passes
+# identically on export_cog.py before and after that branch was added.
+# Exercise the osgeo path itself by putting a stand-in `osgeo` package on the
+# subprocess's PYTHONPATH (ADR 0018: subprocess-per-Node, no fixture
+# library/mocking framework). The stand-in's gdal.Open() reports a
+# structurally valid COG -- so validate() passes and the check is actually
+# about valid_fraction(), not a validator failure -- and its gdal.Info()
+# raises the same RuntimeError text real GDAL raises on an all-nodata sample.
+_FAKE_OSGEO_GDAL = '''\
+class _Band:
+    def GetBlockSize(self):
+        return (512, 512)
+
+    def GetOverviewCount(self):
+        return 1
+
+
+class _SpatialRef:
+    def GetAuthorityCode(self, target):
+        return "3857"
+
+
+class _Dataset:
+    def GetMetadata(self, domain=None):
+        return {"LAYOUT": "COG"}
+
+    def GetRasterBand(self, n):
+        return _Band()
+
+    def GetMetadataItem(self, item, domain=None):
+        return "8"
+
+    def GetSpatialRef(self):
+        return _SpatialRef()
+
+
+def UseExceptions():
+    pass
+
+
+def Open(path):
+    return _Dataset()
+
+
+def InfoOptions(**kwargs):
+    return kwargs
+
+
+def Info(path, options=None):
+    raise RuntimeError("ERROR 1: no valid pixels found in sampling")
+'''
+
+
+def check_export_cog_osgeo_path():
+    if shutil.which("gdal_create") is None or shutil.which("gdal_translate") is None:
+        _skip("export-cog osgeo-bindings check", "gdal_create/gdal_translate not on PATH")
+        return
+    with tempfile.TemporaryDirectory() as tmp:
+        tmp = Path(tmp)
+        fake_root = tmp / "fake_osgeo"
+        osgeo_pkg = fake_root / "osgeo"
+        osgeo_pkg.mkdir(parents=True)
+        (osgeo_pkg / "__init__.py").write_text("")
+        (osgeo_pkg / "gdal.py").write_text(_FAKE_OSGEO_GDAL)
+
+        # Same all-nodata fixture as check_cog_validator's own empty.tif above.
+        empty = tmp / "empty.tif"
+        result = subprocess.run(
+            ["gdal_create", "-outsize", "2048", "2048", "-bands", "4", "-ot", "Byte",
+             "-burn", "128", "-burn", "128", "-burn", "128", "-burn", "0",
+             "-co", "PHOTOMETRIC=RGB", "-co", "ALPHA=YES",
+             "-a_srs", "EPSG:4326", "-a_ullr", "-1", "1", "1", "-1", str(empty)],
+            capture_output=True, text=True,
+        )
+        if result.returncode != 0:
+            _skip("export-cog osgeo-bindings check", f"gdal_create failed: {result.stderr}")
+            return
+
+        out = tmp / "out"
+        env = {**os.environ, "PYTHONPATH": str(fake_root) + os.pathsep + os.environ.get("PYTHONPATH", "")}
+        r = subprocess.run(
+            [PY, str(REPO_ROOT / "nodes" / "export-cog" / "export_cog.py"),
+             "--in", str(empty), "--out", str(out)],
+            capture_output=True, text=True, env=env,
+        )
+        check("export-cog (osgeo bindings): refuses a mostly-empty Orthomosaic instead of crashing",
+              r.returncode != 0 and "floor" in r.stderr and "Traceback" not in r.stderr, r.stdout + r.stderr)
+        report = out / "validator_output.txt"
+        report_text = report.read_text() if report.is_file() else ""
+        check("export-cog (osgeo bindings): report records 0% valid pixels",
+              "valid_pixel_fraction=0.0000" in report_text, report_text or "<no report written>")
+
+
 # A missing prerequisite must not read as a pass. The heavy evidence needs
 # docker, GDAL and a dataset that lives on the compute host; when any is absent
 # this check says so and fails, unless the operator marks the gap deliberate.
@@ -583,6 +681,7 @@ def main() -> None:
     check_second_solve_hands_reconstruct_a_task()
     check_bellus_real_projection()
     check_cog_validator()
+    check_export_cog_osgeo_path()
 
     if FAILURES:
         print(f"\n{len(FAILURES)} check(s) failed: {FAILURES}", file=sys.stderr)
