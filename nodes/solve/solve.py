@@ -62,7 +62,6 @@ Usage:
 """
 
 import argparse
-import uuid
 import json
 import subprocess
 import sys
@@ -284,31 +283,25 @@ def main() -> None:
     # Cleanup is declarative via the manifest; remove-task flag is deprecated.
     args = p.parse_args()
 
-    # Context-driven no-GCP signal: if the Runner indicates no GCPs via env,
-    # force no-gcp on this run (first/second pass shenanigans).
-    ctx = _load_execution_context_from_env()
-    if isinstance(ctx, dict) and "ground_control_points" in ctx:
-        if not ctx["ground_control_points"]:
-            # Override to force the no-GCP path for this solve invocation.
-            args.gcp = None
-
     images = list_images(args.images_dir)
     if not images:
         sys.exit(f"solve: no images found in {args.images_dir}")
     if args.gcp is not None and not args.gcp.is_file():
         sys.exit(f"solve: --gcp {args.gcp} does not exist")
-    # register always creates --gcp's path; empty means "no Anchors to
-    # register" and is the deliberate, expected no-ground-control signal
-    # (see register.py), not an error -- only a genuinely missing file is.
-    # F2: remove the emptiness check; if a gcp path is provided, pass it through
-    # as-is. The manifest controls whether we actually have GCPs via the
-    # EXECUTION_CONTEXT signal.
-    gcp_path = args.gcp if args.gcp is not None else None
+    # Two separate questions. Which pass this is -- and so which route -- is
+    # whether --gcp was given at all. Whether a ground control file is uploaded
+    # is the Manifest's declared fact, carried in EXECUTION_CONTEXT. Letting the
+    # fact pick the route sent the second pass down the CLI route with no NodeODM
+    # task behind it, and every reconstruct stage after it failed.
+    first_pass = args.gcp is None
+    gcp_path = args.gcp
+    if _load_execution_context_from_env().get("ground_control_points") is False:
+        gcp_path = None
 
     options = [{"name": "end-with", "value": args.end_with}] + parse_options(args.option)
     args.out.mkdir(parents=True, exist_ok=True)
 
-    if args.gcp is None:
+    if first_pass:
         # First pass (module docstring): recover poses cheaply via the ODM
         # CLI container directly, not NodeODM -- register needs
         # opensfm/reconstruction.json, which NodeODM's asset API never
@@ -322,13 +315,8 @@ def main() -> None:
                                            args.odm_image, args.timeout_seconds)
         cameras, poses = poses_from_reconstruction(reconstruction_path)
         remove_odm_project(project_root)  # heavy, root-owned opensfm working set; poses/camera already extracted
-        # F1: no-GCP path must still provide a stable task descriptor for later stages.
-        # Provide a minimal task.json with uuid/host so reconstruct.py can proceed
-        # without KeyError when the next stage restarts the task.
-        (args.out / "task.json").write_text(json.dumps({
-            "route": "odm-cli", "end_with": args.end_with, "gcp": False,
-            "host": "odm-cli", "uuid": str(uuid.uuid4()),
-        }, indent=1))
+        # No task.json: this pass leaves no NodeODM task to restart, and a
+        # made-up id would only fail later, in reconstruct, hours further on.
     else:
         print(f"solve: submitting {len(images)} images to {args.host} "
               f"(end-with={args.end_with}, gcp={'yes' if gcp_path else 'no'})")
