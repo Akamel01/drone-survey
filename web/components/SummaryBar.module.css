@@ -1,109 +1,279 @@
+/* The page always wraps this in a `glass-smoke` panel (plan/page.tsx), on a
+   phone as much as on a wide screen, so this component supplies layout only —
+   never its own background — and inherits whatever glass it is sitting in. */
 .wrap {
   flex: none;
-  background: var(--canopy-700);
-  border-top: 1px solid var(--glass-edge);
-  padding: 10px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 16px;
 }
 
-/* The figures and the controls. The figures scroll sideways when there is no
-   room; the controls never do, or Save ends up off the edge of a phone. */
+/* Always a column, never a row that could need a horizontal scrollbar to
+   read: on a wide screen this panel's actual width is whatever is left
+   between the Missions and Settings panels (as little as ~500 px at 1280,
+   not the viewport width), so a breakpoint on viewport width cannot tell
+   whether a row fits. Wrapping is what fits it at every width instead. */
 .bar {
   display: flex;
-  align-items: center;
-  gap: 24px;
+  flex-direction: column;
+  gap: 16px;
 }
 
-.row {
-  flex: 1;
-  min-width: 0;
+.figures {
   display: flex;
-  align-items: center;
-  gap: 24px;
-  overflow-x: auto;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
 }
 
-.stat {
+/* One number leads (spec § 2 rule 4, § 8): flight time, in the display face,
+   with its per-battery split named underneath instead of hiding in a hover
+   title. */
+.lead {
   display: flex;
   flex-direction: column;
   gap: 2px;
-  white-space: nowrap;
 }
 
-.label {
+.leadLabel {
   font-size: 11px;
+  font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.06em;
   color: var(--on-glass-3);
 }
 
-.statValue {
+.leadRow {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
+
+.leadFigure {
+  font-family: var(--display), var(--sans);
+  font-variant-numeric: tabular-nums;
+  font-size: 40px;
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: -0.01em;
+  color: var(--on-glass);
+}
+
+.leadUnit {
   font-size: 15px;
+  color: var(--on-glass-3);
+}
+
+.leadDelta {
+  margin: 2px 0 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--on-glass-2);
+}
+
+/* Metric tiles (spec § 8): GSD, Photos, Lines/Rings, Flights. A flat tint
+   rather than the shared `glass-smoke` utility -- they already sit inside one
+   blurred surface, and a blur nested in a blur is cost with nothing to show
+   for it (spec § 12 on keeping blurred layers few). */
+.tiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(78px, 1fr));
+  gap: 8px;
+}
+
+.tile {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  padding: 10px 12px;
+  border-radius: 14px;
+  /* Darkens rather than lightens: the parent glass is already at the edge of
+     4.5:1 for white text over the brightest imagery it can sit on, and a
+     white tint would spend that margin instead of adding to it. */
+  background: rgb(0 0 0 / 0.14);
+  box-shadow: inset 0 0 0 1px var(--glass-edge);
+}
+
+.tileLabel {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--on-glass-3);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.tileValue {
+  font-size: 18px;
+  font-weight: 700;
 }
 
 .warn {
   color: var(--warn);
 }
 
+/* Spacing and speed: checked less often than the tiles, so they stay a
+   quieter row instead of competing with them for attention. */
+.quiet {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 18px;
+}
+
+.quietStat {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  white-space: nowrap;
+}
+
+.quietLabel {
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--on-glass-3);
+}
+
+.quietValue {
+  font-size: 12px;
+  color: var(--on-glass-2);
+}
+
 .actions {
   display: flex;
-  gap: 8px;
-  flex: none;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 10px;
+  padding-top: 12px;
+  border-top: 1px solid var(--glass-edge);
 }
 
-/* The wide-screen summary floats between the two open panels, so it can be
-   narrower than one line. Let the two groups take a line each instead of
-   crushing the figures to nothing; full width, nothing wraps. */
-@media (min-width: 1000px) {
-  .bar {
-    flex-wrap: wrap;
-  }
-
-  .actions {
-    flex: 0 1 auto;
-    flex-wrap: wrap;
-  }
-}
-
-@media (max-width: 999px) {
-  .bar {
-    flex-direction: column;
-    align-items: stretch;
-    gap: 10px;
-  }
-
-  .actions {
-    flex-wrap: wrap;
-  }
-
-  .actions .passphrase {
-    flex: 1 1 100%;
-    width: auto;
-    max-width: none;
-  }
-}
-
-.problems {
-  margin: 8px 0 0;
-  padding-left: 18px;
-  color: var(--danger);
-  font-size: 12px;
+/* The passphrase as a glass field (spec § 5), with the note that used to be
+   its only hover title now written beside it. */
+.passphraseWrap {
+  flex: 1 1 220px;
+  min-width: 180px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
 }
 
 .passphrase {
-  /* Wide enough for the whole placeholder: at 140px the text was trimmed. */
-  width: 13rem;
-  max-width: 40vw;
+  min-height: 44px;
+  background: var(--glass-clear);
+  border: 1px solid var(--glass-edge);
+  border-radius: 12px;
+  padding: 0 12px;
+  color: var(--on-glass);
+}
+
+.passphrase::placeholder {
+  color: var(--on-glass-3);
+}
+
+.passphraseHint {
+  margin: 0;
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--on-glass-3);
+}
+
+/* Save, Copy spec and Download Mission Spec: each hugs its own label (spec
+   § 8's primary button is never stretched to fill a row) and all three meet a
+   44 px touch target, wrapping onto their own line whenever the panel is too
+   narrow to hold them beside the passphrase field. */
+.actions button {
+  flex: 0 0 auto;
+  min-height: 44px;
+  padding: 0 20px;
+  font-size: 14px;
+  font-weight: 500;
+  white-space: nowrap;
+  transition: transform var(--dur-press) var(--ease-out);
+}
+
+.actions button:active:not(:disabled) {
+  transform: scale(0.97);
+}
+
+/* Danger text has to hold 4.5:1 over whatever is behind the glass, down to
+   the bright satellite imagery the map can show (spec § 12) -- the shared
+   smoke-glass tint alone does not get there, so these two carry their own
+   near-opaque backing rather than sitting directly on it. */
+.dispatchError {
+  margin-top: 4px;
+  padding: 8px 12px;
+  border-radius: 10px;
+  background: rgb(20 12 10 / 0.9);
+  box-shadow: inset 0 0 0 1px rgb(224 112 79 / 0.35);
+  color: var(--danger);
+  font-size: 12px;
+  line-height: 1.5;
 }
 
 .dispatchOk {
-  margin-top: 8px;
+  margin-top: 4px;
   color: var(--on-glass);
   font-size: 12px;
   font-family: var(--mono);
 }
 
-.dispatchError {
-  margin-top: 8px;
+.problems {
+  margin: 0;
+  padding: 10px 16px 10px 32px;
+  border-radius: 12px;
+  background: rgb(20 12 10 / 0.9);
+  box-shadow: inset 0 0 0 1px rgb(224 112 79 / 0.35);
   color: var(--danger);
   font-size: 12px;
+  line-height: 1.6;
+}
+
+/* The press transition above is already neutralised by globals.css's blanket
+   `prefers-reduced-motion` rule (`* { transition: none !important }`); no
+   second override needed here. */
+
+/* On a phone the Summary is a normal block sharing the screen with the Map or
+   Settings view above it (spec § 10 is for the wide floating panel only), so
+   here -- and only here, where the viewport width is the real available
+   width -- it is worth tightening the spacing and pairing the two secondary
+   actions, rather than letting four wrapped rows of controls push the map
+   down to a sliver. A height cap with its own scroll is the backstop: however
+   long the problems list gets, the view behind the Summary keeps most of the
+   screen. */
+@media (max-width: 999px) {
+  .wrap {
+    gap: 10px;
+    padding: 12px;
+    max-height: 64vh;
+    overflow-y: auto;
+  }
+
+  .bar {
+    gap: 10px;
+  }
+
+  .figures {
+    gap: 8px;
+  }
+
+  .actions {
+    gap: 8px;
+    padding-top: 10px;
+  }
+
+  /* Save keeps its own row -- it is the primary action -- and Copy spec and
+     Download Mission Spec share the next one instead of each claiming a
+     full-width row of their own. */
+  .actions button:nth-of-type(1) {
+    flex-basis: 100%;
+  }
+
+  .actions button:nth-of-type(2),
+  .actions button:nth-of-type(3) {
+    flex: 1 1 0;
+  }
 }
