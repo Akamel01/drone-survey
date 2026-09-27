@@ -19,8 +19,9 @@ synthesis, or a secondary/blog source, flagged as such.
 ## The lead finding
 
 **The planner ships 44 px targets; the only measured gloved standard asks for
-15–20 mm.** Platform minimums cluster low — Apple 44 pt (≈8.5 mm once the 2016
-study converts it), Android/Material 48 dp (≈9 mm), Windows 7.5 mm — but the
+15–20 mm.** Platform minimums cluster low — Apple 44 pt (≈8.5 mm at typical
+device PPI, **Inferred**: my conversion via the 2016 study's ratio, not stated in
+the fetched source), Android/Material 48 dp (≈9 mm), Windows 7.5 mm — but the
 military standard behind glove use is **15 mm ungloved / 20 mm gloved**, and the
 2016 in-vehicle study that tested it found participants made **no activation
 errors at all** in the MIL-STD-1472 sizing condition, with or without gloves, and
@@ -49,7 +50,7 @@ therefore carried as **Inferred** (§7).
 | Capacitive touch fails with a glove at all; thickness/standoff from the panel is the dominant factor. | Hoober, *Design for Fingers, Touch, and People, Part 1* (2017), confirmed read: capacitive touch "doesn't work with any old pen as a stylus, **when wearing gloves**, or even when your skin is too dry". Practitioner source (UXmatters), **secondary**. The dedicated glove-physics paper (Ocular Touch) was not fetched this session (§7). | Procedural: no glove mode is proposed for the browser (see §7); the check is the enlarged target/spacing rule above, which is glove-agnostic. |
 
 **Gap, stated plainly.** 44 CSS px measures ≈ 11.6 mm at the CSS reference pixel
-(1/96 in) and ≈ 8.5 mm as Apple's 44 pt; 48 dp ≈ 9 mm. The measured gloved
+(1/96 in) and ≈ 8.5 mm as Apple's 44 pt (**Inferred** — device-PPI dependent); 48 dp ≈ 9 mm. The measured gloved
 requirement is 20 mm ≈ 76 px. Real command output for the conversion:
 `44px at 96dpi = 11.6 mm ; 20mm at 96dpi = 75.6 px`. Whatever the conversion, the
 planner's 44 px floor is roughly half the gloved evidence base.
@@ -104,7 +105,7 @@ for #229 rather than reversing the web decision.
 |---|---|---|
 | Actions that modify or delete user-controllable data are **reversible**, **checked** at entry, or **confirmed** before they commit. | WCAG 2.2 SC 3.3.4 (AA) — [error-prevention-legal-financial-data](https://www.w3.org/WAI/WCAG22/Understanding/error-prevention-legal-financial-data.html): "at least one of the following … Reversible … Checked … Confirmed". Confirmed. | Procedural: Dispatch/Withdraw and any delete get one of the three; a Playwright test can assert a confirm step exists before a destructive store call. |
 | Errors are identified and a correction suggested as they happen. | WCAG 2.2 SC 3.3.1 (Error Identification, A) and SC 3.3.3 (Error Suggestion, AA); both are enumerated in the WCAG 2.2 baseline — [w3.org/TR/WCAG22](https://www.w3.org/TR/WCAG22/). Confirmed by SC number; the individual Understanding pages were not opened this session. | Procedural: the passphrase/store error surface names the field and the fix (the notice, `web/app` post-#215). |
-| Detected input problems are **rejected at entry**, not after a long invalid entry; touch feedback is explicit because touch gives none; multi-step entry is avoided under load. | FAA **AC 120-76D**, *Authorization for Use of Electronic Flight Bags* (10/27/17) — [faa.gov … ac_120-76d.pdf](https://www.faa.gov/documentLibrary/media/advisory_circular/ac_120-76d.pdf). Confirmed verbatim: ¶11.10 "incorporate input error checking to detect input errors at the earliest possible point during entry, rather than on completion of a possibly lengthy invalid entry"; ¶11.8 "touch screens provide little or no tactile feedback … visual and/or aural or other touch activation feedback is especially important"; ¶11.12 "**Avoid complex, multi-step data entry tasks** during taxi, takeoff, descent, approach, landing, and non-cruise phases"; ¶11.3 legibility "under the full range of lighting conditions … to include daytime use in **direct sunlight**", brightness "adjustable in fine increments", and must "not produce objectionable glare or reflections". | Procedural: Save/Dispatch validate at field level (not on submit) and avoid multi-step entry at the aircraft; the field-glare checklist (§7) covers sunlight. |
+| Detected input problems are **rejected at entry**, not after a long invalid entry; touch feedback is explicit because touch gives none; multi-step entry is avoided under load. | FAA **AC 120-76D**, *Authorization for Use of Electronic Flight Bags* (10/27/17) — [faa.gov … ac_120-76d.pdf](https://www.faa.gov/documentLibrary/media/advisory_circular/ac_120-76d.pdf). Confirmed verbatim: ¶11.10 "incorporate input error checking to detect input errors at the earliest possible point during entry, rather than on completion of a possibly lengthy invalid entry"; ¶11.8 "touch screens provide little or no tactile feedback … visual and/or aural or other touch activation feedback is especially important"; ¶11.12 "**Avoid complex, multi-step data entry tasks** during taxi, takeoff, descent, approach, landing, and non-cruise phases"; ¶11.3 legibility "under the full range of lighting conditions … to include daytime use in **direct sunlight**", brightness "adjustable in fine increments", and should "not produce objectionable glare or reflections". | Procedural: Save/Dispatch validate at field level (not on submit) and avoid multi-step entry at the aircraft; the field-glare checklist (§7) covers sunlight. |
 
 Aviation is used here as the field-app case study because no agriculture or
 surveying primary was found (§7); the load — gloved, bright light, time pressure —
@@ -116,7 +117,7 @@ is the same.
 
 - 44 px targets in the touch surfaces — glass pills `web/components/MapPane.module.css:84`,
   menu items `:245`, draw actions `:431`; sheet close `web/components/Sheet.module.css:103-104`;
-  invisible 44 px map hit layers `web/components/MapPane.tsx:228,246,257`.
+  invisible 44 px map hit layers `web/components/MapPane.tsx:230,247,258`.
 - Sunlight reasoning already done right: the map chrome moved from white-on-clear-glass
   to **40 % white fill with dark ink**, precisely because a translucent white fill
   "can never hold *white* text to 4.5:1 against a bright tile"
