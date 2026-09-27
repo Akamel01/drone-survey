@@ -10,7 +10,8 @@
     "test": "node --import ./scripts/test-hooks.mjs --test lib/*.test.ts",
     "check:map-chrome": "node scripts/map-chrome-check.mjs",
     "check:scrollbar": "node scripts/scrollbar-check.mjs",
-    "check:motion": "node --import ./scripts/test-hooks.mjs scripts/motion-check.mjs"
+    "check:motion": "node --import ./scripts/test-hooks.mjs scripts/motion-check.mjs",
+    "check:fold": "node --import ./scripts/test-hooks.mjs scripts/fold-check.mjs"
   },
   "dependencies": {
     "maplibre-gl": "5.24.0",
