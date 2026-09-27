@@ -13,7 +13,9 @@ A case that "works" by doing nothing visible has not been handled.
 
 | Suite | What it drives | Run |
 |---|---|---|
-| `web/lib/lifecycle.test.ts` | The deployed route handlers, the real B2 client and its checksums, against an in-memory store that counts transactions and fails any call on demand | `npm test` in `web/` |
+| `web/lib/missionLifecycle.test.ts` | Every Mission action through the Mission lifecycle module, over the in-memory store adapter: write order, refusals and each partial failure's message | `npm test` in `web/` |
+| `web/lib/missionStore.test.ts` | The B2 store adapter with the real B2 client and its checksums, against a faked store that counts transactions and fails any call on demand | `npm test` in `web/` |
+| `web/lib/missionRoutes.test.ts` | The route adapters: the caller check, each route's JSON wording, and how a refusal maps to a status | `npm test` in `web/` |
 | `scripts/mission/load.py --selftest` | The loader against a fake Controller directory, plus a stand-in store that can be overwritten mid-write | `python3 scripts/mission/load.py --selftest` |
 | `scripts/mission/b2_status.py --selftest` | The Ledger rules shared with the planner | as named |
 | `scripts/mission/e2e_test.py` | A Spec through the real planner maths and the real writer, then both Mission files parsed as the Controller would | as named |
