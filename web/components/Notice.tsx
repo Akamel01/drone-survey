@@ -1,11 +1,24 @@
 "use client";
 
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import {
+  COLLAPSE_MS,
+  COMPACT_BEAT_MS,
+  DISMISS_MS,
+  compactTitle,
+  initialPhase,
+  noticeRole,
+  noticeTone,
+  splitNotice,
+  togglePhase,
+  type NoticePhase,
+} from "@/lib/notice";
 import styles from "./Notice.module.css";
 
 // The single reporting path for action results (D1): SummaryBar.runSave and
-// MissionList.act() feed these through the page-owned slot (M2). `title` is
-// the first sentence (compact pill); `body` the full verbatim text.
+// MissionList.act() feed these through the page-owned slot (M2). `body` is
+// the full verbatim text; the title and rest-only body come from
+// splitNotice below, so the two never repeat a sentence.
 export interface NoticePayload {
   title: string;
   body: string;
@@ -19,15 +32,25 @@ interface NoticeProps {
   onDismiss: () => void;
 }
 
-// Success timing (grilling §3): expanded ~4s → compact for a brief beat →
-// 150–250ms `--ease-in` leave, then onDismiss. Failures carry no timers.
-const COLLAPSE_MS = 4000;
-const COMPACT_BEAT_MS = 250;
-const LEAVE_MS = 200;
+function Badge({ failed }: { failed: boolean }) {
+  return (
+    <span className={`${styles.badge} ${failed ? styles.fail : ""}`} aria-hidden="true">
+      {failed ? (
+        <svg viewBox="0 0 24 24">
+          <path d="M12 5v9" />
+          <circle className={styles.dot} cx="12" cy="18" r="1.4" />
+        </svg>
+      ) : (
+        <svg viewBox="0 0 24 24">
+          <path d="M6.5 12.5l4 4 7-8.5" />
+        </svg>
+      )}
+    </span>
+  );
+}
 
 export default function Notice({ payload, onDismiss }: NoticeProps) {
-  const [collapsed, setCollapsed] = useState(false);
-  const [leaving, setLeaving] = useState(false);
+  const [phase, setPhase] = useState<NoticePhase>(initialPhase);
   // The control that ran the action, for Escape focus-return (spec §10).
   const opener = useRef<Element | null>(null);
   // Focusable fallback when opener gone/disabled (body.focus() no-op w/o tabindex).
@@ -41,12 +64,14 @@ export default function Notice({ payload, onDismiss }: NoticeProps) {
   // paint, earlier than useEffect) to shrink post-async focus-drift window.
   // Full press-time capture needs opener carried on payload (MissionList.act),
   // outside this file scope.
+  // Timing owns the lib (spec §9.1): expanded ~4s → compact for a brief beat
+  // → 200ms `--ease-in` leave, then onDismiss. Failures carry no timers.
   useLayoutEffect(() => {
     opener.current = document.activeElement;
     if (!payload || payload.failed) return;
-    const t1 = setTimeout(() => setCollapsed(true), COLLAPSE_MS);
-    const t2 = setTimeout(() => setLeaving(true), COLLAPSE_MS + COMPACT_BEAT_MS);
-    const t3 = setTimeout(() => dismiss.current(), COLLAPSE_MS + COMPACT_BEAT_MS + LEAVE_MS);
+    const t1 = setTimeout(() => setPhase("compact"), COLLAPSE_MS);
+    const t2 = setTimeout(() => setPhase("leaving"), COLLAPSE_MS + COMPACT_BEAT_MS);
+    const t3 = setTimeout(() => dismiss.current(), DISMISS_MS);
     return () => {
       clearTimeout(t1);
       clearTimeout(t2);
@@ -72,22 +97,33 @@ export default function Notice({ payload, onDismiss }: NoticeProps) {
 
   if (!payload) return null;
 
-  const short = payload.title.replace(/[.!?…]+$/, "");
+  const failed = noticeTone(payload.failed) === "stop";
+  const { title, rest } = splitNotice(payload.body);
+  const short = compactTitle(title);
+  const collapsed = phase !== "expanded";
+
   return (
     <div
       ref={box}
       tabIndex={-1}
-      role={payload.failed ? "alert" : "status"}
-      className={`${styles.notice} ${collapsed ? styles.compact : styles.expanded} ${leaving ? styles.leaving : ""}`}
-      onClick={() => setCollapsed((c) => !c)}
+      role={noticeRole(payload.failed)}
+      className={`${styles.notice} ${collapsed ? styles.compact : styles.expanded} ${phase === "leaving" ? styles.leaving : ""}`}
+      onClick={() => setPhase((p) => togglePhase(p))}
     >
       {collapsed ? (
-        <span className={styles.short}>{short}…</span>
+        <>
+          <Badge failed={failed} />
+          <span className={styles.short}>{short}</span>
+          {payload.missionName ? <span className={styles.capsule}>{payload.missionName}</span> : null}
+        </>
       ) : (
         <>
-          <span className={styles.mission}>{payload.missionName}</span>
-          <span className={styles.title}>{payload.title}</span>
-          <p className={styles.body}>{payload.body}</p>
+          <span className={styles.head}>
+            <Badge failed={failed} />
+            <span className={styles.title}>{short}</span>
+          </span>
+          {payload.missionName ? <span className={styles.mission}>{payload.missionName}</span> : null}
+          {rest ? <p className={styles.body}>{rest}</p> : null}
         </>
       )}
       <button
