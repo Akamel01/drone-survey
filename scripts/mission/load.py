@@ -52,7 +52,6 @@ from load_core import (  # noqa: E402
     LoadFailed,
     NotOnController,
     Part,
-    REPEAT_AFTER_S,
 )
 
 MOUNT = Path.home() / "rc2"
