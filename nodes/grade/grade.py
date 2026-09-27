@@ -8,6 +8,8 @@ name a Reconstruction or an island dir, grading never alters the Reconstruction.
 import argparse
 import ast
 import hashlib
+import os
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -42,6 +44,27 @@ def run(in_wide, in_tall, sky, out_wide, out_tall):
     sky_path = sky
     for src, dst in ((in_wide, out_wide), (in_tall, out_tall)):
         grade(Image.open(src).convert("RGBA")).save(dst)
+
+
+N_FRAMES = 243  # files per framing dir; mirrors nodes/render/render_island.py (M2)
+
+
+def grade_frames(frames_dir, sky, out_dir, n=N_FRAMES):
+    """Grade a frame dir: frame_{i:03d}.png in, same names out (M3, D2).
+
+    One shared grade() does every frame, so the turn look cannot fork from
+    the stills look (#192 wiring stays valid). Grading is deterministic, so
+    M2's first==last input copy grades to first==last output with no
+    special-casing. Missing input raises; output count always equals n.
+    """
+    global sky_path
+    sky_path = sky
+    os.makedirs(out_dir, exist_ok=True)
+    for i in range(n):
+        name = f"frame_{i:03d}.png"
+        grade(Image.open(os.path.join(frames_dir, name)).convert("RGBA")).save(
+            os.path.join(out_dir, name))
+    return n
 
 
 def _synth_rgba(w, h, seed):
@@ -119,6 +142,33 @@ def selftest():
                         f"{n} cli run {i}: pixels differ from direct grade"
         assert cli_digests[1] == cli_digests[2], "CLI output files differ across runs"
 
+        assert N_FRAMES == 243, f"turn must hold 243 files, got {N_FRAMES}"
+        n, fw, fh = 7, 64, 48  # small frames; loop logic identical at 4K
+        for framing in ("wide", "tall"):
+            fdir, gdir = td / f"frames-{framing}", td / f"graded-{framing}"
+            fdir.mkdir()
+            for i in range(n):
+                Image.new("RGBA", (fw, fh),
+                          ((17 * i + 3) % 256, (41 * i + 5) % 256, (7 * i + 11) % 256, 200)
+                          ).save(fdir / f"frame_{i:03d}.png")
+            shutil.copyfile(fdir / "frame_000.png", fdir / f"frame_{n - 1:03d}.png")
+            assert grade_frames(str(fdir), str(sky), str(gdir), n) == n
+            outs = sorted(p.name for p in gdir.iterdir())
+            assert outs == [f"frame_{i:03d}.png" for i in range(n)], f"{framing}: {outs}"
+            with Image.open(gdir / "frame_000.png") as im:
+                assert im.mode == "RGB", f"{framing}: mode {im.mode}"
+                ref = grade(Image.open(fdir / "frame_000.png").convert("RGBA"))
+                assert im.tobytes() == ref.tobytes(), f"{framing}: frame 0 not pixel-identical"
+            a = (gdir / "frame_000.png").read_bytes()
+            assert (gdir / f"frame_{n - 1:03d}.png").read_bytes() == a, \
+                f"{framing}: first==last not carried through"
+            gdir2 = td / f"graded2-{framing}"
+            grade_frames(str(fdir), str(sky), str(gdir2), n)
+            assert all((gdir / o).read_bytes() == (gdir2 / o).read_bytes() for o in outs), \
+                f"{framing}: rerun differs"
+            print(f"  frames-{framing} {n} in/{n} out  frame 0 pixel-identical  "
+                  f"first==last ok  rerun byte-identical")
+
         for name, (w, h, _) in cases.items():
             print(f"  {name:4} {w}x{h}  pixels sha256 {digests[name]}  "
                   f"hero-identical  cli png sha256 {cli_digests[1][name]}")
@@ -136,13 +186,26 @@ def main(argv=None):
     p.add_argument("--sky", help="opaque RGB sky plate (C5)")
     p.add_argument("--out-wide")
     p.add_argument("--out-tall")
+    p.add_argument("--frames-wide", help="M2 frames-wide/ dir in")
+    p.add_argument("--frames-tall", help="M2 frames-tall/ dir in")
+    p.add_argument("--graded-wide", help="graded-wide/ dir out")
+    p.add_argument("--graded-tall", help="graded-tall/ dir out")
     p.add_argument("--self-test", action="store_true",
-                   help="synthetic RGBA pair: sizes, alpha, determinism, hero parity")
+                    help="synthetic RGBA pair: sizes, alpha, determinism, hero parity")
     a = p.parse_args(argv)
     if a.self_test:
         return selftest()
+    if a.frames_wide is not None or a.frames_tall is not None:
+        missing = [f"--{n}" for n in ("frames-wide", "frames-tall", "graded-wide",
+                                      "graded-tall", "sky")
+                   if getattr(a, n.replace("-", "_")) is None]
+        if missing:
+            p.error("missing required arguments: " + ", ".join(missing))
+        grade_frames(a.frames_wide, a.sky, a.graded_wide)
+        grade_frames(a.frames_tall, a.sky, a.graded_tall)
+        return 0
     missing = [f"--{n}" for n in ("in-wide", "in-tall", "sky", "out-wide", "out-tall")
-               if getattr(a, n.replace("-", "_")) is None]
+                if getattr(a, n.replace("-", "_")) is None]
     if missing:
         p.error("missing required arguments: " + ", ".join(missing))
     run(a.in_wide, a.in_tall, a.sky, a.out_wide, a.out_tall)
