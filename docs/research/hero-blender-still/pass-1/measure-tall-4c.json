@@ -1,0 +1,44 @@
+{
+  "bloom_bg_L": {
+    "attr": "4c",
+    "note": "",
+    "region": "x0.50-0.75:y0.30-0.55",
+    "unit": "levels",
+    "value": 143.4992
+  },
+  "bloom_falloff_10_90_px": {
+    "attr": "4c",
+    "note": "",
+    "region": "x0.50-0.75:y0.30-0.55",
+    "unit": "px",
+    "value": 2.384109298886945
+  },
+  "bloom_peak_L": {
+    "attr": "4c",
+    "note": "",
+    "region": "x0.50-0.75:y0.30-0.55",
+    "unit": "levels",
+    "value": 199.596
+  },
+  "bloom_peak_bg_ratio": {
+    "attr": "4c",
+    "note": "",
+    "region": "x0.50-0.75:y0.30-0.55",
+    "unit": "ratio",
+    "value": 1.3909206462475052
+  },
+  "bloom_r50_pctH": {
+    "attr": "4c",
+    "note": "",
+    "region": "x0.50-0.75:y0.30-0.55",
+    "unit": "%H",
+    "value": 0.021690628227196574
+  },
+  "bloom_r50_px": {
+    "attr": "4c",
+    "note": "edge-limited: peak sits on the island silhouette, not sky; TOOL (ESRGAN/HEVC) \u2014 not a resolvable sky-side halo",
+    "region": "x0.50-0.75:y0.30-0.55",
+    "unit": "px",
+    "value": 0.8329201239243486
+  }
+}

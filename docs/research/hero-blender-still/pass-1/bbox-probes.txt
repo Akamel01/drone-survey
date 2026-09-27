@@ -1,0 +1,32 @@
+# S2 bbox-fit probe log — M3 pass-1 framing fit
+# Probe method: preview renders via the M3 driver copy + measure.py's own
+# island_mask/BBOX_REF/BBOX_TOL (same code path as still_review.s2_gate);
+# bbox compared to ref tall x 0.50-1.00 y 0.45-0.88, wide x 0.59-0.93 y 0.29-0.86,
+# tol x +/-0.03 y +/-0.01. Tall previews 540x960 (=2160x3840 aspect), wide 960x540.
+# These are NOT passes. K2 knobs are per-framing; unlisted knobs at their defaults.
+
+probe     framing  res      knobs                                                              bbox x0..x1 y0..y1        gate
+pr-t1     tall     540x960  (defaults; dist 23.5 sy 0.09)                                        0.4796-0.9981 0.3740-0.8990 (polluted)  FAIL y0 -0.076
+pr-w1     wide     960x540  (defaults)                                                            0.5500-0.9479 0.2759-0.8981 (polluted)  FAIL y0 -0.014 y1 +0.038
+pr-d1     tall     540x960  tall.haze_gain=0            (diagnostic)                             0.4796-0.9981 0.3729-0.7583  (dots hidden, band dark)
+pr-d2     tall     540x960  vol_density=0               (diagnostic)                             0.4796-0.9981 0.3740-0.7583
+pr-d3     tall     540x960  tall.haze_depth_max=19000   (diagnostic)                             0.4796-0.9981 0.3740-0.8990  (608 strays persist -> gate not the cause)
+pr-d4     tall     540x960  Depth ramp (temp copy)      (diagnostic)                             0.4796-0.9981 0.3729-0.8990  (608 strays persist -> Depth pass noisy too)
+pr-d5     tall     540x960  6px Mist blur (temp copy)   (diagnostic)                             0.4796-0.9981 0.3740-0.8990  (blur node had no effect in 5.2 unified compositor)
+pr-d6     tall     540x960  constant fac 0.9 (temp copy)(diagnostic; mask empty, image flat 189-206 -> dots ARE fac-driven)
+pr-d7     tall     540x960  two-view-layer haze fix applied (still.py E2)                         0.4796-0.9981 0.3740-0.7583  ZERO strays
+pr-d8     wide     960x540  (E2 fix)                                                             0.5500-0.9406 0.2759-0.8981  island bottom below window; terrain pixels flagged
+pr-t2     tall     540x960  tall.dist=21.0 tall.shift_y=0.192                                     0.4796-0.9981 0.4500-0.8802  dx0 -0.0204 dx1 -0.0019 dy0 +0.001 dy1 +0.0002  PASS
+pr-w2     wide     960x540  wide.dist=25.65 sy=0.078 sx=-0.145                                    0.5500-0.9406 0.2870-0.8981  still window-clipped bottom; island too wide
+pr-w3     wide     960x540  wide.dist=28.9 sy=0.060 sx=-0.26                                      0.5906-0.9396 0.2944-0.8500  dx0 +0.0006 dx1 +0.0096 dy0 +0.0044 dy1 -0.0100 (1e-17 over the <= tol bound)
+
+4K checks (scored, not previews):
+pass-1 c1 both     0.480-1.000 0.448-0.881 (tall PASS)   0.551-0.949 0.281-0.882 (wide FAIL x0 -0.039 y1 +0.022)
+pass-1 c2 both     0.480-1.000 0.448-0.881 (tall PASS)   0.552-0.949 0.272-0.875 (wide FAIL x0 -0.038 y0 -0.018 y1 +0.015)
+pass-1 c3 both     0.480-1.000 0.448-0.881 (tall PASS)   0.551-0.949 0.281-0.882 (wide FAIL x0 -0.039 y1 +0.022)
+
+Wide miss diagnosis (c3 4K): the out-of-gate pixels are NOT the island; e.g. leftmost mask pixel
+x 0.5505 y 0.846 colour (135,143,149) = mist/terrain pixel passing the mask's "green" test
+(G > R+4) with dE > 12 vs the left-column row median; bottom pixels likewise (2 px at row 0.88,
+colour (135,144,150)); island-only extents are ~x 0.59-0.92 (mask x1 0.949 is also a mist pixel).
+Camera nudges (c2: sy 0.050 sx -0.27) moved the island but not the pollution.
