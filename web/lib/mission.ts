@@ -211,6 +211,18 @@ export function circlePolygon(center: LL, radiusM: number, segments = 64): LL[] 
   return pts;
 }
 
+// Looking down at the subject from this ring: negative is below horizontal.
+// Mirrors make_mission.py:313-314, including the gimbal clamp.
+export function orbitTilt(
+  ringM: number,
+  targetM: number,
+  radiusM: number,
+): { deg: number; clamped: boolean } {
+  const raw = (-Math.atan2(ringM - targetM, radiusM) * 180) / Math.PI;
+  const [lo, hi] = GIMBAL_RANGE;
+  return { deg: Math.max(lo, Math.min(hi, raw)), clamped: raw < lo || raw > hi };
+}
+
 /**
  * An orbit around a subject: one ring of photo positions per altitude.
  *
