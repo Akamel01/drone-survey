@@ -215,11 +215,6 @@
   padding: 8px 16px;
   font-size: 13px;
   min-height: 36px;
-  transition: transform 100ms ease-out;
-}
-
-.actions button:active {
-  transform: scale(0.97);
 }
 
 .actions button:focus-visible,
@@ -313,15 +308,6 @@
   .bar button {
     min-height: 44px;
     padding: 10px 16px;
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .actions button {
-    transition: none;
-  }
-  .actions button:active {
-    transform: none;
   }
 }
 

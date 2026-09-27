@@ -1,0 +1,58 @@
+[
+  {
+    "ring_m": 40,
+    "target_m": 20,
+    "radius_m": 40,
+    "deg": -26.56505117707799,
+    "clamped": false
+  },
+  {
+    "ring_m": 60,
+    "target_m": 20,
+    "radius_m": 40,
+    "deg": -45.0,
+    "clamped": false
+  },
+  {
+    "ring_m": 20,
+    "target_m": 60,
+    "radius_m": 40,
+    "deg": 45.0,
+    "clamped": false
+  },
+  {
+    "ring_m": 40,
+    "target_m": 0,
+    "radius_m": 5,
+    "deg": -82.8749836510982,
+    "clamped": false
+  },
+  {
+    "ring_m": 120,
+    "target_m": 0,
+    "radius_m": 5,
+    "deg": -87.61405596961119,
+    "clamped": false
+  },
+  {
+    "ring_m": 5,
+    "target_m": 120,
+    "radius_m": 5,
+    "deg": 55.0,
+    "clamped": true
+  },
+  {
+    "ring_m": 0,
+    "target_m": 40,
+    "radius_m": 1,
+    "deg": 55.0,
+    "clamped": true
+  },
+  {
+    "ring_m": 5,
+    "target_m": 5,
+    "radius_m": 5,
+    "deg": -0.0,
+    "clamped": false
+  }
+]

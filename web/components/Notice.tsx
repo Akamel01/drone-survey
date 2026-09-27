@@ -107,7 +107,7 @@ export default function Notice({ payload, onDismiss }: NoticeProps) {
       ref={box}
       tabIndex={-1}
       role={noticeRole(payload.failed)}
-      className={`${styles.notice} ${collapsed ? styles.compact : styles.expanded} ${phase === "leaving" ? styles.leaving : ""}`}
+      className={`press ${styles.notice} ${collapsed ? styles.compact : styles.expanded} ${phase === "leaving" ? styles.leaving : ""}`}
       onClick={() => setPhase((p) => togglePhase(p))}
     >
       {collapsed ? (

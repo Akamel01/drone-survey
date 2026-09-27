@@ -207,6 +207,14 @@
   font-size: 12px;
 }
 
+/* The computed per-ring tilt: read-only text beside the height, kept on one
+   line so input + unit + tilt + Remove still fit the narrow row. */
+.ringTilt {
+  color: var(--on-glass-2);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
 .readout {
   display: flex;
   justify-content: space-between;

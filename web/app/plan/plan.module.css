@@ -90,6 +90,24 @@
   display: none;
 }
 
+/* Narrow-only hero crossfade: the animated scenes sit behind the whole column,
+   the still fades in whenever the Missions view is not the active one. */
+.heroLayer {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+.heroStill {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  transition: opacity 350ms var(--ease-out);
+}
+.page:not([data-view="missions"]) .heroStill { opacity: 1; }
+@media (min-width: 1000px) { .heroLayer { display: none; } }
+
 /* Announced, never seen. */
 .srOnly {
   position: absolute;
@@ -105,30 +123,48 @@
    1000px the three columns would leave the map a sliver -- on a phone it was
    30px wide, with the Mission list at the very bottom of the settings. */
 @media (max-width: 999px) {
+  .top {
+    position: relative;
+    overflow: hidden;
+  }
+
   .missions,
   .map,
   .settings {
-    display: none;
+    position: absolute;
+    inset: 0;
+    display: flex;               /* all three stay laid out, incl. the map canvas */
     width: 100%;
     flex: 1;
     border: none;
+    z-index: 1;
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+    transform: translateX(calc((var(--i) - var(--active, 0)) * 100%));
+    transition:
+      transform var(--dur-slow) var(--ease-emphasised),
+      opacity var(--dur-fast) var(--ease-out),
+      visibility 0s linear var(--dur-slow);
   }
-
+  .missions { --i: 0; }
+  .map      { --i: 1; }
+  .settings { --i: 2; }
+  .page[data-view="missions"] { --active: 0; }
+  .page[data-view="map"]      { --active: 1; }
+  .page[data-view="settings"] { --active: 2; }
   .page[data-view="missions"] .missions,
   .page[data-view="map"] .map,
   .page[data-view="settings"] .settings {
-    display: flex;
+    opacity: 1;
+    visibility: visible;
+    pointer-events: auto;
+    transition-delay: 0s;
   }
 
   .missions {
     flex-direction: column;
     border: none;
-  }
-
-  /* The hero sits behind the list. */
-  .missions > :not(:first-child) {
-    position: relative;
-    z-index: 1;
   }
 
   /* These panels are the hero scene's frame, not glass over a map: the still
@@ -143,11 +179,6 @@
   /* The pre-blurred still sits behind the panel. */
   .settings {
     position: relative;
-  }
-
-  .settings > :not(:first-child) {
-    position: relative;
-    z-index: 1;
   }
 
   /* The settings panel keeps its own scroll; it only loses its fixed width and
@@ -316,7 +347,9 @@
   .edgeTab {
     position: absolute;
     top: 50%;
-    transform: translateY(-50%);
+    /* Individual `translate` (not `transform`) so the shared press scale
+       composes with it instead of clobbering the vertical centring. */
+    translate: 0 -50%;
     z-index: 3;
     width: 28px;
     height: 56px;
@@ -415,4 +448,15 @@
     font-size: 17px;
     white-space: nowrap;
   }
+}
+
+/* The blanket reduced-motion guard in globals.css kills all transitions, so
+   these must outrank it to keep the view switch and crossfade legible. */
+@media (prefers-reduced-motion: reduce) {
+  .missions, .map, .settings {
+    transform: none !important;
+    transition: opacity var(--dur-fast) var(--ease-out),
+                visibility 0s linear var(--dur-fast) !important;
+  }
+  .heroStill { transition: opacity var(--dur-fast) var(--ease-out) !important; }
 }
