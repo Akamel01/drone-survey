@@ -1,6 +1,6 @@
 "use client";
 
-import { Children, cloneElement, Fragment, isValidElement, useEffect, useId, useRef, useState, type ReactNode } from "react";
+import { Children, cloneElement, Fragment, isValidElement, useEffect, useId, useRef, useState, type ReactElement, type ReactNode } from "react";
 import { newSiteId, type MissionSpec, type MissionType, type TurnMode } from "@/lib/spec";
 import { orbitTilt, type Preview } from "@/lib/mission";
 import { MISSION_NAME_MAX, missionNameProblem } from "@/lib/missionRecords";
@@ -141,20 +141,21 @@ function Field({
   // button), so name it explicitly from the label text alone (UI-12 audit: the
   // Altitude slider had no accessible name).
   const labelId = useId();
-  let named = false;
-  const control = Children.map(children, (child) => {
-    if (
-      named ||
-      !isValidElement<{ "aria-label"?: string; "aria-labelledby"?: string }>(child) ||
-      (child.type !== "input" && child.type !== "select") ||
-      child.props["aria-label"] ||
-      child.props["aria-labelledby"]
-    ) {
-      return child;
-    }
-    named = true;
-    return cloneElement(child, { "aria-labelledby": labelId });
-  });
+  type Named = { "aria-label"?: string; "aria-labelledby"?: string };
+  const kids = Children.toArray(children);
+  const first = kids.findIndex(
+    (child) =>
+      isValidElement<Named>(child) &&
+      (child.type === "input" || child.type === "select") &&
+      !child.props["aria-label"] &&
+      !child.props["aria-labelledby"],
+  );
+  const control =
+    first === -1
+      ? children
+      : kids.map((child, i) =>
+          i === first ? cloneElement(child as ReactElement<Named>, { "aria-labelledby": labelId }) : child,
+        );
   return (
     <div className={styles.field}>
       <div className={styles.fieldHead}>
