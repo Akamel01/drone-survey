@@ -1,19 +1,23 @@
-# One container for the Showcase render Node (and the island-cut Node that
-# shares it): pinned Blender plus the CC0 Poly Haven assets the island
-# materials and sky are built from.  The Runner mounts only the workdir and
-# sets no working directory (pipeline/runner.py:206), so the assets and the
-# Node script have to travel in the image, at the path the command names.
+# One container for the Showcase render Nodes (render, render-background and
+# the island-cut Node that shares it): pinned Blender plus the CC0 Poly Haven
+# assets the island materials and sky are built from.  The Runner mounts only
+# the workdir and sets no working directory (pipeline/runner.py:206), so the
+# assets and the Node scripts have to travel in the image, at the paths the
+# commands name.
 #
-# Build: stage the asset store and this Node's script into the context
+# Build: stage the asset store and the Node scripts into the context
 # (assets are not committed):
-#   mkdir -p /tmp/render-ctx/assets /tmp/render-ctx/nodes/render
+#   mkdir -p /tmp/render-ctx/assets /tmp/render-ctx/nodes/render /tmp/render-ctx/nodes/render-background
 #   cp -r <asset-store>/{kloofendal_overcast_puresky,cliff_side,forest_ground_04,lichen_rock,aerial_rocks_02} /tmp/render-ctx/assets/
 #   cp nodes/render/render_island.py /tmp/render-ctx/nodes/render/
+#   cp nodes/render-background/cloud_pass.py /tmp/render-ctx/nodes/render-background/
 #   docker build -f nodes/render/Dockerfile -t drone-render-showcase:blender-5.2.2 /tmp/render-ctx
 #
-# Run (the Manifest's frozen command, relative script path):
+# Run (the Manifest's frozen commands, relative script paths):
 #   docker run --rm --gpus all -v "$PWD":"$PWD" drone-render-showcase:blender-5.2.2 \
 #       blender -b --factory-startup -P nodes/render/render_island.py -- ...
+#   docker run --rm --gpus all -v "$PWD":"$PWD" drone-render-showcase:blender-5.2.2 \
+#       blender -b --factory-startup -P nodes/render-background/cloud_pass.py -- ...
 FROM nvidia/cuda:12.6.3-base-ubuntu24.04
 
 # Blender 5.2.2 (docs/ui-theme/hero-pipeline.md:330), official linux-x64 tarball.
@@ -32,8 +36,9 @@ ENV PATH=/opt/blender:$PATH
 # The pool the render script reads from (render_island.py:ASSETS).
 COPY assets/ /opt/showcase/assets/
 
-# The Node script at the relative path the Runner command names.  The Runner
+# The Node scripts at the relative paths the Runner commands name.  The Runner
 # passes no -w/cwd, so without this the relative path resolves against / and
 # fails (same pattern as nodes/export-cog/Dockerfile:12-13).
 WORKDIR /work
 COPY nodes/render/render_island.py /work/nodes/render/render_island.py
+COPY nodes/render-background/cloud_pass.py /work/nodes/render-background/cloud_pass.py
