@@ -18,6 +18,25 @@ absolute accuracy is stated in centimetres and which stands as a record of
 measurement.
 _Avoid_: accurate, precise, professional-grade
 
+### Accounts
+
+**Account**:
+one person's identity in the planner: an email address they sign in with
+through Google, GitHub, or email and password. An Account works inside a
+Workspace.
+_Avoid_: user (in the product's own words), login, profile.
+
+**Workspace**:
+the unit that owns Missions and, later, pays for them: every Account works
+inside one, and every Mission belongs to exactly one.
+_Avoid_: organization, team, tenant.
+
+**Approval**:
+the operator's decision that lets a new Account reach its Workspace's Missions
+and the machines behind them. Until then the Account can sign in but reaches
+nothing. It stands in for billing until billing exists.
+_Avoid_: verification (that is the email check), activation, whitelist.
+
 ### Capture
 
 **Site**:

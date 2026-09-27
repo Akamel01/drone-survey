@@ -454,6 +454,12 @@ the reel's editing.
   each icon.
 - **Sheets**: rise from the bottom over the blurred parent; drag down or tap
   the close control to dismiss; a 36 × 5 px grab handle at the top.
+- **Sheet drag**: drag down on the grab handle to dismiss; a fast downward
+  flick — at least 0.5 px/ms measured over the pointer's last 100 ms, with at
+  least 16 px of travel — dismisses without the full 120 px; upward movement
+  resists towards a 64 px limit and settles back; a released drag returns to
+  rest over `--dur-base` / `--ease-out`, with no overshoot. The constants live
+  in `web/lib/sheet.ts` (#256).
 - **Swipe between views** mirrors the reel's screen push, but only where it
   cannot fight the map: never on the map view, where a horizontal drag pans.
 - **Safe areas**: `env(safe-area-inset-*)` on the tab bar, the notice

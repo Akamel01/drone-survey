@@ -4,23 +4,32 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "next build",
+    "build": "node scripts/migrate.mjs && next build",
     "start": "next start",
     "lint": "eslint",
     "test": "node --import ./scripts/test-hooks.mjs --test lib/*.test.ts",
+    "db:migrate": "node scripts/migrate.mjs",
     "check:map-chrome": "node scripts/map-chrome-check.mjs",
     "check:scrollbar": "node scripts/scrollbar-check.mjs",
     "check:motion": "node --import ./scripts/test-hooks.mjs scripts/motion-check.mjs",
-    "check:fold": "node --import ./scripts/test-hooks.mjs scripts/fold-check.mjs"
+    "check:fold": "node --import ./scripts/test-hooks.mjs scripts/fold-check.mjs",
+    "check:chrome-motion": "node scripts/chrome-motion-check.mjs",
+    "check:showcase-player": "node scripts/showcase-player-check.mjs",
+    "check:mission-rows": "node --import ./scripts/test-hooks.mjs scripts/mission-rows-check.mjs"
   },
   "dependencies": {
+    "better-auth": "1.7.6",
     "maplibre-gl": "5.24.0",
     "next": "16.3.5",
+    "pg": "8.23.0",
     "react": "19.2.8",
     "react-dom": "19.2.8"
   },
   "devDependencies": {
+    "@electric-sql/pglite": "^0.5.8",
+    "@electric-sql/pglite-socket": "^0.2.11",
     "@types/node": "^20",
+    "@types/pg": "^8.23.1",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "eslint": "^9",
