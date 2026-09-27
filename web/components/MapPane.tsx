@@ -271,6 +271,55 @@ function labelMarker(text: string, background: string): HTMLElement {
   return el;
 }
 
+/** The tab bar's line-style icons live in plan/page.tsx (24 px grid, 1.5 px
+ *  stroke, round caps and joins); the base-map icons below match that style so
+ *  the map controls read as the same system. */
+function SatelliteIcon() {
+  return (
+    <svg
+      className={styles.baseIcon}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <rect x="9.5" y="9.5" width="5" height="5" rx="1" transform="rotate(45 12 12)" />
+      <path d="M8.5 15.5 6.3 17.7M15.5 8.5l2.2-2.2" />
+      <rect x="2.6" y="14.6" width="4.4" height="4.4" rx="0.5" transform="rotate(45 4.8 16.8)" />
+      <rect x="17" y="5.2" width="4.4" height="4.4" rx="0.5" transform="rotate(45 19.2 7.4)" />
+      <path d="M4.8 14.9v3.8M19.2 5.5v3.8" />
+    </svg>
+  );
+}
+
+/** Folded street map with road lines — the OpenStreetMap base map's mark. */
+function OsmIcon() {
+  return (
+    <svg
+      className={styles.baseIcon}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M9 4 3 6.5v13L9 17l6 2.5 6-2.5v-13L15 6.5 9 4Z" />
+      <path d="M9 4v13M15 6.5v13" />
+      <path d="M3.8 14.2 8 12.6l2.8-3.4 4.4.8 5-2" />
+    </svg>
+  );
+}
+
+const BASEMAP_NAMES = {
+  esri: { button: "Satellite", item: "Satellite imagery" },
+  osm: { button: "Street map", item: "Street map (OpenStreetMap)" },
+} as const;
+
 export default function MapPane({
   spec,
   preview,
@@ -1067,15 +1116,18 @@ export default function MapPane({
             className={styles.pill}
             aria-haspopup="menu"
             aria-expanded={openMenu === "base"}
+            aria-label={`Base map: ${BASEMAP_NAMES[basemap].button}`}
             onClick={() => (openMenu === "base" ? closeMapMenu("base") : openMapMenu("base"))}
             onKeyDown={(e) => menuBtnKeys(e, "base")}
           >
-            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" aria-hidden="true">
-              <path d="M8 1.5 14.5 5 8 8.5 1.5 5Z" />
-              <path d="m1.5 8.5 6.5 3.5 6.5-3.5" />
-              <path d="m1.5 11.5 6.5 3.5 6.5-3.5" />
-            </svg>
-            {basemap === "esri" ? "Satellite" : "OSM"}
+            <span className={styles.layersGlyph} aria-hidden="true">
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round">
+                <path d="M8 1.5 14.5 5 8 8.5 1.5 5Z" />
+                <path d="m1.5 8.5 6.5 3.5 6.5-3.5" />
+                <path d="m1.5 11.5 6.5 3.5 6.5-3.5" />
+              </svg>
+            </span>
+            {basemap === "esri" ? <SatelliteIcon /> : <OsmIcon />}
           </button>
           {(openMenu === "base" || closingMenu === "base") && (
             <div
@@ -1087,14 +1139,15 @@ export default function MapPane({
             >
               {(
                 [
-                  { id: "esri", label: "Satellite" },
-                  { id: "osm", label: "OSM" },
+                  { id: "esri", Icon: SatelliteIcon },
+                  { id: "osm", Icon: OsmIcon },
                 ] as const
-              ).map(({ id, label }, i) => (
+              ).map(({ id, Icon }, i) => (
                 <button
                   key={id}
                   role="menuitemradio"
                   aria-checked={basemap === id}
+                  aria-label={BASEMAP_NAMES[id].item}
                   className={`${styles.menuItem} ${basemap === id ? styles.menuItemActive : ""}`}
                   style={{ animationDelay: `calc(var(--stagger) * ${i})` }}
                   onClick={() => {
@@ -1109,7 +1162,9 @@ export default function MapPane({
                       </svg>
                     ) : null}
                   </span>
-                  {label}
+                  <span className={styles.menuItemIcon}>
+                    <Icon />
+                  </span>
                 </button>
               ))}
             </div>
@@ -1121,6 +1176,7 @@ export default function MapPane({
             className={styles.pill}
             aria-haspopup="menu"
             aria-expanded={openMenu === "overlays"}
+            aria-label={overlaysOn ? `Overlays, ${overlaysOn} on` : "Overlays, none on"}
             onClick={() => (openMenu === "overlays" ? closeMapMenu("overlays") : openMapMenu("overlays"))}
             onKeyDown={(e) => menuBtnKeys(e, "overlays")}
           >
@@ -1128,7 +1184,14 @@ export default function MapPane({
               <path d="M5.5 1.5h7a2 2 0 0 1 2 2v7" />
               <rect x="1.5" y="5.5" width="9" height="9" rx="2" />
             </svg>
-            {overlaysOn ? `Overlays · ${overlaysOn}` : "Overlays"}
+            <span className={styles.btnLabel} aria-hidden="true">
+              {overlaysOn ? `Overlays · ${overlaysOn}` : "Overlays"}
+            </span>
+            {overlaysOn > 0 && (
+              <span className={styles.countBadge} aria-hidden="true">
+                {overlaysOn}
+              </span>
+            )}
           </button>
           {(openMenu === "overlays" || closingMenu === "overlays") && (
             <div

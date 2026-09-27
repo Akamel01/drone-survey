@@ -110,6 +110,74 @@
   box-shadow: inset 0 0 0 999px rgb(255 255 255 / 0.06), inset 0 1px 0 rgb(255 255 255 / 0.55);
 }
 
+/* The base-map mark in the tab bar's line style (24 px grid, 1.5 px stroke,
+   round caps and joins): a satellite for imagery, a folded map with road
+   lines for OpenStreetMap. 20 px beside the layers glyph, 24 px alone. */
+.baseIcon {
+  width: 20px;
+  height: 20px;
+  flex: none;
+}
+
+.layersGlyph {
+  display: inline-flex;
+}
+
+/* Icon-only base-map items: the accessible name (aria-label) carries the
+   "Satellite imagery" / "Street map (OpenStreetMap)" wording for screen
+   readers (spec §10: nothing lives in a tooltip or title only). */
+.menuItemIcon {
+  display: inline-flex;
+}
+
+.menuItemIcon > svg {
+  width: 24px;
+  height: 24px;
+}
+
+/* The overlays count on a phone: a small badge on the glyph, shown below
+   1000 px where the button drops its word (wide screens keep "Overlays · N"
+   as text). Dark ink with white figures on the 40 % white pill. */
+.countBadge {
+  display: none;
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 5px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  background: var(--ink);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Phone view (below 1000 px): icons only on both buttons. The Base map
+   button keeps the current base map's icon (the layers glyph hides); the
+   Overlays button keeps its glyph with the count badge. Both keep their
+   accessible names and their 44 px targets. */
+@media (max-width: 999px) {
+  .pill {
+    position: relative;
+    padding: 0;
+    min-width: 44px;
+  }
+  .pill .baseIcon {
+    width: 24px;
+    height: 24px;
+  }
+  .layersGlyph,
+  .btnLabel {
+    display: none;
+  }
+  .countBadge {
+    display: inline-flex;
+  }
+}
 /* The two menus anchor to their buttons; placement stays where the pills were,
    so --toggle-h (measured off .basemapToggle in MapPane.tsx) keeps clearing
    the Summary and the drawing panel exactly as before. */
