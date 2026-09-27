@@ -1,0 +1,7 @@
+/* Option A for the operator: WCAG AA on the brightest backdrops. */
+:root { --on-glass-3: rgb(255 255 255 / 0.80); --on-glass-4: rgb(255 255 255 / 0.80); --glass-smoke: rgb(40 44 46 / 0.68); }
+@media (min-width: 1000px) { :root { --glass-smoke: rgb(40 44 46 / 0.75); } }
+[class*="HomeScreen-module"][class*="__content"]::before {
+  content: ""; position: absolute; z-index: -1; left: -50vw; right: -50vw; top: -140px; bottom: 0;
+  background: linear-gradient(to top, rgb(8 12 16 / 0.72), rgb(8 12 16 / 0.45) 55%, transparent);
+}
