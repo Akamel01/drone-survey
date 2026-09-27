@@ -363,6 +363,18 @@ export default function MapPane({
   // Why a finish did not happen. A double-click on a two-corner ring used to
   // commit nothing and say nothing, which reads exactly like a broken map.
   const [drawNote, setDrawNote] = useState<string | null>(null);
+  // UI-20: the drawing panel's presence outlives the drawing mode by one exit
+  // animation. closingDraw is set during the render that first sees the mode
+  // leave drawing -- not in an effect, because Escape (window keydown) and the
+  // map's dblclick close outside React's events, and an effect would paint one
+  // frame with the panel already gone. 160ms covers the 150ms reduced-motion
+  // crossfade (globals.css) with the 10ms margin the menus use over theirs.
+  const [closingDraw, setClosingDraw] = useState(false);
+  // Previous-render bookkeeping. State, not refs: this lint's react-hooks/refs
+  // (React Compiler) forbids touching a ref during render, and both values are
+  // read during render to decide the hold.
+  const [lastDrawMode, setLastDrawMode] = useState<DrawMode>("idle");
+  const [wasDrawing, setWasDrawing] = useState(false);
 
   const dragIndexRef = useRef<number | null>(null);
   const circleDragRef = useRef<null | "center" | "radius">(null);
@@ -375,6 +387,30 @@ export default function MapPane({
   // True while a shape is being rubber-banded, so the data push below leaves the
   // live preview alone instead of overwriting it from the committed spec.
   const drawingRef = useRef(false);
+
+  // Adjusting state during render (React's documented pattern, guarded so it
+  // cannot loop): the render that loses the drawing mode queues the exit hold
+  // before React commits, so the panel's DOM node never unmounts in between.
+  const drawing = isDrawing(mode);
+  if (drawing) {
+    if (lastDrawMode !== mode) setLastDrawMode(mode);
+    if (!wasDrawing) setWasDrawing(true);
+  } else if (wasDrawing) {
+    if (!closingDraw) setClosingDraw(true);
+    setWasDrawing(false);
+  }
+  if (drawing && closingDraw) setClosingDraw(false);
+  // What the panel reads while it is on screen: the live mode, or the mode it
+  // is leaving, so idle copy never flashes during the exit.
+  const panelMode = drawing ? mode : lastDrawMode;
+
+  // Ends the exit. Drawing again during the hold cancelled this timer already
+  // by flipping closingDraw back during that render.
+  useEffect(() => {
+    if (!closingDraw) return;
+    const t = setTimeout(() => setClosingDraw(false), 160);
+    return () => clearTimeout(t);
+  }, [closingDraw]);
 
   // The display-pill row's real height, read by the drawing / remove-corner
   // panel below 1000px wide (MapPane.module.css) so it starts under the pills
@@ -1080,6 +1116,8 @@ export default function MapPane({
     if (!map) return;
     map.getCanvas().style.cursor = mode === "idle" ? "" : "crosshair";
     if (!map.getLayer("aoi-outline")) return;
+    // Local, not the render-scope `drawing`: the effect's deps are [mode], and
+    // exhaustive-deps would ask for the derived variable too.
     const drawing = isDrawing(mode);
     map.setPaintProperty("aoi-outline", "line-color", drawing ? "#e0a94f" : "#4fb8a8");
     map.setPaintProperty("aoi-outline", "line-dasharray", drawing ? [2, 2] : undefined);
@@ -1090,13 +1128,14 @@ export default function MapPane({
     mapRef.current?.setStyle(next === "esri" ? BASEMAP : BASEMAP_OSM);
   }
 
-  // What a click on the map does at this instant — not what it did a mode ago,
-  // and not what dragging a finished shape would do.
+  // What a click on the map does while the panel is up: the live mode, or the
+  // one it is leaving, so the exit never switches to idle copy. Not what
+  // dragging a finished shape would do.
   const corners = spec.aoi.length;
   const clickMeaning =
-    mode === "draw-polygon" || mode === "append-polygon"
+    panelMode === "draw-polygon" || panelMode === "append-polygon"
       ? `Each click adds a corner — ${corners} so far, three needed.`
-      : mode === "draw-rectangle"
+      : panelMode === "draw-rectangle"
         ? (corners === 0 ? "Click one corner." : (drawHint ?? "Click the opposite corner."))
         : (drawHint ?? "Click the centre, then drag out the radius.");
 
@@ -1239,9 +1278,11 @@ export default function MapPane({
           )}
         </div>
       </div>
-      {isDrawing(mode) && (
-        <div className={`${styles.drawPanel} glass-smoke`}>
-          <div className={styles.drawTitle}>{drawModeLabel(mode)}</div>
+      {(drawing || closingDraw) && (
+        <div
+          className={`${styles.drawPanel} glass-smoke ${drawing ? styles.drawPanelLive : styles.drawPanelClosing}`}
+        >
+          <div className={styles.drawTitle}>{drawModeLabel(panelMode)}</div>
           <div className={styles.drawClick}>{clickMeaning}</div>
           {drawNote && (
             <div className={styles.drawNote} aria-live="polite">
@@ -1249,7 +1290,7 @@ export default function MapPane({
             </div>
           )}
           <div className={styles.drawActions}>
-            {(mode === "draw-polygon" || mode === "append-polygon") && (
+            {(panelMode === "draw-polygon" || panelMode === "append-polygon") && (
               <button onClick={finishDraw} disabled={spec.aoi.length < 3}>
                 Finish area
               </button>
