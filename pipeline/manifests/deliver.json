@@ -5,7 +5,7 @@
       "name": "bundle",
       "command": ["python3", "nodes/bundle/build.py", "--out", "{out.bundle}"],
       "outputs": {"bundle": "bundle"},
-      "notes": "No ingest/reconstruct/export-cog Node exists yet to wire as {in.x}, so the source Orthomosaic/splat/report/vendor-asset paths are read from the BUNDLE_ORTHO / BUNDLE_SPLAT_SCENE / BUNDLE_SPLAT_META / BUNDLE_REPORT / BUNDLE_VENDOR_DIR env vars (see nodes/bundle/build.py). At least one of BUNDLE_ORTHO or BUNDLE_SPLAT_SCENE is required."
+      "notes": "No ingest/reconstruct/export-cog Node exists yet to wire as {in.x}, so the source Orthomosaic/splat/showcase/report/vendor-asset paths are read from the BUNDLE_ORTHO / BUNDLE_SPLAT_SCENE / BUNDLE_SPLAT_META / BUNDLE_SHOWCASE / BUNDLE_SPRITE / BUNDLE_REPORT / BUNDLE_VENDOR_DIR env vars (see nodes/bundle/build.py). At least one of BUNDLE_ORTHO, BUNDLE_SPLAT_SCENE or BUNDLE_SHOWCASE is required."
     },
     {
       "name": "publish",

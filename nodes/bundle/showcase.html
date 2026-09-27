@@ -1,0 +1,178 @@
+<!doctype html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<!-- The Bundle's Showcase player, one static file: selection and rate mirror web/lib/hero.ts:27-42 deliberately. -->
+<meta name="robots" content="noindex, nofollow">
+<title>Showcase</title>
+<style>
+  html, body { height: 100%; }
+  body { margin: 0; background: #0a0e0f; overflow: hidden; }
+  [hidden] { display: none !important; }
+  .scene { position: fixed; inset: 0; background: #496c81; }
+  .scene video, .scene img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: 100% 60%; }
+  .birds { position: absolute; inset: 0; overflow: hidden; pointer-events: none; }
+  .bird { position: absolute; left: 0; top: 0; background-image: url("showcase/bird-sprite.webp"); background-repeat: no-repeat; will-change: transform; }
+</style>
+
+<div class="scene">
+  <img id="poster" alt="" src="showcase/tall-poster-1440.jpg">
+  <video id="hero" muted playsinline autoplay loop></video>
+  <div class="birds" id="birds"></div>
+</div>
+
+<script>
+  const video = document.getElementById("hero");
+  const poster = document.getElementById("poster");
+  const layer = document.getElementById("birds");
+  const mq = matchMedia("(prefers-reduced-motion: reduce)");
+  const TURN_S = 40;
+  let reduced = mq.matches;
+  let loadedSrc = "";
+
+  const CUTS = {
+    tall: {
+      av1_1440: "showcase/tall-1440p60-av1.mp4",
+      hevc_1440: "showcase/tall-1440p60-hevc.mp4",
+      h264_1080: "showcase/tall-1080p30-h264.mp4",
+      poster: "showcase/tall-poster-1440.jpg",
+    },
+    wide: {
+      av1_1440: "showcase/wide-1440p60-av1.mp4",
+      hevc_1440: "showcase/wide-1440p60-hevc.mp4",
+      h264_1080: "showcase/wide-1080p30-h264.mp4",
+      av1_4k60: "showcase/wide-4k60-av1.mp4",
+      poster: "showcase/wide-poster-1440.jpg",
+    },
+  };
+
+  function chooseSrc() {
+    const tall = innerWidth <= innerHeight;
+    const cuts = tall ? CUTS.tall : CUTS.wide;
+    const big = !tall && innerWidth * devicePixelRatio >= 2560;
+    poster.src = cuts.poster;
+    const av1 = big ? 'video/mp4; codecs="av01.0.13M.08"' : 'video/mp4; codecs="av01.0.12M.08"';
+    return [
+      [big ? cuts.av1_4k60 : cuts.av1_1440, av1],
+      [cuts.hevc_1440, 'video/mp4; codecs="hvc1"'],
+      [cuts.h264_1080, "video/mp4"],
+    ].find(([, type]) => video.canPlayType(type))?.[0] ?? cuts.h264_1080;
+  }
+
+  function apply() {
+    const src = chooseSrc();
+    if (reduced) {
+      video.pause();
+      video.removeAttribute("src");
+      video.load();
+      loadedSrc = "";
+      video.hidden = true;
+      stopBirds();
+      return;
+    }
+    if (src !== loadedSrc) {
+      loadedSrc = src;
+      video.hidden = true;
+      video.src = src;
+      if (document.hidden) video.pause();
+      else video.play().catch(() => {});
+    } else if (video.paused && !document.hidden) {
+      video.play().catch(() => {});
+    }
+    startBirds();
+  }
+
+  const FRAMES = 16, GLIDE = 16, rnd = (a, b) => a + Math.random() * (b - a);
+  let flock = [], raf = 0, last = 0, next = 4000;
+
+  function spawn() {
+    const n = Math.round(rnd(2, 4));
+    const ltr = Math.random() < 0.6;
+    const w = innerWidth, h = innerHeight;
+    const speed = rnd(70, 100), y0 = h * rnd(0.1, 0.3), rise = rnd(-0.06, 0.04) * h;
+    for (let i = 0; i < n; i++) {
+      const size = rnd(16, 28) * (i ? rnd(0.75, 1) : 1);
+      const el = document.createElement("div");
+      el.className = "bird";
+      el.style.width = el.style.height = `${size}px`;
+      el.style.backgroundSize = `${(FRAMES + 1) * size}px ${size}px`;
+      el.style.opacity = (0.55 + size / 60).toFixed(2);
+      layer.appendChild(el);
+      flock.push({ el, size, ltr, speed: speed * rnd(0.97, 1.03), y0: y0 + rnd(-18, 18), rise, w,
+        x: ltr ? -60 - i * rnd(24, 48) : w + 60 + i * rnd(24, 48),
+        beat: rnd(0.3, 0.34), phase: rnd(0, 1), flaps: Math.round(rnd(3, 6)), glide: 0, t: 0, sway: rnd(0, 6.28) });
+    }
+  }
+
+  function step(now) {
+    raf = requestAnimationFrame(step);
+    const dt = Math.min((now - (last || now)) / 1000, 0.1);
+    last = now;
+    next -= dt * 1000;
+    if (next <= 0) { spawn(); next = rnd(9000, 20000); }
+    flock = flock.filter((b) => {
+      b.t += dt;
+      b.x += (b.ltr ? 1 : -1) * b.speed * dt;
+      const along = b.ltr ? b.x / b.w : 1 - b.x / b.w;
+      const y = b.y0 + b.rise * along + 4 * Math.sin(b.t * 1.7 + b.sway);
+      let frame;
+      if (b.glide > 0) {
+        b.glide -= dt;
+        frame = GLIDE;
+        if (b.glide <= 0) b.flaps = Math.round(rnd(3, 6));
+      } else {
+        b.phase += dt / b.beat;
+        if (b.phase >= 1) {
+          b.phase -= 1;
+          if (--b.flaps <= 0) b.glide = rnd(0.6, 1.6);
+        }
+        frame = Math.floor(b.phase * FRAMES) % FRAMES;
+      }
+      const bank = 3 * Math.sin(b.t * 0.9 + b.sway);
+      b.el.style.backgroundPositionX = `${-frame * b.size}px`;
+      b.el.style.transform = `translate(${b.x}px, ${y}px) rotate(${bank}deg) scaleX(${b.ltr ? 1 : -1})`;
+      const gone = b.ltr ? b.x > b.w + 80 : b.x < -80 - b.size;
+      if (gone) b.el.remove();
+      return !gone;
+    });
+  }
+
+  function startBirds() {
+    if (reduced || document.hidden || raf) return;
+    last = 0;
+    raf = requestAnimationFrame(step);
+  }
+
+  function stopBirds() {
+    if (raf) cancelAnimationFrame(raf);
+    raf = 0;
+    document.querySelectorAll(".bird").forEach((el) => el.remove());
+    flock = [];
+  }
+
+  function resume() {
+    if (!reduced && video.paused && !document.hidden) video.play().catch(() => {});
+  }
+
+  function detach() {
+    removeEventListener("pointerdown", resume);
+    removeEventListener("keydown", resume);
+  }
+
+  video.addEventListener("loadeddata", () => { video.playbackRate = video.duration / TURN_S; });
+  video.addEventListener("playing", () => { video.hidden = false; detach(); });
+  addEventListener("pointerdown", resume);
+  addEventListener("keydown", resume);
+  addEventListener("resize", apply);
+  mq.addEventListener("change", () => { reduced = mq.matches; apply(); });
+  document.addEventListener("visibilitychange", () => {
+    if (document.hidden) {
+      video.pause();
+      stopBirds();
+    } else if (!reduced) {
+      if (video.paused) video.play().catch(() => {});
+      startBirds();
+    }
+  });
+
+  apply();
+</script>

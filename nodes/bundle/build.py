@@ -15,17 +15,20 @@ docs/business/object-storage-setup.md exactly:
                             upstream HTML imports ./index.js relatively, so the
                             files sit next to it rather than in assets/
       settings.json         the viewer's settings; empty means "use its defaults"
+      showcase.html         the Showcase player page, copied verbatim (if --showcase)
       ortho/orthomosaic.tif
       splat/scene.sog, splat/meta.json
+      showcase/             the nine cut files + bird-sprite.webp (if --showcase)
       assets/               vendored viewer JS/CSS, pinned versions
       report/               optional
       NOTICES.txt           third-party licence notices for what's included
       bundle-manifest.json  every file above: relative path, size, sha256
 
-At least one of --ortho / --splat-scene is required. Ortho/splat/report
-source paths have no upstream Node in pipeline/manifests/deliver.json yet
-(no ingest/reconstruct/export-cog Node exists), so they are read from
-BUNDLE_ORTHO / BUNDLE_SPLAT_SCENE / BUNDLE_SPLAT_META / BUNDLE_REPORT /
+At least one of --ortho / --splat-scene / --showcase is required. Ortho/splat/
+showcase/report source paths have no upstream Node in
+pipeline/manifests/deliver.json yet (no ingest/reconstruct/export-cog Node
+exists), so they are read from BUNDLE_ORTHO / BUNDLE_SPLAT_SCENE /
+BUNDLE_SPLAT_META / BUNDLE_SHOWCASE / BUNDLE_SPRITE / BUNDLE_REPORT /
 BUNDLE_VENDOR_DIR env vars as well as the equivalent --flags, so the Manifest
 can supply them without a {in.x} wire that doesn't exist yet.
 
@@ -127,6 +130,25 @@ LICENSE_BODIES = {"MIT": MIT_BODY, "BSD-3-Clause": BSD3_BODY}
 
 NOINDEX_META = '<meta name="robots" content="noindex, nofollow">'
 
+SHOWCASE_CUTS: dict[str, dict[str, str]] = {
+    "tall": {
+        "av1_1440": "tall-1440p60-av1.mp4",
+        "hevc_1440": "tall-1440p60-hevc.mp4",
+        "h264_1080": "tall-1080p30-h264.mp4",
+        "poster": "tall-poster-1440.jpg",
+    },
+    "wide": {
+        "av1_1440": "wide-1440p60-av1.mp4",
+        "hevc_1440": "wide-1440p60-hevc.mp4",
+        "h264_1080": "wide-1080p30-h264.mp4",
+        "av1_4k60": "wide-4k60-av1.mp4",
+        "poster": "wide-poster-1440.jpg",
+    },
+}
+SHOWCASE_FILES: list[str] = [name for framing in SHOWCASE_CUTS.values() for name in framing.values()]
+SHOWCASE_PAGE = Path(__file__).resolve().parent / "showcase.html"
+DEFAULT_SPRITE = Path(__file__).resolve().parents[2] / "web" / "public" / "hero" / "v1" / "bird-sprite.webp"
+
 
 def write_asset(assets_dir: Path, vendor_dir: Path | None, filename: str, project: str, version: str) -> None:
     """Copy a vendored library file in, or leave a clearly-marked placeholder.
@@ -175,12 +197,14 @@ def notices_text(components: list[tuple[str, str, str]]) -> str:
     return "".join(parts)
 
 
-def render_index(has_ortho: bool, has_splat: bool, has_report: bool) -> str:
+def render_index(has_ortho: bool, has_splat: bool, has_report: bool, has_showcase: bool = False) -> str:
     links = []
     if has_ortho:
         links.append('<li><a href="ortho.html">Orthomosaic</a></li>')
     if has_splat:
         links.append('<li><a href="splat.html">3D reconstruction</a></li>')
+    if has_showcase:
+        links.append('<li><a href="showcase.html">Showcase</a></li>')
     if has_report:
         links.append('<li><a href="report/">Report</a></li>')
     return f"""<!doctype html>
@@ -317,11 +341,38 @@ see docs/business/object-storage-setup.md.
 """
 
 
+def require_showcase_files(showcase_dir: Path) -> None:
+    """Refuse a Showcase input that is missing any of the nine frozen files."""
+    missing = [name for name in SHOWCASE_FILES if not (showcase_dir / name).is_file()]
+    if missing:
+        sys.exit(f"{showcase_dir} is missing Showcase files: {', '.join(missing)}")
+
+
+def write_showcase(out: Path, showcase_dir: Path, sprite: Path) -> None:
+    """Copy the Showcase cuts, the bird sprite and the player page into the Bundle."""
+    if not sprite.is_file():
+        sys.exit(f"the bird sprite is missing: {sprite} (see --sprite / BUNDLE_SPRITE)")
+    showcase_out = out / "showcase"
+    showcase_out.mkdir(exist_ok=True)
+    for name in SHOWCASE_FILES:
+        shutil.copyfile(showcase_dir / name, showcase_out / name)
+    shutil.copyfile(sprite, showcase_out / "bird-sprite.webp")
+    shutil.copyfile(SHOWCASE_PAGE, out / "showcase.html")
+
+
 def build(args: argparse.Namespace) -> Path:
-    if not args.ortho and not args.splat_scene:
-        sys.exit("refusing to build a Bundle with neither --ortho nor --splat-scene")
+    if not (args.ortho or args.splat_scene or args.showcase):
+        sys.exit("refusing to build a Bundle with none of --ortho, --splat-scene or --showcase")
     if args.splat_scene and not args.splat_meta:
         sys.exit("--splat-scene needs --splat-meta (SuperSplat Viewer's companion metadata file)")
+
+    sprite = Path(args.sprite) if args.sprite else DEFAULT_SPRITE
+    if args.showcase:
+        if not SHOWCASE_PAGE.is_file():
+            sys.exit(f"the committed player page is missing: {SHOWCASE_PAGE}")
+        require_showcase_files(Path(args.showcase))
+        if not sprite.is_file():
+            sys.exit(f"the bird sprite is missing: {sprite} (see --sprite / BUNDLE_SPRITE)")
 
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
@@ -358,7 +409,10 @@ def build(args: argparse.Namespace) -> Path:
         shutil.copyfile(args.report, report_dir / Path(args.report).name)
         has_report = True
 
-    (out / "index.html").write_text(render_index(bool(args.ortho), bool(args.splat_scene), has_report))
+    if args.showcase:
+        write_showcase(out, Path(args.showcase), sprite)
+
+    (out / "index.html").write_text(render_index(bool(args.ortho), bool(args.splat_scene), has_report, bool(args.showcase)))
     (out / "NOTICES.txt").write_text(notices_text(components))
 
     # bundle-manifest.json last: it hashes everything else already written.
@@ -370,7 +424,7 @@ def build(args: argparse.Namespace) -> Path:
     manifest = {
         "bundle_id": bundle_id,
         "generated_at": datetime.now(timezone.utc).isoformat(),
-        "deliverables": [d for d, present in (("orthomosaic", args.ortho), ("splat", args.splat_scene)) if present],
+        "deliverables": [d for d, present in (("orthomosaic", args.ortho), ("splat", args.splat_scene), ("showcase", args.showcase)) if present],
         "files": files,
     }
     (out / "bundle-manifest.json").write_text(json.dumps(manifest, indent=2))
@@ -385,6 +439,8 @@ def main() -> None:
     p.add_argument("--splat-scene", default=os.environ.get("BUNDLE_SPLAT_SCENE"), help="path to the .sog splat scene")
     p.add_argument("--splat-meta", default=os.environ.get("BUNDLE_SPLAT_META"), help="path to the splat's meta.json")
     p.add_argument("--report", default=os.environ.get("BUNDLE_REPORT"), help="optional PDF/summary")
+    p.add_argument("--showcase", default=os.environ.get("BUNDLE_SHOWCASE"), help="directory of the nine Showcase files from the cuts Node")
+    p.add_argument("--sprite", default=os.environ.get("BUNDLE_SPRITE"), help="Showcase bird sprite; defaults to web/public/hero/v1/bird-sprite.webp")
     p.add_argument("--vendor-dir", default=os.environ.get("BUNDLE_VENDOR_DIR"), help="local folder of pinned viewer JS/CSS builds")
     args = p.parse_args()
     out = build(args)
