@@ -121,12 +121,11 @@ the ADB route is closed twice over.
   read 2026-09-27; Apple-hosted forum, Apple-staff answer).
 - The one USB device-class framework, **ImageCaptureCore** (iOS 13+), browses **cameras and
   scanners** and speaks **PTP** (Picture Transfer Protocol), listing media files and
-  downloading them; its upload call is already deprecated
+  downloading them; its upload API (`ICCameraDevice.requestUploadFile`) is deprecated and
+  `requestSendPTPCommand` writes no file
   ([Apple ImageCaptureCore](https://developer.apple.com/documentation/imagecapturecore),
   read 2026-09-27;
   [`ICCameraDevice`](https://developer.apple.com/documentation/imagecapturecore/iccameradevice),
-  read 2026-09-27;
-  [`requestSendPTPCommand`](https://developer.apple.com/documentation/imagecapturecore/iccameradevice/3393298-requestsendptpcommand),
   read 2026-09-27). It is aimed at PTP cameras; it offers no way to write a KMZ into an
   Android app-private folder.
 
@@ -152,9 +151,10 @@ This is the path the project already chose (`docs/adr/0016-...:487-493`). Shape:
   it sidesteps the CC/DR_Swap problem that defeats the phone.
 - **Software:** `scripts/mission/load.py` unchanged. It mounts the Controller over MTP with
   `jmtpfs` and writes each Mission into the way-finder Card that its Spec reserved. The
-  transport is a filesystem mount, not a bespoke protocol: `MOUNT = ~/rc2`, path
-  `Internal shared storage/Android/data/dji.go.v5/files/waypoint/<guid>/<guid>.kmz`
-  (`scripts/mission/load.py:44-52,301-309`). Success is a read-back hash after a fresh mount,
+  transport is a filesystem mount, not a bespoke protocol: `MOUNT = ~/rc2` joined with
+  `STORAGE = "Internal shared storage"` (`scripts/mission/load.py:48-49`), then
+  `WAYPOINT_DIR = "Android/data/dji.go.v5/files/waypoint"`
+  (`scripts/mission/kmz.py:17`). Success is a read-back hash after a fresh mount,
   with rollback on mismatch (`load.py:354-427`). It is stdlib Python plus `jmtpfs`, so it runs
   on the board as-is.
 - **What the phone provides:** a Wi-Fi hotspot (internet for Collecting) and the planner UI
