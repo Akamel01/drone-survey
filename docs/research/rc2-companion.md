@@ -36,10 +36,10 @@ Controller itself.
 with "No." ([dji.com/rc-2/faq](https://www.dji.com/rc-2/faq), read 2026-09-27). The same page is
 clear the USB-C ports are "for charging and connecting to computer", and the Controller's model is
 RC331 with 32 GB internal storage
-([dji.com/rc-2/specs](https://www.dji.com/rc-2/specs), read 2026-09-27). By contrast, DJI's own
-retail knowledge base states the **RC Pro 2 does** allow third-party apps, with a liability
-disclaimer ([heliguy.com](https://www.heliguy.com/blogs/knowledge-base/does-dji-rc-pro-2-support-installing-third-party-apps),
-vendors of DJI equipment, read 2026-09-27 via search) — showing DJI treats the two controllers
+([dji.com/rc-2/specs](https://www.dji.com/rc-2/specs), read 2026-09-27). By contrast, a
+DJI-authorised retailer's knowledge base states the **RC Pro 2 does** allow third-party apps,
+with a liability disclaimer ([heliguy.com](https://www.heliguy.com/blogs/knowledge-base/does-dji-rc-pro-2-support-installing-third-party-apps),
+DJI-authorised retailer, **vendor-stated**, read 2026-09-27 via search) — showing DJI treats the two controllers
 differently on purpose. AirData, a vendor whose app wants to run there, states it plainly: "the
 DJI RC and RC 2 are locked down by DJI and cannot install third party apps"
 ([app.airdata.com wiki](https://app.airdata.com/wiki/Help/DJI+RC,+RC+2:+Uploads+for+US+Users),
@@ -95,7 +95,10 @@ repository (April 2025): "The Mini 4 Pro can only use the MSDK in conjunction wi
 for plans, the same reply: "we currently haven't received any relevant plans for MSDK to support
 the DJI RC 2" ([Mobile-SDK-Android-V5 issue #539](https://github.com/dji-sdk/Mobile-SDK-Android-V5/issues/539),
 DJI `dji-dev` comments 2025-04-08, read 2026-09-27 via the GitHub API). The thread has 14 comments
-and by 2026-07-31 is still community "+1 RC2 support" posts with no change from DJI. **So an MSDK
+and by 2026-07-31 is still community "+1 RC2 support" posts with no change from DJI. This
+supersedes the earlier repo record that the issue had zero replies
+(`docs/research/controller-and-loader-facts-2026-09-11.md:70-71,217-220`) — that reading is stale;
+the API read on 2026-09-27 shows 14 comments including the two DJI replies above. **So an MSDK
 app cannot run *on* the RC 2: MSDK apps run on an external Android device, and DJI says that
 device cannot be the RC 2.** DJI repeats the support boundary in issue #654 (2025-10-23):
 "currently MSDK only supports the following combinations: DJI Mini 3 + DJI RC N1, DJI Mini 3 Pro
@@ -125,7 +128,8 @@ RC2 controller restriction already closes this route (see "Could not verify").
 
 **The write route is closed to a normal app by Android's scoped storage.** DJI Fly's missions live
 at `Android/data/dji.go.v5/files/waypoint/<GUID>/<GUID>.kmz`, the file the loader replaces over
-MTP (`scripts/mission/kmz.py:17`; ADR 0016:472-478). Google's rules for Android 11+ say
+MTP (`scripts/mission/kmz.py:17` for the waypoint directory, `scripts/mission/load.py:150-151`
+for `<GUID>/<GUID>.kmz`; ADR 0016:472-478). Google's rules for Android 11+ say
 `MANAGE_EXTERNAL_STORAGE` grants access to internal storage *except* `/Android/data/` and its
 subdirectories, and apps holding it "still can't access the app-specific directories that belong
 to other apps"; `ACTION_OPEN_DOCUMENT_TREE` likewise cannot request `Android/data/` ([Android
