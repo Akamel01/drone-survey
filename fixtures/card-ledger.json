@@ -1,13 +1,18 @@
 {
   "_comment": [
     "The Card Ledger contract, asserted from both languages so the host and the",
-    "planner cannot drift apart about it (ADR 0022). The planner's tests read",
-    "this file, and so does load.py's self-check.",
+    "planner cannot drift apart about it (ADR 0022). The two contract runners",
+    "read this file: web/lib/cardLedgerContract.test.ts and the",
+    "CardLedgerContractTest in scripts/mission/load_test.py.",
     "",
     "Every case below is one the operator named or one that bit us:",
     "reserving when Cards are free, refusing when they are not, releasing on",
     "withdrawal, a Flown Card being reusable, and a Ledger that disagrees with",
-    "the Controller."
+    "the Controller.",
+    "",
+    "Cases share the Ledger below unless a case carries its own `ledger` object.",
+    "Adding a holding to it or reordering its pool changes what several cases",
+    "expect, so freeze it with the contract."
   ],
 
   "ledger": {
@@ -36,11 +41,13 @@
 
   "cases": {
     "available": {
+      "rule": "available",
       "_why": "way finder 1 holds an unflown Mission. way finder 2 was flown, so it is reusable again.",
       "expect": ["way finder 2", "way finder 3", "way finder 4", "way finder 5"]
     },
 
     "reserve_two": {
+      "rule": "reserve",
       "_why": "A Spec that splits into two Missions takes the first two available Cards.",
       "needed": 2,
       "expect_ok": true,
@@ -48,6 +55,7 @@
     },
 
     "reserve_more_than_free": {
+      "rule": "reserve",
       "_why": "The operator's own case: every Card taken, another Mission Dispatched. Refused at Dispatch, naming what is in the way, rather than overwriting an unflown Mission at Load.",
       "needed": 5,
       "expect_ok": false,
@@ -56,24 +64,39 @@
     },
 
     "release_on_withdraw": {
+      "rule": "release",
       "_why": "Withdrawing a Spec gives its Cards back. What it holds is no longer current.",
       "spec_key": "specs/rehearsal-field/2026-09-17/20260917T014122Z.json",
       "expect_available_after": ["way finder 1", "way finder 2", "way finder 3", "way finder 4", "way finder 5"]
     },
 
     "flown_holding_survives_release": {
+      "rule": "release",
       "_why": "A Flown holding is the record of what was flown; releasing its Spec must not erase it.",
       "spec_key": "specs/rehearsal-field/2026-09-18/20260917T014442Z.json",
       "expect_holding_kept": "way finder 2"
     },
 
+    "flown_mark_and_unmark": {
+      "rule": "flown_mark",
+      "_why": "The operator's mark decides Flown: it frees the Card, and unmarking takes it back with the mark removed rather than falsified (ADR 0021, ADR 0022).",
+      "spec_key": "specs/rehearsal-field/2026-09-17/20260917T014122Z.json",
+      "card": "way finder 1",
+      "at": "2026-09-24T18:00:00Z",
+      "expect_available_when_marked": ["way finder 1", "way finder 2", "way finder 3", "way finder 4", "way finder 5"],
+      "expect_reason_mentions": ["unflown"],
+      "expect_flown_at_absent_when_unmarked": true
+    },
+
     "uncalibrated_card": {
+      "rule": "available",
       "_why": "The pool is what is calibrated, never what is hoped for. This Ledger's pool stops at way finder 5.",
       "card": "way finder 6",
       "expect_reason": "not calibrated"
     },
 
     "drift": {
+      "rule": "drift",
       "_why": "The Ledger says one thing, the Controller holds another. Reported, never quietly corrected.",
       "on_device": {
         "way finder 1": "specs/rehearsal-field/2026-09-17/20260917T014122Z.json",
@@ -87,6 +110,108 @@
           "found": "specs/somewhere-else/2026-09-01/20260901T000000Z.json"
         }
       ]
+    },
+
+    "drift_silence": {
+      "rule": "drift",
+      "_why": "A Card the device was not asked about is not evidence of drift. Silence is not a disagreement.",
+      "on_device": {},
+      "expect_drift": []
+    },
+
+    "stale_after_write": {
+      "rule": "stale",
+      "_why": "way finder 1 holds an unflown Mission whose Spec is no longer live, so the planner must say do not fly this. The Flown way finder 2 is not stale.",
+      "live_spec_keys": [],
+      "expect_stale": ["way finder 1"]
+    },
+
+    "reservation_is_not_stale": {
+      "rule": "stale",
+      "_why": "A reservation that never reached the Controller is not stale on it: stale needs a written holding.",
+      "ledger": { "pool": ["A"], "holdings": {} },
+      "cards": ["A"],
+      "spec_key": "specs/x/y/z.json",
+      "at": "t",
+      "expect_stale": []
+    },
+
+    "flight_order": {
+      "rule": "reservation",
+      "_why": "Reserving records the flight order, so a row can say flight 2 of 3.",
+      "ledger": { "pool": ["A", "B", "C"], "holdings": {} },
+      "cards": ["A", "B", "C"],
+      "spec_key": "specs/s/d/k.json",
+      "at": "2026-09-23T00:00:00Z",
+      "expect_cards_for": ["1 of 3 in A", "2 of 3 in B", "3 of 3 in C"],
+      "expect_available_after": []
+    },
+
+    "no_reservation_has_no_cards": {
+      "rule": "reservation",
+      "_why": "A Spec that was never Dispatched holds no Cards, and the planner must say so by name rather than invent one.",
+      "spec_key": "specs/never/dispatched/here.json",
+      "expect_cards_for": []
+    },
+
+    "concurrent_write_erased": {
+      "rule": "change_survived",
+      "_why": "Another writer wrote from before our Reservation landed, so their write erased ours. Both were told they succeeded (#152).",
+      "base": { "pool": ["way finder 1", "way finder 2"], "holdings": {} },
+      "ours": {
+        "op": "reserve",
+        "cards": ["way finder 1"],
+        "spec_key": "specs/race/2026-09-27/20260927T000001Z.json",
+        "at": "t0"
+      },
+      "after": {
+        "op": "reserve",
+        "cards": ["way finder 2"],
+        "spec_key": "specs/race/2026-09-27/20260927T000002Z.json",
+        "at": "t0",
+        "apply_to": "base"
+      },
+      "expect_survived": false
+    },
+
+    "concurrent_write_kept": {
+      "rule": "change_survived",
+      "_why": "A later writer who kept our Reservation is not a conflict: only the Cards we changed are checked.",
+      "base": { "pool": ["way finder 1", "way finder 2"], "holdings": {} },
+      "ours": {
+        "op": "reserve",
+        "cards": ["way finder 1"],
+        "spec_key": "specs/race/2026-09-27/20260927T000001Z.json",
+        "at": "t0"
+      },
+      "after": {
+        "op": "reserve",
+        "cards": ["way finder 2"],
+        "spec_key": "specs/race/2026-09-27/20260927T000002Z.json",
+        "at": "t0",
+        "apply_to": "ours"
+      },
+      "expect_survived": true
+    },
+
+    "concurrent_write_same_card": {
+      "rule": "change_survived",
+      "_why": "The same Card given to someone else is our change lost, even though the Card is still occupied.",
+      "base": { "pool": ["way finder 1"], "holdings": {} },
+      "ours": {
+        "op": "reserve",
+        "cards": ["way finder 1"],
+        "spec_key": "specs/race/2026-09-27/20260927T000003Z.json",
+        "at": "t0"
+      },
+      "after": {
+        "op": "reserve",
+        "cards": ["way finder 1"],
+        "spec_key": "specs/race/2026-09-27/20260927T000004Z.json",
+        "at": "t0",
+        "apply_to": "base"
+      },
+      "expect_survived": false
     }
   }
 }
