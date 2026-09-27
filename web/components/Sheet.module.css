@@ -43,6 +43,18 @@
     display var(--dur-slow) allow-discrete;
 }
 
+/* Release, not dismissed: transform returns to rest over --dur-base / --ease-out.
+   The opacity/filter legs restate [open] so a close mid-settle still exits at
+   the closed rule's --dur-base / --ease-in. */
+.sheet.settling[open] {
+  transition:
+    transform var(--dur-base) var(--ease-out),
+    opacity var(--dur-slow) var(--ease-out),
+    filter var(--dur-slow) var(--ease-out),
+    overlay var(--dur-slow) allow-discrete,
+    display var(--dur-slow) allow-discrete;
+}
+
 /* The entrance only: rises from below. Exit does not reverse this -- the
    resting (closed) rule above has no transform, so leaving is a plain fade. */
 @starting-style {
@@ -81,12 +93,19 @@
   }
 }
 
+/* The visible pill is 36 x 5 (spec § 11), but the target is >= 44 x 44 (same
+   bullet): the padding makes the content box the pill, `background-clip`
+   paints only the content box, and the negative top margin puts the hit box
+   flush with the sheet's top edge at the pill's old y (12 px in). The body
+   starts below the whole hit box, so the pad never covers it. */
 .handle {
-  width: 36px;
-  height: 5px;
+  width: 44px;
+  height: 45px;
+  padding: 12px 4px 28px;
+  margin: -10px auto 0;
   border-radius: 999px;
   background: var(--glass-edge);
-  margin: 2px auto 10px;
+  background-clip: content-box;
   touch-action: none;
   cursor: grab;
 }
@@ -119,8 +138,11 @@
   fill: none;
 }
 
-.close:hover {
-  filter: brightness(1.15);
+/* Hover brighten only on a fine pointer (spec § 10); a touch tap would stick. */
+@media (hover: hover) and (pointer: fine) {
+  .close:hover {
+    filter: brightness(1.15);
+  }
 }
 
 .body {

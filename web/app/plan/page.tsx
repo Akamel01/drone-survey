@@ -125,7 +125,7 @@ export default function PlanPage() {
   const collapseSettings = useRef<HTMLButtonElement>(null);
   const expandMissions = useRef<HTMLButtonElement>(null);
   const expandSettings = useRef<HTMLButtonElement>(null);
-  const pageRef = useRef<HTMLDivElement>(null);
+  const pageRef = useRef<HTMLElement>(null);
   const summaryRef = useRef<HTMLDivElement>(null);
   // The control a fold is about to create, focused once it is on screen. Null
   // on first mount: the page must not steal focus on load.
@@ -188,7 +188,11 @@ export default function PlanPage() {
       "settings-collapse": collapseSettings.current,
       "settings-tab": expandSettings.current,
     };
-    el[target]?.focus();
+    // preventScroll: at unfold the collapse button still sits inside the
+    // translated panel for one frame; letting the browser scroll it into view
+    // would scroll the clipping `.top` container and drag the whole map with
+    // the fold (the harness samples consumer rects to catch exactly that).
+    el[target]?.focus({ preventScroll: true });
   }, [missionsOpen, settingsOpen]);
 
   const handleBasemapError = useCallback(() => setMapFailed(true), []);
@@ -253,7 +257,7 @@ export default function PlanPage() {
   const onListRead = (read: MissionListRead) => setSites(sitesFrom(read.missions));
 
   return (
-    <div
+    <main
       ref={pageRef}
       className={styles.page}
       data-view={view}
@@ -261,6 +265,8 @@ export default function PlanPage() {
       data-missions={missionsOpen ? "open" : "closed"}
       data-settings={settingsOpen ? "open" : "closed"}
     >
+      {/* The page's one top-level heading; the panels carry the h2s (UI-12 audit). */}
+      <h1 className="visually-hidden">Mission Control</h1>
       <Notice key={notice?.key ?? "empty"} payload={notice} onDismiss={dismissNotice} />
       <div className={styles.top}>
         <div className={styles.heroLayer} aria-hidden="true">
@@ -269,7 +275,7 @@ export default function PlanPage() {
             <HeroScene variant="still" playing={false} />
           </div>
         </div>
-        <section id="missions-panel" className={`${styles.missions} glass-smoke`} aria-label="Missions" inert={!wide && view !== "missions"}>
+        <section id="missions-panel" className={`${styles.missions} glass-smoke`} aria-label="Missions" inert={wide ? !missionsOpen : view !== "missions"}>
           <div className={styles.panelHead}>
             <h2 className={styles.viewTitle}>Missions</h2>
             <button
@@ -319,7 +325,7 @@ export default function PlanPage() {
             </div>
           )}
         </section>
-        <section id="settings-panel" className={`${styles.settings} glass-smoke`} aria-label="Settings" inert={!wide && view !== "settings"}>
+        <section id="settings-panel" className={`${styles.settings} glass-smoke`} aria-label="Settings" inert={wide ? !settingsOpen : view !== "settings"}>
           <div className={styles.panelHead}>
             <h2 className={styles.heading}>Settings</h2>
             <button
@@ -344,6 +350,7 @@ export default function PlanPage() {
           sites={sites}
           editing={editing}
           onNameChange={(name) => setEditing((e) => ({ ...e, name }))}
+          onNotice={showNotice}
           />
         </section>
       </div>
@@ -362,32 +369,30 @@ export default function PlanPage() {
           countKey={openToken}
         />
       </div>
-      {!missionsOpen && (
-        <button
-          ref={expandMissions}
-          type="button"
-          className={`glass-smoke ${styles.edgeTab} ${styles.edgeTabLeft}`}
-          aria-expanded={false}
-          aria-controls="missions-panel"
-          aria-label="Expand Missions"
-          onClick={() => foldMissions(true)}
-        >
-          ›
-        </button>
-      )}
-      {!settingsOpen && (
-        <button
-          ref={expandSettings}
-          type="button"
-          className={`glass-smoke ${styles.edgeTab} ${styles.edgeTabRight}`}
-          aria-expanded={false}
-          aria-controls="settings-panel"
-          aria-label="Expand Settings"
-          onClick={() => foldSettings(true)}
-        >
-          ‹
-        </button>
-      )}
+      <button
+        ref={expandMissions}
+        type="button"
+        className={`glass-smoke ${styles.edgeTab} ${styles.edgeTabLeft}`}
+        aria-expanded={false}
+        aria-controls="missions-panel"
+        aria-label="Expand Missions"
+        onClick={() => foldMissions(true)}
+        inert={missionsOpen}
+      >
+        ›
+      </button>
+      <button
+        ref={expandSettings}
+        type="button"
+        className={`glass-smoke ${styles.edgeTab} ${styles.edgeTabRight}`}
+        aria-expanded={false}
+        aria-controls="settings-panel"
+        aria-label="Expand Settings"
+        onClick={() => foldSettings(true)}
+        inert={settingsOpen}
+      >
+        ‹
+      </button>
       <nav className={styles.views} aria-label="Show">
         {VIEWS.map((v) => (
           <button
@@ -402,6 +407,6 @@ export default function PlanPage() {
           </button>
         ))}
       </nav>
-    </div>
+    </main>
   );
 }

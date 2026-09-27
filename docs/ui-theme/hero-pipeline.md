@@ -261,9 +261,9 @@ These rules are what the preview does and what production must keep:
 - **Choose one file.** Tall when the viewport is taller than wide, else wide.
   Sources in order: AV1 (`av01.0.13M.08` for 4K/60, `av01.0.12M.08` for 1440p),
   HEVC (`hvc1`), H.264. 4K/60 only when `innerWidth × devicePixelRatio ≥ 2560`.
-- **40 s per turn** in both framings: `playbackRate = 0.8` on the 32.4 s
-  file. Set it again on `loadeddata`: loading a new source resets it. There is
-  no speed setting in the product.
+- **40 s per turn** in both framings: `playbackRate = duration / 40` (≈0.81 on
+  the 32.4 s file). Set it again on `loadeddata`: loading a new source resets
+  it. There is no speed setting in the product.
 - `muted playsinline autoplay loop`, poster underneath.
 - **Pause** when the page is hidden, under a sheet and off the Missions view.
   `prefers-reduced-motion` shows the poster only.
@@ -276,6 +276,13 @@ These rules are what the preview does and what production must keep:
   by downloading the file whole and playing it from memory. Production must be
   checked on Safari (macOS and iPhone), and no service worker may sit in front
   of the video without range support.
+
+The Bundle's Showcase player (`nodes/bundle/showcase.html`) implements these
+rules as a static page; `npm run check:showcase-player -- <page-url>` is the
+automated record. On a physical iPhone, open
+`<origin>/d/<bundle-id>/showcase.html` in Safari and confirm autoplay, looping
+and birds, and that it pauses when you switch away; then turn on Reduce Motion
+and confirm the poster alone, with no birds (operator step).
 
 ### Spin direction
 

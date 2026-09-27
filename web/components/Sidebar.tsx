@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, useEffect, useRef, useState, type ReactNode } from "react";
+import { Children, cloneElement, Fragment, isValidElement, useEffect, useId, useRef, useState, type ReactElement, type ReactNode } from "react";
 import { newSiteId, type MissionSpec, type MissionType, type TurnMode } from "@/lib/spec";
 import { orbitTilt, type Preview } from "@/lib/mission";
 import { MISSION_NAME_MAX, missionNameProblem } from "@/lib/missionRecords";
@@ -8,6 +8,10 @@ import { siteTwin, type SiteChoice } from "@/lib/missionView";
 import type { Editing } from "@/app/plan/page";
 import { isDrawing, type DrawMode } from "./MapPane";
 import styles from "./Sidebar.module.css";
+import { authClient, signOutToHome } from "@/lib/authClient";
+import { accountLabel } from "@/lib/home";
+import AccountsSection from "./AccountsSection";
+import type { NoticePayload } from "./Notice";
 
 interface SidebarProps {
   spec: MissionSpec;
@@ -24,6 +28,8 @@ interface SidebarProps {
   /** The stored Mission the editor is working on, and its Mission Name. */
   editing: Editing;
   onNameChange: (name: string) => void;
+  /** Where Settings reports an action's result (the Accounts section's). */
+  onNotice?: (p: Omit<NoticePayload, "key">) => void;
 }
 
 // Plain metric area: m² under a square kilometre, km² above.
@@ -135,11 +141,30 @@ function Field({
   info?: ReactNode;
   children: ReactNode;
 }) {
+  // The control sits outside the <label> (the label row also holds the info
+  // button), so name it explicitly from the label text alone (UI-12 audit: the
+  // Altitude slider had no accessible name).
+  const labelId = useId();
+  type Named = { "aria-label"?: string; "aria-labelledby"?: string };
+  const kids = Children.toArray(children);
+  const first = kids.findIndex(
+    (child) =>
+      isValidElement<Named>(child) &&
+      (child.type === "input" || child.type === "select") &&
+      !child.props["aria-label"] &&
+      !child.props["aria-labelledby"],
+  );
+  const control =
+    first === -1
+      ? children
+      : kids.map((child, i) =>
+          i === first ? cloneElement(child as ReactElement<Named>, { "aria-labelledby": labelId }) : child,
+        );
   return (
     <div className={styles.field}>
       <div className={styles.fieldHead}>
         <label>
-          {label}
+          <span id={labelId}>{label}</span>
           {info ? <Info>{info}</Info> : null}
         </label>
         <span className={`mono ${styles.value}`}>
@@ -147,7 +172,7 @@ function Field({
           {unit ? ` ${unit}` : ""}
         </span>
       </div>
-      {children}
+      {control}
     </div>
   );
 }
@@ -162,6 +187,7 @@ export default function Sidebar({
   sites,
   editing,
   onNameChange,
+  onNotice,
 }: SidebarProps) {
   const flight = spec.flight;
   const camera = spec.camera;
@@ -207,7 +233,7 @@ export default function Sidebar({
       </Section>
 
       {isOrbit ? (
-        <Section title="Subject">
+        <Section key={isOrbit ? "subject" : "area"} title="Subject">
           <div className={styles.group}>
             <button
               className={mode === "set-poi" ? "active" : ""}
@@ -338,7 +364,7 @@ export default function Sidebar({
           </Field>
         </Section>
       ) : (
-        <Section title="Area">
+        <Section key={isOrbit ? "subject" : "area"} title="Area">
           <div className={styles.groupLabel}>
             Shape{drawing ? " — drawing on the map" : ""}
           </div>
@@ -679,7 +705,25 @@ export default function Sidebar({
         </div>
       </Section>
 
+      <AccountsSection onNotice={onNotice} />
+
+      <SignedInLine />
+
     </aside>
+  );
+}
+
+function SignedInLine() {
+  const { data, error } = authClient.useSession();
+  if (error || !data?.user) return null;
+  const { name, email } = data.user;
+  return (
+    <div className={styles.accountLine}>
+      <span className={styles.accountText}>Signed in as {accountLabel(name, email)} ·</span>
+      <button type="button" onClick={() => void signOutToHome()}>
+        Sign out
+      </button>
+    </div>
   );
 }
 

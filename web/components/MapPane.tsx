@@ -8,38 +8,38 @@ import {
   type GeoJSONSource,
   type MapMouseEvent,
   type MapLayerMouseEvent,
-  type MapLayerTouchEvent,
   type MapTouchEvent,
 } from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 import { BASEMAP, BASEMAP_OSM } from "@/lib/basemap";
-import { insertCorner, isTap, moveCorner, removeCorner, trimDoubleClick } from "@/lib/aoi";
-import { circlePolygon, geodesicM } from "@/lib/mission";
+import {
+  canFinish,
+  canRemoveCorner,
+  clickMeaning,
+  drawModeLabel,
+  isDrawing,
+  newSession,
+  step,
+} from "@/lib/areaEditing";
+import type {
+  DrawMode,
+  EditContext,
+  EditEffect,
+  EditEvent,
+  EditSession,
+  HandleTarget,
+  PressTarget,
+} from "@/lib/areaEditing";
 import type { CircleShape, MissionSpec } from "@/lib/spec";
 import type { Preview } from "@/lib/mission";
 import styles from "./MapPane.module.css";
 
-export type DrawMode =
-  | "idle"
-  | "draw-polygon"
-  | "draw-rectangle"
-  | "draw-circle"
-  | "append-polygon"
-  | "set-home"
-  | "set-poi";
-
-/** A mode in which a click on the map places part of a shape, rather than editing one. */
-export const isDrawing = (m: DrawMode) =>
-  m === "draw-polygon" || m === "draw-rectangle" || m === "draw-circle" || m === "append-polygon";
-
-/** The one thing a click on the map does in each drawing mode, in the operator's words. */
-export function drawModeLabel(m: DrawMode): string {
-  if (m === "draw-polygon") return "Drawing a polygon";
-  if (m === "append-polygon") return "Adding corners to the area";
-  if (m === "draw-rectangle") return "Drawing a rectangle";
-  if (m === "draw-circle") return "Drawing a circle";
-  return "";
-}
+// Every drawing rule lives in `lib/areaEditing`; this component is its
+// adapter: MapLibre payloads in as `EditEvent`s, `EditEffect`s back out, and
+// all the map paint, cursors and chrome stay here. The two names below are
+// re-exported because the page and the Sidebar import them from this file.
+export type { DrawMode };
+export { isDrawing };
 
 interface MapPaneProps {
   spec: MissionSpec;
@@ -101,7 +101,8 @@ function pointsGeoJSON(points: LL[], props: (i: number) => object = () => ({})) 
 
 /** Midpoint of every edge — the handle that inserts a vertex on that edge. */
 function midpointsGeoJSON(aoi: LL[], shape: CircleShape | null | undefined) {
-  if (aoi.length < 3 || shape) return fc([]);
+  // `canFinish` is the same length test the panel uses.
+  if (!canFinish(aoi) || shape) return fc([]);
   return fc(
     aoi.map((p, i) => {
       const q = aoi[(i + 1) % aoi.length];
@@ -343,7 +344,6 @@ export default function MapPane({
   const homeMarkerRef = useRef<Marker | null>(null);
   const poiMarkerRef = useRef<Marker | null>(null);
   const endMarkersRef = useRef<Marker[]>([]);
-  const dragLockRef = useRef(false);
   const numberMarkersRef = useRef<Marker[]>([]);
   const [basemap, setBasemap] = useState<"esri" | "osm">("esri");
   const [showFootprint, setShowFootprint] = useState(false);
@@ -363,18 +363,49 @@ export default function MapPane({
   // Why a finish did not happen. A double-click on a two-corner ring used to
   // commit nothing and say nothing, which reads exactly like a broken map.
   const [drawNote, setDrawNote] = useState<string | null>(null);
+  // UI-20: the drawing panel's presence outlives the drawing mode by one exit
+  // animation. closingDraw is set during the render that first sees the mode
+  // leave drawing -- not in an effect, because Escape (window keydown) and the
+  // map's dblclick close outside React's events, and an effect would paint one
+  // frame with the panel already gone. 160ms covers the 150ms reduced-motion
+  // crossfade (globals.css) with the 10ms margin the menus use over theirs.
+  const [closingDraw, setClosingDraw] = useState(false);
+  // Previous-render bookkeeping. State, not refs: this lint's react-hooks/refs
+  // (React Compiler) forbids touching a ref during render, and both values are
+  // read during render to decide the hold.
+  const [lastDrawMode, setLastDrawMode] = useState<DrawMode>("idle");
+  const [wasDrawing, setWasDrawing] = useState(false);
 
-  const dragIndexRef = useRef<number | null>(null);
-  const circleDragRef = useRef<null | "center" | "radius">(null);
-  const circleCenterRef = useRef<LL | null>(null);
-  // Touch press bookkeeping: where the finger landed and which handle it armed,
-  // so touchend can tell a tap (selects the corner) from a drag (moves it).
-  const touchStartRef = useRef<{ x: number; y: number; index: number; kind: "vertex" | "midpoint" | "circle" | "fill" } | null>(null);
-  const touchMovedRef = useRef(false);
-  const shapeDragRef = useRef<null | { start: LL; aoi: LL[]; shape: CircleShape | null }>(null);
-  // True while a shape is being rubber-banded, so the data push below leaves the
-  // live preview alone instead of overwriting it from the committed spec.
-  const drawingRef = useRef(false);
+  // The editing session -- which drag is armed, the pending circle centre, the
+  // touch bookkeeping -- belongs to the module; the map only holds it. `run` is
+  // built inside the init effect, where the map lives, and the panel buttons
+  // and the window key listener reach it through here.
+  const sessionRef = useRef<EditSession>(newSession());
+  const runRef = useRef<((event: EditEvent) => void) | null>(null);
+
+  // Adjusting state during render (React's documented pattern, guarded so it
+  // cannot loop): the render that loses the drawing mode queues the exit hold
+  // before React commits, so the panel's DOM node never unmounts in between.
+  const drawing = isDrawing(mode);
+  if (drawing) {
+    if (lastDrawMode !== mode) setLastDrawMode(mode);
+    if (!wasDrawing) setWasDrawing(true);
+  } else if (wasDrawing) {
+    if (!closingDraw) setClosingDraw(true);
+    setWasDrawing(false);
+  }
+  if (drawing && closingDraw) setClosingDraw(false);
+  // What the panel reads while it is on screen: the live mode, or the mode it
+  // is leaving, so idle copy never flashes during the exit.
+  const panelMode = drawing ? mode : lastDrawMode;
+
+  // Ends the exit. Drawing again during the hold cancelled this timer already
+  // by flipping closingDraw back during that render.
+  useEffect(() => {
+    if (!closingDraw) return;
+    const t = setTimeout(() => setClosingDraw(false), 160);
+    return () => clearTimeout(t);
+  }, [closingDraw]);
 
   // The display-pill row's real height, read by the drawing / remove-corner
   // panel below 1000px wide (MapPane.module.css) so it starts under the pills
@@ -386,7 +417,12 @@ export default function MapPane({
     const toggle = toggleRef.current;
     if (!wrap || !toggle) return;
     const ro = new ResizeObserver(() => {
-      wrap.style.setProperty("--toggle-h", `${toggle.getBoundingClientRect().height}px`);
+      const box = toggle.getBoundingClientRect();
+      wrap.style.setProperty("--toggle-h", `${box.height}px`);
+      // The notice (a sibling of the map, not inside it) centres itself
+      // between the Missions panel and these buttons on a wide screen, so it
+      // never covers them; it reads their width from the document.
+      document.documentElement.style.setProperty("--map-controls-w", `${box.width}px`);
     });
     ro.observe(toggle);
     return () => ro.disconnect();
@@ -468,11 +504,12 @@ export default function MapPane({
     }
   };
 
-  // Leaving a draw mode half-finished must not leave the shape behind, so every  // mode change discards it. An effect on `mode` would cost a second render.
+  // A mode change discards the gesture state and the hint, as the old handler
+  // block's changeMode did. A Sidebar-driven mode change is context and never
+  // reaches here, exactly as it never cleared the old refs.
   const changeMode = (next: DrawMode) => {
     if (next !== "draw-circle") {
-      circleCenterRef.current = null;
-      drawingRef.current = false;
+      sessionRef.current = newSession();
       setDrawHint(null);
     }
     setDrawNote(null);
@@ -481,28 +518,14 @@ export default function MapPane({
   };
 
   // The polygon draws are the only ones that do not end themselves, so they are
-  // the only ones that need an end. Refusing a short ring out loud is the point:
-  // silence here is what made a slow double-click look like a dead map.
+  // the only ones that need an end; the module owns what an end means.
   const finishDraw = () => {
-    const { spec, mode, onAoiChange } = stateRef.current;
-    if (mode !== "draw-polygon" && mode !== "append-polygon") return;
-    if (spec.aoi.length < 3) {
-      setDrawNote(`An area needs three corners — ${3 - spec.aoi.length} to go.`);
-      return;
-    }
-    onAoiChange(spec.aoi, spec.shape ?? null);
-    changeMode("idle");
+    runRef.current?.({ type: "finish" });
   };
 
-  // Escape and the Cancel button are the same act, so they are the same code. A
-  // shape mode cleared the area on the way in, so there is nothing to keep; a
-  // corner-adding mode found an area already there, so it keeps it.
+  // Escape and the Cancel button are the same act, so they are the same code.
   const cancelDraw = () => {
-    const { spec, mode, onAoiChange } = stateRef.current;
-    if (mode === "draw-polygon" || mode === "draw-rectangle" || mode === "draw-circle") {
-      if (spec.aoi.length) onAoiChange([], null);
-    }
-    changeMode("idle");
+    runRef.current?.({ type: "cancel" });
   };
 
   // Latest props, readable from map handlers registered once on init. This must
@@ -588,309 +611,135 @@ export default function MapPane({
     // layers, which must never widen what the mouse grabs.
     const VISIBLE_HANDLES = ["aoi-vertices", "aoi-midpoints", "circle-handles"];
     const TOUCH_HANDLES = [...VISIBLE_HANDLES, "aoi-vertices-hit", "aoi-midpoints-hit", "circle-handles-hit"];
-    const handlesAt = (point: MapMouseEvent["point"], layers: string[]) =>
-      map.getLayer("aoi-vertices") !== undefined && map.queryRenderedFeatures(point, { layers }).length > 0;
-    const onHandle = (point: MapMouseEvent["point"]) => handlesAt(point, VISIBLE_HANDLES);
-    const onTouchHandle = (point: MapMouseEvent["point"]) => handlesAt(point, TOUCH_HANDLES);
 
-    // One press-and-drag core for mouse and touch. The event wrappers translate
-    // their event into plain data and call these, so neither input owns the
-    // logic and the two paths cannot drift apart.
+    /** What the query found under a point, in the module's words. Handles come
+     *  first: a press on one is an edit of a handle, never of the fill beneath. */
+    const handleAt = (point: MapMouseEvent["point"], layers: string[]): HandleTarget | null => {
+      if (map.getLayer("aoi-vertices") === undefined) return null;
+      const hit = map.queryRenderedFeatures(point, { layers })[0];
+      if (!hit) return null;
+      const id = hit.layer.id;
+      if (id.startsWith("aoi-vertices")) return { kind: "vertex", index: hit.properties!.index as number };
+      if (id.startsWith("aoi-midpoints")) return { kind: "midpoint", edgeIndex: hit.properties!.edgeIndex as number };
+      return { kind: "circle", part: hit.properties!.kind as "center" | "radius" };
+    };
+    // A layer that has not been added yet must not be queried: MapLibre fires
+    // an error event for it and returns an empty list.
+    const pressTarget = (point: MapMouseEvent["point"], pointer: "mouse" | "touch"): PressTarget | null =>
+      map.getLayer("aoi-vertices") === undefined
+        ? null
+        : (handleAt(point, pointer === "mouse" ? VISIBLE_HANDLES : TOUCH_HANDLES) ??
+          (map.queryRenderedFeatures(point, { layers: ["aoi-fill"] }).length > 0 ? { kind: "fill" } : null));
+
+    // The plan facts the rules read, rebuilt from the freshest props per event:
+    // the handlers registered once on init must not see the mount-time spec.
+    const context = (): EditContext => {
+      const s = stateRef.current;
+      return { mode: s.mode, aoi: s.spec.aoi, shape: s.spec.shape ?? null, missionType: s.spec.mission_type, orbitCenter: s.spec.orbit.center };
+    };
+
+    const cursorRest = () => (stateRef.current.mode === "idle" ? "" : "crosshair");
+    // Arming a drag holds the map still; the transition below is what lets go.
     const holdMap = () => {
       map.dragPan.disable();
       map.getCanvas().style.cursor = "grabbing";
     };
-    const startVertexDrag = (index: number) => {
-      dragIndexRef.current = index;
-      holdMap();
-    };
-    const startMidpointDrag = (edge: number, at: LL) => {
-      const { spec, onAoiChange } = stateRef.current;
-      onAoiChange(insertCorner(spec.aoi, edge, at), spec.shape);
-      dragIndexRef.current = edge + 1;
-      holdMap();
-    };
-    const startCircleDrag = (kind: "center" | "radius") => {
-      circleDragRef.current = kind;
-      holdMap();
-    };
-    const startShapeDrag = (at: LL) => {
-      const { spec } = stateRef.current;
-      shapeDragRef.current = { start: at, aoi: spec.aoi, shape: spec.shape ?? null };
-      holdMap();
-    };
-    // Where the finger presses down, so touchend can tell a tap (selects the
-    // corner) from a drag (moves it). Mouse needs none of this.
-    const noteTouchStart = (
-      x: number,
-      y: number,
-      index: number,
-      kind: "vertex" | "midpoint" | "circle" | "fill",
-    ) => {
-      touchStartRef.current = { x, y, index, kind };
-      touchMovedRef.current = false;
-    };
-    // The drag-move core: circle handles, whole-shape moves and corner drags
-    // all land here with a map position, whichever input produced it.
-    const moveDragged = (p: LL) => {
-      const { spec, onAoiChange, onPoiChange, onOrbitRadiusChange } = stateRef.current;
-      if (circleDragRef.current) {
-        if (spec.mission_type === "orbit" && spec.orbit.center) {
-          if (circleDragRef.current === "center") onPoiChange(p);
-          else onOrbitRadiusChange(Math.max(5, Math.round(geodesicM(spec.orbit.center, p))));
-        } else if (spec.shape) {
-          const s = spec.shape;
-          if (circleDragRef.current === "center") {
-            onAoiChange(circlePolygon(p, s.radius_m), { ...s, center: p });
-          } else {
-            const radius_m = Math.max(1, geodesicM(s.center, p));
-            onAoiChange(circlePolygon(s.center, radius_m), { ...s, radius_m });
-          }
-        }
-        return;
-      }
-      if (shapeDragRef.current) {
-        const d = shapeDragRef.current;
-        const dLat = p[0] - d.start[0];
-        const dLon = p[1] - d.start[1];
-        const moved = d.aoi.map(([la, lo]) => [la + dLat, lo + dLon] as LL);
-        onAoiChange(
-          moved,
-          d.shape ? { ...d.shape, center: [d.shape.center[0] + dLat, d.shape.center[1] + dLon] } : null,
-        );
-        return;
-      }
-      if (dragIndexRef.current === null) return;
-      onAoiChange(moveCorner(spec.aoi, dragIndexRef.current, p), spec.shape);
+    const releaseMap = () => {
+      map.dragPan.enable();
+      map.getCanvas().style.cursor = cursorRest();
     };
 
+    /** Apply one effect from the module. Callbacks are read off `stateRef` per
+     *  effect, never off the mount-time closure. */
+    const apply = (e: EditEffect) => {
+      const s = stateRef.current;
+      if (e.kind === "area") s.onAoiChange(e.aoi, e.shape);
+      else if (e.kind === "poi") s.onPoiChange(e.center);
+      else if (e.kind === "orbit-radius") s.onOrbitRadiusChange(e.radiusM);
+      else if (e.kind === "hint") setDrawHint(e.text);
+      else if (e.kind === "note") setDrawNote(e.text);
+      else if (e.kind === "mode") s.onModeChange(e.mode);
+      else if (e.kind === "select") s.onSelectedCornerChange(e.index);
+      else if (e.kind === "preview") (map.getSource("aoi") as GeoJSONSource | undefined)?.setData(polygonGeoJSON(e.aoi));
+    };
+
+    // One event in: the module decides, the adapter applies. The map is held or
+    // released on the drag transition, compared after the effects -- a mode
+    // effect goes through changeMode, which resets the session.
+    const run = (event: EditEvent) => {
+      const before = sessionRef.current;
+      const result = step(before, context(), event);
+      sessionRef.current = result.session;
+      for (const effect of result.effects) apply(effect);
+      if (before.drag === null && sessionRef.current.drag !== null) holdMap();
+      else if (before.drag !== null && sessionRef.current.drag === null) releaseMap();
+    };
+    runRef.current = run;
+
+    // Placing the take-off point or the orbit's subject is not area editing, so
+    // those one-shot placements stay here; the module keeps the drawing rules.
+    // The click veto is the visible-layer query for both inputs.
     map.on("click", (e: MapMouseEvent) => {
-      const { mode, spec, onAoiChange, onHomeChange, onPoiChange, onModeChange } = stateRef.current;
+      const { mode, onHomeChange, onPoiChange, onModeChange } = stateRef.current;
       const p: LL = [e.lngLat.lat, e.lngLat.lng];
-
-      if (mode === "set-home") {
-        onHomeChange(p);
-        onModeChange("idle");
-        return;
-      }
-      if (mode === "set-poi") {
-        onPoiChange(p);
-        onModeChange("idle");
-        return;
-      }
-      if (mode === "draw-polygon" || mode === "append-polygon") {
-        // A press on a handle is an edit of a corner that exists, never a new
-        // one: without this a click on a handle drops a second corner on top.
-        if (onHandle(e.point)) return;
-        setDrawNote(null); // the operator is acting on the refusal; stop repeating it
-        onAoiChange([...spec.aoi, p]);
-        return;
-      }
-      if (mode === "draw-rectangle") {
-        if (spec.aoi.length === 0) {
-          onAoiChange([p]);
-          setDrawHint("Drag out the opposite corner");
-        } else {
-          const [a] = spec.aoi;
-          drawingRef.current = false;
-          setDrawHint(null);
-          onAoiChange([[a[0], a[1]], [a[0], p[1]], [p[0], p[1]], [p[0], a[1]]]);
-          onModeChange("idle");
-        }
-        return;
-      }
-      if (mode === "draw-circle") {
-        if (!circleCenterRef.current) {
-          circleCenterRef.current = p;
-          setDrawHint("Drag out the radius");
-        } else {
-          const center = circleCenterRef.current;
-          const radius_m = Math.max(1, geodesicM(center, p));
-          circleCenterRef.current = null;
-          drawingRef.current = false;
-          setDrawHint(null);
-          onAoiChange(circlePolygon(center, radius_m), { kind: "circle", center, radius_m });
-          onModeChange("idle");
-        }
-      }
+      if (mode === "set-home") { onHomeChange(p); onModeChange("idle"); return; }
+      if (mode === "set-poi") { onPoiChange(p); onModeChange("idle"); return; }
+      run({ type: "click", at: p, target: handleAt(e.point, VISIBLE_HANDLES) });
     });
 
     // A double-click still finishes a draw, for the operator who already knows
     // it does; the Finish button above the map is for the one who does not.
-    map.on("dblclick", () => {
-      const { mode, spec, onAoiChange, onModeChange } = stateRef.current;
-      if (mode !== "draw-polygon" && mode !== "append-polygon") return;
-      const pts = trimDoubleClick(spec.aoi);
-      if (pts.length < 3) {
-        setDrawNote(`An area needs three corners — ${3 - pts.length} to go.`);
-        return;
-      }
-      onAoiChange(pts);
-      onModeChange("idle");
-    });
+    map.on("dblclick", () => run({ type: "dblclick" }));
 
-    // A corner handle is live wherever it is drawn. Arming the drag only in
-    // `idle` left every corner placed while drawing visibly grabbable and dead,
-    // and the press panned the map instead (#122). The handles are drawn only
-    // for an editable area, so their own presence is the whole condition.
-    map.on("mousedown", "aoi-vertices", (e: MapLayerMouseEvent) => {
-      if (!e.features?.length) return;
-      e.preventDefault();
-      startVertexDrag(e.features[0].properties!.index as number);
-    });
-
-    // Touch variant: hit area for vertices
-    map.on("touchstart", "aoi-vertices-hit", (e: MapLayerTouchEvent) => {
-      if (dragLockRef.current || !e.features?.length) return;
-      dragLockRef.current = true;
-      e.preventDefault();
-      const index = e.features[0].properties!.index as number;
-      noteTouchStart(e.point.x, e.point.y, index, "vertex");
-      startVertexDrag(index);
-    });
-
-    // Clicking a midpoint inserts a vertex there, then hands straight over to the
-    // existing drag machinery so a click drops it and a drag positions it.
-    map.on("mousedown", "aoi-midpoints", (e: MapLayerMouseEvent) => {
-      if (!e.features?.length) return;
-      e.preventDefault();
-      startMidpointDrag(e.features[0].properties!.edgeIndex as number, [e.lngLat.lat, e.lngLat.lng]);
-    });
-
-    // Touch variant: hit area for midpoints
-    map.on("touchstart", "aoi-midpoints-hit", (e: MapLayerTouchEvent) => {
-      if (dragLockRef.current || !e.features?.length) return;
-      dragLockRef.current = true;
-      e.preventDefault();
-      const edge = e.features[0].properties!.edgeIndex as number;
-      noteTouchStart(e.point.x, e.point.y, edge + 1, "midpoint");
-      startMidpointDrag(edge, [e.lngLat.lat, e.lngLat.lng]);
-    });
-
-    map.on("mousedown", "circle-handles", (e: MapLayerMouseEvent) => {
-      if (stateRef.current.mode !== "idle" || !e.features?.length) return;
-      e.preventDefault();
-      startCircleDrag(e.features[0].properties!.kind as "center" | "radius");
-    });
-
-    // Touch variant: hit area for circle handles
-    map.on("touchstart", "circle-handles-hit", (e: MapLayerTouchEvent) => {
-      if (dragLockRef.current || stateRef.current.mode !== "idle" || !e.features?.length) return;
-      dragLockRef.current = true;
-      e.preventDefault();
-      noteTouchStart(e.point.x, e.point.y, -1, "circle");
-      startCircleDrag(e.features[0].properties!.kind as "center" | "radius");
-    });
-
-    // Dragging inside the shape moves the whole thing. The handles sit on top of
-    // the fill, so a press on one of them must not also start a move.
-    map.on("mousedown", "aoi-fill", (e: MapLayerMouseEvent) => {
-      const { mode, spec } = stateRef.current;
-      if (mode !== "idle" || spec.mission_type === "orbit" || spec.aoi.length < 3) return;
-      if (onHandle(e.point)) return;
-      e.preventDefault();
-      startShapeDrag([e.lngLat.lat, e.lngLat.lng]);
-    });
-
-    // Touch variant: a finger inside the shape moves the whole thing, like the
-    // mouse. A tap without movement ends the drag with nothing moved.
-    map.on("touchstart", "aoi-fill", (e: MapLayerTouchEvent) => {
-      const { mode, spec } = stateRef.current;
-      if (dragLockRef.current || mode !== "idle" || spec.mission_type === "orbit" || spec.aoi.length < 3) return;
-      if (onTouchHandle(e.point)) return;
-      dragLockRef.current = true;
-      e.preventDefault();
-      noteTouchStart(e.point.x, e.point.y, -1, "fill");
-      startShapeDrag([e.lngLat.lat, e.lngLat.lng]);
-    });
+    // A corner handle is live wherever it is drawn: arming the drag only in
+    // `idle` left every corner placed while drawing visibly grabbable and
+    // dead, and the press panned the map instead (#122). The circle handles
+    // keep their idle gate, which the module applies. One generic press per
+    // input, handles before fill -- the old per-layer veto, once. A refusal
+    // comes back as the same session and must not preventDefault; the old
+    // layer-scoped handlers did not for one either.
+    const pressOn = (e: MapMouseEvent | MapTouchEvent, pointer: "mouse" | "touch") => {
+      const target = pressTarget(e.point, pointer);
+      if (!target) return;
+      const before = sessionRef.current;
+      run({ type: "press", at: [e.lngLat.lat, e.lngLat.lng], target, pointer, point: { x: e.point.x, y: e.point.y } });
+      if (sessionRef.current !== before && sessionRef.current.drag !== null) e.preventDefault();
+    };
+    map.on("mousedown", (e: MapMouseEvent) => pressOn(e, "mouse"));
+    map.on("touchstart", (e: MapTouchEvent) => pressOn(e, "touch"));
 
     map.on("contextmenu", "aoi-vertices", (e: MapLayerMouseEvent) => {
-      const { spec, onAoiChange } = stateRef.current;
+      const { spec } = stateRef.current;
+      // The guard keeps the browser menu closed on a refusal; the rule itself
+      // (including refusing when a circle is present) is the module's.
       if (!e.features?.length || spec.shape) return;
       e.preventDefault();
       e.originalEvent.preventDefault();
-      const i = e.features[0].properties!.index as number;
-      onAoiChange(removeCorner(spec.aoi, i), spec.shape); // a polygon needs three corners
+      run({ type: "remove-corner", index: e.features[0].properties!.index as number });
     });
 
-    map.on("mousemove", (e: MapMouseEvent) => {
-      const { spec, mode } = stateRef.current;
-      const p: LL = [e.lngLat.lat, e.lngLat.lng];
-      const src = (id: string) => map.getSource(id) as GeoJSONSource | undefined;
+    const moveTo = (e: MapMouseEvent | MapTouchEvent, pointer: "mouse" | "touch") =>
+      run({ type: "move", at: [e.lngLat.lat, e.lngLat.lng], pointer, point: { x: e.point.x, y: e.point.y } });
 
-      // Rubber-band while a shape is being drawn, painted straight into the
-      // source: committing to state on every mouse move would be a render per
-      // pixel, and without it there is no sign anything is being drawn at all.
-      if (mode === "draw-rectangle" && spec.aoi.length === 1) {
-        const a = spec.aoi[0];
-        const rect: LL[] = [[a[0], a[1]], [a[0], p[1]], [p[0], p[1]], [p[0], a[1]]];
-        drawingRef.current = true;
-        src("aoi")?.setData(polygonGeoJSON(rect));
-        setDrawHint(
-          `${Math.round(geodesicM(rect[0], rect[1]))} × ${Math.round(geodesicM(rect[1], rect[2]))} m — click to finish`,
-        );
-        return;
-      }
-      if (mode === "draw-circle" && circleCenterRef.current) {
-        const r = Math.max(1, geodesicM(circleCenterRef.current, p));
-        drawingRef.current = true;
-        src("aoi")?.setData(polygonGeoJSON(circlePolygon(circleCenterRef.current, r)));
-        setDrawHint(`Radius ${Math.round(r)} m — click to finish`);
-        return;
-      }
+    // Rubber-bands are module previews now: the adapter paints them straight
+    // into the source and the data push below leaves them alone.
+    map.on("mousemove", (e: MapMouseEvent) => moveTo(e, "mouse"));
 
-      moveDragged(p);
-    });
-
-    const endDrag = () => {
-      // The re-entry lock always clears, even when nothing was armed: a touch
-      // refused up front must not lock touch out afterwards.
-      dragLockRef.current = false;
-      if (dragIndexRef.current === null && circleDragRef.current === null && shapeDragRef.current === null) {
-        return;
-      }
-      dragIndexRef.current = null;
-      circleDragRef.current = null;
-      shapeDragRef.current = null;
-      map.dragPan.enable();
-      map.getCanvas().style.cursor = stateRef.current.mode === "idle" ? "" : "crosshair";
-    };
-    map.on("mouseup", endDrag);
-    // A touch that never moved is a tap on a corner: select it for the Remove
-    // corner button instead of dragging it. Anything else ends the drag.
-    map.on("touchend", () => {
-      const start = touchStartRef.current;
-      touchStartRef.current = null;
-      if (start && !touchMovedRef.current && (start.kind === "vertex" || start.kind === "midpoint")) {
-        touchMovedRef.current = false;
-        dragIndexRef.current = null;
-        circleDragRef.current = null;
-        shapeDragRef.current = null;
-        dragLockRef.current = false;
-        map.dragPan.enable();
-        map.getCanvas().style.cursor = stateRef.current.mode === "idle" ? "" : "crosshair";
-        // Selecting is an edit-mode act: while drawing, a tap stays a no-op so
-        // it can never arm the Remove button mid-draw.
-        if (stateRef.current.mode === "idle") stateRef.current.onSelectedCornerChange(start.index);
-        return;
-      }
-      touchMovedRef.current = false;
-      endDrag();
-    });
+    map.on("mouseup", () => run({ type: "release" }));
+    // A touch that never moved is a tap on a corner, which the module turns
+    // into a selection for the Remove corner button instead of a drag.
+    map.on("touchend", () => run({ type: "release" }));
     map.on("touchcancel", () => {
-      touchStartRef.current = null;
-      touchMovedRef.current = false;
-      endDrag();
-      map.getCanvas().style.cursor = stateRef.current.mode === "idle" ? "" : "crosshair";
+      // The browser cancelled the gesture, so the cursor always comes back --
+      // even when no drag was armed to release.
+      run({ type: "touchcancel" });
+      map.getCanvas().style.cursor = cursorRest();
     });
-    for (const layer of ["aoi-vertices", "aoi-midpoints", "circle-handles", "aoi-vertices-hit", "aoi-midpoints-hit", "circle-handles-hit"]) {
-      map.on("mouseenter", layer, () => {
-        map.getCanvas().style.cursor = "grab";
-      });
+    for (const layer of TOUCH_HANDLES) {
+      map.on("mouseenter", layer, () => { map.getCanvas().style.cursor = "grab"; });
       map.on("mouseleave", layer, () => {
-        if (dragIndexRef.current === null && circleDragRef.current === null) {
-          map.getCanvas().style.cursor = stateRef.current.mode === "idle" ? "" : "crosshair";
-        }
+        const drag = sessionRef.current.drag;
+        if (drag === null || (drag.kind !== "vertex" && drag.kind !== "circle")) map.getCanvas().style.cursor = cursorRest();
       });
     }
     map.on("mouseenter", "aoi-fill", () => {
@@ -898,26 +747,12 @@ export default function MapPane({
       if (mode === "idle" && spec.mission_type !== "orbit") map.getCanvas().style.cursor = "move";
     });
     map.on("mouseleave", "aoi-fill", () => {
-      if (shapeDragRef.current === null) {
-        map.getCanvas().style.cursor = stateRef.current.mode === "idle" ? "" : "crosshair";
-      }
+      if (sessionRef.current.drag?.kind !== "shape") map.getCanvas().style.cursor = cursorRest();
     });
 
-    // Touch move handling runs the same drag-move core as the mouse, with one
-    // extra gate above it: a finger that has barely moved is a tap, not a drag.
-    map.on("touchmove", (e: MapTouchEvent) => {
-      const x = e.point.x;
-      const y = e.point.y;
-      const p: LL = [e.lngLat.lat, e.lngLat.lng];
-      // Hold the corner still so touchend can select it instead of shifting it
-      // by a pixel.
-      const start = touchStartRef.current;
-      if (start && !touchMovedRef.current) {
-        if (isTap(x - start.x, y - start.y)) return;
-        touchMovedRef.current = true;
-      }
-      moveDragged(p);
-    });
+    // Touch move runs the same event as the mouse; the module's tap gate is
+    // what holds a barely-moved finger still.
+    map.on("touchmove", (e: MapTouchEvent) => moveTo(e, "touch"));
 
     const onKeydown = (e: KeyboardEvent) => {
       const { cancelDraw, finishDraw } = stateRef.current;
@@ -931,6 +766,7 @@ export default function MapPane({
 
     return () => {
       gone = true;
+      runRef.current = null;
       window.removeEventListener("keydown", onKeydown);
       fit.disconnect();
       map.remove();
@@ -945,7 +781,7 @@ export default function MapPane({
     const set = (id: string, data: GeoJSON.FeatureCollection) =>
       (map.getSource(id) as GeoJSONSource).setData(data);
 
-    if (!drawingRef.current) set("aoi", isOrbit ? fc([]) : polygonGeoJSON(spec.aoi));
+    if (!sessionRef.current.previewing) set("aoi", isOrbit ? fc([]) : polygonGeoJSON(spec.aoi));
     set("aoi-vertices", isOrbit || spec.shape ? fc([]) : pointsGeoJSON(spec.aoi, (i) => ({ index: i })));
     // The tapped corner reads selected in amber; the rest stay teal.
     if (map.getLayer("aoi-vertices")) {
@@ -1080,6 +916,8 @@ export default function MapPane({
     if (!map) return;
     map.getCanvas().style.cursor = mode === "idle" ? "" : "crosshair";
     if (!map.getLayer("aoi-outline")) return;
+    // Local, not the render-scope `drawing`: the effect's deps are [mode], and
+    // exhaustive-deps would ask for the derived variable too.
     const drawing = isDrawing(mode);
     map.setPaintProperty("aoi-outline", "line-color", drawing ? "#e0a94f" : "#4fb8a8");
     map.setPaintProperty("aoi-outline", "line-dasharray", drawing ? [2, 2] : undefined);
@@ -1090,15 +928,10 @@ export default function MapPane({
     mapRef.current?.setStyle(next === "esri" ? BASEMAP : BASEMAP_OSM);
   }
 
-  // What a click on the map does at this instant — not what it did a mode ago,
-  // and not what dragging a finished shape would do.
-  const corners = spec.aoi.length;
-  const clickMeaning =
-    mode === "draw-polygon" || mode === "append-polygon"
-      ? `Each click adds a corner — ${corners} so far, three needed.`
-      : mode === "draw-rectangle"
-        ? (corners === 0 ? "Click one corner." : (drawHint ?? "Click the opposite corner."))
-        : (drawHint ?? "Click the centre, then drag out the radius.");
+  // What a click on the map does while the panel is up: the live mode, or the
+  // one it is leaving, so the exit never switches to idle copy. Not what
+  // dragging a finished shape would do. The copy itself is the module's.
+  const meaning = clickMeaning(panelMode, spec.aoi.length, drawHint);
 
   const footprintLabel = preview.footprint_across_m
     ? `${Math.round(preview.footprint_across_m)} × ${Math.round(preview.footprint_along_m)} m`
@@ -1239,18 +1072,20 @@ export default function MapPane({
           )}
         </div>
       </div>
-      {isDrawing(mode) && (
-        <div className={`${styles.drawPanel} glass-smoke`}>
-          <div className={styles.drawTitle}>{drawModeLabel(mode)}</div>
-          <div className={styles.drawClick}>{clickMeaning}</div>
+      {(drawing || closingDraw) && (
+        <div
+          className={`${styles.drawPanel} glass-smoke ${drawing ? styles.drawPanelLive : styles.drawPanelClosing}`}
+        >
+          <div className={styles.drawTitle}>{drawModeLabel(panelMode)}</div>
+          <div className={styles.drawClick}>{meaning}</div>
           {drawNote && (
             <div className={styles.drawNote} aria-live="polite">
               {drawNote}
             </div>
           )}
           <div className={styles.drawActions}>
-            {(mode === "draw-polygon" || mode === "append-polygon") && (
-              <button onClick={finishDraw} disabled={spec.aoi.length < 3}>
+            {(panelMode === "draw-polygon" || panelMode === "append-polygon") && (
+              <button onClick={finishDraw} disabled={!canFinish(spec.aoi)}>
                 Finish area
               </button>
             )}
@@ -1266,11 +1101,10 @@ export default function MapPane({
           <div className={styles.drawActions}>
             <button
               onClick={() => {
-                const newAoi = removeCorner(spec.aoi, selectedCorner);
-                if (newAoi !== spec.aoi) onAoiChange(newAoi, spec.shape);
-                onSelectedCornerChange(null);
+                if (selectedCorner == null) return;
+                runRef.current?.({ type: "remove-corner", index: selectedCorner });
               }}
-              disabled={selectedCorner == null || selectedCorner >= spec.aoi.length || spec.aoi.length <= 3}
+              disabled={!canRemoveCorner(spec.aoi, selectedCorner)}
               title={selectedCorner == null ? "Tap a corner on the map first" : `Remove corner ${selectedCorner + 1}`}
             >
               {selectedCorner == null ? "Remove corner" : `Remove corner ${selectedCorner + 1}`}

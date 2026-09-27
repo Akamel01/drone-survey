@@ -76,10 +76,11 @@
    be paper-bright concrete or near-black forest. A translucent white fill can
    never hold *white* text to 4.5:1 against a bright tile -- more opacity only
    pushes the fill closer to white, closer to the text colour itself. Raising
-   the fill to 40% white and reading it with dark ink instead (spec §12: raise
-   opacity, don't shrink text) holds >5:1 against both #cfcfcf and a dark
-   vegetation tile, because at that opacity the fill's own colour dominates
-   over whatever is underneath it. */
+   the fill to 50% white and reading it with dark ink instead (spec §12: raise
+   opacity, don't shrink text) holds >5:1 against both bright tiles and a
+   near-black forest tile, because at that opacity the fill's own colour
+   dominates over whatever is underneath it. 40% measured 4.31:1 over near-black
+   tiles (field UX research, #226), so UI-12 raised it. */
 .pill {
   min-height: 44px;
   padding: 0 16px;
@@ -89,7 +90,7 @@
   gap: 8px;
   border-radius: 999px;
   border: 1px solid rgb(255 255 255 / 0.55);
-  background: rgb(255 255 255 / 0.4);
+  background: rgb(255 255 255 / 0.5);
   backdrop-filter: blur(20px) saturate(120%);
   -webkit-backdrop-filter: blur(20px) saturate(120%);
   box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.55);
@@ -130,7 +131,7 @@
 
 /* The overlays count on a phone: a small badge on the glyph, shown below
    1000 px where the button drops its word (wide screens keep "Overlays · N"
-   as text). Dark ink with white figures on the 40 % white pill. */
+   as text). Dark ink with white figures on the 50 % white pill. */
 .countBadge {
   display: none;
   position: absolute;
@@ -178,7 +179,7 @@
   position: relative;
 }
 
-/* Same material as the buttons (option A: 40% white, dark ink, blur 20px),
+/* Same material as the buttons (option A: 50% white, dark ink, blur 20px),
    menu radius 18 (spec §7). Opening morphs out of its button like the
    reference Live Activity expand (spec §9.1): width and height together via
    scale from the button corner, 500ms, --ease-emphasised, no overshoot. */
@@ -199,7 +200,7 @@
   gap: 2px;
   border-radius: 18px;
   border: 1px solid rgb(255 255 255 / 0.55);
-  background: rgb(255 255 255 / 0.4);
+  background: rgb(255 255 255 / 0.5);
   backdrop-filter: blur(20px) saturate(120%);
   -webkit-backdrop-filter: blur(20px) saturate(120%);
   box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.55), 0 8px 32px rgb(0 0 0 / 0.25);
@@ -299,6 +300,14 @@
   .menuItem {
     animation: menuFade 150ms ease-out !important;
   }
+  /* The pair is already opacity-only, so reduced motion keeps the same
+     150ms crossfade rather than the instant cut globals.css would leave. */
+  .drawPanelLive {
+    animation: drawPanelIn var(--dur-fast) var(--ease-out) !important;
+  }
+  .drawPanelClosing {
+    animation: drawPanelOut var(--dur-fast) var(--ease-out) forwards !important;
+  }
 }
 
 @keyframes menuFade {
@@ -352,8 +361,9 @@
 /* Smoke-glass panel (spec §5): the `glass-smoke` global class on the element
    supplies the fill, blur and edge highlight (plus its own reduced-
    transparency / contrast / no-backdrop-filter fallbacks); only layout lives
-   here. Present only while a draw is in progress or a corner is selected, so
-   its presence is itself the mode indicator. */
+   here. Present while a draw is in progress (plus its 160ms exit hold,
+   UI-20) or a corner is selected, so its presence is itself the mode
+   indicator. */
 .drawPanel {
   position: absolute;
   top: 12px;
@@ -365,6 +375,34 @@
   display: flex;
   flex-direction: column;
   gap: 6px;
+}
+
+/* Drawing panel presence (UI-20). Opens with the 150ms --ease-out chrome
+   fade (spec §9.1 "Next screen chrome"), closes over 120ms --ease-in with
+   forwards so the last frame sticks until closingDraw lets it unmount at
+   160ms. Opacity only: the panel sits over the WebGL map, where a blur would
+   repaint on every pan frame (spec §12), and no transform -- this is chrome
+   arriving, not an object moving. The render picks one class or the other, so
+   declaration order here is defensive, not load-bearing. */
+.drawPanelLive {
+  animation: drawPanelIn var(--dur-fast) var(--ease-out);
+}
+
+.drawPanelClosing {
+  animation: drawPanelOut var(--dur-press) var(--ease-in) forwards;
+  pointer-events: none;
+}
+
+@keyframes drawPanelIn {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes drawPanelOut {
+  to {
+    opacity: 0;
+  }
 }
 
 /* Below 1000px there are no side panels for --missions-w to hold it clear of,
