@@ -353,3 +353,16 @@
   background: var(--ink);
   transform: translate(20px, -50%);
 }
+
+.accountLine {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 0 16px;
+}
+
+.accountText {
+  color: var(--on-glass-2);
+  font-size: 12px;
+}

@@ -8,6 +8,8 @@ import { siteTwin, type SiteChoice } from "@/lib/missionView";
 import type { Editing } from "@/app/plan/page";
 import { isDrawing, type DrawMode } from "./MapPane";
 import styles from "./Sidebar.module.css";
+import { authClient, signOutToHome } from "@/lib/authClient";
+import { accountLabel } from "@/lib/home";
 
 interface SidebarProps {
   spec: MissionSpec;
@@ -679,7 +681,23 @@ export default function Sidebar({
         </div>
       </Section>
 
+      <SignedInLine />
+
     </aside>
+  );
+}
+
+function SignedInLine() {
+  const { data, error } = authClient.useSession();
+  if (error || !data?.user) return null;
+  const { name, email } = data.user;
+  return (
+    <div className={styles.accountLine}>
+      <span className={styles.accountText}>Signed in as {accountLabel(name, email)} ·</span>
+      <button type="button" onClick={() => void signOutToHome()}>
+        Sign out
+      </button>
+    </div>
   );
 }
 
