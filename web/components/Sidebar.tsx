@@ -207,7 +207,7 @@ export default function Sidebar({
       </Section>
 
       {isOrbit ? (
-        <Section title="Subject">
+        <Section key={isOrbit ? "subject" : "area"} title="Subject">
           <div className={styles.group}>
             <button
               className={mode === "set-poi" ? "active" : ""}
@@ -338,7 +338,7 @@ export default function Sidebar({
           </Field>
         </Section>
       ) : (
-        <Section title="Area">
+        <Section key={isOrbit ? "subject" : "area"} title="Area">
           <div className={styles.groupLabel}>
             Shape{drawing ? " — drawing on the map" : ""}
           </div>

@@ -299,6 +299,14 @@
   .menuItem {
     animation: menuFade 150ms ease-out !important;
   }
+  /* The pair is already opacity-only, so reduced motion keeps the same
+     150ms crossfade rather than the instant cut globals.css would leave. */
+  .drawPanelLive {
+    animation: drawPanelIn var(--dur-fast) var(--ease-out) !important;
+  }
+  .drawPanelClosing {
+    animation: drawPanelOut var(--dur-fast) var(--ease-out) forwards !important;
+  }
 }
 
 @keyframes menuFade {
@@ -352,8 +360,9 @@
 /* Smoke-glass panel (spec §5): the `glass-smoke` global class on the element
    supplies the fill, blur and edge highlight (plus its own reduced-
    transparency / contrast / no-backdrop-filter fallbacks); only layout lives
-   here. Present only while a draw is in progress or a corner is selected, so
-   its presence is itself the mode indicator. */
+   here. Present while a draw is in progress (plus its 160ms exit hold,
+   UI-20) or a corner is selected, so its presence is itself the mode
+   indicator. */
 .drawPanel {
   position: absolute;
   top: 12px;
@@ -365,6 +374,34 @@
   display: flex;
   flex-direction: column;
   gap: 6px;
+}
+
+/* Drawing panel presence (UI-20). Opens with the 150ms --ease-out chrome
+   fade (spec §9.1 "Next screen chrome"), closes over 120ms --ease-in with
+   forwards so the last frame sticks until closingDraw lets it unmount at
+   160ms. Opacity only: the panel sits over the WebGL map, where a blur would
+   repaint on every pan frame (spec §12), and no transform -- this is chrome
+   arriving, not an object moving. The render picks one class or the other, so
+   declaration order here is defensive, not load-bearing. */
+.drawPanelLive {
+  animation: drawPanelIn var(--dur-fast) var(--ease-out);
+}
+
+.drawPanelClosing {
+  animation: drawPanelOut var(--dur-press) var(--ease-in) forwards;
+  pointer-events: none;
+}
+
+@keyframes drawPanelIn {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes drawPanelOut {
+  to {
+    opacity: 0;
+  }
 }
 
 /* Below 1000px there are no side panels for --missions-w to hold it clear of,
