@@ -284,12 +284,240 @@ def check_gate_cli():
         check("gate CLI: wrong-size graded still is caught too", "graded-wide: RGB 3840x2160" in failed, json.dumps(sorted(failed)))
 
 
+# --- M6: seam (D5) + direction (D4) + counts/codecs/sizes (D6) -------------------------------
+
+FIXTURES = Path(__file__).resolve().parent.parent / "fixtures" / "showcase"
+
+
+def check_seam():
+    c = gate.seam_check("seam-wide", FIXTURES / "turn-3f")
+    check("M6 seam: seam-closed turn-3f passes (closing 0 <= max consec)", c["ok"], c["detail"])
+
+    c = gate.seam_check("seam-wide", FIXTURES / "dir-a")
+    check("M6 seam: 2-frame pair passes (closing == consec)", c["ok"], c["detail"])
+
+    with tempfile.TemporaryDirectory() as tmp:
+        d = Path(tmp)
+        # drifting bars [8,12,16]: each step overlaps, closing step does not
+        for i, x in enumerate((8, 12, 16)):
+            img = Image.new("RGBA", (64, 32), (0, 0, 0, 0))
+            ImageDraw.Draw(img).rectangle([x, 0, x + 7, 31], fill=(255, 255, 255, 255))
+            img.save(d / f"frame_{i:03d}.png")
+        c = gate.seam_check("seam-wide", d)
+        check("M6 seam: drifting (unclosed) sequence fails the wiring guard", not c["ok"], c["detail"])
+
+
+def check_direction():
+    sign, dx, detail = gate.direction_shift(FIXTURES / "dir-a")
+    check("M6 direction: dir-a shifts +x (sign +1)", sign == 1, detail)
+    sign, dx, detail = gate.direction_shift(FIXTURES / "dir-b")
+    check("M6 direction: dir-b shifts -x (sign -1)", sign == -1, detail)
+
+    c = gate.direction_check("dir", FIXTURES / "dir-a", FIXTURES / "dir-a")
+    check("M6 direction: same pair twice agrees (pass)", c["ok"], c["detail"])
+    c = gate.direction_check("dir", FIXTURES / "dir-a", FIXTURES / "dir-b")
+    check("M6 direction: reversed-pair flip disagrees (fail)", not c["ok"], c["detail"])
+
+
+def check_counts_codecs():
+    check("M6 counts: gate defaults are 3888f/120fps/32.4s",
+          (gate.EXPECT_FRAMES, gate.EXPECT_FPS, gate.EXPECT_DUR) == (3888, 120.0, 32.4),
+          repr((gate.EXPECT_FRAMES, gate.EXPECT_FPS, gate.EXPECT_DUR)))
+    import subprocess
+    with tempfile.TemporaryDirectory() as tmp:
+        tmp = Path(tmp)
+        md = tmp / "masters"
+        md.mkdir()
+        frames = tmp / "frames"
+        frames.mkdir()
+        n, fps = 30, 20
+        for i in range(n):
+            Image.new("RGB", (96, 64),
+                      ((61 * i + 7) % 256, (37 * i + 13) % 256, (11 * i + 5) % 256)
+                      ).save(frames / f"f{i:03d}.png")
+        for suffix, enc in (("hevc", ("-c:v", "libx265", "-crf", "28", "-preset", "ultrafast",
+                                          "-tag:v", "hvc1")),
+                            ("av1", ("-c:v", "libsvtav1", "-preset", "8"))):
+            subprocess.run(["ffmpeg", "-v", "error", "-y", "-framerate", str(fps),
+                            "-i", str(frames / "f%03d.png"), *enc,
+                            "-pix_fmt", "yuv420p", "-movflags", "+faststart",
+                            str(md / f"wide-4k120-{suffix}.mp4")], check=True)
+        (md / "wide-poster.jpg").write_bytes(b"fake-poster")
+        (md / "wide-blur.jpg").write_bytes(b"fake-blur")
+        dur = n / fps
+        checks = gate.master_checks(md, expect_frames=n, expect_fps=float(fps),
+                                    expect_dur=dur, dur_tol=0.2, expect_size=(96, 64))
+        check("M6 counts: smoke masters pass with matching expects",
+              all(c["ok"] for c in checks), json.dumps(checks))
+        checks = gate.master_checks(md, expect_frames=n, expect_fps=25.0,
+                                    expect_dur=dur, dur_tol=0.2, expect_size=(96, 64))
+        check("M6 counts: wrong fps expect fails", any(not c["ok"] for c in checks),
+              json.dumps(checks))
+    with tempfile.TemporaryDirectory() as tmp:  # real 4K pixel assert, tiny count
+        tmp = Path(tmp)
+        fd, md = tmp / "f", tmp / "m"
+        fd.mkdir()
+        md.mkdir()
+        for i in range(3):
+            Image.new("RGB", (3840, 2160), (i * 40 + 10, 90, 140)).save(fd / f"f{i:03d}.png")
+        subprocess.run(["ffmpeg", "-v", "error", "-y", "-framerate", "20",
+                        "-i", str(fd / "f%03d.png"),
+                        "-c:v", "libx265", "-crf", "30", "-preset", "ultrafast",
+                        "-tag:v", "hvc1", "-pix_fmt", "yuv420p",
+                        "-movflags", "+faststart",
+                        str(md / "wide-4k120-hevc.mp4")], check=True)
+        (md / "wide-poster.jpg").write_bytes(b"p")
+        (md / "wide-blur.jpg").write_bytes(b"b")
+        checks = gate.master_checks(md, expect_frames=3, expect_fps=20.0,
+                                    expect_dur=0.15, dur_tol=0.1)
+        check("M6 counts: real 4K pixels pass the default (non-overridden) size rule",
+              all(c["ok"] for c in checks), json.dumps(checks))
+
+
+def check_sizes():
+    with tempfile.TemporaryDirectory() as tmp:
+        p = Path(tmp) / "cut.mp4"
+        p.write_bytes(b"x" * 1500)
+        check("M6 size: 1500B within 2x of 1000B ref passes",
+              gate.size_within(p, 1000, 2.0)[0])
+        ok, detail = gate.size_within(p, 500, 2.0)
+        check("M6 size: 1500B over 2x of 500B ref fails", not ok, detail)
+
+
+def check_cuts():
+    import subprocess
+    import importlib.util
+    spec = importlib.util.spec_from_file_location(
+        "cuts_node", NODES / "cuts" / "cuts.py")
+    cuts = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(cuts)
+    with tempfile.TemporaryDirectory() as tmp:
+        tmp = Path(tmp)
+        md, fd, cd = tmp / "masters", tmp / "frames", tmp / "cuts"
+        md.mkdir()
+        fd.mkdir()
+        n, fps = 10, 20
+        for i in range(n):
+            Image.new("RGB", (96, 64),
+                      ((61 * i + 7) % 256, (37 * i + 13) % 256, (11 * i + 5) % 256)
+                      ).save(fd / f"f{i:03d}.png")
+        subprocess.run(["ffmpeg", "-v", "error", "-y", "-framerate", str(fps),
+                        "-i", str(fd / "f%03d.png"),
+                        "-c:v", "libx265", "-crf", "28", "-preset", "ultrafast",
+                        "-tag:v", "hvc1", "-pix_fmt", "yuv420p",
+                        "-movflags", "+faststart",
+                        str(md / "wide-4k120-hevc.mp4")], check=True)
+        out = cuts.run(md, cd, av1_encoder="libsvtav1",
+                       av1_extra_1440=("-preset", "8"), av1_extra_4k=("-preset", "8"))
+        assert set(out) == {"wide"} and "av1_4k60" in out["wide"]
+        ref = {p.name: p.stat().st_size for cuts in out.values() for p in cuts.values()}
+        checks = gate.cuts_checks(cd, md, 0.5, ref, 2.0)
+        check("M6 cuts: real §6 set passes (codec/res/fps/duration exact, sizes <= 2x own ref)",
+              all(c["ok"] for c in checks), json.dumps([c for c in checks if not c["ok"]]))
+        tight = {k: v // 4 for k, v in ref.items()}
+        checks = gate.cuts_checks(cd, md, 0.5, tight, 2.0)
+        check("M6 cuts: quarter ref table fails the size bound",
+              any(not c["ok"] and "size" in c["name"] for c in checks),
+              json.dumps([c["name"] for c in checks if not c["ok"]])[:200])
+        (cd / "wide-1440p60-av1.mp4").unlink()
+        checks = gate.cuts_checks(cd, md, 0.5, ref, 2.0)
+        check("M6 cuts: deleted cut fails presence",
+              any(not c["ok"] and "present" in c["name"] for c in checks),
+              json.dumps([c["name"] for c in checks if not c["ok"]])[:200])
+
+
+def run_gate_new(tmp: Path, argv: list[str]) -> subprocess.CompletedProcess:
+    return subprocess.run([sys.executable, str(GATE), *argv,
+                           "--out-verdict", str(tmp / "verdict.json")],
+                          capture_output=True, text=True)
+
+
+def make_turn_pair(d: Path, x0: int, x1: int, w: int = 64, h: int = 32) -> None:
+    """C4-clean 2-frame turn: right-third island, strictly in frame, +x shift."""
+    d.mkdir(parents=True, exist_ok=True)
+    for i, x in enumerate((x0, x1)):
+        img = Image.new("RGBA", (w, h), (0, 0, 0, 0))
+        ImageDraw.Draw(img).rectangle([x, 4, x + 15, h - 5], fill=(210, 120, 60, 255))
+        img.save(d / f"frame_{i:03d}.png")
+
+
+def check_gate_cli_new():
+    import subprocess
+    with tempfile.TemporaryDirectory() as tmp:
+        tmp = Path(tmp)
+        md = tmp / "masters"
+        md.mkdir()
+        frames = tmp / "frames"
+        frames.mkdir()
+        n, fps = 30, 20
+        for i in range(n):
+            Image.new("RGB", (96, 64),
+                      ((61 * i + 7) % 256, (37 * i + 13) % 256, (11 * i + 5) % 256)
+                      ).save(frames / f"f{i:03d}.png")
+        subprocess.run(["ffmpeg", "-v", "error", "-y", "-framerate", str(fps),
+                        "-i", str(frames / "f%03d.png"),
+                        "-c:v", "libx265", "-crf", "28", "-preset", "ultrafast",
+                        "-tag:v", "hvc1", "-pix_fmt", "yuv420p",
+                        "-movflags", "+faststart",
+                        str(md / "wide-4k120-hevc.mp4")], check=True)
+        (md / "wide-poster.jpg").write_bytes(b"p")
+        (md / "wide-blur.jpg").write_bytes(b"b")
+        dur = n / fps
+        make_turn_pair(tmp / "wide", 42, 44)  # centroid ~0.78W, dx +2
+        make_turn_pair(tmp / "tall", 42, 44)
+        argv = ["--frames-wide", str(tmp / "wide"),
+                "--frames-tall", str(tmp / "tall"),
+                "--masters-dir", str(md),
+                "--expect-frames", str(n), "--expect-fps", str(float(fps)),
+                "--expect-duration", str(dur), "--expect-size", "96x64"]
+        result = run_gate_new(tmp, argv)
+        check("M6 gate CLI: goldens + smoke master pass, one verdict, exit 0",
+              result.returncode == 0, result.stderr[-500:] + result.stdout[-500:])
+        verdict = json.loads((tmp / "verdict.json").read_text())
+        names = [c["name"] for c in verdict["checks"]]
+        check("M6 gate CLI: verdict carries seam + direction + master + frame-0 C4 checks",
+              any("seam" in v for v in names) and any("direction" in v for v in names)
+              and any("master" in v for v in names) and any("[0]" in v for v in names),
+              json.dumps(names))
+
+        argv_flip = ["--frames-wide", str(FIXTURES / "dir-a"),
+                     "--frames-tall", str(FIXTURES / "dir-b"),
+                     "--masters-dir", str(md),
+                     "--expect-frames", str(n), "--expect-fps", str(float(fps)),
+                     "--expect-duration", str(dur), "--expect-size", "96x64"]
+        result = run_gate_new(tmp, argv_flip)
+        check("M6 gate CLI: reversed-pair flip exits 1", result.returncode == 1,
+              f"rc={result.returncode}")
+        verdict = json.loads((tmp / "verdict.json").read_text())
+        check("M6 gate CLI: flip verdict still written, pass=false",
+              verdict["pass"] is False)
+
+    with tempfile.TemporaryDirectory() as tmp:  # N2: C4 lives on frame-0 after cutover
+        tmp = Path(tmp)
+        d = tmp / "wide"
+        d.mkdir()
+        img = Image.new("RGBA", (64, 32), (0, 0, 0, 0))
+        ImageDraw.Draw(img).rectangle([0, 4, 15, 27], fill=(210, 120, 60, 255))  # clipped left
+        img.save(d / "frame_000.png")
+        img.save(d / "frame_001.png")
+        checks = gate.dir_frame0_checks("frames-wide", d)
+        failed = {c["name"] for c in checks if not c["ok"]}
+        check("M6 N2: clipped frame-0 fails under the frames-wide[0] label",
+              "frames-wide[0]: island wholly in frame" in failed, json.dumps(sorted(failed)))
+
+
 def main() -> None:
     check_frame()
     check_right_third()
     check_top_hole_free()
     check_hashes()
     check_gate_cli()
+    check_seam()
+    check_direction()
+    check_counts_codecs()
+    check_sizes()
+    check_cuts()
+    check_gate_cli_new()
 
     if FAILURES:
         print(f"\n{len(FAILURES)} check(s) failed: {FAILURES}", file=sys.stderr)
