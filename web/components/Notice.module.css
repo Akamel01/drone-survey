@@ -47,6 +47,20 @@
     clip-path 500ms var(--ease-emphasised);
 }
 
+/* Wide screens (UI-12): the map's Base map and Overlays buttons share the
+   notice's top band, and at 1280-1440 wide the notice sat on them. Centre it in
+   the free span between the Missions panel and those buttons instead of the
+   viewport, narrowing it if the span is under 355 px. --missions-w and
+   --settings-w are the page's open-panel offsets; --map-controls-w is measured
+   by MapPane. */
+@media (min-width: 1000px) {
+  .notice {
+    left: calc(var(--missions-w, 0px) + 24px);
+    right: calc(var(--settings-w, 0px) + 36px + var(--map-controls-w, 0px));
+    width: min(355px, calc(100vw - var(--missions-w, 0px) - var(--settings-w, 0px) - 60px - var(--map-controls-w, 0px)));
+  }
+}
+
 @keyframes pillArrive {
   from {
     clip-path: inset(0 var(--nx) var(--pb) var(--nx) round 999px);

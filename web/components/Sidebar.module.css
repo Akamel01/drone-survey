@@ -51,7 +51,16 @@
   align-items: center;
 }
 
+/* 18 px to the eye, 44 px to a finger (spec § 11): the hit area is a
+   transparent ring around the glyph. */
+.info::before {
+  content: "";
+  position: absolute;
+  inset: -13px;
+}
+
 .info {
+  position: relative;
   appearance: none;
   -webkit-appearance: none;
   display: inline-flex;

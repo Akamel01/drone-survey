@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, useEffect, useRef, useState, type ReactNode } from "react";
+import { Children, cloneElement, Fragment, isValidElement, useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { newSiteId, type MissionSpec, type MissionType, type TurnMode } from "@/lib/spec";
 import { orbitTilt, type Preview } from "@/lib/mission";
 import { MISSION_NAME_MAX, missionNameProblem } from "@/lib/missionRecords";
@@ -137,11 +137,29 @@ function Field({
   info?: ReactNode;
   children: ReactNode;
 }) {
+  // The control sits outside the <label> (the label row also holds the info
+  // button), so name it explicitly from the label text alone (UI-12 audit: the
+  // Altitude slider had no accessible name).
+  const labelId = useId();
+  let named = false;
+  const control = Children.map(children, (child) => {
+    if (
+      named ||
+      !isValidElement<{ "aria-label"?: string; "aria-labelledby"?: string }>(child) ||
+      (child.type !== "input" && child.type !== "select") ||
+      child.props["aria-label"] ||
+      child.props["aria-labelledby"]
+    ) {
+      return child;
+    }
+    named = true;
+    return cloneElement(child, { "aria-labelledby": labelId });
+  });
   return (
     <div className={styles.field}>
       <div className={styles.fieldHead}>
         <label>
-          {label}
+          <span id={labelId}>{label}</span>
           {info ? <Info>{info}</Info> : null}
         </label>
         <span className={`mono ${styles.value}`}>
@@ -149,7 +167,7 @@ function Field({
           {unit ? ` ${unit}` : ""}
         </span>
       </div>
-      {children}
+      {control}
     </div>
   );
 }
