@@ -57,11 +57,15 @@ test("the test inbox receives each mail as one JSON file", async () => {
       await sendMail(verificationMail("a@example.test", "http://x/verify?token=1"));
       await sendMail(resetMail("a@example.test", "http://x/reset/2"));
     });
-    const files = readdirSync(dir).sort();
+    const files = readdirSync(dir);
     assert.equal(files.length, 2);
-    const first = JSON.parse(readFileSync(path.join(dir, files[0]), "utf8"));
-    assert.equal(first.to, "a@example.test");
-    assert.match(first.text, /http:\/\/x\/verify\?token=1/);
+    // Two mails can share a millisecond, so find each by its subject, not its file name.
+    const mails = files.map((f) => JSON.parse(readFileSync(path.join(dir, f), "utf8")));
+    const verify = mails.find((m) => m.subject.startsWith("Confirm"));
+    const reset = mails.find((m) => m.subject.startsWith("Reset"));
+    assert.equal(verify?.to, "a@example.test");
+    assert.match(verify?.text ?? "", /http:\/\/x\/verify\?token=1/);
+    assert.match(reset?.text ?? "", /http:\/\/x\/reset\/2/);
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }

@@ -195,16 +195,24 @@ async function clickPill(page, oauthStandin, label) {
   await page.waitForTimeout(250);
   await respectSignInRateLimit();
   const authorizeP = page
-    .waitForRequest((request) => request.url().startsWith(`${oauthStandin.baseUrl}/authorize`), { timeout: 30_000 })
+    .waitForRequest((request) => request.url().startsWith(`${oauthStandin.baseUrl}/authorize`), { timeout: 45_000 })
     .catch(() => null);
-  const signInP = page
-    .waitForResponse(
-      (response) => response.request().method() === "POST" && response.url().includes("/api/auth/sign-in/social"),
-      { timeout: 30_000 },
-    )
-    .catch(() => null);
-  await page.getByRole("button", { name: label, exact: true }).click();
-  const [authorize, signIn] = await Promise.all([authorizeP, signInP]);
+  // A click that lands before the page has hydrated does nothing (the button
+  // is server-rendered), and a loaded CI runner can hydrate late: if no
+  // sign-in POST follows, click again. An unhandled click sends nothing, so
+  // it costs no rate-limit budget.
+  let signIn = null;
+  for (let attempt = 0; attempt < 3 && !signIn; attempt++) {
+    const signInP = page
+      .waitForResponse(
+        (response) => response.request().method() === "POST" && response.url().includes("/api/auth/sign-in/social"),
+        { timeout: 10_000 },
+      )
+      .catch(() => null);
+    await page.getByRole("button", { name: label, exact: true }).click();
+    signIn = await signInP;
+  }
+  const authorize = await authorizeP;
   assert.ok(authorize, `clicking "${label}" started GET /authorize at the stand-in`);
   assert.equal(authorize.method(), "GET");
   assert.ok(authorize.url().startsWith(`${oauthStandin.baseUrl}/authorize`));
