@@ -4,7 +4,9 @@
 // what the operator's actions do to the store, not about signing in.
 //
 // Runs only with DATABASE_URL (pglite://memory locally); absent is SKIPPED
-// with a printed reason, as in accountFlow.test.ts.
+// with a printed reason, as in accountFlow.test.ts. In CI every test file
+// shares one Postgres and runs at the same time, so every row here carries
+// the "adm-" prefix and the assertions look only at those rows.
 
 import { after, before, test } from "node:test";
 import assert from "node:assert/strict";
@@ -21,7 +23,6 @@ if (!databaseUrl) {
 } else {
   process.env.BETTER_AUTH_SECRET ??= "account-admin-test-secret-0123456789abcdef";
   process.env.BETTER_AUTH_URL ??= "http://localhost:3000";
-  process.env.OWNER_EMAIL ??= "owner@example.com";
 
   const { getAuth } = await import("./accountAuth.ts");
   const { getPool, closeDb } = await import("./accountDb.ts");
@@ -30,6 +31,8 @@ if (!databaseUrl) {
 
   let pool: Pool;
   const now = new Date("2026-09-28T12:00:00Z");
+  const P = "adm-";
+  const mine = async () => (await listAccounts(pool)).filter((r) => r.id.startsWith(P));
   const at = (minutes: number) => new Date(now.getTime() + minutes * 60_000);
 
   async function user(id: string, email: string, opts: { approved: boolean; admin?: boolean; minutes: number }) {
@@ -66,6 +69,14 @@ if (!databaseUrl) {
       [`ses-${userId}`, at(60 * 24), `tok-${userId}`, now, userId],
     );
   }
+  /** This file's rows only, so a rerun against the same database starts clean. */
+  async function purge() {
+    await pool.query(`DELETE FROM "session" WHERE "userId" LIKE $1`, [`${P}%`]);
+    await pool.query(`DELETE FROM "account" WHERE "userId" LIKE $1`, [`${P}%`]);
+    await pool.query(`DELETE FROM "member" WHERE "userId" LIKE $1`, [`${P}%`]);
+    await pool.query(`DELETE FROM "organization" WHERE slug LIKE $1 OR slug LIKE $2`, [`${P}%`, `u-${P}%`]);
+    await pool.query(`DELETE FROM "user" WHERE id LIKE $1`, [`${P}%`]);
+  }
   const count = async (sql: string, args: unknown[]) =>
     Number((await pool.query<{ n: string }>(sql, args)).rows[0].n);
 
@@ -76,81 +87,84 @@ if (!databaseUrl) {
     pool = maybePool;
     const { runMigrations } = await getMigrations(auth.options);
     await runMigrations();
+    await purge();
     // The operator, one approved Account and two pending ones.
-    await user("owner", "owner@example.com", { approved: true, admin: true, minutes: 0 });
-    await account("owner", "google");
-    await workspace("owner", "operator");
-    await user("ann", "ann@example.com", { approved: true, minutes: 10 });
-    await account("ann", "github");
-    await workspace("ann", "u-ann");
-    await user("bob", "bob@example.com", { approved: false, minutes: 20 });
-    await account("bob", "github");
-    await account("bob", "google");
-    await workspace("bob", "u-bob");
-    await session("bob");
-    await user("cy", "cy@example.com", { approved: false, minutes: 30 });
-    await account("cy", "google");
-    await workspace("cy", "u-cy");
+    await user(`${P}owner`, "adm-owner@example.test", { approved: true, admin: true, minutes: 0 });
+    await account(`${P}owner`, "google");
+    await workspace(`${P}owner`, `${P}operator`);
+    await user(`${P}ann`, "adm-ann@example.test", { approved: true, minutes: 10 });
+    await account(`${P}ann`, "github");
+    await workspace(`${P}ann`, `u-${P}ann`);
+    await user(`${P}bob`, "adm-bob@example.test", { approved: false, minutes: 20 });
+    await account(`${P}bob`, "github");
+    await account(`${P}bob`, "google");
+    await workspace(`${P}bob`, `u-${P}bob`);
+    await session(`${P}bob`);
+    await user(`${P}cy`, "adm-cy@example.test", { approved: false, minutes: 30 });
+    await account(`${P}cy`, "google");
+    await workspace(`${P}cy`, `u-${P}cy`);
   });
 
   after(async () => {
+    await purge();
     await closeDb();
   });
 
   test("the list puts pending Accounts first, newest first, with their providers", async () => {
-    const rows = await listAccounts(pool);
+    const rows = await mine();
     assert.deepEqual(
       rows.map((r) => [r.id, r.approved, r.admin]),
       [
-        ["cy", false, false],
-        ["bob", false, false],
-        ["ann", true, false],
-        ["owner", true, true],
+        [`${P}cy`, false, false],
+        [`${P}bob`, false, false],
+        [`${P}ann`, true, false],
+        [`${P}owner`, true, true],
       ],
     );
-    assert.deepEqual(rows.find((r) => r.id === "bob")?.providers, ["github", "google"]);
-    assert.equal(rows.find((r) => r.id === "cy")?.email, "cy@example.com");
+    assert.deepEqual(rows.find((r) => r.id === `${P}bob`)?.providers, ["github", "google"]);
+    assert.equal(rows.find((r) => r.id === `${P}cy`)?.email, "adm-cy@example.test");
   });
 
   test("approving lets a pending Account in, and approving again is harmless", async () => {
-    assert.deepEqual(await approveAccount(pool, "cy"), { ok: true });
-    assert.deepEqual(await approveAccount(pool, "cy"), { ok: true });
-    const cy = (await listAccounts(pool)).find((r) => r.id === "cy");
+    assert.deepEqual(await approveAccount(pool, `${P}cy`), { ok: true });
+    assert.deepEqual(await approveAccount(pool, `${P}cy`), { ok: true });
+    const cy = (await mine()).find((r) => r.id === `${P}cy`);
     assert.equal(cy?.approved, true);
   });
 
   test("approving an Account that is gone is a 404", async () => {
-    const outcome = await approveAccount(pool, "nobody");
+    const outcome = await approveAccount(pool, `${P}nobody`);
     assert.equal(outcome.ok, false);
     assert.equal(!outcome.ok && outcome.status, 404);
   });
 
   test("removing an Account signs it out everywhere and deletes it with its own Workspace", async () => {
-    assert.equal(await count(`SELECT count(*) AS n FROM "session" WHERE "userId" = $1`, ["bob"]), 1);
-    assert.deepEqual(await removeAccount(pool, "bob", "owner"), { ok: true });
-    assert.equal(await count(`SELECT count(*) AS n FROM "user" WHERE id = $1`, ["bob"]), 0);
-    assert.equal(await count(`SELECT count(*) AS n FROM "session" WHERE "userId" = $1`, ["bob"]), 0);
-    assert.equal(await count(`SELECT count(*) AS n FROM "account" WHERE "userId" = $1`, ["bob"]), 0);
-    assert.equal(await count(`SELECT count(*) AS n FROM "member" WHERE "userId" = $1`, ["bob"]), 0);
-    assert.equal(await count(`SELECT count(*) AS n FROM "organization" WHERE slug = $1`, ["u-bob"]), 0);
+    const bob = `${P}bob`;
+    assert.equal(await count(`SELECT count(*) AS n FROM "session" WHERE "userId" = $1`, [bob]), 1);
+    assert.deepEqual(await removeAccount(pool, bob, `${P}owner`), { ok: true });
+    assert.equal(await count(`SELECT count(*) AS n FROM "user" WHERE id = $1`, [bob]), 0);
+    assert.equal(await count(`SELECT count(*) AS n FROM "session" WHERE "userId" = $1`, [bob]), 0);
+    assert.equal(await count(`SELECT count(*) AS n FROM "account" WHERE "userId" = $1`, [bob]), 0);
+    assert.equal(await count(`SELECT count(*) AS n FROM "member" WHERE "userId" = $1`, [bob]), 0);
+    assert.equal(await count(`SELECT count(*) AS n FROM "organization" WHERE slug = $1`, [`u-${bob}`]), 0);
     // Nobody else is touched.
     assert.deepEqual(
-      (await listAccounts(pool)).map((r) => r.id),
-      ["cy", "ann", "owner"],
+      (await mine()).map((r) => r.id),
+      [`${P}cy`, `${P}ann`, `${P}owner`],
     );
-    assert.equal(await count(`SELECT count(*) AS n FROM "organization" WHERE slug = $1`, ["u-ann"]), 1);
+    assert.equal(await count(`SELECT count(*) AS n FROM "organization" WHERE slug = $1`, [`u-${P}ann`]), 1);
   });
 
   test("the operator cannot remove their own Account, nor another admin", async () => {
-    const self = await removeAccount(pool, "owner", "owner");
+    const self = await removeAccount(pool, `${P}owner`, `${P}owner`);
     assert.equal(!self.ok && self.status, 409);
-    const admin = await removeAccount(pool, "owner", "ann");
+    const admin = await removeAccount(pool, `${P}owner`, `${P}ann`);
     assert.equal(!admin.ok && admin.status, 409);
-    assert.equal(await count(`SELECT count(*) AS n FROM "user" WHERE id = $1`, ["owner"]), 1);
+    assert.equal(await count(`SELECT count(*) AS n FROM "user" WHERE id = $1`, [`${P}owner`]), 1);
   });
 
   test("removing an Account that is gone is a 404", async () => {
-    const outcome = await removeAccount(pool, "bob", "owner");
+    const outcome = await removeAccount(pool, `${P}bob`, `${P}owner`);
     assert.equal(!outcome.ok && outcome.status, 404);
   });
 }
