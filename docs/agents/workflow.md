@@ -1,14 +1,25 @@
-# Working tickets with Claude Code subagents
+# Working tickets
 
-Status: in use from 2026-09-26. It replaces the opencode trial (#196, #200,
-#202), which was stopped before it proved itself: every piece of work now runs
+Every piece of work goes through a ticket, so every change traces to an issue
+and a pull request. **Who does the work depends on where the session runs**
+(operator, 2026-09-26, #213):
+
+| Session | Worker | How |
+|---|---|---|
+| **Local** (the MacBook, where opencode is installed) | **opencode**, running `/autoforge` on Muse Spark 1.3 free, then DeepSeek V4.1 Flash | [`opencode-framework.md`](opencode-framework.md) |
+| **Cloud** (Claude Code on the web: no opencode) | Claude Code subagents, as below | This document |
+
+In both, Claude Code orchestrates: it picks the frontier, reviews against the
+ticket, and merges. Work a cloud session pushed is taken over locally as
+described in [`opencode-framework.md`](opencode-framework.md#taking-over-another-sessions-work).
+
+## Cloud sessions: Claude Code subagents
+
+The cloud session's fallback for opencode (#207): every piece of work runs
 inside Claude Code, with cheaper models for the parts that do not need the
 most capable one.
 
-Every piece of work still goes through a ticket, so every change traces to an
-issue and a pull request.
-
-## Roles
+### Roles
 
 | Who | Model | Does |
 |---|---|---|
@@ -24,7 +35,7 @@ issue and a pull request.
 Haiku only runs things and reports on them. It never writes code and never
 reviews it.
 
-## The loop
+### The loop
 
 ```
 tickets (to-tickets skill, ready-for-agent)
@@ -49,7 +60,7 @@ tickets (to-tickets skill, ready-for-agent)
 - **Tickets the loop does not take**: those labelled `ready-for-human`, and
   research tickets marked deferred (#195).
 
-## Cloud sessions
+## Cloud session setup
 
 A Claude Code session on the web starts in a fresh container. `.claude/settings.json`
 declares the plugins every session gets: caveman, ponytail, impeccable,
