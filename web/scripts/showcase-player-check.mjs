@@ -193,6 +193,7 @@ const REDUCED = [
 const LOW_POWER = [
   { name: "chromium-low-power-390x844-dpr3", engine: "chromium", width: 390, height: 844, dpr: 3 },
   { name: "webkit-low-power-390x844-dpr3", engine: "webkit", width: 390, height: 844, dpr: 3, mobile: true },
+  { name: "chromium-low-power-key-390x844-dpr3", engine: "chromium", width: 390, height: 844, dpr: 3, key: true },
 ];
 
 async function openContext(browsers, spec, { reduced = false, lowPower = false } = {}) {
@@ -206,7 +207,10 @@ async function openContext(browsers, spec, { reduced = false, lowPower = false }
   if (lowPower) {
     await context.addInitScript(() => {
       let unlocked = false;
+      // The page resumes on the first pointerdown OR keydown
+      // (`nodes/bundle/showcase.html`); either unlocks the simulation.
       addEventListener("pointerdown", () => { unlocked = true; }, true);
+      addEventListener("keydown", () => { unlocked = true; }, true);
       const origPlay = HTMLMediaElement.prototype.play;
       HTMLMediaElement.prototype.play = function () {
         if (!unlocked) {
@@ -430,15 +434,151 @@ async function runLowPower(spec, browsers) {
     check(name, "autoplay refused: video paused", state.paused === true, `paused=${state.paused}`);
     check(name, "autoplay refused: poster loaded", state.posterW > 0, String(state.posterW));
     await page.screenshot({ path: shot(`${name}-locked`) });
-    await page.mouse.click(Math.round(spec.width / 2), Math.round(spec.height / 2));
+    if (spec.key) {
+      await page.evaluate(() => document.body.focus());
+      await page.keyboard.press("Space");
+    } else {
+      await page.mouse.click(Math.round(spec.width / 2), Math.round(spec.height / 2));
+    }
     let playing = true;
     try {
       await page.waitForFunction(() => !document.querySelector("#hero").paused, null, { timeout: 10000 });
     } catch {
       playing = false;
     }
-    check(name, "first touch starts playback", playing, playing ? "" : "still paused after click");
+    const first = spec.key ? "first key press starts playback" : "first touch starts playback";
+    check(name, first, playing, playing ? "" : `still paused after ${spec.key ? "Space" : "click"}`);
     await page.screenshot({ path: shot(`${name}-playing`) });
+  } finally {
+    await context.close();
+  }
+}
+
+// F2: a page loaded while hidden must fetch no media at all — not even the
+// source selection — and must load and start from the visible branch of its
+// own `visibilitychange` handler. The override is installed before any page
+// script runs, so the page's first `apply()` sees `document.hidden === true`.
+async function runHiddenAtLoad(browsers) {
+  const name = "chromium-hidden-at-load-1440x900-dpr1";
+  const context = await browsers.chromium.newContext({
+    viewport: { width: 1440, height: 900 },
+    deviceScaleFactor: 1,
+  });
+  const mediaRequests = [];
+  await context.addInitScript(() => {
+    Object.defineProperty(document, "hidden", { configurable: true, get: () => true });
+    Object.defineProperty(document, "visibilityState", { configurable: true, get: () => "hidden" });
+  });
+  const page = await context.newPage();
+  page.on("request", (req) => {
+    if (req.url().includes(".mp4")) mediaRequests.push(req.url());
+  });
+  try {
+    await page.goto(PAGE_URL, { waitUntil: "load", timeout: 30000 });
+    await page.waitForTimeout(1000);
+    const state = await page.evaluate(READ_STATE);
+    const display = await page.evaluate(() => getComputedStyle(document.querySelector("#poster")).display);
+    check(
+      name,
+      "hidden at load: no src/currentSrc",
+      !state.hasSrcAttr && state.currentSrc === "",
+      `attr=${state.hasSrcAttr} currentSrc=${JSON.stringify(state.currentSrc)}`,
+    );
+    check(name, "hidden at load: no media request", mediaRequests.length === 0, mediaRequests.join(", "));
+    check(
+      name,
+      "hidden at load: poster visible",
+      state.posterW > 0 && !state.posterHidden && display !== "none",
+      `display=${display} naturalWidth=${state.posterW}`,
+    );
+    await page.screenshot({ path: shot(name) });
+
+    await page.evaluate(() => {
+      delete document.hidden;
+      delete document.visibilityState;
+      document.dispatchEvent(new Event("visibilitychange"));
+    });
+    const expected = await page.evaluate(EXPECTED_PICK);
+    let started = true;
+    try {
+      await page.waitForFunction(
+        ({ want }) => {
+          const v = document.querySelector("#hero");
+          return v.currentSrc.endsWith(want) && !v.paused;
+        },
+        { want: expected.pick },
+        { timeout: 20000 },
+      );
+    } catch {
+      started = false;
+    }
+    const shown = await page.evaluate(READ_STATE);
+    check(name, `visible: source set = ${expected.pick}`, shown.currentSrc.endsWith(expected.pick), shown.currentSrc);
+    check(name, "visible: playback starts", started, started ? "" : `paused=${shown.paused} currentSrc=${shown.currentSrc}`);
+  } finally {
+    await context.close();
+  }
+}
+
+// F3: the live `prefers-reduced-motion` listener — the context starts at
+// no-preference, then the media feature is toggled under the running page and
+// both directions are asserted. A page that only reads the query once
+// (or lost its `change` listener) fails here.
+async function runReducedLive(browsers) {
+  const name = "chromium-reduced-live-1440x900-dpr1";
+  const context = await openContext(browsers, { engine: "chromium", width: 1440, height: 900, dpr: 1 });
+  const page = await context.newPage();
+  try {
+    await page.goto(PAGE_URL, { waitUntil: "load", timeout: 30000 });
+    try {
+      await page.waitForFunction(() => {
+        const v = document.querySelector("#hero");
+        return v.readyState >= 2 && !v.paused;
+      }, null, { timeout: 30000 });
+    } catch {
+      check(name, "playback before toggle", false, "never reached playing state");
+    }
+
+    await page.emulateMedia({ reducedMotion: "reduce" });
+    try {
+      await page.waitForFunction(() => {
+        const v = document.querySelector("#hero");
+        return v.paused && !v.hasAttribute("src");
+      }, null, { timeout: 5000 });
+    } catch {
+      // The checks below carry the FAIL detail.
+    }
+    const state = await page.evaluate(READ_STATE);
+    const display = await page.evaluate(() => ({
+      poster: getComputedStyle(document.querySelector("#poster")).display,
+      video: getComputedStyle(document.querySelector("#hero")).display,
+    }));
+    check(name, "toggle to reduce: video paused", state.paused === true, `paused=${state.paused}`);
+    // `src` removal is the documented rule (`video.removeAttribute("src")`).
+    // Chromium keeps the last selected resource in `currentSrc` after a live
+    // `load()`, so only the attribute is asserted here (the fresh-load reduced
+    // contexts above still assert `currentSrc === ""`).
+    check(name, "toggle to reduce: no src attribute", !state.hasSrcAttr, `attr=${state.hasSrcAttr}`);
+    check(
+      name,
+      "toggle to reduce: poster visible",
+      state.posterW > 0 && display.poster !== "none" && display.video === "none",
+      `poster=${display.poster} video=${display.video} naturalWidth=${state.posterW}`,
+    );
+    check(name, "toggle to reduce: .bird count is 0", state.birds === 0, String(state.birds));
+    await page.screenshot({ path: shot(name) });
+
+    await page.emulateMedia({ reducedMotion: "no-preference" });
+    let resumed = true;
+    try {
+      await page.waitForFunction(() => !document.querySelector("#hero").paused, null, { timeout: 10000 });
+    } catch {
+      resumed = false;
+    }
+    const t1 = await page.evaluate(() => document.querySelector("#hero").currentTime);
+    await page.waitForTimeout(600);
+    const t2 = await page.evaluate(() => document.querySelector("#hero").currentTime);
+    check(name, "toggle back: playback resumes", resumed && t2 > t1, `${t1.toFixed(3)} -> ${t2.toFixed(3)}`);
   } finally {
     await context.close();
   }
@@ -510,6 +650,16 @@ try {
     } catch (err) {
       check(spec.name, "context ran", false, err?.message ?? String(err));
     }
+  }
+  try {
+    await runHiddenAtLoad(browsers);
+  } catch (err) {
+    check("chromium-hidden-at-load-1440x900-dpr1", "context ran", false, err?.message ?? String(err));
+  }
+  try {
+    await runReducedLive(browsers);
+  } catch (err) {
+    check("chromium-reduced-live-1440x900-dpr1", "context ran", false, err?.message ?? String(err));
   }
   try {
     await rangeCheck(PAGE_URL);
