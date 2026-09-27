@@ -1,15 +1,7 @@
 import { authProblem } from "@/lib/auth";
-import { isSafeId } from "@/lib/keys";
-import { actionProblem, deriveMissions, withFlownMark, type MissionRecord } from "@/lib/missionRecords";
-import {
-  readLedger,
-  readManifest,
-  readMissions,
-  sessions,
-  storeFailure,
-  updateLedger,
-  writeMission,
-} from "@/lib/missionStore";
+import { createMissionLifecycle } from "@/lib/missionLifecycle";
+import { respond } from "@/lib/missionRoute";
+import { b2MissionStore } from "@/lib/missionStore";
 
 // Flown is asserted, not merely observed. Imagery arriving for a Site and date
 // is evidence the system infers from; the operator's own mark is what decides
@@ -23,7 +15,7 @@ export const preferredRegion = "yyz1";
  *
  * Marking Flown releases this Mission's Cards; unmarking takes them back, and
  * is refused when another Mission has been given one of them in the meantime,
- * naming which.
+ * naming which. The lifecycle module owns the request shape and every refusal.
  */
 export async function POST(request: Request) {
   const denied = authProblem(request);
@@ -35,115 +27,5 @@ export async function POST(request: Request) {
   } catch {
     return Response.json({ error: "Body is not JSON. Send { id, flown }." }, { status: 400 });
   }
-  const { id, flown } = (raw ?? {}) as { id?: unknown; flown?: unknown };
-  if (!isSafeId(id)) {
-    return Response.json({ error: "That is not a Mission id. Reload the Mission list." }, { status: 400 });
-  }
-  if (typeof flown !== "boolean") {
-    return Response.json(
-      { error: "Say whether this Mission was Flown: send { flown: true } or { flown: false }." },
-      { status: 400 },
-    );
-  }
-
-  const s = await sessions();
-  if (s instanceof Response) return s;
-
-  try {
-    const [records, manifest, ledger] = await Promise.all([
-      readMissions(s.read, s.bucket),
-      readManifest(s.read, s.bucket),
-      readLedger(s.read, s.bucket),
-    ]);
-    const record = records.find((r) => r.id === id);
-    const row = deriveMissions(records, manifest, ledger).find((m) => m.id === id);
-    if (!record || !row) {
-      return Response.json(
-        { error: "That Mission is no longer in the store. Reload the Mission list." },
-        { status: 404 },
-      );
-    }
-    // Only a Mission on the Controller can have been flown (#163), and only a
-    // Flown one unmarked -- the same rule the row's buttons come from (#102).
-    // Pressing either twice is not refused: the second is a repeat, not a change.
-    const repeat = flown ? row.state === "flown" : row.state === "loaded";
-    const notNow = repeat ? null : actionProblem(flown ? "Mark Flown" : "Unmark Flown", row);
-    if (notNow) return Response.json({ error: notNow, state: row.state }, { status: 409 });
-    if (!record.dispatched_key) {
-      return Response.json(
-        {
-          error:
-            "This Mission has not been Dispatched, so there is nothing that could have been flown. " +
-            "Dispatch it first.",
-          state: row.state,
-        },
-        { status: 409 },
-      );
-    }
-    if (record.withdrawn_at) {
-      return Response.json(
-        {
-          error: "This Mission was Withdrawn before it reached the Controller, so it cannot be marked Flown.",
-          state: row.state,
-        },
-        { status: 409 },
-      );
-    }
-
-    const at = new Date().toISOString();
-    const specKey = record.dispatched_key;
-
-    // Unmarking takes the Card back, which is only honest if it is still free.
-    if (!flown) {
-      // The Cards it was written to, not only the ones the Ledger still says
-      // it holds: once a Card goes to another Mission this Mission's holding
-      // is gone from the Ledger, and "unmarked, it holds its Card again" was
-      // said while it held nothing (#152).
-      const had = new Set([...row.cards.map((h) => h.card), ...row.loaded_cards.map((c) => c.card)]);
-      const taken = [...had]
-        .map((card) => ledger.holdings[card])
-        .filter((h) => h && h.spec_key !== specKey);
-      if (taken.length) {
-        return Response.json(
-          {
-            error:
-              `${taken.map((h) => h.card).join(", ")} now holds another Mission, so unmarking this one ` +
-              "would claim a Card that is not free. Withdraw that Mission first if it is the wrong one.",
-          },
-          { status: 409 },
-        );
-      }
-    }
-
-    const ledgerOrWhy = await updateLedger(s.read, s.write, s.bucket, (started) =>
-      withFlownMark(started, specKey, flown ? at : null),
-    );
-    if (typeof ledgerOrWhy === "string") {
-      return Response.json({ error: ledgerOrWhy }, { status: 409 });
-    }
-
-    const marked: MissionRecord = { ...record, flown_mark: { flown, at }, updated_at: at };
-    try {
-      await writeMission(s.write, marked);
-    } catch (err) {
-      const detail = err instanceof Error ? err.message : "unknown";
-      return Response.json(
-        {
-          error:
-            `The Card Ledger was updated but this Mission's mark was not saved (${detail}), so the list and ` +
-            "the Ledger now disagree. Reload the Mission list and set it again.",
-        },
-        { status: 502 },
-      );
-    }
-
-    const after = deriveMissions(
-      records.map((r) => (r.id === id ? marked : r)),
-      manifest,
-      ledgerOrWhy,
-    ).find((m) => m.id === id);
-    return Response.json({ id, mission: after, cards: after?.cards ?? [] });
-  } catch (err) {
-    return storeFailure(err);
-  }
+  return respond(await createMissionLifecycle(b2MissionStore()).setFlown({ kind: "passphrase" }, raw));
 }

@@ -9,9 +9,10 @@
 // download per record. Nothing polls.
 
 import { authorize, b2Env, b2ReadEnv, downloadFile, listFiles, uploadFile, type B2Session } from "./b2.ts";
-import { LEDGER_KEY, MISSIONS_PREFIX, SKIPPED_KEY, STATUS_KEY, missionKey } from "./keys.ts";
+import { LEDGER_KEY, MISSIONS_PREFIX, SKIPPED_KEY, STATUS_KEY, SUMMARIES_KEY, missionKey } from "./keys.ts";
+import { StoreNotConfigured, type LedgerResult, type MissionStore, type SkippedResult } from "./missionLifecycle.ts";
 import { EMPTY_LEDGER, type CardLedger } from "./model.ts";
-import type { Manifest } from "./missions.ts";
+import type { Manifest, SpecSummary } from "./missions.ts";
 import { changeSurvived, isMissionRecord, sameLedger, type MissionRecord } from "./missionRecords.ts";
 
 /** The read session, the write session and the bucket, or a 503 response
@@ -210,4 +211,70 @@ export function storeFailure(err: unknown): Response {
     { error: `Could not reach the store: ${detail}. Nothing was changed; try again.` },
     { status: 502 },
   );
+}
+
+/**
+ * The store as the Mission lifecycle needs it: the eight operations of
+ * `MissionStore`, wrapping the free functions above.
+ *
+ * The seam is HTTP-free, so a missing credential is a thrown
+ * `StoreNotConfigured` rather than a 503 `Response`; every other failure
+ * keeps its `b2.ts` wording, because the module classifies on it (`\b403\b`
+ * is the daily-cap signal, #152).
+ */
+export function b2MissionStore(): MissionStore {
+  const session = async () => {
+    const s = await sessions();
+    if (s instanceof Response) throw new StoreNotConfigured();
+    return s;
+  };
+  return {
+    async readMissions() {
+      const s = await session();
+      const unreadable: string[] = [];
+      const records = await readMissions(s.read, s.bucket, unreadable);
+      return { records, unreadable };
+    },
+    async readManifest() {
+      const s = await session();
+      return readManifest(s.read, s.bucket);
+    },
+    async readLedger() {
+      const s = await session();
+      return readLedger(s.read, s.bucket);
+    },
+    async writeMission(record) {
+      const s = await session();
+      await writeMission(s.write, record);
+    },
+    async updateLedger(change) {
+      const s = await session();
+      const result = await updateLedger(s.read, s.write, s.bucket, change);
+      if (typeof result === "string") return { ok: false, reason: result } satisfies LedgerResult;
+      return { ok: true, ledger: result } satisfies LedgerResult;
+    },
+    async addSkipped(keys, at) {
+      const s = await session();
+      const result = await addSkipped(s.read, s.write, s.bucket, keys, at);
+      if (result !== null) return { ok: false, reason: result } satisfies SkippedResult;
+      return { ok: true } satisfies SkippedResult;
+    },
+    async writeSpec(key, spec) {
+      const s = await session();
+      await uploadFile(s.write, key, Buffer.from(JSON.stringify(spec, null, 2)));
+    },
+    async updateSummaries(key, summary) {
+      const s = await session();
+      const existing = await downloadFile(s.read, s.bucket, SUMMARIES_KEY);
+      const summaries: Record<string, SpecSummary> = existing
+        ? (JSON.parse(existing.toString()) as Record<string, SpecSummary>)
+        : {};
+      summaries[key] = {
+        photo_count: summary.photo_count,
+        path_length_m: summary.path_length_m,
+        parts: summary.parts,
+      };
+      await uploadFile(s.write, SUMMARIES_KEY, Buffer.from(JSON.stringify(summaries, null, 2)));
+    },
+  };
 }
