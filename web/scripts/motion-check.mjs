@@ -16,13 +16,31 @@ import { chromium } from "playwright-core";
 import { DEFAULT_SPEC } from "../lib/spec.ts";
 import { deriveMissions } from "../lib/missionRecords.ts";
 import { preview } from "../lib/mission.ts";
+import {
+  flickVelocity,
+  isFlick,
+  rubberBand,
+  SHEET_DISMISS_PX,
+  SHEET_FLICK_MIN_PX,
+  SHEET_FLICK_VELOCITY,
+} from "../lib/sheet.ts";
 
 const BASE = process.argv[2] ?? "http://127.0.0.1:3101";
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const OUT = path.resolve(HERE, "../../docs/ui-theme/screenshots/ui-11");
 fs.mkdirSync(OUT, { recursive: true });
+// UI-19 (#256): the sheet-gesture recordings live in their own directory, so
+// an `ONLY=sheet` run never rewrites the committed ui-11 media.
+const SHEET_OUT = path.resolve(HERE, "../../docs/ui-theme/screenshots/ui-19");
+fs.mkdirSync(SHEET_OUT, { recursive: true });
 const VIDEO_DIR = fs.mkdtempSync(path.join(os.tmpdir(), "ui11-video-"));
 const PASSPHRASE_KEY = "drone-planner.wayfinder-key";
+
+// `ONLY=sheet` runs only the new ui-19 gesture cases; the legacy ui-11
+// motions keep their own groups (`sheet-legacy`, `reduced-legacy`), so a
+// focused evidence run leaves ui-11 byte-identical. Unset = run everything.
+const ONLY = process.env.ONLY ?? "";
+const want = (group) => !ONLY || ONLY.split(",").includes(group);
 
 // ---------------------------------------------------------------------------
 // The seeded Mission list
@@ -90,6 +108,12 @@ function isIdentity(transform) {
 function txOf(transform) {
   const m = /^matrix\(([^)]+)\)$/.exec(transform);
   return m ? Number(m[1].split(",")[4].trim()) : NaN;
+}
+/** The Y translation of a computed transform matrix — the sheet moves on Y,
+ *  so `txOf` would always read 0 for it. */
+function tyOf(transform) {
+  const m = /^matrix\(([^)]+)\)$/.exec(transform);
+  return m ? Number(m[1].split(",")[5].trim()) : NaN;
 }
 
 // ---------------------------------------------------------------------------
@@ -535,8 +559,383 @@ async function reducedMotionRecording(browser) {
   }
 }
 
-async function saveVideo(video, name) {
-  const target = path.join(OUT, `${name}.webm`);
+// ---------------------------------------------------------------------------
+// The sheet gesture (UI-19, #256)
+// ---------------------------------------------------------------------------
+
+/** Install the in-page rig once. `reset()` re-arms capture listeners on the
+ *  open sheet's handle recording every pointer sample as `{y, t}` with the
+ *  browser's own `event.timeStamp`, plus a `close` counter on the dialog, and
+ *  returns dispatchers for synthetic PointerEvents on the handle (O1).
+ *  Synthetic events cannot be back-dated, but they run at real browser time,
+ *  so the velocity measured from the samples is honest. */
+async function installRig(page) {
+  await page.evaluate(() => {
+    const frame = () =>
+      new Promise((resolve) => {
+        const t = setTimeout(resolve, 50); // never stall if rAF is throttled
+        requestAnimationFrame(() => {
+          clearTimeout(t);
+          resolve();
+        });
+      });
+    const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+    window.__sheetRig = {
+      reset() {
+        const handle = document.querySelector('dialog[open] [class*="handle"]');
+        if (!handle) throw new Error("open sheet handle not found");
+        const dialog = handle.closest("dialog");
+        const samples = [];
+        let closes = 0;
+        const record = (e) => samples.push({ y: e.clientY, t: e.timeStamp });
+        for (const type of ["pointerdown", "pointermove", "pointerup"]) {
+          handle.addEventListener(type, record, true);
+        }
+        dialog.addEventListener("close", () => {
+          closes += 1;
+        });
+        const rect = handle.getBoundingClientRect();
+        const x = rect.left + rect.width / 2;
+        const y = rect.top + rect.height / 2;
+        const send = (type, dy) =>
+          handle.dispatchEvent(
+            new PointerEvent(type, {
+              bubbles: true,
+              cancelable: true,
+              pointerId: 1,
+              pointerType: "touch",
+              isPrimary: true,
+              clientX: x,
+              clientY: y + dy,
+              buttons: type === "pointerup" ? 0 : 1,
+            }),
+          );
+        return {
+          frame,
+          sleep,
+          rect: { width: rect.width, height: rect.height, top: rect.top },
+          samples,
+          closes: () => closes,
+          down: (dy = 0) => send("pointerdown", dy),
+          move: (dy = 0) => send("pointermove", dy),
+          up: (dy = 0) => send("pointerup", dy),
+          open: () => dialog.hasAttribute("open"),
+          hasSettling: () => [...dialog.classList].some((c) => c.includes("settling")),
+          identity: () => {
+            const t = getComputedStyle(dialog).transform;
+            if (t === "none") return true;
+            const m = /^matrix\(([^)]+)\)$/.exec(t);
+            if (!m) return false;
+            const [a, b, c, d] = m[1].split(",").map((v) => Number(v.trim()));
+            return a === 1 && b === 0 && c === 0 && d === 1;
+          },
+          transform: () => getComputedStyle(dialog).transform,
+          opacity: () => getComputedStyle(dialog).opacity,
+          hitTop: () => document.elementFromPoint(x, rect.top + 2) === handle,
+          styles: () => {
+            const cs = getComputedStyle(dialog);
+            return {
+              transitionProperty: cs.transitionProperty,
+              transitionDuration: cs.transitionDuration,
+              transitionTimingFunction: cs.transitionTimingFunction,
+            };
+          },
+        };
+      },
+    };
+  });
+}
+
+/** Open the Details sheet and remember the opener, so focus return can be
+ *  asserted. The explicit focus() before the click is what makes the native
+ *  dialog's focus restoration deterministic (critic N1). */
+async function openDetails(page) {
+  const details = page.getByRole("button", { name: "Details", exact: true }).first();
+  await details.focus();
+  await page.evaluate(() => {
+    window.__sheetOpener = document.activeElement;
+  });
+  await details.click();
+  await page.locator("dialog[open]").waitFor({ timeout: 5000 });
+  await page.waitForTimeout(500); // the entrance runs --dur-slow
+  return details;
+}
+
+/** Close the open sheet through the close control, so the next case starts
+ *  from a fresh open. A no-op when the previous case ended dismissed. */
+async function closeSheet(page) {
+  if ((await page.locator("dialog[open]").count()) === 0) return;
+  await page.getByRole("button", { name: "Close" }).click();
+  await page.locator("dialog[open]").waitFor({ state: "hidden", timeout: 3000 });
+  await page.waitForTimeout(350);
+}
+
+async function sheetGesture(browser) {
+  const { context, page } = await pageFor(browser, { width: 375, height: 812, mobile: true, video: true });
+  const video = page.video();
+  try {
+    await installRig(page);
+
+    // 0. The handle is a real >= 44 x 44 target (the old 5px pill fails).
+    await openDetails(page);
+    const target = await page.evaluate(() => {
+      const g = window.__sheetRig.reset();
+      return { width: g.rect.width, height: g.rect.height, hit: g.hitTop() };
+    });
+    check("sheet-target", "hit box is at least 44 x 44", target.width >= 44 && target.height >= 44, `${target.width} x ${target.height}`);
+    check("sheet-target", "elementFromPoint 2px into the hit box finds the handle", target.hit === true);
+
+    // 1. Fast flick: 48px of travel dismisses, though 48 < 120.
+    const fast = await page.evaluate(async () => {
+      const g = window.__sheetRig.reset();
+      g.down();
+      await g.frame();
+      g.move(24);
+      await g.frame();
+      g.move(48);
+      const closedAt = performance.now();
+      g.up(48);
+      const samples = g.samples.slice();
+      while (g.open() && performance.now() - closedAt < 1000) await g.frame();
+      // The exit dissolve runs --dur-base; poll for it instead of sleeping a
+      // fixed 300ms, because the first frame after close can lag by a capture
+      // interval under video recording.
+      let fadedAt = null;
+      while (performance.now() - closedAt < 1000) {
+        if (g.opacity() === "0") {
+          fadedAt = performance.now() - closedAt;
+          break;
+        }
+        await g.frame();
+      }
+      await g.sleep(80); // the async close event and the focus fixup
+      return {
+        samples,
+        goneWithin1s: !g.open(),
+        fadedAt,
+        closes: g.closes(),
+        focusReturned: document.activeElement === window.__sheetOpener,
+        opacity: g.opacity(),
+      };
+    });
+    const fastDy = fast.samples.at(-1).y - fast.samples[0].y;
+    const fastV = flickVelocity(fast.samples);
+    check("sheet-flick", "raw drag < SHEET_DISMISS_PX", fastDy < SHEET_DISMISS_PX, `${fastDy}px < ${SHEET_DISMISS_PX}px`);
+    check("sheet-flick", "measured velocity >= SHEET_FLICK_VELOCITY", fastV >= SHEET_FLICK_VELOCITY, `${fastV.toFixed(3)} px/ms`);
+    check("sheet-flick", "dialog[open] gone within 1s", fast.goneWithin1s === true);
+    check("sheet-flick", "close count is 1", fast.closes === 1, String(fast.closes));
+    check("sheet-flick", "focus returns to the Details opener", fast.focusReturned === true);
+    check("sheet-flick", "mounted dialog reaches opacity 0", fast.opacity === "0", fast.fadedAt === null ? "never" : `${fast.fadedAt.toFixed(0)}ms`);
+
+    await closeSheet(page); // already dismissed; explicit for the next case
+
+    // 2. Slow short drag: the premise velocity lands in [half, full), so only
+    //    a wrong threshold would dismiss it.
+    await openDetails(page);
+    const slow = await page.evaluate(async () => {
+      const g = window.__sheetRig.reset();
+      g.down();
+      await g.frame();
+      g.move(24);
+      await g.sleep(260);
+      g.move(44);
+      await g.sleep(60);
+      g.move(64);
+      g.up(64); // final move and release in one task, so dt stays ~60ms
+      const styles = g.styles(); // read before any CDP round trip (critic N3)
+      const frames = [];
+      const start = performance.now();
+      while (performance.now() - start < 350) {
+        frames.push(g.transform());
+        await g.frame();
+      }
+      await g.sleep(Math.max(0, 500 - (performance.now() - start)));
+      return {
+        samples: g.samples.slice(),
+        styles,
+        frames,
+        open: g.open(),
+        closes: g.closes(),
+        settlingAt500: g.hasSettling(),
+      };
+    });
+    const slowV = flickVelocity(slow.samples);
+    check("sheet-springback", "premise: slow velocity in [0.25, 0.5)", slowV >= SHEET_FLICK_VELOCITY / 2 && slowV < SHEET_FLICK_VELOCITY, `v = ${slowV.toFixed(3)} px/ms`);
+    check("sheet-springback", "halved threshold would have dismissed", isFlick(64, slowV, SHEET_FLICK_MIN_PX, SHEET_FLICK_VELOCITY / 2) === true);
+    check("sheet-springback", "tap-sized travel is not a flick", isFlick(8, 5, SHEET_FLICK_MIN_PX, SHEET_FLICK_VELOCITY) === false);
+    check("sheet-springback", "dialog stays open", slow.open === true && slow.closes === 0, `open=${slow.open} closes=${slow.closes}`);
+    check("sheet-springback", "settle transition includes transform", slow.styles.transitionProperty.includes("transform"), slow.styles.transitionProperty);
+    check("sheet-springback", "settle duration starts 0.25s", slow.styles.transitionDuration.startsWith("0.25s"), slow.styles.transitionDuration);
+    check("sheet-springback", "settle easing is cubic-bezier(0.22, 1, 0.36, 1)", slow.styles.transitionTimingFunction.includes("cubic-bezier(0.22, 1, 0.36, 1)"), slow.styles.transitionTimingFunction);
+    const txs = slow.frames.map(tyOf);
+    check("sheet-springback", "first frame still offset (> 0)", txs[0] > 0, `${txs[0]}`);
+    check("sheet-springback", "returns to rest monotone, no overshoot", txs.every((x) => x >= 0 && x <= txs[0]), txs.map((x) => x.toFixed(1)).join(","));
+    check("sheet-springback", "last frame is identity", isIdentity(slow.frames.at(-1)), slow.frames.at(-1));
+    check("sheet-springback", ".settling gone by +500ms", slow.settlingAt500 === false);
+
+    await closeSheet(page);
+
+    // 3. Rubber-band: upward travel follows damped and springs back.
+    await openDetails(page);
+    const rubber = await page.evaluate(async () => {
+      const g = window.__sheetRig.reset();
+      g.down();
+      await g.frame();
+      g.move(-40);
+      await g.frame();
+      g.move(-80);
+      const midTransform = g.transform();
+      g.up(-80);
+      const start = performance.now();
+      let elapsed = null;
+      while (performance.now() - start < 800) {
+        if (g.identity()) {
+          elapsed = performance.now() - start;
+          break;
+        }
+        await g.frame();
+      }
+      await g.sleep(80);
+      return { midTransform, elapsed, open: g.open(), closes: g.closes(), end: g.transform() };
+    });
+    const midTy = tyOf(rubber.midTransform);
+    check("sheet-rubber", "mid-drag offset is upward (ty < 0)", midTy < 0, `${midTy.toFixed(2)}px`);
+    check("sheet-rubber", "mid-drag offset is damped (< 80px)", Math.abs(midTy) < 80, `${midTy.toFixed(2)}px`);
+    check("sheet-rubber", "mid-drag offset is rubberBand(-80)", Math.abs(midTy - rubberBand(-80)) <= 1, `${midTy.toFixed(2)} vs ${rubberBand(-80).toFixed(2)}`);
+    check("sheet-rubber", "identity within 800ms", rubber.elapsed !== null && isIdentity(rubber.end), rubber.elapsed === null ? "never" : `${rubber.elapsed.toFixed(0)}ms`);
+    check("sheet-rubber", "dialog stays open", rubber.open === true);
+    check("sheet-rubber", "close count is 0", rubber.closes === 0, String(rubber.closes));
+
+    await closeSheet(page);
+
+    // 4. A tap (zero travel) never dismisses and measures exactly zero.
+    await openDetails(page);
+    const tap = await page.evaluate(async () => {
+      const g = window.__sheetRig.reset();
+      g.down();
+      g.up(0);
+      await g.sleep(150);
+      return { samples: g.samples.slice(), open: g.open(), closes: g.closes() };
+    });
+    const tapV = flickVelocity(tap.samples);
+    check("sheet-tap", "measured velocity is exactly 0", tapV === 0, String(tapV));
+    check("sheet-tap", "dialog stays open", tap.open === true);
+    check("sheet-tap", "close count is 0", tap.closes === 0, String(tap.closes));
+
+    await page.waitForTimeout(500);
+  } finally {
+    await context.close();
+    await saveVideo(video, "sheet-drag", SHEET_OUT);
+  }
+}
+
+async function sheetDesktopMotion(browser) {
+  const { context, page } = await pageFor(browser, { width: 1440, height: 900, video: true });
+  const video = page.video();
+  try {
+    const details = page.getByRole("button", { name: "Details", exact: true }).first();
+    await details.focus();
+    await page.evaluate(() => {
+      window.__opener = document.activeElement;
+      window.__closes = 0;
+    });
+    await details.click();
+    await page.locator("dialog[open]").waitFor({ timeout: 5000 });
+    await page.evaluate(() => {
+      document.querySelector("dialog[open]").addEventListener("close", () => {
+        window.__closes += 1;
+      });
+    });
+    await page.waitForTimeout(500);
+
+    // Close control (mouse): [open] gone, focus returns, one close event.
+    await page.getByRole("button", { name: "Close" }).click();
+    let gone = await page
+      .locator("dialog[open]")
+      .waitFor({ state: "hidden", timeout: 2000 })
+      .then(() => true, () => false);
+    await page.waitForTimeout(100);
+    let state = await page.evaluate(() => ({
+      closes: window.__closes,
+      focusReturned: document.activeElement === window.__opener,
+    }));
+    check("sheet-desktop", "Close control removes [open]", gone);
+    check("sheet-desktop", "Close control returns focus to the Details opener", state.focusReturned === true);
+    check("sheet-desktop", "Close control fires one close event", state.closes === 1, String(state.closes));
+
+    // Escape (keyboard): same three assertions (O7 -- no drag at 1440).
+    await details.focus();
+    await page.evaluate(() => {
+      window.__opener = document.activeElement;
+      window.__closes = 0;
+    });
+    await details.click();
+    await page.locator("dialog[open]").waitFor({ timeout: 5000 });
+    await page.waitForTimeout(500);
+    await page.keyboard.press("Escape");
+    gone = await page.locator("dialog[open]").waitFor({ state: "hidden", timeout: 2000 }).then(() => true, () => false);
+    await page.waitForTimeout(100);
+    state = await page.evaluate(() => ({
+      closes: window.__closes,
+      focusReturned: document.activeElement === window.__opener,
+    }));
+    check("sheet-desktop", "Escape removes [open]", gone);
+    check("sheet-desktop", "Escape returns focus to the Details opener", state.focusReturned === true);
+    check("sheet-desktop", "Escape fires one close event", state.closes === 1, String(state.closes));
+  } finally {
+    await context.close();
+    await saveVideo(video, "sheet-desktop", SHEET_OUT);
+  }
+}
+
+async function sheetReducedMotion(browser) {
+  const { context, page } = await pageFor(browser, { width: 375, height: 812, mobile: true, reduced: true, video: true });
+  const video = page.video();
+  try {
+    await installRig(page);
+    await openDetails(page);
+    const duration = await page.evaluate(() => getComputedStyle(document.querySelector("dialog[open]")).transitionDuration);
+    check("sheet-reduced", "computed transitionDuration is 0s", duration === "0s", duration);
+
+    const slow = await page.evaluate(async () => {
+      const g = window.__sheetRig.reset();
+      g.down();
+      await g.frame();
+      g.move(60);
+      await g.sleep(160); // slow finish: the release must not read as a flick
+      g.up(60);
+      await g.frame();
+      const after1 = g.identity();
+      await g.frame();
+      const after2 = g.identity();
+      return { after1, after2, open: g.open() };
+    });
+    check("sheet-reduced", "released 60px drag reaches identity within 2 rAF", slow.after2 === true, `after1=${slow.after1} after2=${slow.after2}`);
+    check("sheet-reduced", "dialog stays open after the drag", slow.open === true);
+
+    const flick = await page.evaluate(async () => {
+      const g = window.__sheetRig.reset();
+      g.down();
+      await g.frame();
+      g.move(24);
+      await g.frame();
+      g.move(48);
+      g.up(48);
+      const deadline = performance.now() + 1000;
+      while (g.open() && performance.now() < deadline) await g.frame();
+      return { gone: !g.open() };
+    });
+    check("sheet-reduced", "fast flick removes [open]", flick.gone === true);
+
+    await page.waitForTimeout(400);
+  } finally {
+    await context.close();
+    await saveVideo(video, "sheet-reduced", SHEET_OUT);
+  }
+}
+
+async function saveVideo(video, name, dir = OUT) {
+  const target = path.join(dir, `${name}.webm`);
   await video.saveAs(target);
   const size = fs.statSync(target).size;
   check("video", `${name}.webm is non-empty`, size > 1500, `${size} bytes`);
@@ -615,22 +1014,35 @@ async function stills(browser) {
 
 const browser = await chromium.launch();
 try {
-  await pressMotion(browser);
-  await countUpMotion(browser);
-  await viewPushMotion(browser);
-  await heroCrossfadeMotion(browser);
-  await sheetMotion(browser);
-  await reducedMotionRecording(browser);
-  await stills(browser);
+  if (want("press")) await pressMotion(browser);
+  if (want("countup")) await countUpMotion(browser);
+  if (want("viewpush")) await viewPushMotion(browser);
+  if (want("hero")) await heroCrossfadeMotion(browser);
+  if (want("sheet-legacy")) await sheetMotion(browser);
+  if (want("reduced-legacy")) await reducedMotionRecording(browser);
+  if (want("stills")) await stills(browser);
+  if (want("sheet")) await sheetGesture(browser);
+  if (want("sheet")) await sheetDesktopMotion(browser);
+  if (want("sheet")) await sheetReducedMotion(browser);
 } finally {
   await browser.close();
 }
 
-const pngs = fs.readdirSync(OUT).filter((f) => f.endsWith(".png")).length;
-const webms = fs.readdirSync(OUT).filter((f) => f.endsWith(".webm")).length;
-console.log(`artifacts: ${pngs} png, ${webms} webm in ${OUT}`);
-if (pngs < 6 || webms < 6) {
-  console.log("FAIL artifact-count");
+// The ui-11 guard only makes sense in a full run; `ONLY=sheet` touches only
+// ui-19 and leaves the committed ui-11 media as it is.
+if (!ONLY) {
+  const pngs = fs.readdirSync(OUT).filter((f) => f.endsWith(".png")).length;
+  const webms = fs.readdirSync(OUT).filter((f) => f.endsWith(".webm")).length;
+  console.log(`artifacts: ${pngs} png, ${webms} webm in ${OUT}`);
+  if (pngs < 6 || webms < 6) {
+    console.log("FAIL artifact-count");
+    failed = true;
+  }
+}
+const sheetWebms = fs.readdirSync(SHEET_OUT).filter((f) => f.endsWith(".webm")).length;
+console.log(`artifacts: ${sheetWebms} webm in ${SHEET_OUT}`);
+if (sheetWebms < 3) {
+  console.log("FAIL artifact-count sheet");
   failed = true;
 }
 console.log(failed ? "motion check: FAIL" : "motion check: all pass");
