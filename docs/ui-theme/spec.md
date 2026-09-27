@@ -304,6 +304,28 @@ left; a clear-glass button right, inset 7 on all sides so its radius is 12.
 reference; the switcher sits top-left with the close or filter control
 top-right.
 
+**Map controls** — decided 2026-09-26 (plan decision 19). Two buttons where
+the pills were, never one row mixing the two kinds of control. **Base map**
+(layers glyph + current base map name) opens a menu of base maps, one
+selectable at a time (`menuitemradio`); choosing applies it and closes the
+menu. **Overlays** (overlays glyph + "Overlays", with a count badge when any
+are on) opens a menu of independent switches, Numbers and Footprint
+(`menuitemcheckbox`); toggling keeps the menu open. Only one menu open at a
+time; tap-outside, Escape, or opening the other menu closes it with focus back
+on its button; `aria-haspopup="menu"` with `aria-expanded`; arrow keys move
+within a menu; every item at least 44 px tall; one code path for touch and
+mouse. Buttons and menu share option A material (40 % white fill, dark ink,
+blur 20 px — the fill opacity carries the 4.5:1 contrast on any basemap, per
+the reasoning in `MapPane.module.css`); menu radius 18, item radius 12;
+selected base map and on-overlays show the active formula (`--pill-active`,
+`--ink`, weight 600) with a check glyph. Motion: press scales to 0.97 under a
+6 % white overlay over `--dur-press` from pointer-down (§ 11); opening morphs
+out of its button, width and height together, 500 ms `--ease-emphasised`, no
+overshoot, items staggered by `--stagger` fading from 4 px blur to sharp over
+150 ms (§ 9.1); closing dissolves, opacity + blur, 250 ms `--ease-in`, no
+movement. Only `transform`, `opacity`, `filter`, `clip-path` animate (§ 9.3);
+under `prefers-reduced-motion` a 150 ms crossfade, no scaling.
+
 **Chips** — 28 tall, fully round, `--chip` on a light panel, 13 px `#272D2F`
 text, centred in a row above the panel's object.
 
@@ -476,6 +498,7 @@ For the plan to confirm or reject. Terms are from [`../../CONTEXT.md`](../../CON
 | Status banner + inline action | A Mission's lifecycle state with its next action (e.g. dispatch pending → Dispatch) |
 | Metric tiles | The summary figures (GSD, photos, flight time, flights) |
 | Segmented pills | The narrow-screen view switcher; the settings' segmented controls |
+| Map controls (option A) | The Base map and Overlays buttons with their menus on the map |
 | Chips | Mission lifecycle state on a Mission row; list filters |
 | Light panel | A Mission's details, inside its sheet |
 | Notice (Live Activity) | The result of Save, Dispatch, Withdraw and the other Mission actions, today plain text under the summary or the row |

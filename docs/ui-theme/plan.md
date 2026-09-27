@@ -28,6 +28,7 @@ Settled with the operator before any ticket was written.
 | 16 | Remove a corner by tapping it, then "Remove corner"; right-click stays as a shortcut | A long-press is a hidden gesture that fights dragging |
 | 17 | With no stored passphrase, the phone's Missions view asks for it in place | Today it points at a box that view hides |
 | 18 | Birds are a separate sprite layer, side-on, a flock every 9–20 s | Natural speed whatever the island does; generated birds looked stiff |
+| 19 | Map controls are two buttons with menus (Base map radio, Overlays checkboxes) in option A material, per spec §8 | Base map and overlays are different kinds of control and must not share one row; clear glass failed legibility over bright ground, so 40 % white with dark ink |
 
 ## What the phone cannot do today
 
