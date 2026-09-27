@@ -192,11 +192,6 @@
   font-size: 14px;
   font-weight: 500;
   white-space: nowrap;
-  transition: transform var(--dur-press) var(--ease-out);
-}
-
-.actions button:active:not(:disabled) {
-  transform: scale(0.97);
 }
 
 /* Danger text has to hold 4.5:1 over whatever is behind the glass, down to

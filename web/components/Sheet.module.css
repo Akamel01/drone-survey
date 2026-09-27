@@ -127,6 +127,35 @@
   padding-top: 6px;
 }
 
+/* Content arrives staggered (spec § 9.1): 400 ms each, --stagger (90 ms) apart.
+   Scoped to [open] so it restarts on every open while children stay mounted.
+   Only the first body child animates blur (spec § 9.3: one layer, never many). */
+.sheet[open] .handle,
+.sheet[open] .close,
+.sheet[open] .body > * {
+  animation: sheetFadeIn var(--dur-slow) var(--ease-out) backwards;
+}
+.sheet[open] .close                { animation-delay: calc(var(--stagger) * 1); }
+.sheet[open] .body > :nth-child(1)  { animation-name: sheetPanelIn; animation-delay: calc(var(--stagger) * 1); }
+.sheet[open] .body > :nth-child(2)  { animation-delay: calc(var(--stagger) * 2); }
+.sheet[open] .body > :nth-child(3)  { animation-delay: calc(var(--stagger) * 3); }
+.sheet[open] .body > :nth-child(4)  { animation-name: sheetRiseIn; animation-delay: calc(var(--stagger) * 4); }
+/* The last body child rises (§ 9.1), named generically so it holds whatever
+   the caller's child count; its delay comes from the nth-child rule above. */
+.sheet[open] .body > :last-child:not(:only-child) { animation-name: sheetRiseIn; }
+/* Sheets with a single body child (the details light panel): same panel entrance. */
+.sheet[open] .body > :only-child    { animation-name: sheetPanelIn; animation-delay: calc(var(--stagger) * 1); }
+
+@keyframes sheetFadeIn { from { opacity: 0; } to { opacity: 1; } }
+@keyframes sheetPanelIn {
+  from { opacity: 0; filter: blur(4px); transform: scale(0.92); }
+  to   { opacity: 1; filter: blur(0);   transform: scale(1); }
+}
+@keyframes sheetRiseIn {
+  from { opacity: 0; transform: translateY(40px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
 /* Wide screen: a centred panel, not a bottom sheet -- the browser's own
    modal centring (UA default `margin: auto` on a fixed-inset dialog) does
    the placement; this only bounds its size and drops the phone shape. */

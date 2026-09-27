@@ -98,18 +98,11 @@
   font-weight: 500;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
-  /* Press springs back on release (spec §11); the return runs this way. */
-  transition: transform var(--dur-press), box-shadow var(--dur-press);
 }
 
 /* Press (spec §11): on pointer-down -- :active starts at press, not release --
    the button scales to 0.97 under a 6% white overlay (the inset wash), over
    --dur-press. Same code serves touch and mouse. */
-.pill:active {
-  transform: scale(0.97);
-  box-shadow: inset 0 0 0 999px rgb(255 255 255 / 0.06), inset 0 1px 0 rgb(255 255 255 / 0.55);
-}
-
 /* The base-map mark in the tab bar's line style (24 px grid, 1.5 px stroke,
    round caps and joins): a satellite for imagery, a folded map with road
    lines for OpenStreetMap. 20 px beside the layers glyph, 24 px alone. */
@@ -260,7 +253,6 @@
   white-space: nowrap;
   cursor: pointer;
   animation: menuItemIn 150ms var(--ease-out) backwards;
-  transition: transform var(--dur-press), box-shadow var(--dur-press);
 }
 
 @keyframes menuItemIn {
@@ -272,11 +264,6 @@
     opacity: 1;
     filter: blur(0);
   }
-}
-
-.menuItem:active {
-  transform: scale(0.97);
-  box-shadow: inset 0 0 0 999px rgb(255 255 255 / 0.06);
 }
 
 /* Selected base map / on-overlays: the active-pill formula (--pill-active,
@@ -306,10 +293,6 @@
   }
   .menuItem {
     animation: menuFade 150ms ease-out !important;
-  }
-  .pill:active,
-  .menuItem:active {
-    transform: none;
   }
 }
 
