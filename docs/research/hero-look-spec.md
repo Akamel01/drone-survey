@@ -231,7 +231,9 @@ gradient**, not four fixed positions — as §8.1 of the architecture predicted.
 
 Horizon haze region mean: tall `HorizonHaze` `#B9C3D1`, ΔE vs `--haze` `#788B92`
 = **22.42**; wide `#B8C5D2`, ΔE = **22.07**. The measured haze is therefore much
-lighter than the `--haze` token; it sits near `--sky-low`.
+lighter than the `--haze` token; it sits near `--sky-low`. This ΔE ≈ 22 is a
+divergence **flagged for shared-token sign-off** (§5) — no token is edited and
+nothing is superseded (D-2).
 
 Linear fit of channel mean vs %H over 0.02–0.68 H (report §4a), mean over s0–s7
 (`frame_sd ≤ 0.01`):
@@ -253,10 +255,13 @@ Caveat: wide `SkyFull` ends at 0.58 H, below the pinned 0.65 H horizon anchor;
 that one value is the strip's clamped bottom row and should be read as "bottom
 of the sampled sky", with the separate `HorizonHaze` mean the real haze colour.
 
-### 4b. Contrast and saturation falloff with depth
+### 4b. Contrast and saturation falloff with aerial depth
 
-Depth bands by camera distance: D1 = island front face, D2 = `MountainBand` near
-ridge, D3 = `HorizonHaze` far band. High-pass RMS = RMS of `L − GaussianBlur(σ=4 px)`
+**Depth here is aerial depth, not camera depth of field** (which is 4e): the
+recession *down the frame*, image-space y increasing with distance, the same
+aerial-depth axis as `grade.py:9-15`, with haze growing along it. Bands on that
+axis: D1 = island front face, D2 = `MountainBand` near ridge, D3 = `HorizonHaze`
+far band. High-pass RMS = RMS of `L − GaussianBlur(σ=4 px)`
 on luminance; S = HSV saturation; V = mean max-channel. Mean over s0–s7.
 
 | metric | tall | wide | units |
@@ -280,27 +285,34 @@ Caveat: D1 also carries the render's DOF, so the D2/D1 contrast ratio is
 *combined DOF + atmospheric falloff*; 4e reports the DOF-only component. The
 micro-contrast here is post-Real-ESRGAN — **TOOL** at the sharp end (C2).
 
-### 4c. Highlight bloom
+### 4c. Highlight bloom (measured — result: no resolvable halo)
 
-Sky immediately around the island's upper-left silhouette; peak luminance pixel
-vs region median; radial profile (8 rays) → r50, 10–90% falloff width,
-peak/background ratio. `bloom_r50_px` is the halo **plus** mist. Mean over s0–s7
-(r50 reported as a range because the halo tracks the island):
+Detector region is the ring over the island's upper-left silhouette; peak
+luminance pixel vs region median; radial profile (8 rays) → r50, 10–90% falloff
+width, peak/background ratio. The peak pixel sits **on the island silhouette**
+(inside the island bbox), not in sky, and only a handful of ring pixels clear
+half-max — so the measured r50 is a **sub-pixel step-edge overshoot, not a
+resolvable halo**. Mean over s0–s7 (r50 reported as a range because the
+overshoot tracks the turning island):
 
 | metric | tall mean (range s0–s7) | wide mean (range) | units |
 |---|---|---|---|
 | peak L | 199.7 (177.0–221.4) | 196.3 (180.7–210.3) | levels |
 | background L | 141.6 | 123.4 | levels |
 | peak/bg | **1.41** | **1.59** | ratio |
-| r50 | 0.83 (0.42–1.52) | 0.80 (0.50–1.18) | px |
-| r50 | **0.022** | **0.037** | %H |
+| r50 (edge-limited, TOOL) | 0.83 (0.42–1.52) | 0.80 (0.50–1.18) | px |
+| r50 (edge-limited, TOOL) | **0.022** | **0.037** | %H |
 | 10–90% falloff width | 1.12 | 1.23 | px |
 
 Frames s0–s7 (`peak_bg_ratio frame_sd` 0.12 tall / 0.08 wide). Algorithm as
 report §4c. **Newly measured** — no prior settled number (C5; Grading per
-ADR 0009). Caveat: part of the bright neighbourhood is the mist band, so r50 is
-halo-plus-mist; the peak/background contrast of 1.4–1.6 says the halo is real but
-soft, not a hard specular.
+ADR 0009). Honest result: **there is no resolvable sky-side bloom beyond the
+edge overshoot.** The r50 ≈ 0.8 px is one-sample edge-limited: the peak is on
+the island silhouette and the ray crosses background within the first sample, so
+the value is an artefact of the sub-pixel step edge (post-upscale ESRGAN
+sharpening plus HEVC ringing), marked **TOOL**, not VIEW, consistent with 4e/4f
+(C2). The peak/background contrast of 1.4–1.6 measures the island's own bright
+neighbourhood against sky, not a glow.
 
 ### 4d. Shadow lift
 
@@ -399,20 +411,23 @@ them.
 ### 4h. Conifer silhouette density
 
 `ConiferBand`; silhouette = green-dominant AND luminance below the band's 40th
-percentile; tree count = 4-connected components, area > 200 px, h/w > 1.5;
-edge density = Sobel magnitude > 12 levels. Mean over s0–s7, with the per-frame
-range and the 0° value:
+percentile; density = dark-area fraction and edge density = Sobel magnitude
+> 12 levels. Mean over s0–s7:
 
-| framing | tree count mean (range, s0) | dark-area % | edge density |
-|---|---|---|---|
-| tall | 1.63 (1–3, s0 = 1) | 28.2 | 0.352 |
-| wide | 0.25 (0–1, s0 = 0) | 12.3 | 0.165 |
+| framing | dark-area % | edge density |
+|---|---|---|
+| tall | 28.2 | 0.352 |
+| wide | 12.3 | 0.165 |
 
-Frames s0–s7 (`count frame_sd` 0.70 tall / 0.45 wide). Algorithm as report §4h.
-The count changes with turn angle (occlusion); conifers are the darkest green and
-are much smaller in wide, where the band barely resolves one tree. `spec.md:161`
-describes "three small conifers" — the tall frames reach 3 at s1 but the
-silhouette detector counts 1–3 as faces occlude.
+Frames s0–s7. Silhouette **density** is what the ticket asks for and what is
+reported here. A per-tree **count is not reliably separable** from these frames
+and is deliberately **not** reported: the trees merge with the dark island body
+beneath them into wide blobs, so any component filter scores the blobs' height/
+width and counts detached slivers rather than conifers (the same merge defeats an
+erode-then-label pass). The contact sheets show **2–3 clearly resolved conifers in
+every wide frame**, so an earlier wide reading of 0–1 was an artefact of that
+merge, not fewer trees; `spec.md:161` "three small conifers" is consistent with
+the frames.
 
 ### 4i. Cloud layer structure and drift
 
@@ -472,21 +487,32 @@ unless Grading deliberately adds it.
   `--sky-low #AABBCA` are a vertical sample of this ramp (ΔE ≤ 7.6 at their
   nearest anchors).
 - **Haze** is light: measured horizon-haze `#B9C3D1` / `#B8C5D2`, near
-  `--sky-low`, **not** `--haze #788B92` (ΔE ≈ 22).
-- **Bloom** is a soft halo, not a specular: peak/background 1.4–1.6, r50
-  ≤ ~1.5 px at 4K.
+  `--sky-low`, **not** `--haze #788B92` (ΔE ≈ 22). This ΔE ≈ 22 divergence
+  between the measured haze and the shared `--haze` token is **flagged for
+  shared-token sign-off** — no token is edited and no supersession is implied
+  (D-2).
+- **Aerial-depth falloff** (4b): the island front carries the micro-contrast and
+  the far bands fall off. Target contrast RMS **D2/D1 0.06–0.16** and **D3/D1
+  0.04–0.06**, and saturation **S D2/D1 0.38–0.42** / **S D3/D1 0.26–0.32**. The
+  D2/D1 contrast ratio is *combined DOF + atmospheric falloff*; get the DOF-only
+  part from 4e.
 - **DOF**: the island front is ~365× (tall) / ~73× (wide) sharper (Laplacian
   variance) than the near mountain; far haze matches ~1.6–2.6 px of blur at 4K.
 - **Palette** (union medians): turf `#283017`, moss `#384117`, soil `#1B1E24`,
   pebble `#212111`, basalt `#090C11` (tall); wide nearby. Moss is a higher-chroma
   green than turf; basalt is near-black.
-- **Conifers** are a sparse dark silhouette: 28 % dark-area, edge density 0.35,
-  1–3 tall trees.
+- **Conifers** are a sparse dark silhouette, read as **density**, not a tree
+  count: 28 % dark-area / edge density 0.35 (tall), 12 % / 0.17 (wide). A
+  per-tree count is not reliably separable (4h); the contact sheets show 2–3
+  trees in the wide framing.
 - **Layering**: sharp island in front, hazed mountains/valley mist behind, flat
   sky behind both; the island is always on the right.
 
 **TOOL (do not chase)**
 
+- **Bloom / highlight halo**: not resolvable — the §4c r50 ≈ 0.8 px is a
+  sub-pixel edge overshoot on the island silhouette, not a glow. Do not add
+  bloom to match it (Real-ESRGAN / HEVC edge artefact).
 - **Grain**: ≤ ~0.4 of an 8-bit level — effectively none. Do not add noise to
   match it.
 - **Micro-contrast / edge crispness** at the island front: Real-ESRGAN's. Match
@@ -497,8 +523,9 @@ unless Grading deliberately adds it.
 ## 6. What was measured, not measured, contradicted
 
 **Measured (with frames):** sky gradient + haze colours (4a, s0–s7); contrast and
-saturation falloff with depth (4b, s0–s7); highlight bloom (4c, s0–s7); shadow
-lift (4d, s0–s7); depth of field (4e, s0–s7); grain (4f, s0–s7); island palette
+saturation falloff with aerial depth (4b, s0–s7); highlight edge overshoot — no
+resolvable bloom (4c, s0–s7); shadow lift (4d, s0–s7); depth of field (4e,
+s0–s7); grain (4f, s0–s7); island palette
 per stratum — turf, moss, soil, pebble, basalt (4g, s0–s7 + union); conifer
 silhouette density (4h, s0–s7); cloud structure and drift (4i, s0–s7 pairs).
 The region model was re-derived and passed the S2 gate.
@@ -529,7 +556,8 @@ The region model was re-derived and passed the S2 gate.
   drift is at or below the detection floor in both framings (4i). Report the
   negative; do not invent a speed (ADR-220-6, D-3).
 - **"Shadow lift"**: the basalt blacks are **not** lifted (4d). The dreamy read
-  comes from haze, bloom and DOF, not raised blacks.
+  comes from haze and DOF, not raised blacks — the §4c "bloom" is a sub-pixel
+  edge artefact, not a glow.
 - The reference reel's `#517046` (leaf) and `#474B59` (stone) are **not** hero
   colours (ΔE 28–30; F3) and must not be imported.
 

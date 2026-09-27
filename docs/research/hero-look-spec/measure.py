@@ -158,35 +158,6 @@ def close3(m, it=2):
     return e
 
 
-def cc_stats(mask):
-    m = mask.copy()
-    h, w = m.shape
-    comps = []
-    for y0, x0 in np.argwhere(m):
-        if not m[y0, x0]:
-            continue
-        stack = [(int(y0), int(x0))]
-        m[y0, x0] = False
-        miny = maxy = int(y0)
-        minx = maxx = int(x0)
-        area = 0
-        while stack:
-            cy, cx = stack.pop()
-            area += 1
-            miny = min(miny, cy); maxy = max(maxy, cy)
-            minx = min(minx, cx); maxx = max(maxx, cx)
-            if cy > 0 and m[cy - 1, cx]:
-                m[cy - 1, cx] = False; stack.append((cy - 1, cx))
-            if cy < h - 1 and m[cy + 1, cx]:
-                m[cy + 1, cx] = False; stack.append((cy + 1, cx))
-            if cx > 0 and m[cy, cx - 1]:
-                m[cy, cx - 1] = False; stack.append((cy, cx - 1))
-            if cx < w - 1 and m[cy, cx + 1]:
-                m[cy, cx + 1] = False; stack.append((cy, cx + 1))
-        comps.append((area, maxy - miny + 1, maxx - minx + 1))
-    return comps
-
-
 def kmeans3(pixels, seed=0, iters=12):
     n = pixels.shape[0]
     if n < 3:
@@ -331,7 +302,8 @@ def m_4c(img, framing, res):
     put(res, "4c", "bloom_peak_L", peak, "levels", r)
     put(res, "4c", "bloom_bg_L", bg, "levels", r)
     put(res, "4c", "bloom_peak_bg_ratio", peak / max(bg, 1e-9), "ratio", r)
-    put(res, "4c", "bloom_r50_px", r50, "px", r, "halo-plus-mist; newly measured")
+    put(res, "4c", "bloom_r50_px", r50, "px", r,
+        "edge-limited: peak sits on the island silhouette, not sky; TOOL (ESRGAN/HEVC) — not a resolvable sky-side halo")
     put(res, "4c", "bloom_r50_pctH", r50 / H * 100.0, "%H", r)
     put(res, "4c", "bloom_falloff_10_90_px", width, "px", r)
 
@@ -537,10 +509,9 @@ def m_4h(img, framing, res):
     green = (a[..., 1] > a[..., 0] + 4) & (a[..., 1] > a[..., 2] + 4)
     thr = np.percentile(L, 40)
     sil = green & (L < thr)
-    comps = cc_stats(sil)
-    trees = [c for c in comps if c[0] > 200 and c[1] / max(c[2], 1) > 1.5]
-    put(res, "4h", "conifer_tree_count", float(len(trees)), "count", r,
-        "connected 4-conn, area>200, h/w>1.5")
+    # NB: a per-tree count is NOT reliably separable here — the trees merge with
+    # the dark island body below them into wide blobs, so any h/w filter counts
+    # detached slivers, not conifers. Report silhouette density only (ticket ask).
     put(res, "4h", "conifer_dark_area_pct", float(sil.mean() * 100.0), "%", r)
     put(res, "4h", "conifer_edge_density", float((sobel_mag(L) > 12).mean()), "fraction", r,
         "Sobel mag > 12 levels")
@@ -755,7 +726,7 @@ def fig_sky(frames_dir, agg, out):
         dr.line((x, T, x, B), fill=(235, 235, 235))
         dr.text((x - 8, B + 6), str(i), fill=(0, 0, 0), font=font)
     dr.text(((L + R) / 2 - 40, B + 24), "%H (SkyFull strip)", fill=(0, 0, 0), font=font)
-    dr.text((6, 8), "sky gradient — channel means vs %H", fill=(0, 0, 0), font=font)
+    dr.text((6, 8), "sky gradient - channel means vs %H", fill=(0, 0, 0), font=font)
     series = {}
     for framing in ("tall", "wide"):
         img = load_frame(frames_dir, framing, 0)
@@ -780,7 +751,9 @@ def fig_sky(frames_dir, agg, out):
     for (af, name), col in ycols:
         x = L + af * (R - L)
         dr.line((x, T, x, B), fill=col)
-        dr.text((x + 3, T + 3), "%s %s" % (name, agg.get("sky_hex_%s" % name, "")), fill=col, font=font)
+        th = agg.get("tall:sky_hex_%s" % name, "")
+        wh = agg.get("wide:sky_hex_%s" % name, "")
+        dr.text((x + 3, T + 3), "%s T%s W%s" % (name, th, wh), fill=col, font=font)
     labels = [("tall", (0, 0, 0)), ("wide", (0, 0, 0))]
     for i, (framing, col) in enumerate(labels):
         dr.text((R - 130, T + 10 + i * 16), "%s: R=red G=green B=blue" % framing, fill=col, font=font)
@@ -793,10 +766,10 @@ def fig_palette(agg, out):
     cv = Image.new("RGB", (cw * 5 + pad * 6, ch * 2 + pad * 3 + 30), (245, 245, 245))
     dr = ImageDraw.Draw(cv)
     font = ImageFont.load_default()
-    dr.text((pad, 6), "island palette per stratum — measured median (tall / wide)", fill=(0, 0, 0), font=font)
+    dr.text((pad, 6), "island palette per stratum - measured median (tall / wide)", fill=(0, 0, 0), font=font)
     for ri, framing in enumerate(("tall", "wide")):
         for ci, s in enumerate(strata):
-            h = agg.get("palette_%s_median_hex" % s, "#000000")
+            h = agg.get("%s:palette_%s_median_hex" % (framing, s), "#000000")
             try:
                 rgb = hex_to_rgb(h)
             except Exception:
@@ -847,7 +820,24 @@ def self_check(frames_dir, csv_path):
     print("  csv row    : %.9f levels" % ref)
     ok = abs(got - ref) <= tol
     print("  tolerance  : %g  -> %s" % (tol, "PASS" if ok else "FAIL"))
-    return 0 if ok else 1
+
+    # figure regression (F3): the palette figure must plot each framing's own
+    # medians, i.e. per-framing agg keys must not collide onto one row.
+    import tempfile
+    fake = {"tall:palette_turf_median_hex": "#283017",
+            "wide:palette_turf_median_hex": "#1F2912"}
+    tmp = tempfile.NamedTemporaryFile(suffix=".png", delete=False).name
+    fig_palette(fake, tmp)
+    pim = Image.open(tmp).convert("RGB")
+    os.unlink(tmp)
+    tall_px = "#%02X%02X%02X" % pim.getpixel((124, 89))
+    wide_px = "#%02X%02X%02X" % pim.getpixel((124, 193))
+    fig_ok = tall_px == "#283017" and wide_px == "#1F2912" and tall_px != wide_px
+    print("self-check: palette figure rows are per-framing (F3)")
+    print("  tall cell  : %s (expect #283017)" % tall_px)
+    print("  wide cell  : %s (expect #1F2912)" % wide_px)
+    print("  -> %s" % ("PASS" if fig_ok else "FAIL"))
+    return 0 if (ok and fig_ok) else 1
 
 
 # ----------------------------------------------------------------------------
@@ -948,7 +938,7 @@ def main(argv):
                 continue
             hx = hex_of(np.median(arr, axis=0))
             s, v = hsv_mean(arr)
-            agg["palette_%s_median_hex" % name] = hx
+            agg["%s:palette_%s_median_hex" % (framing, name)] = hx
             all_rows.append([framing, "mean", "", "4g", "palette_%s_union_hex" % name, hx, "hex",
                              reg, MASTER_SHA[framing], "union of s0..s7 (pooled stratum pixels)"])
             all_rows.append([framing, "mean", "", "4g", "palette_%s_union_share" % name,
@@ -977,7 +967,12 @@ def main(argv):
                     ok = False
                     break
             if ok:
-                agg[metric] = float(np.mean([per_frame[k][metric]["value"] for k in range(8)]))
+                agg["%s:%s" % (framing, metric)] = float(np.mean([per_frame[k][metric]["value"] for k in range(8)]))
+        # per-framing sky anchor hexes for the sky-gradient figure (F6: no overwrite)
+        for name in ("top", "mid", "horizon"):
+            hm = per_frame[0].get("sky_hex_%s" % name)
+            if hm is not None:
+                agg["%s:sky_hex_%s" % (framing, name)] = hm["value"]
 
     if args.out:
         with open(args.out, "w", newline="") as fh:

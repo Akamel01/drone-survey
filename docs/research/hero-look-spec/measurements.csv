@@ -56,7 +56,7 @@ tall,0,0,4b,falloff_sat_D3_D1,0.2362056154716077,ratio,x0.02-0.35:y0.62-0.72,8fb
 tall,0,0,4c,bloom_peak_L,221.44199999999998,levels,x0.50-0.75:y0.30-0.55,8fb54b550875cdf0bc46c240bb5a6868b2f039781ed8de0cfdacdb4493abec81,
 tall,0,0,4c,bloom_bg_L,141.07399999999998,levels,x0.50-0.75:y0.30-0.55,8fb54b550875cdf0bc46c240bb5a6868b2f039781ed8de0cfdacdb4493abec81,
 tall,0,0,4c,bloom_peak_bg_ratio,1.5696868310248522,ratio,x0.50-0.75:y0.30-0.55,8fb54b550875cdf0bc46c240bb5a6868b2f039781ed8de0cfdacdb4493abec81,
-tall,0,0,4c,bloom_r50_px,0.6363104380543096,px,x0.50-0.75:y0.30-0.55,8fb54b550875cdf0bc46c240bb5a6868b2f039781ed8de0cfdacdb4493abec81,halo-plus-mist; newly measured
+tall,0,0,4c,bloom_r50_px,0.6363104380543096,px,x0.50-0.75:y0.30-0.55,8fb54b550875cdf0bc46c240bb5a6868b2f039781ed8de0cfdacdb4493abec81,"edge-limited: peak sits on the island silhouette, not sky; TOOL (ESRGAN/HEVC) — not a resolvable sky-side halo"
 tall,0,0,4c,bloom_r50_pctH,0.01657058432433098,%H,x0.50-0.75:y0.30-0.55,8fb54b550875cdf0bc46c240bb5a6868b2f039781ed8de0cfdacdb4493abec81,
 tall,0,0,4c,bloom_falloff_10_90_px,0.982191492813796,px,x0.50-0.75:y0.30-0.55,8fb54b550875cdf0bc46c240bb5a6868b2f039781ed8de0cfdacdb4493abec81,
 tall,0,0,4d,shadow_p0_1,0.6378,levels,x0.55-1.00:y0.72-0.90,8fb54b550875cdf0bc46c240bb5a6868b2f039781ed8de0cfdacdb4493abec81,
@@ -132,7 +132,6 @@ tall,0,0,4g,palette_basalt_k3_hex,#040506,hex,x0.55-1.00:y0.45-0.90,8fb54b550875
 tall,0,0,4g,palette_basalt_k3_share,0.2802551095874916,fraction,x0.55-1.00:y0.45-0.90,8fb54b550875cdf0bc46c240bb5a6868b2f039781ed8de0cfdacdb4493abec81,
 tall,0,0,4g,palette_turf_vs_517046_deltaE,28.45656596698731,dE76,x0.55-1.00:y0.45-0.90,8fb54b550875cdf0bc46c240bb5a6868b2f039781ed8de0cfdacdb4493abec81,"informational: #517046 is a reference-reel value, not a hero target"
 tall,0,0,4g,palette_basalt_vs_474B59_deltaE,29.81654646763911,dE76,x0.55-1.00:y0.45-0.90,8fb54b550875cdf0bc46c240bb5a6868b2f039781ed8de0cfdacdb4493abec81,"informational: #474B59 is a reference-reel value, not a hero target"
-tall,0,0,4h,conifer_tree_count,1,count,x0.62-0.95:y0.44-0.62,8fb54b550875cdf0bc46c240bb5a6868b2f039781ed8de0cfdacdb4493abec81,"connected 4-conn, area>200, h/w>1.5"
 tall,0,0,4h,conifer_dark_area_pct,30.751416225037193,%,x0.62-0.95:y0.44-0.62,8fb54b550875cdf0bc46c240bb5a6868b2f039781ed8de0cfdacdb4493abec81,
 tall,0,0,4h,conifer_edge_density,0.43273869810811416,fraction,x0.62-0.95:y0.44-0.62,8fb54b550875cdf0bc46c240bb5a6868b2f039781ed8de0cfdacdb4493abec81,Sobel mag > 12 levels
 tall,4.05,486,4a,sky_hex_anchor_0.02,#24384A,hex,x0.02-0.20:y0.02-0.72,8fb54b550875cdf0bc46c240bb5a6868b2f039781ed8de0cfdacdb4493abec81,
@@ -192,7 +191,7 @@ tall,4.05,486,4b,falloff_sat_D3_D1,0.26730748409050203,ratio,x0.02-0.35:y0.62-0.
 tall,4.05,486,4c,bloom_peak_L,212.089,levels,x0.50-0.75:y0.30-0.55,8fb54b550875cdf0bc46c240bb5a6868b2f039781ed8de0cfdacdb4493abec81,
 tall,4.05,486,4c,bloom_bg_L,140.9284,levels,x0.50-0.75:y0.30-0.55,8fb54b550875cdf0bc46c240bb5a6868b2f039781ed8de0cfdacdb4493abec81,
 tall,4.05,486,4c,bloom_peak_bg_ratio,1.5049415164012363,ratio,x0.50-0.75:y0.30-0.55,8fb54b550875cdf0bc46c240bb5a6868b2f039781ed8de0cfdacdb4493abec81,
-tall,4.05,486,4c,bloom_r50_px,0.988190855271641,px,x0.50-0.75:y0.30-0.55,8fb54b550875cdf0bc46c240bb5a6868b2f039781ed8de0cfdacdb4493abec81,halo-plus-mist; newly measured
+tall,4.05,486,4c,bloom_r50_px,0.988190855271641,px,x0.50-0.75:y0.30-0.55,8fb54b550875cdf0bc46c240bb5a6868b2f039781ed8de0cfdacdb4493abec81,"edge-limited: peak sits on the island silhouette, not sky; TOOL (ESRGAN/HEVC) — not a resolvable sky-side halo"
 tall,4.05,486,4c,bloom_r50_pctH,0.025734136856032316,%H,x0.50-0.75:y0.30-0.55,8fb54b550875cdf0bc46c240bb5a6868b2f039781ed8de0cfdacdb4493abec81,
 tall,4.05,486,4c,bloom_falloff_10_90_px,1.0330043312409365,px,x0.50-0.75:y0.30-0.55,8fb54b550875cdf0bc46c240bb5a6868b2f039781ed8de0cfdacdb4493abec81,
 tall,4.05,486,4d,shadow_p0_1,1.5736,levels,x0.55-1.00:y0.72-0.90,8fb54b550875cdf0bc46c240bb5a6868b2f039781ed8de0cfdacdb4493abec81,
@@ -268,7 +267,6 @@ tall,4.05,486,4g,palette_basalt_k3_hex,#110F0B,hex,x0.55-1.00:y0.45-0.90,8fb54b5
 tall,4.05,486,4g,palette_basalt_k3_share,0.16916033719721865,fraction,x0.55-1.00:y0.45-0.90,8fb54b550875cdf0bc46c240bb5a6868b2f039781ed8de0cfdacdb4493abec81,
 tall,4.05,486,4g,palette_turf_vs_517046_deltaE,29.835437484487603,dE76,x0.55-1.00:y0.45-0.90,8fb54b550875cdf0bc46c240bb5a6868b2f039781ed8de0cfdacdb4493abec81,"informational: #517046 is a reference-reel value, not a hero target"
 tall,4.05,486,4g,palette_basalt_vs_474B59_deltaE,29.11056265678101,dE76,x0.55-1.00:y0.45-0.90,8fb54b550875cdf0bc46c240bb5a6868b2f039781ed8de0cfdacdb4493abec81,"informational: #474B59 is a reference-reel value, not a hero target"
-tall,4.05,486,4h,conifer_tree_count,3,count,x0.62-0.95:y0.44-0.62,8fb54b550875cdf0bc46c240bb5a6868b2f039781ed8de0cfdacdb4493abec81,"connected 4-conn, area>200, h/w>1.5"
 tall,4.05,486,4h,conifer_dark_area_pct,30.200960861243438,%,x0.62-0.95:y0.44-0.62,8fb54b550875cdf0bc46c240bb5a6868b2f039781ed8de0cfdacdb4493abec81,
 tall,4.05,486,4h,conifer_edge_density,0.4182385022418066,fraction,x0.62-0.95:y0.44-0.62,8fb54b550875cdf0bc46c240bb5a6868b2f039781ed8de0cfdacdb4493abec81,Sobel mag > 12 levels
 tall,8.10,972,4a,sky_hex_anchor_0.02,#24384A,hex,x0.02-0.20:y0.02-0.72,8fb54b550875cdf0bc46c240bb5a6868b2f039781ed8de0cfdacdb4493abec81,
@@ -328,7 +326,7 @@ tall,8.10,972,4b,falloff_sat_D3_D1,0.28910703617281625,ratio,x0.02-0.35:y0.62-0.
 tall,8.10,972,4c,bloom_peak_L,198.35379999999998,levels,x0.50-0.75:y0.30-0.55,8fb54b550875cdf0bc46c240bb5a6868b2f039781ed8de0cfdacdb4493abec81,
 tall,8.10,972,4c,bloom_bg_L,141.2184,levels,x0.50-0.75:y0.30-0.55,8fb54b550875cdf0bc46c240bb5a6868b2f039781ed8de0cfdacdb4493abec81,
 tall,8.10,972,4c,bloom_peak_bg_ratio,1.4045889204239672,ratio,x0.50-0.75:y0.30-0.55,8fb54b550875cdf0bc46c240bb5a6868b2f039781ed8de0cfdacdb4493abec81,
-tall,8.10,972,4c,bloom_r50_px,0.41603053140771407,px,x0.50-0.75:y0.30-0.55,8fb54b550875cdf0bc46c240bb5a6868b2f039781ed8de0cfdacdb4493abec81,halo-plus-mist; newly measured
+tall,8.10,972,4c,bloom_r50_px,0.41603053140771407,px,x0.50-0.75:y0.30-0.55,8fb54b550875cdf0bc46c240bb5a6868b2f039781ed8de0cfdacdb4493abec81,"edge-limited: peak sits on the island silhouette, not sky; TOOL (ESRGAN/HEVC) — not a resolvable sky-side halo"
 tall,8.10,972,4c,bloom_r50_pctH,0.010834128422075887,%H,x0.50-0.75:y0.30-0.55,8fb54b550875cdf0bc46c240bb5a6868b2f039781ed8de0cfdacdb4493abec81,
 tall,8.10,972,4c,bloom_falloff_10_90_px,0.6656488502523423,px,x0.50-0.75:y0.30-0.55,8fb54b550875cdf0bc46c240bb5a6868b2f039781ed8de0cfdacdb4493abec81,
 tall,8.10,972,4d,shadow_p0_1,1.5736,levels,x0.55-1.00:y0.72-0.90,8fb54b550875cdf0bc46c240bb5a6868b2f039781ed8de0cfdacdb4493abec81,
@@ -404,7 +402,6 @@ tall,8.10,972,4g,palette_basalt_k3_hex,#100F0C,hex,x0.55-1.00:y0.45-0.90,8fb54b5
 tall,8.10,972,4g,palette_basalt_k3_share,0.15717662951705505,fraction,x0.55-1.00:y0.45-0.90,8fb54b550875cdf0bc46c240bb5a6868b2f039781ed8de0cfdacdb4493abec81,
 tall,8.10,972,4g,palette_turf_vs_517046_deltaE,29.10489136169316,dE76,x0.55-1.00:y0.45-0.90,8fb54b550875cdf0bc46c240bb5a6868b2f039781ed8de0cfdacdb4493abec81,"informational: #517046 is a reference-reel value, not a hero target"
 tall,8.10,972,4g,palette_basalt_vs_474B59_deltaE,29.11056265678101,dE76,x0.55-1.00:y0.45-0.90,8fb54b550875cdf0bc46c240bb5a6868b2f039781ed8de0cfdacdb4493abec81,"informational: #474B59 is a reference-reel value, not a hero target"
-tall,8.10,972,4h,conifer_tree_count,1,count,x0.62-0.95:y0.44-0.62,8fb54b550875cdf0bc46c240bb5a6868b2f039781ed8de0cfdacdb4493abec81,"connected 4-conn, area>200, h/w>1.5"
 tall,8.10,972,4h,conifer_dark_area_pct,28.606223474323244,%,x0.62-0.95:y0.44-0.62,8fb54b550875cdf0bc46c240bb5a6868b2f039781ed8de0cfdacdb4493abec81,
 tall,8.10,972,4h,conifer_edge_density,0.3503611855899229,fraction,x0.62-0.95:y0.44-0.62,8fb54b550875cdf0bc46c240bb5a6868b2f039781ed8de0cfdacdb4493abec81,Sobel mag > 12 levels
 tall,12.15,1458,4a,sky_hex_anchor_0.02,#24384A,hex,x0.02-0.20:y0.02-0.72,8fb54b550875cdf0bc46c240bb5a6868b2f039781ed8de0cfdacdb4493abec81,
@@ -464,7 +461,7 @@ tall,12.15,1458,4b,falloff_sat_D3_D1,0.2749701538467418,ratio,x0.02-0.35:y0.62-0
 tall,12.15,1458,4c,bloom_peak_L,179.22019999999998,levels,x0.50-0.75:y0.30-0.55,8fb54b550875cdf0bc46c240bb5a6868b2f039781ed8de0cfdacdb4493abec81,
 tall,12.15,1458,4c,bloom_bg_L,141.784,levels,x0.50-0.75:y0.30-0.55,8fb54b550875cdf0bc46c240bb5a6868b2f039781ed8de0cfdacdb4493abec81,
 tall,12.15,1458,4c,bloom_peak_bg_ratio,1.264036844777972,ratio,x0.50-0.75:y0.30-0.55,8fb54b550875cdf0bc46c240bb5a6868b2f039781ed8de0cfdacdb4493abec81,
-tall,12.15,1458,4c,bloom_r50_px,0.4583013335982666,px,x0.50-0.75:y0.30-0.55,8fb54b550875cdf0bc46c240bb5a6868b2f039781ed8de0cfdacdb4493abec81,halo-plus-mist; newly measured
+tall,12.15,1458,4c,bloom_r50_px,0.4583013335982666,px,x0.50-0.75:y0.30-0.55,8fb54b550875cdf0bc46c240bb5a6868b2f039781ed8de0cfdacdb4493abec81,"edge-limited: peak sits on the island silhouette, not sky; TOOL (ESRGAN/HEVC) — not a resolvable sky-side halo"
 tall,12.15,1458,4c,bloom_r50_pctH,0.011934930562454859,%H,x0.50-0.75:y0.30-0.55,8fb54b550875cdf0bc46c240bb5a6868b2f039781ed8de0cfdacdb4493abec81,
 tall,12.15,1458,4c,bloom_falloff_10_90_px,0.7332821337572267,px,x0.50-0.75:y0.30-0.55,8fb54b550875cdf0bc46c240bb5a6868b2f039781ed8de0cfdacdb4493abec81,
 tall,12.15,1458,4d,shadow_p0_1,1.8636,levels,x0.55-1.00:y0.72-0.90,8fb54b550875cdf0bc46c240bb5a6868b2f039781ed8de0cfdacdb4493abec81,
@@ -540,7 +537,6 @@ tall,12.15,1458,4g,palette_basalt_k3_hex,#060608,hex,x0.55-1.00:y0.45-0.90,8fb54
 tall,12.15,1458,4g,palette_basalt_k3_share,0.2716151915628219,fraction,x0.55-1.00:y0.45-0.90,8fb54b550875cdf0bc46c240bb5a6868b2f039781ed8de0cfdacdb4493abec81,
 tall,12.15,1458,4g,palette_turf_vs_517046_deltaE,27.54837819296207,dE76,x0.55-1.00:y0.45-0.90,8fb54b550875cdf0bc46c240bb5a6868b2f039781ed8de0cfdacdb4493abec81,"informational: #517046 is a reference-reel value, not a hero target"
 tall,12.15,1458,4g,palette_basalt_vs_474B59_deltaE,29.618421574876077,dE76,x0.55-1.00:y0.45-0.90,8fb54b550875cdf0bc46c240bb5a6868b2f039781ed8de0cfdacdb4493abec81,"informational: #474B59 is a reference-reel value, not a hero target"
-tall,12.15,1458,4h,conifer_tree_count,1,count,x0.62-0.95:y0.44-0.62,8fb54b550875cdf0bc46c240bb5a6868b2f039781ed8de0cfdacdb4493abec81,"connected 4-conn, area>200, h/w>1.5"
 tall,12.15,1458,4h,conifer_dark_area_pct,24.965139856662397,%,x0.62-0.95:y0.44-0.62,8fb54b550875cdf0bc46c240bb5a6868b2f039781ed8de0cfdacdb4493abec81,
 tall,12.15,1458,4h,conifer_edge_density,0.2460263496000471,fraction,x0.62-0.95:y0.44-0.62,8fb54b550875cdf0bc46c240bb5a6868b2f039781ed8de0cfdacdb4493abec81,Sobel mag > 12 levels
 tall,16.20,1944,4a,sky_hex_anchor_0.02,#24384A,hex,x0.02-0.20:y0.02-0.72,8fb54b550875cdf0bc46c240bb5a6868b2f039781ed8de0cfdacdb4493abec81,
@@ -600,7 +596,7 @@ tall,16.20,1944,4b,falloff_sat_D3_D1,0.2565101169680047,ratio,x0.02-0.35:y0.62-0
 tall,16.20,1944,4c,bloom_peak_L,209.29600000000002,levels,x0.50-0.75:y0.30-0.55,8fb54b550875cdf0bc46c240bb5a6868b2f039781ed8de0cfdacdb4493abec81,
 tall,16.20,1944,4c,bloom_bg_L,141.784,levels,x0.50-0.75:y0.30-0.55,8fb54b550875cdf0bc46c240bb5a6868b2f039781ed8de0cfdacdb4493abec81,
 tall,16.20,1944,4c,bloom_peak_bg_ratio,1.4761609208373303,ratio,x0.50-0.75:y0.30-0.55,8fb54b550875cdf0bc46c240bb5a6868b2f039781ed8de0cfdacdb4493abec81,
-tall,16.20,1944,4c,bloom_r50_px,0.5884084647021012,px,x0.50-0.75:y0.30-0.55,8fb54b550875cdf0bc46c240bb5a6868b2f039781ed8de0cfdacdb4493abec81,halo-plus-mist; newly measured
+tall,16.20,1944,4c,bloom_r50_px,0.5884084647021012,px,x0.50-0.75:y0.30-0.55,8fb54b550875cdf0bc46c240bb5a6868b2f039781ed8de0cfdacdb4493abec81,"edge-limited: peak sits on the island silhouette, not sky; TOOL (ESRGAN/HEVC) — not a resolvable sky-side halo"
 tall,16.20,1944,4c,bloom_r50_pctH,0.015323137101617217,%H,x0.50-0.75:y0.30-0.55,8fb54b550875cdf0bc46c240bb5a6868b2f039781ed8de0cfdacdb4493abec81,
 tall,16.20,1944,4c,bloom_falloff_10_90_px,0.9414535435233621,px,x0.50-0.75:y0.30-0.55,8fb54b550875cdf0bc46c240bb5a6868b2f039781ed8de0cfdacdb4493abec81,
 tall,16.20,1944,4d,shadow_p0_1,2.5736,levels,x0.55-1.00:y0.72-0.90,8fb54b550875cdf0bc46c240bb5a6868b2f039781ed8de0cfdacdb4493abec81,
@@ -676,7 +672,6 @@ tall,16.20,1944,4g,palette_basalt_k3_hex,#070709,hex,x0.55-1.00:y0.45-0.90,8fb54
 tall,16.20,1944,4g,palette_basalt_k3_share,0.2709451467618172,fraction,x0.55-1.00:y0.45-0.90,8fb54b550875cdf0bc46c240bb5a6868b2f039781ed8de0cfdacdb4493abec81,
 tall,16.20,1944,4g,palette_turf_vs_517046_deltaE,30.329055315438673,dE76,x0.55-1.00:y0.45-0.90,8fb54b550875cdf0bc46c240bb5a6868b2f039781ed8de0cfdacdb4493abec81,"informational: #517046 is a reference-reel value, not a hero target"
 tall,16.20,1944,4g,palette_basalt_vs_474B59_deltaE,29.293889428104386,dE76,x0.55-1.00:y0.45-0.90,8fb54b550875cdf0bc46c240bb5a6868b2f039781ed8de0cfdacdb4493abec81,"informational: #474B59 is a reference-reel value, not a hero target"
-tall,16.20,1944,4h,conifer_tree_count,2,count,x0.62-0.95:y0.44-0.62,8fb54b550875cdf0bc46c240bb5a6868b2f039781ed8de0cfdacdb4493abec81,"connected 4-conn, area>200, h/w>1.5"
 tall,16.20,1944,4h,conifer_dark_area_pct,28.173896805856906,%,x0.62-0.95:y0.44-0.62,8fb54b550875cdf0bc46c240bb5a6868b2f039781ed8de0cfdacdb4493abec81,
 tall,16.20,1944,4h,conifer_edge_density,0.348104156222155,fraction,x0.62-0.95:y0.44-0.62,8fb54b550875cdf0bc46c240bb5a6868b2f039781ed8de0cfdacdb4493abec81,Sobel mag > 12 levels
 tall,20.25,2430,4a,sky_hex_anchor_0.02,#24384A,hex,x0.02-0.20:y0.02-0.72,8fb54b550875cdf0bc46c240bb5a6868b2f039781ed8de0cfdacdb4493abec81,
@@ -736,7 +731,7 @@ tall,20.25,2430,4b,falloff_sat_D3_D1,0.25721507661552,ratio,x0.02-0.35:y0.62-0.7
 tall,20.25,2430,4c,bloom_peak_L,176.9646,levels,x0.50-0.75:y0.30-0.55,8fb54b550875cdf0bc46c240bb5a6868b2f039781ed8de0cfdacdb4493abec81,
 tall,20.25,2430,4c,bloom_bg_L,142.21839999999997,levels,x0.50-0.75:y0.30-0.55,8fb54b550875cdf0bc46c240bb5a6868b2f039781ed8de0cfdacdb4493abec81,
 tall,20.25,2430,4c,bloom_peak_bg_ratio,1.244315784736715,ratio,x0.50-0.75:y0.30-0.55,8fb54b550875cdf0bc46c240bb5a6868b2f039781ed8de0cfdacdb4493abec81,
-tall,20.25,2430,4c,bloom_r50_px,1.5216677616833065,px,x0.50-0.75:y0.30-0.55,8fb54b550875cdf0bc46c240bb5a6868b2f039781ed8de0cfdacdb4493abec81,halo-plus-mist; newly measured
+tall,20.25,2430,4c,bloom_r50_px,1.5216677616833065,px,x0.50-0.75:y0.30-0.55,8fb54b550875cdf0bc46c240bb5a6868b2f039781ed8de0cfdacdb4493abec81,"edge-limited: peak sits on the island silhouette, not sky; TOOL (ESRGAN/HEVC) — not a resolvable sky-side halo"
 tall,20.25,2430,4c,bloom_r50_pctH,0.03962676462716944,%H,x0.50-0.75:y0.30-0.55,8fb54b550875cdf0bc46c240bb5a6868b2f039781ed8de0cfdacdb4493abec81,
 tall,20.25,2430,4c,bloom_falloff_10_90_px,2.070970614602267,px,x0.50-0.75:y0.30-0.55,8fb54b550875cdf0bc46c240bb5a6868b2f039781ed8de0cfdacdb4493abec81,
 tall,20.25,2430,4d,shadow_p0_1,1.8636,levels,x0.55-1.00:y0.72-0.90,8fb54b550875cdf0bc46c240bb5a6868b2f039781ed8de0cfdacdb4493abec81,
@@ -812,7 +807,6 @@ tall,20.25,2430,4g,palette_basalt_k3_hex,#060606,hex,x0.55-1.00:y0.45-0.90,8fb54
 tall,20.25,2430,4g,palette_basalt_k3_share,0.20315872598052118,fraction,x0.55-1.00:y0.45-0.90,8fb54b550875cdf0bc46c240bb5a6868b2f039781ed8de0cfdacdb4493abec81,
 tall,20.25,2430,4g,palette_turf_vs_517046_deltaE,28.02630960787311,dE76,x0.55-1.00:y0.45-0.90,8fb54b550875cdf0bc46c240bb5a6868b2f039781ed8de0cfdacdb4493abec81,"informational: #517046 is a reference-reel value, not a hero target"
 tall,20.25,2430,4g,palette_basalt_vs_474B59_deltaE,29.742305555023435,dE76,x0.55-1.00:y0.45-0.90,8fb54b550875cdf0bc46c240bb5a6868b2f039781ed8de0cfdacdb4493abec81,"informational: #474B59 is a reference-reel value, not a hero target"
-tall,20.25,2430,4h,conifer_tree_count,1,count,x0.62-0.95:y0.44-0.62,8fb54b550875cdf0bc46c240bb5a6868b2f039781ed8de0cfdacdb4493abec81,"connected 4-conn, area>200, h/w>1.5"
 tall,20.25,2430,4h,conifer_dark_area_pct,28.772862063436328,%,x0.62-0.95:y0.44-0.62,8fb54b550875cdf0bc46c240bb5a6868b2f039781ed8de0cfdacdb4493abec81,
 tall,20.25,2430,4h,conifer_edge_density,0.2791267407237514,fraction,x0.62-0.95:y0.44-0.62,8fb54b550875cdf0bc46c240bb5a6868b2f039781ed8de0cfdacdb4493abec81,Sobel mag > 12 levels
 tall,24.30,2916,4a,sky_hex_anchor_0.02,#24384A,hex,x0.02-0.20:y0.02-0.72,8fb54b550875cdf0bc46c240bb5a6868b2f039781ed8de0cfdacdb4493abec81,
@@ -872,7 +866,7 @@ tall,24.30,2916,4b,falloff_sat_D3_D1,0.26359429970629045,ratio,x0.02-0.35:y0.62-
 tall,24.30,2916,4c,bloom_peak_L,184.2562,levels,x0.50-0.75:y0.30-0.55,8fb54b550875cdf0bc46c240bb5a6868b2f039781ed8de0cfdacdb4493abec81,
 tall,24.30,2916,4c,bloom_bg_L,142.21839999999997,levels,x0.50-0.75:y0.30-0.55,8fb54b550875cdf0bc46c240bb5a6868b2f039781ed8de0cfdacdb4493abec81,
 tall,24.30,2916,4c,bloom_peak_bg_ratio,1.2955862251298007,ratio,x0.50-0.75:y0.30-0.55,8fb54b550875cdf0bc46c240bb5a6868b2f039781ed8de0cfdacdb4493abec81,
-tall,24.30,2916,4c,bloom_r50_px,1.4830595235561141,px,x0.50-0.75:y0.30-0.55,8fb54b550875cdf0bc46c240bb5a6868b2f039781ed8de0cfdacdb4493abec81,halo-plus-mist; newly measured
+tall,24.30,2916,4c,bloom_r50_px,1.4830595235561141,px,x0.50-0.75:y0.30-0.55,8fb54b550875cdf0bc46c240bb5a6868b2f039781ed8de0cfdacdb4493abec81,"edge-limited: peak sits on the island silhouette, not sky; TOOL (ESRGAN/HEVC) — not a resolvable sky-side halo"
 tall,24.30,2916,4c,bloom_r50_pctH,0.03862134175927381,%H,x0.50-0.75:y0.30-0.55,8fb54b550875cdf0bc46c240bb5a6868b2f039781ed8de0cfdacdb4493abec81,
 tall,24.30,2916,4c,bloom_falloff_10_90_px,1.6992833141062842,px,x0.50-0.75:y0.30-0.55,8fb54b550875cdf0bc46c240bb5a6868b2f039781ed8de0cfdacdb4493abec81,
 tall,24.30,2916,4d,shadow_p0_1,1.5736,levels,x0.55-1.00:y0.72-0.90,8fb54b550875cdf0bc46c240bb5a6868b2f039781ed8de0cfdacdb4493abec81,
@@ -948,7 +942,6 @@ tall,24.30,2916,4g,palette_basalt_k3_hex,#050507,hex,x0.55-1.00:y0.45-0.90,8fb54
 tall,24.30,2916,4g,palette_basalt_k3_share,0.2753146785075141,fraction,x0.55-1.00:y0.45-0.90,8fb54b550875cdf0bc46c240bb5a6868b2f039781ed8de0cfdacdb4493abec81,
 tall,24.30,2916,4g,palette_turf_vs_517046_deltaE,24.540421986494835,dE76,x0.55-1.00:y0.45-0.90,8fb54b550875cdf0bc46c240bb5a6868b2f039781ed8de0cfdacdb4493abec81,"informational: #517046 is a reference-reel value, not a hero target"
 tall,24.30,2916,4g,palette_basalt_vs_474B59_deltaE,29.762371241972332,dE76,x0.55-1.00:y0.45-0.90,8fb54b550875cdf0bc46c240bb5a6868b2f039781ed8de0cfdacdb4493abec81,"informational: #474B59 is a reference-reel value, not a hero target"
-tall,24.30,2916,4h,conifer_tree_count,2,count,x0.62-0.95:y0.44-0.62,8fb54b550875cdf0bc46c240bb5a6868b2f039781ed8de0cfdacdb4493abec81,"connected 4-conn, area>200, h/w>1.5"
 tall,24.30,2916,4h,conifer_dark_area_pct,25.467897207738037,%,x0.62-0.95:y0.44-0.62,8fb54b550875cdf0bc46c240bb5a6868b2f039781ed8de0cfdacdb4493abec81,
 tall,24.30,2916,4h,conifer_edge_density,0.3176768835133341,fraction,x0.62-0.95:y0.44-0.62,8fb54b550875cdf0bc46c240bb5a6868b2f039781ed8de0cfdacdb4493abec81,Sobel mag > 12 levels
 tall,28.35,3402,4a,sky_hex_anchor_0.02,#24384A,hex,x0.02-0.20:y0.02-0.72,8fb54b550875cdf0bc46c240bb5a6868b2f039781ed8de0cfdacdb4493abec81,
@@ -1008,7 +1001,7 @@ tall,28.35,3402,4b,falloff_sat_D3_D1,0.258990450245236,ratio,x0.02-0.35:y0.62-0.
 tall,28.35,3402,4c,bloom_peak_L,215.7926,levels,x0.50-0.75:y0.30-0.55,8fb54b550875cdf0bc46c240bb5a6868b2f039781ed8de0cfdacdb4493abec81,
 tall,28.35,3402,4c,bloom_bg_L,141.92839999999998,levels,x0.50-0.75:y0.30-0.55,8fb54b550875cdf0bc46c240bb5a6868b2f039781ed8de0cfdacdb4493abec81,
 tall,28.35,3402,4c,bloom_peak_bg_ratio,1.520432837966186,ratio,x0.50-0.75:y0.30-0.55,8fb54b550875cdf0bc46c240bb5a6868b2f039781ed8de0cfdacdb4493abec81,
-tall,28.35,3402,4c,bloom_r50_px,0.536550414332116,px,x0.50-0.75:y0.30-0.55,8fb54b550875cdf0bc46c240bb5a6868b2f039781ed8de0cfdacdb4493abec81,halo-plus-mist; newly measured
+tall,28.35,3402,4c,bloom_r50_px,0.536550414332116,px,x0.50-0.75:y0.30-0.55,8fb54b550875cdf0bc46c240bb5a6868b2f039781ed8de0cfdacdb4493abec81,"edge-limited: peak sits on the island silhouette, not sky; TOOL (ESRGAN/HEVC) — not a resolvable sky-side halo"
 tall,28.35,3402,4c,bloom_r50_pctH,0.013972667039898856,%H,x0.50-0.75:y0.30-0.55,8fb54b550875cdf0bc46c240bb5a6868b2f039781ed8de0cfdacdb4493abec81,
 tall,28.35,3402,4c,bloom_falloff_10_90_px,0.8584806629313859,px,x0.50-0.75:y0.30-0.55,8fb54b550875cdf0bc46c240bb5a6868b2f039781ed8de0cfdacdb4493abec81,
 tall,28.35,3402,4d,shadow_p0_1,1.2928,levels,x0.55-1.00:y0.72-0.90,8fb54b550875cdf0bc46c240bb5a6868b2f039781ed8de0cfdacdb4493abec81,
@@ -1084,7 +1077,6 @@ tall,28.35,3402,4g,palette_basalt_k3_hex,#050607,hex,x0.55-1.00:y0.45-0.90,8fb54
 tall,28.35,3402,4g,palette_basalt_k3_share,0.2962486176389273,fraction,x0.55-1.00:y0.45-0.90,8fb54b550875cdf0bc46c240bb5a6868b2f039781ed8de0cfdacdb4493abec81,
 tall,28.35,3402,4g,palette_turf_vs_517046_deltaE,26.963346096649556,dE76,x0.55-1.00:y0.45-0.90,8fb54b550875cdf0bc46c240bb5a6868b2f039781ed8de0cfdacdb4493abec81,"informational: #517046 is a reference-reel value, not a hero target"
 tall,28.35,3402,4g,palette_basalt_vs_474B59_deltaE,29.710799251160005,dE76,x0.55-1.00:y0.45-0.90,8fb54b550875cdf0bc46c240bb5a6868b2f039781ed8de0cfdacdb4493abec81,"informational: #474B59 is a reference-reel value, not a hero target"
-tall,28.35,3402,4h,conifer_tree_count,2,count,x0.62-0.95:y0.44-0.62,8fb54b550875cdf0bc46c240bb5a6868b2f039781ed8de0cfdacdb4493abec81,"connected 4-conn, area>200, h/w>1.5"
 tall,28.35,3402,4h,conifer_dark_area_pct,28.936862039079898,%,x0.62-0.95:y0.44-0.62,8fb54b550875cdf0bc46c240bb5a6868b2f039781ed8de0cfdacdb4493abec81,
 tall,28.35,3402,4h,conifer_edge_density,0.4214657294852877,fraction,x0.62-0.95:y0.44-0.62,8fb54b550875cdf0bc46c240bb5a6868b2f039781ed8de0cfdacdb4493abec81,Sobel mag > 12 levels
 tall,mean,,4a,sky_anchor_0.02_deltaE_min,21.65500100785603,dE76,x0.02-0.20:y0.02-0.72,8fb54b550875cdf0bc46c240bb5a6868b2f039781ed8de0cfdacdb4493abec81,mean of s0..s7
@@ -1281,8 +1273,6 @@ tall,mean,,4g,palette_turf_vs_517046_deltaE,28.100550751573287,dE76,x0.55-1.00:y
 tall,frame_sd,,4g,palette_turf_vs_517046_deltaE,1.7098855588523172,dE76,x0.55-1.00:y0.45-0.90,8fb54b550875cdf0bc46c240bb5a6868b2f039781ed8de0cfdacdb4493abec81,frame_sd of s0..s7
 tall,mean,,4g,palette_basalt_vs_474B59_deltaE,29.520682354042172,dE76,x0.55-1.00:y0.45-0.90,8fb54b550875cdf0bc46c240bb5a6868b2f039781ed8de0cfdacdb4493abec81,mean of s0..s7
 tall,frame_sd,,4g,palette_basalt_vs_474B59_deltaE,0.2803111415806837,dE76,x0.55-1.00:y0.45-0.90,8fb54b550875cdf0bc46c240bb5a6868b2f039781ed8de0cfdacdb4493abec81,frame_sd of s0..s7
-tall,mean,,4h,conifer_tree_count,1.625,count,x0.62-0.95:y0.44-0.62,8fb54b550875cdf0bc46c240bb5a6868b2f039781ed8de0cfdacdb4493abec81,mean of s0..s7
-tall,frame_sd,,4h,conifer_tree_count,0.6959705453537527,count,x0.62-0.95:y0.44-0.62,8fb54b550875cdf0bc46c240bb5a6868b2f039781ed8de0cfdacdb4493abec81,frame_sd of s0..s7
 tall,mean,,4h,conifer_dark_area_pct,28.234407316672183,%,x0.62-0.95:y0.44-0.62,8fb54b550875cdf0bc46c240bb5a6868b2f039781ed8de0cfdacdb4493abec81,mean of s0..s7
 tall,frame_sd,,4h,conifer_dark_area_pct,1.9192980332898897,%,x0.62-0.95:y0.44-0.62,8fb54b550875cdf0bc46c240bb5a6868b2f039781ed8de0cfdacdb4493abec81,frame_sd of s0..s7
 tall,mean,,4h,conifer_edge_density,0.35171728068555236,fraction,x0.62-0.95:y0.44-0.62,8fb54b550875cdf0bc46c240bb5a6868b2f039781ed8de0cfdacdb4493abec81,mean of s0..s7
@@ -1424,7 +1414,7 @@ wide,0,0,4b,falloff_sat_D3_D1,0.2813203780458233,ratio,x0.02-0.30:y0.50-0.60,aba
 wide,0,0,4c,bloom_peak_L,210.3164,levels,x0.55-0.80:y0.20-0.45,aba25781e62700cce31a490a6872ab00b57083459a0cceaaa1e48fd2b80cc844,
 wide,0,0,4c,bloom_bg_L,123.4992,levels,x0.55-0.80:y0.20-0.45,aba25781e62700cce31a490a6872ab00b57083459a0cceaaa1e48fd2b80cc844,
 wide,0,0,4c,bloom_peak_bg_ratio,1.702977833054789,ratio,x0.55-0.80:y0.20-0.45,aba25781e62700cce31a490a6872ab00b57083459a0cceaaa1e48fd2b80cc844,
-wide,0,0,4c,bloom_r50_px,0.5048221057025614,px,x0.55-0.80:y0.20-0.45,aba25781e62700cce31a490a6872ab00b57083459a0cceaaa1e48fd2b80cc844,halo-plus-mist; newly measured
+wide,0,0,4c,bloom_r50_px,0.5048221057025614,px,x0.55-0.80:y0.20-0.45,aba25781e62700cce31a490a6872ab00b57083459a0cceaaa1e48fd2b80cc844,"edge-limited: peak sits on the island silhouette, not sky; TOOL (ESRGAN/HEVC) — not a resolvable sky-side halo"
 wide,0,0,4c,bloom_r50_pctH,0.02337139378252599,%H,x0.55-0.80:y0.20-0.45,aba25781e62700cce31a490a6872ab00b57083459a0cceaaa1e48fd2b80cc844,
 wide,0,0,4c,bloom_falloff_10_90_px,0.8077153691240985,px,x0.55-0.80:y0.20-0.45,aba25781e62700cce31a490a6872ab00b57083459a0cceaaa1e48fd2b80cc844,
 wide,0,0,4d,shadow_p0_1,0,levels,x0.58-0.96:y0.55-0.90,aba25781e62700cce31a490a6872ab00b57083459a0cceaaa1e48fd2b80cc844,
@@ -1500,7 +1490,6 @@ wide,0,0,4g,palette_basalt_k3_hex,#090805,hex,x0.58-0.96:y0.28-0.90,aba25781e627
 wide,0,0,4g,palette_basalt_k3_share,0.14174632699190054,fraction,x0.58-0.96:y0.28-0.90,aba25781e62700cce31a490a6872ab00b57083459a0cceaaa1e48fd2b80cc844,
 wide,0,0,4g,palette_turf_vs_517046_deltaE,32.73511674904895,dE76,x0.58-0.96:y0.28-0.90,aba25781e62700cce31a490a6872ab00b57083459a0cceaaa1e48fd2b80cc844,"informational: #517046 is a reference-reel value, not a hero target"
 wide,0,0,4g,palette_basalt_vs_474B59_deltaE,31.77699731513632,dE76,x0.58-0.96:y0.28-0.90,aba25781e62700cce31a490a6872ab00b57083459a0cceaaa1e48fd2b80cc844,"informational: #474B59 is a reference-reel value, not a hero target"
-wide,0,0,4h,conifer_tree_count,0,count,x0.62-0.95:y0.28-0.50,aba25781e62700cce31a490a6872ab00b57083459a0cceaaa1e48fd2b80cc844,"connected 4-conn, area>200, h/w>1.5"
 wide,0,0,4h,conifer_dark_area_pct,13.97382960162838,%,x0.62-0.95:y0.28-0.50,aba25781e62700cce31a490a6872ab00b57083459a0cceaaa1e48fd2b80cc844,
 wide,0,0,4h,conifer_edge_density,0.20098865949403896,fraction,x0.62-0.95:y0.28-0.50,aba25781e62700cce31a490a6872ab00b57083459a0cceaaa1e48fd2b80cc844,Sobel mag > 12 levels
 wide,4.05,486,4a,sky_hex_anchor_0.02,#2C3E4F,hex,x0.02-0.30:y0.02-0.58,aba25781e62700cce31a490a6872ab00b57083459a0cceaaa1e48fd2b80cc844,
@@ -1560,7 +1549,7 @@ wide,4.05,486,4b,falloff_sat_D3_D1,0.325114966330553,ratio,x0.02-0.30:y0.50-0.60
 wide,4.05,486,4c,bloom_peak_L,193.18519999999998,levels,x0.55-0.80:y0.20-0.45,aba25781e62700cce31a490a6872ab00b57083459a0cceaaa1e48fd2b80cc844,
 wide,4.05,486,4c,bloom_bg_L,123.0648,levels,x0.55-0.80:y0.20-0.45,aba25781e62700cce31a490a6872ab00b57083459a0cceaaa1e48fd2b80cc844,
 wide,4.05,486,4c,bloom_peak_bg_ratio,1.5697843737608153,ratio,x0.55-0.80:y0.20-0.45,aba25781e62700cce31a490a6872ab00b57083459a0cceaaa1e48fd2b80cc844,
-wide,4.05,486,4c,bloom_r50_px,1.120530176054711,px,x0.55-0.80:y0.20-0.45,aba25781e62700cce31a490a6872ab00b57083459a0cceaaa1e48fd2b80cc844,halo-plus-mist; newly measured
+wide,4.05,486,4c,bloom_r50_px,1.120530176054711,px,x0.55-0.80:y0.20-0.45,aba25781e62700cce31a490a6872ab00b57083459a0cceaaa1e48fd2b80cc844,"edge-limited: peak sits on the island silhouette, not sky; TOOL (ESRGAN/HEVC) — not a resolvable sky-side halo"
 wide,4.05,486,4c,bloom_r50_pctH,0.051876397039569956,%H,x0.55-0.80:y0.20-0.45,aba25781e62700cce31a490a6872ab00b57083459a0cceaaa1e48fd2b80cc844,
 wide,4.05,486,4c,bloom_falloff_10_90_px,1.2502138947368424,px,x0.55-0.80:y0.20-0.45,aba25781e62700cce31a490a6872ab00b57083459a0cceaaa1e48fd2b80cc844,
 wide,4.05,486,4d,shadow_p0_1,1,levels,x0.58-0.96:y0.55-0.90,aba25781e62700cce31a490a6872ab00b57083459a0cceaaa1e48fd2b80cc844,
@@ -1636,7 +1625,6 @@ wide,4.05,486,4g,palette_basalt_k3_hex,#110F0A,hex,x0.58-0.96:y0.28-0.90,aba2578
 wide,4.05,486,4g,palette_basalt_k3_share,0.1600578620304805,fraction,x0.58-0.96:y0.28-0.90,aba25781e62700cce31a490a6872ab00b57083459a0cceaaa1e48fd2b80cc844,
 wide,4.05,486,4g,palette_turf_vs_517046_deltaE,31.638535961204205,dE76,x0.58-0.96:y0.28-0.90,aba25781e62700cce31a490a6872ab00b57083459a0cceaaa1e48fd2b80cc844,"informational: #517046 is a reference-reel value, not a hero target"
 wide,4.05,486,4g,palette_basalt_vs_474B59_deltaE,29.751144958272743,dE76,x0.58-0.96:y0.28-0.90,aba25781e62700cce31a490a6872ab00b57083459a0cceaaa1e48fd2b80cc844,"informational: #474B59 is a reference-reel value, not a hero target"
-wide,4.05,486,4h,conifer_tree_count,0,count,x0.62-0.95:y0.28-0.50,aba25781e62700cce31a490a6872ab00b57083459a0cceaaa1e48fd2b80cc844,"connected 4-conn, area>200, h/w>1.5"
 wide,4.05,486,4h,conifer_dark_area_pct,13.263822539774853,%,x0.62-0.95:y0.28-0.50,aba25781e62700cce31a490a6872ab00b57083459a0cceaaa1e48fd2b80cc844,
 wide,4.05,486,4h,conifer_edge_density,0.18024342624517095,fraction,x0.62-0.95:y0.28-0.50,aba25781e62700cce31a490a6872ab00b57083459a0cceaaa1e48fd2b80cc844,Sobel mag > 12 levels
 wide,8.10,972,4a,sky_hex_anchor_0.02,#2D3E4F,hex,x0.02-0.30:y0.02-0.58,aba25781e62700cce31a490a6872ab00b57083459a0cceaaa1e48fd2b80cc844,
@@ -1696,7 +1684,7 @@ wide,8.10,972,4b,falloff_sat_D3_D1,0.3318509293322022,ratio,x0.02-0.30:y0.50-0.6
 wide,8.10,972,4c,bloom_peak_L,191.46079999999998,levels,x0.55-0.80:y0.20-0.45,aba25781e62700cce31a490a6872ab00b57083459a0cceaaa1e48fd2b80cc844,
 wide,8.10,972,4c,bloom_bg_L,123.4992,levels,x0.55-0.80:y0.20-0.45,aba25781e62700cce31a490a6872ab00b57083459a0cceaaa1e48fd2b80cc844,
 wide,8.10,972,4c,bloom_peak_bg_ratio,1.5502999209711479,ratio,x0.55-0.80:y0.20-0.45,aba25781e62700cce31a490a6872ab00b57083459a0cceaaa1e48fd2b80cc844,
-wide,8.10,972,4c,bloom_r50_px,1.17928963927984,px,x0.55-0.80:y0.20-0.45,aba25781e62700cce31a490a6872ab00b57083459a0cceaaa1e48fd2b80cc844,halo-plus-mist; newly measured
+wide,8.10,972,4c,bloom_r50_px,1.17928963927984,px,x0.55-0.80:y0.20-0.45,aba25781e62700cce31a490a6872ab00b57083459a0cceaaa1e48fd2b80cc844,"edge-limited: peak sits on the island silhouette, not sky; TOOL (ESRGAN/HEVC) — not a resolvable sky-side halo"
 wide,8.10,972,4c,bloom_r50_pctH,0.05459674255925186,%H,x0.55-0.80:y0.20-0.45,aba25781e62700cce31a490a6872ab00b57083459a0cceaaa1e48fd2b80cc844,
 wide,8.10,972,4c,bloom_falloff_10_90_px,1.453422992177669,px,x0.55-0.80:y0.20-0.45,aba25781e62700cce31a490a6872ab00b57083459a0cceaaa1e48fd2b80cc844,
 wide,8.10,972,4d,shadow_p0_1,1.5655999999999999,levels,x0.58-0.96:y0.55-0.90,aba25781e62700cce31a490a6872ab00b57083459a0cceaaa1e48fd2b80cc844,
@@ -1772,7 +1760,6 @@ wide,8.10,972,4g,palette_basalt_k3_hex,#050508,hex,x0.58-0.96:y0.28-0.90,aba2578
 wide,8.10,972,4g,palette_basalt_k3_share,0.3155507125052029,fraction,x0.58-0.96:y0.28-0.90,aba25781e62700cce31a490a6872ab00b57083459a0cceaaa1e48fd2b80cc844,
 wide,8.10,972,4g,palette_turf_vs_517046_deltaE,30.32863334677502,dE76,x0.58-0.96:y0.28-0.90,aba25781e62700cce31a490a6872ab00b57083459a0cceaaa1e48fd2b80cc844,"informational: #517046 is a reference-reel value, not a hero target"
 wide,8.10,972,4g,palette_basalt_vs_474B59_deltaE,29.857594956142485,dE76,x0.58-0.96:y0.28-0.90,aba25781e62700cce31a490a6872ab00b57083459a0cceaaa1e48fd2b80cc844,"informational: #474B59 is a reference-reel value, not a hero target"
-wide,8.10,972,4h,conifer_tree_count,0,count,x0.62-0.95:y0.28-0.50,aba25781e62700cce31a490a6872ab00b57083459a0cceaaa1e48fd2b80cc844,"connected 4-conn, area>200, h/w>1.5"
 wide,8.10,972,4h,conifer_dark_area_pct,9.50159930212271,%,x0.62-0.95:y0.28-0.50,aba25781e62700cce31a490a6872ab00b57083459a0cceaaa1e48fd2b80cc844,
 wide,8.10,972,4h,conifer_edge_density,0.11407302787355128,fraction,x0.62-0.95:y0.28-0.50,aba25781e62700cce31a490a6872ab00b57083459a0cceaaa1e48fd2b80cc844,Sobel mag > 12 levels
 wide,12.15,1458,4a,sky_hex_anchor_0.02,#2D3E4E,hex,x0.02-0.30:y0.02-0.58,aba25781e62700cce31a490a6872ab00b57083459a0cceaaa1e48fd2b80cc844,
@@ -1832,7 +1819,7 @@ wide,12.15,1458,4b,falloff_sat_D3_D1,0.344123446111234,ratio,x0.02-0.30:y0.50-0.
 wide,12.15,1458,4c,bloom_peak_L,202.94899999999998,levels,x0.55-0.80:y0.20-0.45,aba25781e62700cce31a490a6872ab00b57083459a0cceaaa1e48fd2b80cc844,
 wide,12.15,1458,4c,bloom_bg_L,123.20920000000001,levels,x0.55-0.80:y0.20-0.45,aba25781e62700cce31a490a6872ab00b57083459a0cceaaa1e48fd2b80cc844,
 wide,12.15,1458,4c,bloom_peak_bg_ratio,1.647190307217318,ratio,x0.55-0.80:y0.20-0.45,aba25781e62700cce31a490a6872ab00b57083459a0cceaaa1e48fd2b80cc844,
-wide,12.15,1458,4c,bloom_r50_px,0.6430629032258065,px,x0.55-0.80:y0.20-0.45,aba25781e62700cce31a490a6872ab00b57083459a0cceaaa1e48fd2b80cc844,halo-plus-mist; newly measured
+wide,12.15,1458,4c,bloom_r50_px,0.6430629032258065,px,x0.55-0.80:y0.20-0.45,aba25781e62700cce31a490a6872ab00b57083459a0cceaaa1e48fd2b80cc844,"edge-limited: peak sits on the island silhouette, not sky; TOOL (ESRGAN/HEVC) — not a resolvable sky-side halo"
 wide,12.15,1458,4c,bloom_r50_pctH,0.029771430704898447,%H,x0.55-0.80:y0.20-0.45,aba25781e62700cce31a490a6872ab00b57083459a0cceaaa1e48fd2b80cc844,
 wide,12.15,1458,4c,bloom_falloff_10_90_px,0.9948082093485697,px,x0.55-0.80:y0.20-0.45,aba25781e62700cce31a490a6872ab00b57083459a0cceaaa1e48fd2b80cc844,
 wide,12.15,1458,4d,shadow_p0_1,1.5736,levels,x0.58-0.96:y0.55-0.90,aba25781e62700cce31a490a6872ab00b57083459a0cceaaa1e48fd2b80cc844,
@@ -1908,7 +1895,6 @@ wide,12.15,1458,4g,palette_basalt_k3_hex,#050509,hex,x0.58-0.96:y0.28-0.90,aba25
 wide,12.15,1458,4g,palette_basalt_k3_share,0.23300831518511186,fraction,x0.58-0.96:y0.28-0.90,aba25781e62700cce31a490a6872ab00b57083459a0cceaaa1e48fd2b80cc844,
 wide,12.15,1458,4g,palette_turf_vs_517046_deltaE,32.50095812444287,dE76,x0.58-0.96:y0.28-0.90,aba25781e62700cce31a490a6872ab00b57083459a0cceaaa1e48fd2b80cc844,"informational: #517046 is a reference-reel value, not a hero target"
 wide,12.15,1458,4g,palette_basalt_vs_474B59_deltaE,29.057179411844576,dE76,x0.58-0.96:y0.28-0.90,aba25781e62700cce31a490a6872ab00b57083459a0cceaaa1e48fd2b80cc844,"informational: #474B59 is a reference-reel value, not a hero target"
-wide,12.15,1458,4h,conifer_tree_count,0,count,x0.62-0.95:y0.28-0.50,aba25781e62700cce31a490a6872ab00b57083459a0cceaaa1e48fd2b80cc844,"connected 4-conn, area>200, h/w>1.5"
 wide,12.15,1458,4h,conifer_dark_area_pct,12.517093839571302,%,x0.62-0.95:y0.28-0.50,aba25781e62700cce31a490a6872ab00b57083459a0cceaaa1e48fd2b80cc844,
 wide,12.15,1458,4h,conifer_edge_density,0.1600564948282308,fraction,x0.62-0.95:y0.28-0.50,aba25781e62700cce31a490a6872ab00b57083459a0cceaaa1e48fd2b80cc844,Sobel mag > 12 levels
 wide,16.20,1944,4a,sky_hex_anchor_0.02,#2D3E4E,hex,x0.02-0.30:y0.02-0.58,aba25781e62700cce31a490a6872ab00b57083459a0cceaaa1e48fd2b80cc844,
@@ -1968,7 +1954,7 @@ wide,16.20,1944,4b,falloff_sat_D3_D1,0.325037128190167,ratio,x0.02-0.30:y0.50-0.
 wide,16.20,1944,4c,bloom_peak_L,201.24419999999998,levels,x0.55-0.80:y0.20-0.45,aba25781e62700cce31a490a6872ab00b57083459a0cceaaa1e48fd2b80cc844,
 wide,16.20,1944,4c,bloom_bg_L,124.06479999999999,levels,x0.55-0.80:y0.20-0.45,aba25781e62700cce31a490a6872ab00b57083459a0cceaaa1e48fd2b80cc844,
 wide,16.20,1944,4c,bloom_peak_bg_ratio,1.6220894242363668,ratio,x0.55-0.80:y0.20-0.45,aba25781e62700cce31a490a6872ab00b57083459a0cceaaa1e48fd2b80cc844,
-wide,16.20,1944,4c,bloom_r50_px,0.8300652790596269,px,x0.55-0.80:y0.20-0.45,aba25781e62700cce31a490a6872ab00b57083459a0cceaaa1e48fd2b80cc844,halo-plus-mist; newly measured
+wide,16.20,1944,4c,bloom_r50_px,0.8300652790596269,px,x0.55-0.80:y0.20-0.45,aba25781e62700cce31a490a6872ab00b57083459a0cceaaa1e48fd2b80cc844,"edge-limited: peak sits on the island silhouette, not sky; TOOL (ESRGAN/HEVC) — not a resolvable sky-side halo"
 wide,16.20,1944,4c,bloom_r50_pctH,0.03842894810461236,%H,x0.55-0.80:y0.20-0.45,aba25781e62700cce31a490a6872ab00b57083459a0cceaaa1e48fd2b80cc844,
 wide,16.20,1944,4c,bloom_falloff_10_90_px,1.4183632464663045,px,x0.55-0.80:y0.20-0.45,aba25781e62700cce31a490a6872ab00b57083459a0cceaaa1e48fd2b80cc844,
 wide,16.20,1944,4d,shadow_p0_1,1.71,levels,x0.58-0.96:y0.55-0.90,aba25781e62700cce31a490a6872ab00b57083459a0cceaaa1e48fd2b80cc844,
@@ -2044,7 +2030,6 @@ wide,16.20,1944,4g,palette_basalt_k3_hex,#0B0A06,hex,x0.58-0.96:y0.28-0.90,aba25
 wide,16.20,1944,4g,palette_basalt_k3_share,0.2650220710921494,fraction,x0.58-0.96:y0.28-0.90,aba25781e62700cce31a490a6872ab00b57083459a0cceaaa1e48fd2b80cc844,
 wide,16.20,1944,4g,palette_turf_vs_517046_deltaE,35.281303011832605,dE76,x0.58-0.96:y0.28-0.90,aba25781e62700cce31a490a6872ab00b57083459a0cceaaa1e48fd2b80cc844,"informational: #517046 is a reference-reel value, not a hero target"
 wide,16.20,1944,4g,palette_basalt_vs_474B59_deltaE,29.163130273567926,dE76,x0.58-0.96:y0.28-0.90,aba25781e62700cce31a490a6872ab00b57083459a0cceaaa1e48fd2b80cc844,"informational: #474B59 is a reference-reel value, not a hero target"
-wide,16.20,1944,4h,conifer_tree_count,1,count,x0.62-0.95:y0.28-0.50,aba25781e62700cce31a490a6872ab00b57083459a0cceaaa1e48fd2b80cc844,"connected 4-conn, area>200, h/w>1.5"
 wide,16.20,1944,4h,conifer_dark_area_pct,12.376355252772816,%,x0.62-0.95:y0.28-0.50,aba25781e62700cce31a490a6872ab00b57083459a0cceaaa1e48fd2b80cc844,
 wide,16.20,1944,4h,conifer_edge_density,0.18005234079674323,fraction,x0.62-0.95:y0.28-0.50,aba25781e62700cce31a490a6872ab00b57083459a0cceaaa1e48fd2b80cc844,Sobel mag > 12 levels
 wide,20.25,2430,4a,sky_hex_anchor_0.02,#2D3E4E,hex,x0.02-0.30:y0.02-0.58,aba25781e62700cce31a490a6872ab00b57083459a0cceaaa1e48fd2b80cc844,
@@ -2104,7 +2089,7 @@ wide,20.25,2430,4b,falloff_sat_D3_D1,0.3160587302952453,ratio,x0.02-0.30:y0.50-0
 wide,20.25,2430,4c,bloom_peak_L,186.74159999999998,levels,x0.55-0.80:y0.20-0.45,aba25781e62700cce31a490a6872ab00b57083459a0cceaaa1e48fd2b80cc844,
 wide,20.25,2430,4c,bloom_bg_L,124.2092,levels,x0.55-0.80:y0.20-0.45,aba25781e62700cce31a490a6872ab00b57083459a0cceaaa1e48fd2b80cc844,
 wide,20.25,2430,4c,bloom_peak_bg_ratio,1.5034441893193096,ratio,x0.55-0.80:y0.20-0.45,aba25781e62700cce31a490a6872ab00b57083459a0cceaaa1e48fd2b80cc844,
-wide,20.25,2430,4c,bloom_r50_px,0.7091732857090883,px,x0.55-0.80:y0.20-0.45,aba25781e62700cce31a490a6872ab00b57083459a0cceaaa1e48fd2b80cc844,halo-plus-mist; newly measured
+wide,20.25,2430,4c,bloom_r50_px,0.7091732857090883,px,x0.55-0.80:y0.20-0.45,aba25781e62700cce31a490a6872ab00b57083459a0cceaaa1e48fd2b80cc844,"edge-limited: peak sits on the island silhouette, not sky; TOOL (ESRGAN/HEVC) — not a resolvable sky-side halo"
 wide,20.25,2430,4c,bloom_r50_pctH,0.03283209656060594,%H,x0.55-0.80:y0.20-0.45,aba25781e62700cce31a490a6872ab00b57083459a0cceaaa1e48fd2b80cc844,
 wide,20.25,2430,4c,bloom_falloff_10_90_px,1.0663806417051573,px,x0.55-0.80:y0.20-0.45,aba25781e62700cce31a490a6872ab00b57083459a0cceaaa1e48fd2b80cc844,
 wide,20.25,2430,4d,shadow_p0_1,1.5655999999999999,levels,x0.58-0.96:y0.55-0.90,aba25781e62700cce31a490a6872ab00b57083459a0cceaaa1e48fd2b80cc844,
@@ -2180,7 +2165,6 @@ wide,20.25,2430,4g,palette_basalt_k3_hex,#111005,hex,x0.58-0.96:y0.28-0.90,aba25
 wide,20.25,2430,4g,palette_basalt_k3_share,0.1881916487642843,fraction,x0.58-0.96:y0.28-0.90,aba25781e62700cce31a490a6872ab00b57083459a0cceaaa1e48fd2b80cc844,
 wide,20.25,2430,4g,palette_turf_vs_517046_deltaE,26.33029444548267,dE76,x0.58-0.96:y0.28-0.90,aba25781e62700cce31a490a6872ab00b57083459a0cceaaa1e48fd2b80cc844,"informational: #517046 is a reference-reel value, not a hero target"
 wide,20.25,2430,4g,palette_basalt_vs_474B59_deltaE,29.379062179130127,dE76,x0.58-0.96:y0.28-0.90,aba25781e62700cce31a490a6872ab00b57083459a0cceaaa1e48fd2b80cc844,"informational: #474B59 is a reference-reel value, not a hero target"
-wide,20.25,2430,4h,conifer_tree_count,0,count,x0.62-0.95:y0.28-0.50,aba25781e62700cce31a490a6872ab00b57083459a0cceaaa1e48fd2b80cc844,"connected 4-conn, area>200, h/w>1.5"
 wide,20.25,2430,4h,conifer_dark_area_pct,9.257674573173265,%,x0.62-0.95:y0.28-0.50,aba25781e62700cce31a490a6872ab00b57083459a0cceaaa1e48fd2b80cc844,
 wide,20.25,2430,4h,conifer_edge_density,0.11113031196776471,fraction,x0.62-0.95:y0.28-0.50,aba25781e62700cce31a490a6872ab00b57083459a0cceaaa1e48fd2b80cc844,Sobel mag > 12 levels
 wide,24.30,2916,4a,sky_hex_anchor_0.02,#2D3E4E,hex,x0.02-0.30:y0.02-0.58,aba25781e62700cce31a490a6872ab00b57083459a0cceaaa1e48fd2b80cc844,
@@ -2240,7 +2224,7 @@ wide,24.30,2916,4b,falloff_sat_D3_D1,0.32184363520537684,ratio,x0.02-0.30:y0.50-
 wide,24.30,2916,4c,bloom_peak_L,180.6814,levels,x0.55-0.80:y0.20-0.45,aba25781e62700cce31a490a6872ab00b57083459a0cceaaa1e48fd2b80cc844,
 wide,24.30,2916,4c,bloom_bg_L,123.20920000000001,levels,x0.55-0.80:y0.20-0.45,aba25781e62700cce31a490a6872ab00b57083459a0cceaaa1e48fd2b80cc844,
 wide,24.30,2916,4c,bloom_peak_bg_ratio,1.4664602967960183,ratio,x0.55-0.80:y0.20-0.45,aba25781e62700cce31a490a6872ab00b57083459a0cceaaa1e48fd2b80cc844,
-wide,24.30,2916,4c,bloom_r50_px,0.8923419526028092,px,x0.55-0.80:y0.20-0.45,aba25781e62700cce31a490a6872ab00b57083459a0cceaaa1e48fd2b80cc844,halo-plus-mist; newly measured
+wide,24.30,2916,4c,bloom_r50_px,0.8923419526028092,px,x0.55-0.80:y0.20-0.45,aba25781e62700cce31a490a6872ab00b57083459a0cceaaa1e48fd2b80cc844,"edge-limited: peak sits on the island silhouette, not sky; TOOL (ESRGAN/HEVC) — not a resolvable sky-side halo"
 wide,24.30,2916,4c,bloom_r50_pctH,0.04131212743531524,%H,x0.55-0.80:y0.20-0.45,aba25781e62700cce31a490a6872ab00b57083459a0cceaaa1e48fd2b80cc844,
 wide,24.30,2916,4c,bloom_falloff_10_90_px,2.088901125946552,px,x0.55-0.80:y0.20-0.45,aba25781e62700cce31a490a6872ab00b57083459a0cceaaa1e48fd2b80cc844,
 wide,24.30,2916,4d,shadow_p0_1,1.71,levels,x0.58-0.96:y0.55-0.90,aba25781e62700cce31a490a6872ab00b57083459a0cceaaa1e48fd2b80cc844,
@@ -2316,7 +2300,6 @@ wide,24.30,2916,4g,palette_basalt_k3_hex,#111008,hex,x0.58-0.96:y0.28-0.90,aba25
 wide,24.30,2916,4g,palette_basalt_k3_share,0.21346713780918727,fraction,x0.58-0.96:y0.28-0.90,aba25781e62700cce31a490a6872ab00b57083459a0cceaaa1e48fd2b80cc844,
 wide,24.30,2916,4g,palette_turf_vs_517046_deltaE,29.081942331168687,dE76,x0.58-0.96:y0.28-0.90,aba25781e62700cce31a490a6872ab00b57083459a0cceaaa1e48fd2b80cc844,"informational: #517046 is a reference-reel value, not a hero target"
 wide,24.30,2916,4g,palette_basalt_vs_474B59_deltaE,29.543419720593565,dE76,x0.58-0.96:y0.28-0.90,aba25781e62700cce31a490a6872ab00b57083459a0cceaaa1e48fd2b80cc844,"informational: #474B59 is a reference-reel value, not a hero target"
-wide,24.30,2916,4h,conifer_tree_count,0,count,x0.62-0.95:y0.28-0.50,aba25781e62700cce31a490a6872ab00b57083459a0cceaaa1e48fd2b80cc844,"connected 4-conn, area>200, h/w>1.5"
 wide,24.30,2916,4h,conifer_dark_area_pct,13.58800315706393,%,x0.62-0.95:y0.28-0.50,aba25781e62700cce31a490a6872ab00b57083459a0cceaaa1e48fd2b80cc844,
 wide,24.30,2916,4h,conifer_edge_density,0.17583350641797865,fraction,x0.62-0.95:y0.28-0.50,aba25781e62700cce31a490a6872ab00b57083459a0cceaaa1e48fd2b80cc844,Sobel mag > 12 levels
 wide,28.35,3402,4a,sky_hex_anchor_0.02,#2D3E4E,hex,x0.02-0.30:y0.02-0.58,aba25781e62700cce31a490a6872ab00b57083459a0cceaaa1e48fd2b80cc844,
@@ -2376,7 +2359,7 @@ wide,28.35,3402,4b,falloff_sat_D3_D1,0.31296227420839245,ratio,x0.02-0.30:y0.50-
 wide,28.35,3402,4c,bloom_peak_L,204.11179999999996,levels,x0.55-0.80:y0.20-0.45,aba25781e62700cce31a490a6872ab00b57083459a0cceaaa1e48fd2b80cc844,
 wide,28.35,3402,4c,bloom_bg_L,122.49919999999999,levels,x0.55-0.80:y0.20-0.45,aba25781e62700cce31a490a6872ab00b57083459a0cceaaa1e48fd2b80cc844,
 wide,28.35,3402,4c,bloom_peak_bg_ratio,1.6662296570100048,ratio,x0.55-0.80:y0.20-0.45,aba25781e62700cce31a490a6872ab00b57083459a0cceaaa1e48fd2b80cc844,
-wide,28.35,3402,4c,bloom_r50_px,0.4957911152102984,px,x0.55-0.80:y0.20-0.45,aba25781e62700cce31a490a6872ab00b57083459a0cceaaa1e48fd2b80cc844,halo-plus-mist; newly measured
+wide,28.35,3402,4c,bloom_r50_px,0.4957911152102984,px,x0.55-0.80:y0.20-0.45,aba25781e62700cce31a490a6872ab00b57083459a0cceaaa1e48fd2b80cc844,"edge-limited: peak sits on the island silhouette, not sky; TOOL (ESRGAN/HEVC) — not a resolvable sky-side halo"
 wide,28.35,3402,4c,bloom_r50_pctH,0.02295329237084715,%H,x0.55-0.80:y0.20-0.45,aba25781e62700cce31a490a6872ab00b57083459a0cceaaa1e48fd2b80cc844,
 wide,28.35,3402,4c,bloom_falloff_10_90_px,0.7947529822317744,px,x0.55-0.80:y0.20-0.45,aba25781e62700cce31a490a6872ab00b57083459a0cceaaa1e48fd2b80cc844,
 wide,28.35,3402,4d,shadow_p0_1,0.8504,levels,x0.58-0.96:y0.55-0.90,aba25781e62700cce31a490a6872ab00b57083459a0cceaaa1e48fd2b80cc844,
@@ -2452,7 +2435,6 @@ wide,28.35,3402,4g,palette_basalt_k3_hex,#110F08,hex,x0.58-0.96:y0.28-0.90,aba25
 wide,28.35,3402,4g,palette_basalt_k3_share,0.17544610747679557,fraction,x0.58-0.96:y0.28-0.90,aba25781e62700cce31a490a6872ab00b57083459a0cceaaa1e48fd2b80cc844,
 wide,28.35,3402,4g,palette_turf_vs_517046_deltaE,32.03677890087419,dE76,x0.58-0.96:y0.28-0.90,aba25781e62700cce31a490a6872ab00b57083459a0cceaaa1e48fd2b80cc844,"informational: #517046 is a reference-reel value, not a hero target"
 wide,28.35,3402,4g,palette_basalt_vs_474B59_deltaE,30.00579181559593,dE76,x0.58-0.96:y0.28-0.90,aba25781e62700cce31a490a6872ab00b57083459a0cceaaa1e48fd2b80cc844,"informational: #474B59 is a reference-reel value, not a hero target"
-wide,28.35,3402,4h,conifer_tree_count,1,count,x0.62-0.95:y0.28-0.50,aba25781e62700cce31a490a6872ab00b57083459a0cceaaa1e48fd2b80cc844,"connected 4-conn, area>200, h/w>1.5"
 wide,28.35,3402,4h,conifer_dark_area_pct,14.259294645453412,%,x0.62-0.95:y0.28-0.50,aba25781e62700cce31a490a6872ab00b57083459a0cceaaa1e48fd2b80cc844,
 wide,28.35,3402,4h,conifer_edge_density,0.19930876916047024,fraction,x0.62-0.95:y0.28-0.50,aba25781e62700cce31a490a6872ab00b57083459a0cceaaa1e48fd2b80cc844,Sobel mag > 12 levels
 wide,mean,,4a,sky_anchor_0.02_deltaE_min,19.2984556196469,dE76,x0.02-0.30:y0.02-0.58,aba25781e62700cce31a490a6872ab00b57083459a0cceaaa1e48fd2b80cc844,mean of s0..s7
@@ -2649,8 +2631,6 @@ wide,mean,,4g,palette_turf_vs_517046_deltaE,31.241695358853647,dE76,x0.58-0.96:y
 wide,frame_sd,,4g,palette_turf_vs_517046_deltaE,2.513568050708022,dE76,x0.58-0.96:y0.28-0.90,aba25781e62700cce31a490a6872ab00b57083459a0cceaaa1e48fd2b80cc844,frame_sd of s0..s7
 wide,mean,,4g,palette_basalt_vs_474B59_deltaE,29.81679007878546,dE76,x0.58-0.96:y0.28-0.90,aba25781e62700cce31a490a6872ab00b57083459a0cceaaa1e48fd2b80cc844,mean of s0..s7
 wide,frame_sd,,4g,palette_basalt_vs_474B59_deltaE,0.8027083031046315,dE76,x0.58-0.96:y0.28-0.90,aba25781e62700cce31a490a6872ab00b57083459a0cceaaa1e48fd2b80cc844,frame_sd of s0..s7
-wide,mean,,4h,conifer_tree_count,0.25,count,x0.62-0.95:y0.28-0.50,aba25781e62700cce31a490a6872ab00b57083459a0cceaaa1e48fd2b80cc844,mean of s0..s7
-wide,frame_sd,,4h,conifer_tree_count,0.4330127018922193,count,x0.62-0.95:y0.28-0.50,aba25781e62700cce31a490a6872ab00b57083459a0cceaaa1e48fd2b80cc844,frame_sd of s0..s7
 wide,mean,,4h,conifer_dark_area_pct,12.342209113945083,%,x0.62-0.95:y0.28-0.50,aba25781e62700cce31a490a6872ab00b57083459a0cceaaa1e48fd2b80cc844,mean of s0..s7
 wide,frame_sd,,4h,conifer_dark_area_pct,1.8150049765006393,%,x0.62-0.95:y0.28-0.50,aba25781e62700cce31a490a6872ab00b57083459a0cceaaa1e48fd2b80cc844,frame_sd of s0..s7
 wide,mean,,4h,conifer_edge_density,0.16521081709799362,fraction,x0.62-0.95:y0.28-0.50,aba25781e62700cce31a490a6872ab00b57083459a0cceaaa1e48fd2b80cc844,mean of s0..s7
