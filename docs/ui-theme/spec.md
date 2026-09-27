@@ -304,13 +304,22 @@ left; a clear-glass button right, inset 7 on all sides so its radius is 12.
 reference; the switcher sits top-left with the close or filter control
 top-right.
 
-**Map controls** — decided 2026-09-26 (plan decision 19). Two buttons where
-the pills were, never one row mixing the two kinds of control. **Base map**
-(layers glyph + current base map name) opens a menu of base maps, one
-selectable at a time (`menuitemradio`); choosing applies it and closes the
-menu. **Overlays** (overlays glyph + "Overlays", with a count badge when any
-are on) opens a menu of independent switches, Numbers and Footprint
-(`menuitemcheckbox`); toggling keeps the menu open. Only one menu open at a
+**Map controls** — decided 2026-09-26 (plan decision 19), icons revised the
+same day (plan decision 20). Two buttons where the pills were, never one row
+mixing the two kinds of control. **Base map** (layers glyph + current base
+map's icon) opens a menu of base maps, one selectable at a time
+(`menuitemradio`); choosing applies it and closes the menu. Each menu item
+shows its base map's icon instead of its name — a satellite glyph for
+imagery, a folded street map with road lines for OpenStreetMap, both in the
+tab bar's line style (24 px grid, 1.5 px stroke, round caps and joins).
+**Overlays** (overlays glyph + "Overlays", with "· N" when any are on) opens
+a menu of independent switches, Numbers and Footprint (`menuitemcheckbox`);
+toggling keeps the menu open. Below 1000 px both buttons are icons only: the
+Base map button shows the current base map's icon, the Overlays button its
+glyph with the count as a small badge. The icons are the visible label; the
+accessible names carry the wording for screen readers (`Base map:
+Satellite`, `Overlays, 2 on`, `Satellite imagery`, `Street map
+(OpenStreetMap)`), and nothing lives in a tooltip or title only. Only one menu open at a
 time; tap-outside, Escape, or opening the other menu closes it with focus back
 on its button; `aria-haspopup="menu"` with `aria-expanded`; arrow keys move
 within a menu; every item at least 44 px tall; one code path for touch and
