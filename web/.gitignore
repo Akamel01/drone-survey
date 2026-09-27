@@ -24,6 +24,10 @@
 .DS_Store
 *.pem
 
+# local store (pglite://<dir>) and evidence screenshots for PRs
+.pglite/
+.evidence/
+
 # debug
 npm-debug.log*
 yarn-debug.log*
