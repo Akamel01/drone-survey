@@ -36,7 +36,7 @@ TALL = (2160, 3840)  # frames-tall/ (M2; was C3 raw-tall.png)
 
 N_FRAMES = 243  # files per framing dir; last is a byte-copy of first (D1)
 
-ASSETS = "/opt/showcase/assets"  # baked into the image, never a home directory
+ASSETS = os.environ.get("SHOWCASE_ASSETS", "/opt/showcase/assets")  # baked into the image, never a home directory
 SKY = "kloofendal_overcast_puresky/kloofendal_overcast_puresky_4k.hdr"
 SENSOR_WIDTH = 36.0  # Blender's default sensor, mm
 
