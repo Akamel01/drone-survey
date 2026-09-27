@@ -10,53 +10,429 @@
   inset: 0;
 }
 
-.basemapToggle {
-  position: absolute;
-  top: 10px;
-  right: 10px;
-  z-index: 1;
-  display: flex;
-  gap: 4px;
+/* MapLibre's own scale and attribution controls default to the bare corner,
+   which UI-3 correctly stopped from painting over the glass panels -- but
+   left them to paint *under* the panels instead, when a panel is open wide
+   enough to reach that corner (screenshots, ui-7). Their own styling already
+   holds contrast on any basemap (near-opaque white, dark text); only their
+   position needs to clear the Missions and Settings panels, the same way the
+   pills and the drawing panel do. */
+.wrap :global(.maplibregl-ctrl-bottom-left .maplibregl-ctrl) {
+  margin-left: calc(var(--missions-w, 0px) + 24px);
+}
+.wrap :global(.maplibregl-ctrl-bottom-right .maplibregl-ctrl-attrib) {
+  margin-right: calc(var(--settings-w, 0px) + 24px);
 }
 
-/* Present only while a draw is in progress, so its presence is itself the mode
-   indicator, and amber to match the dashed outline the draw puts on the map. */
-.drawPanel {
+/* At >=1000px the Summary bar also floats along the bottom, spanning the same
+   centre strip these controls sit above -- clearing the side panels is not
+   enough, since the Summary itself is between them. --summary-h is measured
+   from the Summary's real rendered box (plan/page.tsx), not guessed, because
+   its height is content-driven and changing under UI-6; the fallback is 0 so
+   nothing shifts before that measurement lands on first paint. */
+@media (min-width: 1000px) {
+  .wrap :global(.maplibregl-ctrl-bottom-left .maplibregl-ctrl),
+  .wrap :global(.maplibregl-ctrl-bottom-right .maplibregl-ctrl-attrib) {
+    margin-bottom: calc(var(--summary-h, 0px) + 24px);
+  }
+}
+
+/* Scale bar, restyled minimally to the new type and radius (spec §6, §7)
+   instead of MapLibre's default black-bordered white square. Kept opaque
+   with dark ink so it stays legible over any basemap, the same reasoning as
+   the pills; a border only on three sides keeps it reading as a ruler. */
+.wrap :global(.maplibregl-ctrl-scale) {
+  background: var(--panel-light-alt);
+  border: 1.5px solid var(--ink);
+  border-top: none;
+  border-radius: 0 0 6px 6px;
+  color: var(--ink);
+  font: 500 11px/1.4 var(--mono, monospace);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.02em;
+  padding: 1px 6px 2px;
+}
+
+/* Both float on the map itself, so they must stay clear of the Missions and
+   Settings glass panels when those are open, not just of the viewport edge.
+   --missions-w / --settings-w are set on .page (plan.module.css) and cascade
+   down to here; they are simply absent below the 1000px breakpoint, where
+   var()'s fallback puts these back at a flat inset from the edge -- exactly
+   right, since only one column shows there and nothing else can cover them. */
+.basemapToggle {
   position: absolute;
-  top: 10px;
-  left: 10px;
+  top: 12px;
+  right: calc(var(--settings-w, 0px) + 24px);
   z-index: 1;
-  max-width: 260px;
-  padding: 8px 10px;
-  border: 1px solid var(--warn, #e0a94f);
-  border-radius: 4px;
-  background: rgba(6, 17, 15, 0.88);
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 6px;
+  max-width: min(calc(100vw - 48px), 420px);
+}
+
+/* Clear-glass pills (spec §5, §8). The reference tunes "clear glass" for a
+   controlled sky backdrop; ours sits on live satellite or OSM tiles that can
+   be paper-bright concrete or near-black forest. A translucent white fill can
+   never hold *white* text to 4.5:1 against a bright tile -- more opacity only
+   pushes the fill closer to white, closer to the text colour itself. Raising
+   the fill to 40% white and reading it with dark ink instead (spec §12: raise
+   opacity, don't shrink text) holds >5:1 against both #cfcfcf and a dark
+   vegetation tile, because at that opacity the fill's own colour dominates
+   over whatever is underneath it. */
+.pill {
+  min-height: 44px;
+  padding: 0 16px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border-radius: 999px;
+  border: 1px solid rgb(255 255 255 / 0.55);
+  background: rgb(255 255 255 / 0.4);
+  backdrop-filter: blur(20px) saturate(120%);
+  -webkit-backdrop-filter: blur(20px) saturate(120%);
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.55);
+  color: var(--ink);
+  font-size: 14px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  /* Press springs back on release (spec §11); the return runs this way. */
+  transition: transform var(--dur-press), box-shadow var(--dur-press);
+}
+
+/* Press (spec §11): on pointer-down -- :active starts at press, not release --
+   the button scales to 0.97 under a 6% white overlay (the inset wash), over
+   --dur-press. Same code serves touch and mouse. */
+.pill:active {
+  transform: scale(0.97);
+  box-shadow: inset 0 0 0 999px rgb(255 255 255 / 0.06), inset 0 1px 0 rgb(255 255 255 / 0.55);
+}
+
+/* The base-map mark in the tab bar's line style (24 px grid, 1.5 px stroke,
+   round caps and joins): a satellite for imagery, a folded map with road
+   lines for OpenStreetMap. 20 px beside the layers glyph, 24 px alone. */
+.baseIcon {
+  width: 20px;
+  height: 20px;
+  flex: none;
+}
+
+.layersGlyph {
+  display: inline-flex;
+}
+
+/* Icon-only base-map items: the accessible name (aria-label) carries the
+   "Satellite imagery" / "Street map (OpenStreetMap)" wording for screen
+   readers (spec §10: nothing lives in a tooltip or title only). */
+.menuItemIcon {
+  display: inline-flex;
+}
+
+.menuItemIcon > svg {
+  width: 24px;
+  height: 24px;
+}
+
+/* The overlays count on a phone: a small badge on the glyph, shown below
+   1000 px where the button drops its word (wide screens keep "Overlays · N"
+   as text). Dark ink with white figures on the 40 % white pill. */
+.countBadge {
+  display: none;
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 5px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  background: var(--ink);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Phone view (below 1000 px): icons only on both buttons. The Base map
+   button keeps the current base map's icon (the layers glyph hides); the
+   Overlays button keeps its glyph with the count badge. Both keep their
+   accessible names and their 44 px targets. */
+@media (max-width: 999px) {
+  .pill {
+    position: relative;
+    padding: 0;
+    min-width: 44px;
+  }
+  .pill .baseIcon {
+    width: 24px;
+    height: 24px;
+  }
+  .layersGlyph,
+  .btnLabel {
+    display: none;
+  }
+  .countBadge {
+    display: inline-flex;
+  }
+}
+/* The two menus anchor to their buttons; placement stays where the pills were,
+   so --toggle-h (measured off .basemapToggle in MapPane.tsx) keeps clearing
+   the Summary and the drawing panel exactly as before. */
+.menuWrap {
+  position: relative;
+}
+
+/* Same material as the buttons (option A: 40% white, dark ink, blur 20px),
+   menu radius 18 (spec §7). Opening morphs out of its button like the
+   reference Live Activity expand (spec §9.1): width and height together via
+   scale from the button corner, 500ms, --ease-emphasised, no overshoot. */
+.menu {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: 2;
+  min-width: 208px;
+  padding: 6px;
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 2px;
+  border-radius: 18px;
+  border: 1px solid rgb(255 255 255 / 0.55);
+  background: rgb(255 255 255 / 0.4);
+  backdrop-filter: blur(20px) saturate(120%);
+  -webkit-backdrop-filter: blur(20px) saturate(120%);
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.55), 0 8px 32px rgb(0 0 0 / 0.25);
+  color: var(--ink);
+  transform-origin: top right;
+  animation: menuIn 500ms var(--ease-emphasised);
+}
+
+/* Closing dissolves: opacity + blur, 250ms, --ease-in, no movement (the
+   reference sheet exit). Kept mounted by closingMenu until it lands. */
+.menuClosing {
+  animation: menuOut 250ms var(--ease-in) forwards;
+}
+
+@keyframes menuIn {
+  from {
+    opacity: 0;
+    transform: scale(0.6);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes menuOut {
+  from {
+    opacity: 1;
+    filter: blur(0);
+  }
+  to {
+    opacity: 0;
+    filter: blur(4px);
+  }
+}
+
+/* Item radius 12 (spec §7); every item at least 44px tall. Items arrive
+   staggered by --stagger (delay set inline per item), each fading from a 4px
+   blur to sharp over 150ms. */
+.menuItem {
+  min-height: 44px;
+  width: 100%;
+  padding: 0 12px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  border: none;
+  border-radius: 12px;
+  background: transparent;
+  box-shadow: none;
+  color: var(--ink);
+  font-size: 14px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  text-align: left;
+  white-space: nowrap;
+  cursor: pointer;
+  animation: menuItemIn 150ms var(--ease-out) backwards;
+  transition: transform var(--dur-press), box-shadow var(--dur-press);
+}
+
+@keyframes menuItemIn {
+  from {
+    opacity: 0;
+    filter: blur(4px);
+  }
+  to {
+    opacity: 1;
+    filter: blur(0);
+  }
+}
+
+.menuItem:active {
+  transform: scale(0.97);
+  box-shadow: inset 0 0 0 999px rgb(255 255 255 / 0.06);
+}
+
+/* Selected base map / on-overlays: the active-pill formula (--pill-active,
+   --ink, weight 600) plus a check glyph. */
+.menuItemActive {
+  background: var(--pill-active);
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.menuCheck {
+  width: 16px;
+  flex: none;
+  display: inline-flex;
+}
+
+/* Crossfade only, no scaling (spec §12). !important outranks the global
+   reduced-motion kill-all in globals.css (a class beats `*`), restoring the
+   150ms crossfade the spec wants instead of an instant cut. */
+@media (prefers-reduced-motion: reduce) {
+  .menu {
+    animation: menuFade 150ms ease-out !important;
+    transform: none;
+  }
+  .menuClosing {
+    animation: menuFadeOut 150ms ease-out forwards !important;
+  }
+  .menuItem {
+    animation: menuFade 150ms ease-out !important;
+  }
+  .pill:active,
+  .menuItem:active {
+    transform: none;
+  }
+}
+
+@keyframes menuFade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes menuFadeOut {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+
+/* Selected: the reference's active-pill formula (spec §8), asserted here at
+   equal specificity to the plain pill so it always wins regardless of
+   stylesheet order. */
+.pill:global(.active) {
+  background: var(--pill-active);
+  border-color: transparent;
+  color: var(--ink);
+  font-weight: 600;
+}
+
+@supports not (backdrop-filter: blur(20px)) {
+  .pill {
+    background: var(--panel-light-alt);
+    border-color: transparent;
+  }
+}
+@media (prefers-contrast: more) {
+  .pill {
+    border-color: #fff;
+  }
+}
+@media (prefers-reduced-transparency: reduce) {
+  .pill {
+    background: var(--panel-light-alt);
+    border-color: transparent;
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+}
+
+/* Smoke-glass panel (spec §5): the `glass-smoke` global class on the element
+   supplies the fill, blur and edge highlight (plus its own reduced-
+   transparency / contrast / no-backdrop-filter fallbacks); only layout lives
+   here. Present only while a draw is in progress or a corner is selected, so
+   its presence is itself the mode indicator. */
+.drawPanel {
+  position: absolute;
+  top: 12px;
+  left: calc(var(--missions-w, 0px) + 24px);
+  z-index: 1;
+  max-width: 280px;
+  padding: 14px 16px;
+  border-radius: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+/* Below 1000px there are no side panels for --missions-w to hold it clear of,
+   and the display pills claim the same top-left corner -- covering "OSM" and
+   half of "Numbers" while drawing, and hit-testing over them too, so they
+   were not reachable (screenshots, ui-7 review). --toggle-h is the pill row's
+   own measured height (MapPane.tsx), one or two lines depending on wrap, so
+   the panel starts under it at any width or label length instead of guessing
+   a fixed offset. */
+@media (max-width: 999px) {
+  .drawPanel {
+    top: calc(var(--toggle-h, 0px) + 20px);
+  }
 }
 
 .drawTitle {
-  font: 600 11px/1.2 var(--mono, monospace);
+  font: 500 12px/1.3 var(--sans);
   letter-spacing: 0.06em;
   text-transform: uppercase;
-  color: var(--warn, #e0a94f);
+  color: var(--on-glass-3);
 }
 
 .drawClick {
-  font-size: 12px;
-  color: var(--text, #f2f5f7);
+  font-size: 13px;
+  line-height: 1.35;
+  color: var(--on-glass-2);
+  font-variant-numeric: tabular-nums;
+}
+
+.drawHint {
+  font-size: 13px;
+  line-height: 1.35;
+  color: var(--on-glass-2);
 }
 
 .drawNote {
-  font-size: 12px;
-  color: var(--warn, #e0a94f);
+  font-size: 13px;
+  line-height: 1.35;
+  color: var(--warn);
+  font-variant-numeric: tabular-nums;
 }
 
 .drawActions {
   display: flex;
-  gap: 6px;
-  margin-top: 2px;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+/* Finish area / Cancel / Remove corner otherwise inherit the global button's
+   ~6px padding, well under the 44px touch target (spec §11), same as .pill. */
+.drawActions button {
+  min-height: 44px;
+  padding: 0 16px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 
 /* Take-off, not the orbit subject: those are different things and the subject
