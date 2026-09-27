@@ -156,8 +156,9 @@ export default function MissionList({ onEdit, onCopy, editingId = null, onRead, 
 
   // `load` is stable and runs long after the render that made it; it must read
   // the filter as it is now, so it does not dissolve rows the operator has just
-  // asked to show.
-  useEffect(() => {
+  // asked to show. A layout effect, so the ref is current before the next paint
+  // -- a read resolving right after the toggle must not see the old filter.
+  useLayoutEffect(() => {
     showArchivedRef.current = showArchived;
   }, [showArchived]);
 
