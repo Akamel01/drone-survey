@@ -7,6 +7,7 @@ import type { MissionRecord } from "@/lib/missionRecords";
 import { readPassphrase, subscribePassphrase, writePassphrase } from "@/lib/passphrase";
 import { describeSave, flightTimeDelta, saveProblem, type SiteChoice } from "@/lib/missionView";
 import { noteMissionsChanged } from "@/lib/actions";
+import type { NoticePayload } from "./Notice";
 import type { Editing } from "@/app/plan/page";
 import styles from "./SummaryBar.module.css";
 
@@ -21,19 +22,17 @@ interface SummaryBarProps {
   onSaved: (mission: MissionRecord) => void;
   /** The Sites already in the store, so a new Site cannot take one's name. */
   sites?: SiteChoice[];
+  /** Page-owned Notice slot (M2 seam). Accepted but ignored until M4 wires it. */
+  onNotice?: (p: Omit<NoticePayload, "key">) => void;
 }
 
 // Saving is the planner's only write. Dispatch, Withdraw, Flown and Remove all
 // live on the Mission's own row, where its state is: the screen that failed had
 // one Mission's controls in two places under two names, and a Dispatch button
 // beside an editor cannot say which Mission it means (ADR 0021).
-type SaveState =
-  | { kind: "idle" }
-  | { kind: "saving" }
-  | { kind: "ok"; text: string }
-  | { kind: "error"; text: string };
+type SaveState = { kind: "idle" } | { kind: "saving" };
 
-export default function SummaryBar({ spec, preview, editing, onSaved, sites = [] }: SummaryBarProps) {
+export default function SummaryBar({ spec, preview, editing, onSaved, sites = [], onNotice }: SummaryBarProps) {
   const [copied, setCopied] = useState(false);
   const [passphrase, setPassphrase] = useState("");
   const [save, setSave] = useState<SaveState>({ kind: "idle" });
@@ -62,6 +61,13 @@ export default function SummaryBar({ spec, preview, editing, onSaved, sites = []
   async function runSave() {
     if (problem || save.kind === "saving") return;
     setSave({ kind: "saving" });
+    // Save outcomes report through the page-owned Notice slot: the verbatim
+    // text goes to onNotice, never to an inline div. The saveProblem guard
+    // above and copy-feedback below stay where they are.
+    const report = (text: string, failed: boolean) => {
+      onNotice?.({ title: firstSentence(text), body: text, missionName: editing.name.trim(), failed });
+      setSave({ kind: "idle" });
+    };
     try {
       const res = await fetch("/api/missions", {
         method: "POST",
@@ -83,15 +89,15 @@ export default function SummaryBar({ spec, preview, editing, onSaved, sites = []
         // next five-minute poll.
         noteMissionsChanged();
         onSaved(body.mission as MissionRecord);
-        setSave({ kind: "ok", text: describeSave(body) });
+        report(describeSave(body), false);
       } else {
-        setSave({ kind: "error", text: body.error ?? `Not saved (HTTP ${res.status}). Nothing changed.` });
+        report(body.error ?? `Not saved (HTTP ${res.status}). Nothing changed.`, true);
       }
     } catch (err) {
-      setSave({
-        kind: "error",
-        text: `Not saved: ${err instanceof Error ? err.message : "the store could not be reached"}. Nothing changed.`,
-      });
+      report(
+        `Not saved: ${err instanceof Error ? err.message : "the store could not be reached"}. Nothing changed.`,
+        true,
+      );
     }
   }
 
@@ -182,8 +188,6 @@ export default function SummaryBar({ spec, preview, editing, onSaved, sites = []
         </div>
       </div>
       {problem && <div className={styles.dispatchError}>Save: {problem}</div>}
-      {save.kind === "ok" && <div className={styles.dispatchOk}>{save.text}</div>}
-      {save.kind === "error" && <div className={styles.dispatchError}>{save.text}</div>}
       {hasProblems && (
         <ul className={styles.problems}>
           {preview.problems.map((p, i) => (
@@ -193,6 +197,11 @@ export default function SummaryBar({ spec, preview, editing, onSaved, sites = []
       )}
     </div>
   );
+}
+
+/** Compact pill title: the first sentence of the verbatim result text. */
+function firstSentence(text: string): string {
+  return text.match(/^.*?[.!?…](?=\s|$)/)?.[0] ?? text;
 }
 
 /** A copy of the Spec on the operator's own disk. The store holds the Mission;

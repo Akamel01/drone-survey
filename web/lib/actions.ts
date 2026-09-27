@@ -1,8 +1,7 @@
-// One operator action at a time, and its outcome reported next to the control
-// that started it. The status view polls rarely on purpose (a poll costs a
-// storage transaction), so an action's own result is the only feedback the
-// operator gets until the next poll — it has to be right and it has to be
-// where they are looking.
+// One operator action at a time, its outcome reported through the page-owned
+// Notice. The status view polls rarely on purpose (a poll costs a storage
+// transaction), so an action's own result is the feedback the operator gets
+// until the next poll — it has to be right.
 
 /** Which row a control belongs to; "" for the controls above the list. */
 export type ActionTarget = string;
@@ -12,21 +11,11 @@ export interface RunningAction {
   on: ActionTarget;
 }
 
-export interface ActionNotice {
-  on: ActionTarget;
-  text: string;
-  failed: boolean;
-  /** The row's state once the store was re-read after the action. The notice
-   *  is about getting there, so it goes once the row moves on (#164). */
-  state?: string;
-}
-
 export interface ActionState {
   running: RunningAction | null;
-  notice: ActionNotice | null;
 }
 
-export const IDLE: ActionState = { running: null, notice: null };
+export const IDLE: ActionState = { running: null };
 
 /** What came back from an endpoint, or why nothing did. */
 export type ActionResult =
@@ -37,34 +26,7 @@ export type ActionResult =
 /** A press. A second press while one is in flight changes nothing. */
 export function beginAction(state: ActionState, label: string, on: ActionTarget): ActionState {
   if (state.running) return state;
-  return { running: { label, on }, notice: null };
-}
-
-/** The result lands on the row that started it, whether it worked or not. */
-export function endAction(
-  state: ActionState,
-  label: string,
-  on: ActionTarget,
-  result: ActionResult,
-): ActionState {
-  const failed = !result.ok;
-  return {
-    running: state.running && state.running.label === label && state.running.on === on ? null : state.running,
-    notice: { on, text: describeResult(label, result), failed },
-  };
-}
-
-/** The notice stays only while the row is still where the action left it: a
- *  "Dispatched" line under a row that has since been Collected is stale, and
- *  reads as the current answer (#164). */
-export function noticeShows(notice: ActionNotice, rowState: string): boolean {
-  return notice.state === undefined || notice.state === rowState;
-}
-
-/** Stamp the notice with where the row landed, once the follow-up read is in. */
-export function settleNotice(state: ActionState, rowState: string | undefined): ActionState {
-  if (!state.notice || rowState === undefined) return state;
-  return { ...state, notice: { ...state.notice, state: rowState } };
+  return { running: { label, on } };
 }
 
 export function isRunning(state: ActionState, label: string, on: ActionTarget): boolean {

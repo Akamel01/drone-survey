@@ -338,14 +338,3 @@
     border: 1px solid var(--on-glass);
   }
 }
-
-/* What an action just did, when it worked. Plain text: amber is for something
-   that needs attention, and a success that looks like a warning gets a second
-   look it does not deserve (#164). */
-.done {
-  margin: 0 0 8px;
-  font-size: 12px;
-  color: var(--on-glass-3);
-  line-height: 1.55;
-  overflow-wrap: anywhere;
-}
