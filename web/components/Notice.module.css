@@ -20,7 +20,7 @@
   z-index: 10;
   background: var(--black);
   color: var(--on-glass);
-  border-radius: 20px;
+  border-radius: 44px;
   cursor: pointer;
   pointer-events: auto;
   transform-origin: top center;
@@ -37,11 +37,11 @@
   animation: pillArrive 200ms var(--ease-out);
 }
 
-/* Expanded (spec §9.1 row 3): the whole panel, radius 20 (D11 keeps UI-8's
-   20; §7's 44 belongs to parent #176), 500ms --ease-emphasised out of the
-   pill. Collapse is this class's removal -- the base rule's 250ms --ease-in. */
+/* Expanded (spec §9.1 row 3): the whole panel at the reference's measured
+   radius 44 (spec § 7), 500ms --ease-emphasised out of the pill. Collapse is
+   this class's removal -- the base rule's 250ms --ease-in. */
 .expanded {
-  clip-path: inset(0 0 0 0 round 20px);
+  clip-path: inset(0 0 0 0 round 44px);
   transition:
     transform var(--dur-press) var(--ease-out),
     clip-path 500ms var(--ease-emphasised);
@@ -275,8 +275,21 @@
   color: var(--on-glass);
 }
 
+/* Keyboard focus (spec § 10): the global ring sits outside the box, where the
+   clip hides it, so the notice draws its ring inside the visible shape: on the
+   pill while compact, on the panel's edge while expanded. */
+.notice:focus-visible {
+  outline: none;
+  box-shadow: none;
+}
+
+.notice:not(.expanded):focus-visible .compactLayer,
+.notice.expanded:focus-visible {
+  box-shadow: inset 0 0 0 2px #fff;
+}
+
 /* Hidden unless expanded, so a compact (or leaving-from-compact) notice
-   holds no focusable element -- UI-8's Tab order (D5). */
+   holds one Tab stop, the notice itself (UI-21). */
 .notice:not(.expanded) .close {
   display: none;
 }

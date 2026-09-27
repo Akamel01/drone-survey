@@ -1700,6 +1700,52 @@ async function noticeReduced(browser) {
   }
 }
 
+// UI-21 (#282): the notice is one Tab stop and toggles from the keyboard, and a
+// result arriving never takes focus. Also saves the expanded notice at both
+// sizes, since its radius is what this ticket changes.
+async function noticeKeyboard(browser, vp) {
+  const motion = "notice-keyboard";
+  const { context, page } = await pageFor(browser, vp);
+  try {
+    const arrived = await page.evaluate(async () => {
+      const N = window.__notice;
+      const before = document.activeElement;
+      N.byText("Dispatch").click();
+      const mountT = await N.mount();
+      if (mountT === null) return null;
+      await N.settle(900);
+      const root = document.querySelector('[class*="notice"]');
+      return { focusMoved: document.activeElement === root, sameFocus: document.activeElement === before, tabIndex: root.tabIndex };
+    });
+    if (arrived === null) {
+      check(motion, `${vp.width} notice mounted`, false, "no notice mounted");
+      return;
+    }
+    check(motion, `${vp.width} arrival does not take focus`, !arrived.focusMoved, JSON.stringify(arrived));
+    check(motion, `${vp.width} notice is a Tab stop`, arrived.tabIndex === 0, String(arrived.tabIndex));
+    const root = page.locator('[class*="notice"]').first();
+    await root.focus();
+    await page.keyboard.press("Enter");
+    await page.waitForTimeout(800);
+    const open = await root.evaluate((el) => ({
+      expanded: el.className.includes("expanded"),
+      clip: getComputedStyle(el).clipPath,
+      radius: getComputedStyle(el).borderRadius,
+      ring: getComputedStyle(el).boxShadow,
+    }));
+    check(motion, `${vp.width} Enter expands`, open.expanded, JSON.stringify(open));
+    check(motion, `${vp.width} expanded radius is 44`, open.radius === "44px" && open.clip.includes("44px"), `${open.radius} ${open.clip}`);
+    check(motion, `${vp.width} focus ring drawn inside the shape`, open.ring.includes("inset"), open.ring);
+    await page.screenshot({ path: path.join(OUT, `notice-keyboard-${vp.width}.png`), clip: { x: 0, y: 0, width: vp.width, height: 240 } });
+    await page.keyboard.press(" ");
+    await page.waitForTimeout(700);
+    const closed = await root.evaluate((el) => el.className.includes("expanded"));
+    check(motion, `${vp.width} Space collapses`, !closed);
+  } finally {
+    await context.close();
+  }
+}
+
 async function noticeMotion(browser) {
   for (const vp of [
     { width: 1440, height: 900, mobile: false },
@@ -1709,6 +1755,7 @@ async function noticeMotion(browser) {
     await noticeExpand(browser, vp);
     await noticeCollapse(browser, vp);
     await noticeRapid(browser, vp);
+    await noticeKeyboard(browser, vp);
   }
   await noticeLeaveEscape(browser);
   await noticeLeaveClose(browser);

@@ -164,10 +164,17 @@ export default function Notice({ payload, onDismiss }: NoticeProps) {
   return (
     <div
       ref={box}
-      tabIndex={-1}
+      // One Tab stop (spec § 10): Enter or Space toggles it like a tap. It is
+      // never focused on arrival, so a result never pulls focus from the work.
+      tabIndex={leaving ? -1 : 0}
       role={noticeRole(payload.failed)}
       className={`press ${styles.notice} ${showExpanded ? styles.expanded : ""} ${leaving ? styles.leaving : ""}`}
       onClick={() => changePhase(togglePhase(phase))}
+      onKeyDown={(e) => {
+        if (e.target !== e.currentTarget || (e.key !== "Enter" && e.key !== " ")) return;
+        e.preventDefault();
+        changePhase(togglePhase(phase));
+      }}
     >
       <div ref={pill} className={styles.compactLayer} aria-hidden="true">
         <Badge failed={failed} />
