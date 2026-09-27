@@ -731,18 +731,31 @@ class CardLedgerContractTest(unittest.TestCase):
             """The shared base Ledger, unless the case carries its own."""
             return read_ledger(name, c["ledger"]) if "ledger" in c else fixture["ledger"]
 
+        OP_KEYS = {
+            "reserve": ["op", "cards", "spec_key", "at"],
+            "release": ["op", "spec_key"],
+            "pool": ["op", "pool"],
+            "verify": ["op", "at"],
+        }
+
         def read_op(name: str, side: str, raw) -> dict:
             if not isinstance(raw, dict):
                 fail(name, f"{side} must be an op object")
-            check_keys(name, raw, ["op", "cards", "spec_key", "at", "apply_to"] if side == "after"
-                       else ["op", "cards", "spec_key", "at"])
             kind = required(name, raw, "op")
-            if kind not in ("reserve", "release"):
-                fail(name, f'{side}.op must be "reserve" or "release"')
-            required(name, raw, "spec_key")
+            if kind not in OP_KEYS:
+                fail(name, f'{side}.op must be "reserve", "release", "pool" or "verify"')
+            check_keys(name, raw, OP_KEYS[kind] + (["apply_to"] if side == "after" else []))
             if kind == "reserve":
                 if not isinstance(raw.get("cards"), list):
                     fail(name, f"{side}.cards must be an array on a reserve op")
+                required(name, raw, "spec_key")
+                required(name, raw, "at")
+            elif kind == "release":
+                required(name, raw, "spec_key")
+            elif kind == "pool":
+                if not isinstance(raw.get("pool"), list):
+                    fail(name, f"{side}.pool must be an array on a pool op")
+            else:
                 required(name, raw, "at")
             if side == "after":
                 to = required(name, raw, "apply_to")
@@ -752,11 +765,16 @@ class CardLedgerContractTest(unittest.TestCase):
             return raw
 
         def apply_op(op: dict, on: dict) -> dict:
-            # ponytail: two ops, one apply_to, by design; a third op means the
-            # case belongs in a per-side adapter harness, not here.
+            # ponytail: four ops, one apply_to; reserve/release are the planner's,
+            # pool/verify mirror the host's writers; anything beyond these belongs
+            # in a per-side adapter harness, not here.
             if op["op"] == "reserve":
                 return b2_status.with_reservation(on, op["cards"], op["spec_key"], op["at"])
-            return b2_status.with_release(on, op["spec_key"])
+            if op["op"] == "release":
+                return b2_status.with_release(on, op["spec_key"])
+            if op["op"] == "pool":
+                return {**on, "pool": op["pool"]}
+            return b2_status.merge_verified(on, op["at"])
 
         def case_available(name: str, c: dict) -> None:
             check_keys(name, c, ["rule", "ledger", "expect", "card", "expect_reason"])
