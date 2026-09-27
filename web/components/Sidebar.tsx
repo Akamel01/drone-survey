@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { Fragment, useEffect, useRef, useState, type ReactNode } from "react";
 import { newSiteId, type MissionSpec, type MissionType, type TurnMode } from "@/lib/spec";
-import type { Preview } from "@/lib/mission";
+import { orbitTilt, type Preview } from "@/lib/mission";
 import { MISSION_NAME_MAX, missionNameProblem } from "@/lib/missionRecords";
 import { siteTwin, type SiteChoice } from "@/lib/missionView";
 import type { Editing } from "@/app/plan/page";
@@ -271,25 +271,49 @@ export default function Sidebar({
               <label>Rings</label>
               <span className={`mono ${styles.value}`}>{rings.length}</span>
             </div>
-            {rings.map((a, i) => (
-              <div key={i} className={styles.ringRow}>
-                <input
-                  type="number"
-                  min={5}
-                  max={120}
-                  step={1}
-                  value={a}
-                  onChange={(e) => setRing(i, Number(e.target.value))}
-                />
-                <span className={styles.ringUnit}>m</span>
-                <button
-                  disabled={rings.length <= 1}
-                  onClick={() => setOrbit("altitudes_m", rings.filter((_, j) => j !== i))}
-                >
-                  Remove
-                </button>
-              </div>
-            ))}
+            {rings.map((a, i) => {
+              const { deg, clamped } = orbitTilt(a, orbit.target_height_m, orbit.radius_m);
+              const finite = Number.isFinite(deg);
+              // Sign applied after rounding, so a ring level with the subject
+              // reads "tilt 0°", never "tilt −0°" (griller DP3).
+              const tilt = finite ? `${deg < 0 ? "−" : ""}${Math.abs(Math.round(deg))}°` : "—";
+              const tiltLabel = finite
+                ? `tilt ${Math.round(deg)} degrees${clamped ? ", at the gimbal's limit" : ""}`
+                : "tilt unknown";
+              return (
+                <Fragment key={i}>
+                  <div className={styles.ringRow}>
+                    <input
+                      type="number"
+                      min={5}
+                      max={120}
+                      step={1}
+                      value={a}
+                      onChange={(e) => setRing(i, Number(e.target.value))}
+                    />
+                    <span className={styles.ringUnit}>m</span>
+                    <span className={styles.ringTilt} aria-label={tiltLabel}>
+                      tilt {tilt}
+                      {clamped ? " at limit" : ""}
+                    </span>
+                    <button
+                      disabled={rings.length <= 1}
+                      onClick={() => setOrbit("altitudes_m", rings.filter((_, j) => j !== i))}
+                    >
+                      Remove
+                    </button>
+                  </div>
+                  {clamped && (
+                    // The full sentence sits outside the flex row so it cannot
+                    // fight the input for space (plan §3, griller DP3); exact
+                    // wording preserved.
+                    <div className={styles.warnHint}>
+                      {"at the gimbal's limit: raise the ring or widen the radius"}
+                    </div>
+                  )}
+                </Fragment>
+              );
+            })}
             <button
               onClick={() =>
                 setOrbit("altitudes_m", [...rings, Math.min(120, Math.max(...rings) + 20)])
