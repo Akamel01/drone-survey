@@ -187,7 +187,12 @@
   top: calc(100% + 8px);
   right: 0;
   z-index: 2;
-  min-width: 208px;
+  /* Hug the widest item instead of a fixed 208px floor: icon-only base-map
+     rows are ~74px of content, so that floor painted a ~130px empty band. The
+     viewport guard mirrors .basemapToggle's own, so a wide Footprint label
+     can never push the panel off a 375px screen. */
+  width: max-content;
+  max-width: calc(100vw - 48px);
   padding: 6px;
   display: flex;
   flex-direction: column;
