@@ -462,7 +462,7 @@ scatter (adjacent-pair control max 0.534 px) and one interpolation step; every
 adjacent cloud pair deviates by < 0.1 px, so there is **no coherent drift**. The
 "clouds drift slowly" claim (`spec.md:172`, prompt clause `spec.md:170-171`) is
 not reproduced by either master: the cloud layer is **static at the detection
-floor**. Two adjacent tall pairs (s3→s4, s4→s5) lose the correlation peak
+floor**. Three adjacent tall pairs (s3→s4, s4→s5, s5→s6) lose the correlation peak
 (> 90° of turn decorrelates the patch) and are excluded from the reading; the
 static control stays locked (< 0.61 px) across all pairs.
 
@@ -492,8 +492,8 @@ unless Grading deliberately adds it.
   shared-token sign-off** — no token is edited and no supersession is implied
   (D-2).
 - **Aerial-depth falloff** (4b): the island front carries the micro-contrast and
-  the far bands fall off. Target contrast RMS **D2/D1 0.06–0.16** and **D3/D1
-  0.04–0.06**, and saturation **S D2/D1 0.38–0.42** / **S D3/D1 0.26–0.32**. The
+  the far bands fall off. Target contrast RMS **D2/D1 0.05–0.17** and **D3/D1
+  0.04–0.06**, and saturation **S D2/D1 0.38–0.43** / **S D3/D1 0.26–0.32**. The
   D2/D1 contrast ratio is *combined DOF + atmospheric falloff*; get the DOF-only
   part from 4e.
 - **DOF**: the island front is ~365× (tall) / ~73× (wide) sharper (Laplacian
