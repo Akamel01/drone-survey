@@ -3,10 +3,14 @@
 
 Builds a Delivery Bundle from small synthetic inputs, checks its layout,
 hashes, notices, and that its viewer HTML references only files the Bundle
-actually contains; dry-run-publishes it; confirms publish refuses without
-credentials; and runs the real deliver.json Manifest through the Runner
-end-to-end (ADR 0018: per-Node checks are not enough, the seam has to run
-too), entirely offline — no network, no real credentials, no accounts.
+actually contains; checks the Showcase files are present, manifest-listed
+and wired (nine names, sprite, index link, player page literals, sprite
+byte-identity) — presence and wiring only, codec truth stays with the
+Showcase gate and the golden ffprobe (Q6); dry-run-publishes it; confirms
+publish refuses without credentials; and runs the real deliver.json
+Manifest through the Runner end-to-end (ADR 0018: per-Node checks are not
+enough, the seam has to run too), entirely offline — no network, no real
+credentials, no accounts.
 
     python3 nodes/check_deliver.py
 """
@@ -29,6 +33,11 @@ BUNDLE_BUILD = REPO_ROOT / "nodes" / "bundle" / "build.py"
 PUBLISH = REPO_ROOT / "nodes" / "publish" / "publish.py"
 DELIVER_MANIFEST = REPO_ROOT / "pipeline" / "manifests" / "deliver.json"
 RUNNER = REPO_ROOT / "pipeline" / "runner.py"
+
+# The frozen Showcase names live in nodes/bundle/build.py, which is importable
+# with no side effects (main guarded): one source for the nine names.
+sys.path.insert(0, str(REPO_ROOT / "nodes" / "bundle"))
+from build import DEFAULT_SPRITE, SHOWCASE_CUTS, SHOWCASE_FILES  # noqa: E402
 
 HTML_REF = re.compile(r'(?:src|href)="([^"]+)"')
 
@@ -76,6 +85,23 @@ def make_synthetic_splat(fixtures: Path) -> tuple[Path, Path]:
     meta = fixtures / "synthetic_meta.PLACEHOLDER.json"
     meta.write_text(json.dumps({"placeholder": True, "note": "synthetic fixture for check_deliver.py"}))
     return scene, meta
+
+
+def make_synthetic_showcase(fixtures: Path) -> Path:
+    """The nine Showcase names as clearly-named placeholders — no ffmpeg, no ffprobe.
+
+    They prove presence, manifest listing and wiring only; they are not decodable
+    media. Codec truth stays with the Showcase gate (nodes/check-showcase/gate.py)
+    and the golden ffprobe run (Q6).
+    """
+    assert len(SHOWCASE_FILES) == 9 and "av1_4k60" not in SHOWCASE_CUTS["tall"], (
+        "the frozen Showcase shape moved: nine names, no 4K cut under tall (H24)"
+    )
+    cuts = fixtures / "synthetic_cuts"
+    cuts.mkdir(parents=True, exist_ok=True)
+    for name in SHOWCASE_FILES:
+        (cuts / name).write_text(f"not real media -- placeholder for the offline check: {name}\n")
+    return cuts
 
 
 def make_synthetic_vendor(vendor_root: Path) -> dict[str, Path]:
@@ -152,13 +178,15 @@ def run(cmd: list[str], **kw) -> subprocess.CompletedProcess:
     return subprocess.run(cmd, cwd=REPO_ROOT, capture_output=True, text=True, **kw)
 
 
-def check_bundle(bundle_dir: Path, ortho: Path, scene: Path, meta: Path) -> dict:
+def check_bundle(bundle_dir: Path, ortho: Path, scene: Path, meta: Path, showcase_dir: Path) -> dict:
     result = run([
         sys.executable, str(BUNDLE_BUILD),
         "--out", str(bundle_dir),
         "--ortho", str(ortho),
         "--splat-scene", str(scene),
         "--splat-meta", str(meta),
+        "--showcase", str(showcase_dir),
+        "--sprite", str(DEFAULT_SPRITE),
     ])
     assert result.returncode == 0, f"bundle build failed:\n{result.stderr}"
 
@@ -181,6 +209,32 @@ def check_bundle(bundle_dir: Path, ortho: Path, scene: Path, meta: Path) -> dict
     assert (bundle_dir / "ortho" / "orthomosaic.tif").is_file()
     assert (bundle_dir / "splat" / "scene.sog").is_file()
     assert (bundle_dir / "splat" / "meta.json").is_file()
+
+    # Showcase (H16): presence and manifest listing explicitly, because HTML_REF
+    # cannot see the file references the player resolves at runtime.
+    for name in [*SHOWCASE_FILES, "bird-sprite.webp"]:
+        assert (bundle_dir / "showcase" / name).is_file(), f"showcase/{name} missing from the Bundle"
+        assert f"showcase/{name}" in listed, f"showcase/{name} missing from the Bundle manifest"
+    assert (bundle_dir / "showcase.html").is_file(), "showcase.html missing from the Bundle"
+    assert "showcase.html" in listed, "showcase.html missing from the Bundle manifest"
+    assert "showcase" in manifest["deliverables"], f"manifest deliverables omit showcase: {manifest['deliverables']}"
+    assert 'href="showcase.html"' in (bundle_dir / "index.html").read_text(), "index.html does not link the Showcase page"
+
+    page_text = (bundle_dir / "showcase.html").read_text()
+    # Prefixed, so a dropped `showcase/` on any reference (not only the chosen
+    # codec branch) fails here; HTML_REF cannot see the runtime-set src.
+    for token in [*[f"showcase/{name}" for name in SHOWCASE_FILES],
+                  "showcase/", "bird-sprite.webp", "prefers-reduced-motion"]:
+        assert token in page_text, f"showcase.html is missing {token!r}"
+    codec_tokens = ("av01.0.13M.08", "av01.0.12M.08", "hvc1", '"video/mp4"')
+    assert all(token in page_text for token in codec_tokens), "showcase.html is missing a codec token"
+    order = [page_text.index(token) for token in codec_tokens]
+    assert order == sorted(order), f"showcase.html's codec tokens are not in source order: {order}"
+
+    sprite = bundle_dir / "showcase" / "bird-sprite.webp"
+    assert sprite.read_bytes() == DEFAULT_SPRITE.read_bytes(), (
+        "showcase/bird-sprite.webp is not the repo sprite — a placeholder was written instead"
+    )
 
     notices = (bundle_dir / "NOTICES.txt").read_text()
     for expected in (
@@ -218,6 +272,34 @@ def check_bundle(bundle_dir: Path, ortho: Path, scene: Path, meta: Path) -> dict
     return manifest
 
 
+def check_showcase_only(tmp: Path) -> None:
+    """A Bundle holding only a Showcase is legal: --showcase alone builds (ADR 0011 Revision)."""
+    showcase_dir = make_synthetic_showcase(tmp / "showcase-only")
+    out = tmp / "bundle-showcase-only"
+    result = run([sys.executable, str(BUNDLE_BUILD), "--out", str(out), "--showcase", str(showcase_dir)])
+    assert result.returncode == 0, f"showcase-only build failed:\n{result.stderr}"
+
+    assert not (out / "ortho").exists() and not (out / "splat").exists(), "showcase-only Bundle grew ortho/ or splat/"
+    manifest = json.loads((out / "bundle-manifest.json").read_text())
+    assert manifest["deliverables"] == ["showcase"], f"showcase-only deliverables: {manifest['deliverables']}"
+    assert (out / "showcase.html").is_file(), "showcase-only Bundle lacks showcase.html"
+    assert (out / "showcase").is_dir(), "showcase-only Bundle lacks showcase/"
+    print("showcase-only bundle check: ok")
+
+
+def check_showcase_incomplete(tmp: Path) -> None:
+    """A showcase dir missing one of the nine refuses the build, naming it, and writes nothing (H15)."""
+    missing = "wide-4k60-av1.mp4"
+    showcase_dir = make_synthetic_showcase(tmp / "showcase-incomplete")
+    (showcase_dir / missing).unlink()
+    out = tmp / "bundle-incomplete"
+    result = run([sys.executable, str(BUNDLE_BUILD), "--out", str(out), "--showcase", str(showcase_dir)])
+    assert result.returncode != 0, "build accepted a showcase dir missing one of the nine"
+    assert missing in result.stderr, f"refusal does not name {missing!r}:\n{result.stderr}"
+    assert not out.exists(), "a partial Bundle was written for an incomplete showcase input"
+    print("showcase-incomplete refusal check: ok")
+
+
 def check_publish_dry_run(bundle_dir: Path) -> None:
     result = run([
         sys.executable, str(PUBLISH),
@@ -247,10 +329,16 @@ def check_publish_refuses_without_credentials(bundle_dir: Path) -> None:
     print("publish refuses-without-credentials check: ok")
 
 
-def check_runner_end_to_end(ortho: Path, scene: Path, meta: Path) -> None:
+def check_runner_end_to_end(ortho: Path, scene: Path, meta: Path, showcase_dir: Path) -> None:
     with tempfile.TemporaryDirectory() as workdir:
         env = dict(os.environ)
-        env.update(BUNDLE_ORTHO=str(ortho), BUNDLE_SPLAT_SCENE=str(scene), BUNDLE_SPLAT_META=str(meta))
+        env.update(
+            BUNDLE_ORTHO=str(ortho),
+            BUNDLE_SPLAT_SCENE=str(scene),
+            BUNDLE_SPLAT_META=str(meta),
+            BUNDLE_SHOWCASE=str(showcase_dir),
+            BUNDLE_SPRITE=str(DEFAULT_SPRITE),
+        )
         # The real Manifest publishes for real. This check is about the wiring
         # between the two Nodes, so it runs a copy whose publish is a dry run:
         # a validator that uploads to the delivery bucket every time it runs
@@ -271,6 +359,7 @@ def check_runner_end_to_end(ortho: Path, scene: Path, meta: Path) -> None:
 
         bundle_out = Path(workdir) / "nodes" / "bundle" / "bundle"
         assert (bundle_out / "bundle-manifest.json").is_file(), "Runner-driven bundle Node produced no Bundle"
+        assert (bundle_out / "showcase.html").is_file(), "Runner-driven bundle Node omitted the Showcase page"
     print("Runner end-to-end check (deliver.json, --dry-run publish): ok")
 
 
@@ -280,13 +369,16 @@ def main() -> None:
         fixtures.mkdir()
         ortho = make_synthetic_ortho(fixtures)
         scene, meta = make_synthetic_splat(fixtures)
+        showcase_dir = make_synthetic_showcase(fixtures)
 
         bundle_dir = Path(tmp) / "bundle"
-        check_bundle(bundle_dir, ortho, scene, meta)
+        check_bundle(bundle_dir, ortho, scene, meta, showcase_dir)
+        check_showcase_only(Path(tmp))
+        check_showcase_incomplete(Path(tmp))
         check_vendored_splat(Path(tmp), ortho, scene, meta)
         check_publish_dry_run(bundle_dir)
         check_publish_refuses_without_credentials(bundle_dir)
-        check_runner_end_to_end(ortho, scene, meta)
+        check_runner_end_to_end(ortho, scene, meta, showcase_dir)
 
     check_readme_example()
     print("check_deliver: all checks passed")
