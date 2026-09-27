@@ -255,23 +255,43 @@
 @media (min-width: 1000px) {
   .page {
     position: relative;
-    /* Current panel widths, so the Summary can size itself around them. */
-    --missions-w: 340px;
-    --settings-w: 360px;
+    /* The open panel widths, so the Summary can size itself around them, and
+       the settling offsets consumers read. The slide distance is a constant
+       (open width + the 12 px inset), so the transform target never changes
+       under the width's discrete flip. */
+    --missions-w-open: 340px;
+    --settings-w-open: 360px;
+    --missions-w: var(--missions-w-open);
+    --settings-w: var(--settings-w-open);
+    --missions-slide: calc(var(--missions-w-open) + 12px);
+    --settings-slide: calc(var(--settings-w-open) + 12px);
+    /* 0 s duration: the value moves once, when the delay expires. */
+    --missions-delay: 0s;
+    --settings-delay: 0s;
+    transition:
+      --missions-w 0s linear var(--missions-delay),
+      --settings-w 0s linear var(--settings-delay);
   }
 
+  /* Folded: the offset holds its open value until the fold ends, then steps
+     to 0; reopened: it steps back at the start of the unfold. */
   .page[data-missions="closed"] {
     --missions-w: 0px;
+    --missions-delay: var(--dur-base);
   }
 
   .page[data-settings="closed"] {
     --settings-w: 0px;
+    --settings-delay: var(--dur-base);
   }
 
   .top {
     position: absolute;
     inset: 0;
     display: block;
+    /* Clips the panels sliding past their own edges (the narrow block's
+       precedent), so the fold never widens the document. */
+    overflow: hidden;
   }
 
   .map {
@@ -290,6 +310,16 @@
     z-index: 2;
     border: none;
     border-radius: 20px;
+    /* Open is the resting state: an unfold is the panel's entrance, so it
+       runs over --dur-slow with --ease-emphasised (exits stay faster). */
+    transform: none;
+    opacity: 1;
+    visibility: visible;
+    pointer-events: auto;
+    transition:
+      transform var(--dur-slow) var(--ease-emphasised),
+      opacity var(--dur-slow) var(--ease-emphasised),
+      visibility 0s linear 0s;
   }
 
   .missions {
@@ -303,9 +333,26 @@
     overflow: hidden;
   }
 
+  /* Folded: slide toward its own edge and fade over --dur-base with the
+     exit curve; visibility hides -- and clicks pass through -- when the
+     slide is done, not before. */
   .page[data-missions="closed"] .missions,
   .page[data-settings="closed"] .settings {
-    display: none;
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+    transition:
+      transform var(--dur-base) var(--ease-in),
+      opacity var(--dur-base) var(--ease-in),
+      visibility 0s linear var(--dur-base);
+  }
+
+  .page[data-missions="closed"] .missions {
+    transform: translateX(calc(-1 * var(--missions-slide)));
+  }
+
+  .page[data-settings="closed"] .settings {
+    transform: translateX(var(--settings-slide));
   }
 
   /* The map is the photograph; the panels' content must not paint over the
@@ -368,6 +415,32 @@
 
   .edgeTabRight {
     right: 12px;
+  }
+
+  /* Folding leaves a tab behind: it fades in after the panel's dissolve and
+     leaves first when the panel comes back. Opacity only, so the centring
+     `translate` and the shared press scale stay intact; this selector
+     out-specifies the global press rule so the two timings cannot depend on
+     stylesheet order. */
+  .page .edgeTab {
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+    transition:
+      transform var(--dur-press) var(--ease-out),
+      opacity var(--dur-fast) var(--ease-in),
+      visibility 0s linear var(--dur-fast);
+  }
+
+  .page[data-missions="closed"] .edgeTabLeft,
+  .page[data-settings="closed"] .edgeTabRight {
+    opacity: 1;
+    visibility: visible;
+    pointer-events: auto;
+    transition:
+      transform var(--dur-press) var(--ease-out),
+      opacity var(--dur-fast) var(--ease-out) var(--dur-fast),
+      visibility 0s linear 0s;
   }
 
   /* Without its basemap the map has no surface: the chrome gives way to the
@@ -451,12 +524,49 @@
 }
 
 /* The blanket reduced-motion guard in globals.css kills all transitions, so
-   these must outrank it to keep the view switch and crossfade legible. */
-@media (prefers-reduced-motion: reduce) {
+   these must outrank it to keep the view switch and crossfade legible. The
+   narrow push is the only thing these rules were written for. */
+@media (max-width: 999px) and (prefers-reduced-motion: reduce) {
   .missions, .map, .settings {
     transform: none !important;
     transition: opacity var(--dur-fast) var(--ease-out),
                 visibility 0s linear var(--dur-fast) !important;
   }
   .heroStill { transition: opacity var(--dur-fast) var(--ease-out) !important; }
+}
+
+/* The wide fold at reduced motion: a 150 ms crossfade, no movement and no
+   entrance delay, and the offsets settle at t = 0 (H2). The panel width is
+   pinned to its open value so the immediate settle cannot collapse the panel
+   mid-fade; consumers still settle at t = 0. */
+@media (min-width: 1000px) and (prefers-reduced-motion: reduce) {
+  .page[data-missions="closed"],
+  .page[data-settings="closed"] { --missions-delay: 0s; --settings-delay: 0s; }
+
+  /* Crossfade at the resting size: width never chases the settling var, so
+     the frame is a real 150 ms crossfade, not a collapse to zero. */
+  .missions { width: var(--missions-w-open); }
+  .settings { width: var(--settings-w-open); }
+
+  .missions, .settings {
+    transform: none !important;
+    transition: opacity var(--dur-fast) var(--ease-out),
+                visibility 0s linear 0s !important;
+  }
+  .page[data-missions="closed"] .missions,
+  .page[data-settings="closed"] .settings {
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity var(--dur-fast) var(--ease-out),
+                visibility 0s linear var(--dur-fast) !important;
+  }
+  .page .edgeTab {
+    transition: opacity var(--dur-fast) var(--ease-out),
+                visibility 0s linear var(--dur-fast) !important;
+  }
+  .page[data-missions="closed"] .edgeTabLeft,
+  .page[data-settings="closed"] .edgeTabRight {
+    transition: opacity var(--dur-fast) var(--ease-out),
+                visibility 0s linear 0s !important;
+  }
 }

@@ -5,8 +5,9 @@ import type { MissionSpec } from "@/lib/spec";
 import type { Preview } from "@/lib/mission";
 import type { MissionRecord } from "@/lib/missionRecords";
 import { readPassphrase, subscribePassphrase, writePassphrase } from "@/lib/passphrase";
-import { describeSave, flightTimeDelta, saveProblem, type SiteChoice } from "@/lib/missionView";
-import { noteMissionsChanged } from "@/lib/actions";
+import { flightTimeDelta, saveProblem, type SiteChoice } from "@/lib/missionView";
+import * as missionClient from "@/lib/missionClient";
+import { firstSentence } from "@/lib/notice";
 import type { NoticePayload } from "./Notice";
 import type { Editing } from "@/app/plan/page";
 import CountUp from "./CountUp";
@@ -73,29 +74,21 @@ export default function SummaryBar({ spec, preview, editing, onSaved, sites = []
       setSave({ kind: "idle" });
     };
     try {
-      const res = await fetch("/api/missions", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "x-wayfinder-key": passphrase },
-        body: JSON.stringify({
-          id: editing.id ?? undefined,
-          site_id: spec.site_id,
-          site: spec.site,
-          name: editing.name.trim(),
-          date: spec.date,
-          spec,
-        }),
+      const outcome = await missionClient.save({
+        id: editing.id ?? undefined,
+        // saveProblem above refuses a Spec with no site_id, so the guard here
+        // is the non-null.
+        site_id: spec.site_id!,
+        site: spec.site,
+        name: editing.name.trim(),
+        date: spec.date,
+        spec,
       });
-      const body = await res.json().catch(() => ({}));
-      // A failed save must never look like a success, so only a 2xx carrying
-      // the written record counts — anything else shows the server's own text.
-      if (res.ok && body.mission) {
-        // A Mission list open in another window shows this now, not at its
-        // next five-minute poll.
-        noteMissionsChanged();
-        onSaved(body.mission as MissionRecord);
-        report(describeSave(body), false);
+      if (outcome.ok) {
+        onSaved(outcome.mission);
+        report(outcome.text, false);
       } else {
-        report(body.error ?? `Not saved (HTTP ${res.status}). Nothing changed.`, true);
+        report(outcome.text, true);
       }
     } catch (err) {
       report(
@@ -217,11 +210,6 @@ export default function SummaryBar({ spec, preview, editing, onSaved, sites = []
       )}
     </div>
   );
-}
-
-/** Compact pill title: the first sentence of the verbatim result text. */
-function firstSentence(text: string): string {
-  return text.match(/^.*?[.!?…](?=\s|$)/)?.[0] ?? text;
 }
 
 /** A copy of the Spec on the operator's own disk. The store holds the Mission;

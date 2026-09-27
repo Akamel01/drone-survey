@@ -8,6 +8,8 @@ import { siteTwin, type SiteChoice } from "@/lib/missionView";
 import type { Editing } from "@/app/plan/page";
 import { isDrawing, type DrawMode } from "./MapPane";
 import styles from "./Sidebar.module.css";
+import { authClient, signOutToHome } from "@/lib/authClient";
+import { accountLabel } from "@/lib/home";
 
 interface SidebarProps {
   spec: MissionSpec;
@@ -207,7 +209,7 @@ export default function Sidebar({
       </Section>
 
       {isOrbit ? (
-        <Section title="Subject">
+        <Section key={isOrbit ? "subject" : "area"} title="Subject">
           <div className={styles.group}>
             <button
               className={mode === "set-poi" ? "active" : ""}
@@ -338,7 +340,7 @@ export default function Sidebar({
           </Field>
         </Section>
       ) : (
-        <Section title="Area">
+        <Section key={isOrbit ? "subject" : "area"} title="Area">
           <div className={styles.groupLabel}>
             Shape{drawing ? " — drawing on the map" : ""}
           </div>
@@ -679,7 +681,23 @@ export default function Sidebar({
         </div>
       </Section>
 
+      <SignedInLine />
+
     </aside>
+  );
+}
+
+function SignedInLine() {
+  const { data, error } = authClient.useSession();
+  if (error || !data?.user) return null;
+  const { name, email } = data.user;
+  return (
+    <div className={styles.accountLine}>
+      <span className={styles.accountText}>Signed in as {accountLabel(name, email)} ·</span>
+      <button type="button" onClick={() => void signOutToHome()}>
+        Sign out
+      </button>
+    </div>
   );
 }
 

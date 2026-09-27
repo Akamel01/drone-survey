@@ -289,8 +289,11 @@
   fill: none;
 }
 
-.close:hover {
-  filter: brightness(1.15);
+/* Hover brighten only on a fine pointer (spec § 10); a touch tap would stick. */
+@media (hover: hover) and (pointer: fine) {
+  .close:hover {
+    filter: brightness(1.15);
+  }
 }
 
 /* Reduced motion (spec §12, D8): geometry snaps to its final state and only

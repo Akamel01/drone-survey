@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { preview } from "@/lib/mission";
 import type { MissionRow } from "@/lib/missionRecords";
 import Sheet from "./Sheet";
@@ -9,13 +9,13 @@ import {
   IDLE,
   MISSIONS_CHANGED_KEY,
   beginAction,
-  describeResult,
   isRunning,
-  noteMissionsChanged,
   safeStorage,
-  type ActionResult,
   type ActionState,
 } from "@/lib/actions";
+import * as missionClient from "@/lib/missionClient";
+import type { MissionAction } from "@/lib/missionClient";
+import { firstSentence } from "@/lib/notice";
 import { readPassphrase, subscribePassphrase, writePassphrase } from "@/lib/passphrase";
 import {
   asOfStamp,
@@ -30,6 +30,14 @@ import {
   type MissionListRead,
   type RowView,
 } from "@/lib/missionView";
+import {
+  ENTER_MS,
+  arrivingIds,
+  flipDeltas,
+  holdMs,
+  leavingIds,
+  visibleMissions,
+} from "@/lib/missionListMotion";
 import styles from "./MissionList.module.css";
 
 // One Mission, one row, one state.
@@ -54,6 +62,16 @@ const TONE: Record<RowView["headline"]["tone"], string> = {
   quiet: styles.toneQuiet,
 };
 
+/** The same empty set for every "nothing is moving" update, so React can skip
+ *  the render when there is nothing to show. */
+const EMPTY_SET: ReadonlySet<string> = new Set();
+
+/** Read lazily: this module is server-rendered, and a matchMedia read at import
+ *  time would either crash or freeze the server's answer into the client. */
+function prefersReducedMotion(): boolean {
+  return window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+}
+
 interface MissionListProps {
   /** Hand a Mission back to the planner for editing. The store decides what
    *  editing means from its state: in place while Planned, a new Mission that
@@ -70,11 +88,6 @@ interface MissionListProps {
   /** Page-owned Notice slot. The page stamps `key` itself, so this takes the
    *  payload without it. */
   onNotice?: (p: Omit<NoticePayload, "key">) => void;
-}
-
-/** The Notice's compact title: the first sentence of the verbatim result. */
-function firstSentence(body: string): string {
-  return body.match(/^.*?[.!?…](?=\s|$)/)?.[0] ?? body;
 }
 
 export default function MissionList({ onEdit, onCopy, editingId = null, onRead, onNotice }: MissionListProps) {
@@ -107,7 +120,27 @@ export default function MissionList({ onEdit, onCopy, editingId = null, onRead, 
   // the clock whenever React happens to re-run it cannot be trusted to say
   // how old what it shows is.
   const [now, setNow] = useState(0);
+  // The rows dissolving right now, and the rows in their one blur-in window.
+  // Both are sets of ids, not rows: the read the hold is waiting on may not
+  // carry the leaving row any more, and the render still needs its id.
+  const [leaving, setLeaving] = useState<ReadonlySet<string>>(EMPTY_SET);
+  const [arriving, setArriving] = useState<ReadonlySet<string>>(EMPTY_SET);
   const inFlight = useRef(false);
+  const listRef = useRef<HTMLDivElement>(null);
+  // The newest read parked while rows dissolve; it commits when the hold ends.
+  const pendingReadRef = useRef<MissionListRead | null>(null);
+  // `leaving` mirrored for `applyRead`: it decides from what is on screen and
+  // from reads that have not rendered yet, not from the last committed render.
+  const leavingRef = useRef<ReadonlySet<string>>(EMPTY_SET);
+  const holdTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const arrivingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const flipRafRef = useRef<number | null>(null);
+  // Every mission id in the previous committed read -- archived included, so a
+  // filter toggle can never look like an arrival. Null until the first commit.
+  const previousIdsRef = useRef<Set<string> | null>(null);
+  // The old-layout offsets handed to the FLIP layout effect by the last commit.
+  const flipRef = useRef<{ offsets: Map<string, number> } | null>(null);
+  const showArchivedRef = useRef(false);
   // Held in a ref so a caller that passes a fresh closure each render does not
   // restart the poll -- restarting it is how a five-minute poll becomes a
   // per-render one, which is the failure this budget exists to prevent.
@@ -116,18 +149,112 @@ export default function MissionList({ onEdit, onCopy, editingId = null, onRead, 
     reportRead.current = onRead;
   });
 
-  const load = useCallback(async (key: string): Promise<MissionListRead | null> => {
+  // `load` is stable and runs long after the render that made it; it must read
+  // the filter as it is now, so it does not dissolve rows the operator has just
+  // asked to show. A layout effect, so the ref is current before the next paint
+  // -- a read resolving right after the toggle must not see the old filter.
+  useLayoutEffect(() => {
+    showArchivedRef.current = showArchived;
+  }, [showArchived]);
+
+  /** Put a fetched read on screen. The offsets are taken first, while the old
+   *  DOM is still displayed: they are the "first" half of the FLIP. */
+  const commit = useCallback((fresh: MissionListRead) => {
+    const offsets = new Map<string, number>();
+    listRef.current?.querySelectorAll<HTMLElement>("[data-row-id]").forEach((el) => {
+      const id = el.dataset.rowId;
+      if (id) offsets.set(id, el.offsetTop);
+    });
+    const ids = new Set(fresh.missions.map((r) => r.id));
+    const arrivals = arrivingIds(previousIdsRef.current, ids);
+    previousIdsRef.current = ids;
+    flipRef.current = { offsets };
+    setRead(fresh);
+    leavingRef.current = EMPTY_SET;
+    setLeaving(EMPTY_SET);
+    if (arrivals.length > 0) {
+      setArriving((prev) => new Set([...prev, ...arrivals]));
+      if (arrivingTimerRef.current !== null) clearTimeout(arrivingTimerRef.current);
+      arrivingTimerRef.current = setTimeout(() => {
+        arrivingTimerRef.current = null;
+        setArriving(EMPTY_SET);
+      }, ENTER_MS);
+    }
+  }, []);
+
+  /** The read path's one gate. A read that would unmount a visible row makes
+   *  that row dissolve first and waits out the hold; any other read commits at
+   *  once, so idle re-polls never move. */
+  const applyRead = useCallback(
+    (fresh: MissionListRead) => {
+      const rendered = new Set<string>();
+      listRef.current?.querySelectorAll<HTMLElement>("[data-row-id]").forEach((el) => {
+        const id = el.dataset.rowId;
+        if (id) rendered.add(id);
+      });
+      const nextVisible = visibleMissions(fresh.missions, showArchivedRef.current).map((r) => r.id);
+      const nextLeaving = leavingIds(rendered, nextVisible);
+      if (nextLeaving.length === 0) {
+        // Nothing to dissolve. A hold this read supersedes ends now rather
+        // than committing a stale read later.
+        if (holdTimerRef.current !== null) {
+          clearTimeout(holdTimerRef.current);
+          holdTimerRef.current = null;
+        }
+        pendingReadRef.current = null;
+        commit(fresh);
+        return;
+      }
+      const nextSet = new Set(nextLeaving);
+      // A second read during the hold recomputes from the DOM against itself:
+      // the same leavers keep the first deadline, a newly departed row owns it.
+      const newlyDeparted = nextLeaving.some((id) => !leavingRef.current.has(id));
+      leavingRef.current = nextSet;
+      setLeaving(nextSet);
+      pendingReadRef.current = fresh;
+      if (newlyDeparted || holdTimerRef.current === null) {
+        if (holdTimerRef.current !== null) clearTimeout(holdTimerRef.current);
+        holdTimerRef.current = setTimeout(() => {
+          holdTimerRef.current = null;
+          const read = pendingReadRef.current;
+          pendingReadRef.current = null;
+          if (read) commit(read);
+          else {
+            leavingRef.current = EMPTY_SET;
+            setLeaving(EMPTY_SET);
+          }
+        }, holdMs(prefersReducedMotion()));
+      }
+    },
+    [commit],
+  );
+
+  /** A view action ends the hold now: the parked read commits, dissolving
+   *  stops. The filter toggle calls this before it flips, so no frame paints a
+   *  filtered-out row still wearing `.leaving`. */
+  const flushHold = useCallback(() => {
+    if (holdTimerRef.current !== null) {
+      clearTimeout(holdTimerRef.current);
+      holdTimerRef.current = null;
+    }
+    const parked = pendingReadRef.current;
+    pendingReadRef.current = null;
+    leavingRef.current = EMPTY_SET;
+    setLeaving(EMPTY_SET);
+    if (parked) commit(parked);
+  }, [commit]);
+
+  const load = useCallback(async (): Promise<MissionListRead | null> => {
     setLoading(true);
     try {
       // Always the whole list: `archived_count` and the archived rows come in
       // one call, so the filter costs nothing and the count cannot disagree
       // with what the filter reveals.
-      const res = await fetch("/api/missions?archived=1", { headers: { "x-wayfinder-key": key } });
-      const body = await res.json().catch(() => ({}));
-      if (res.ok && Array.isArray(body.missions)) {
-        const fresh = body as MissionListRead;
+      const outcome = await missionClient.list();
+      if (outcome.ok) {
+        const fresh = outcome.read;
         const at = Date.now();
-        setRead(fresh);
+        applyRead(fresh);
         setReadAt(at);
         setNow(at);
         setLive(true);
@@ -137,9 +264,8 @@ export default function MissionList({ onEdit, onCopy, editingId = null, onRead, 
         if (ls) cacheRead(ls, fresh, at);
         reportRead.current?.(fresh);
         return fresh;
-      } else {
-        fallBackToCache(body.error ?? `The Mission list could not be read (HTTP ${res.status}).`);
       }
+      fallBackToCache(outcome.text);
     } catch (err) {
       fallBackToCache(
         `The store could not be reached: ${err instanceof Error ? err.message : "unknown"}.`,
@@ -157,7 +283,7 @@ export default function MissionList({ onEdit, onCopy, editingId = null, onRead, 
       const ls = safeStorage();
       const cached = ls ? cachedRead(ls) : null;
       if (cached) {
-        setRead(cached.read);
+        applyRead(cached.read);
         setReadAt(cached.read_at);
         setLive(false);
         setGate(false);
@@ -165,6 +291,70 @@ export default function MissionList({ onEdit, onCopy, editingId = null, onRead, 
         setLive(true);
       }
     }
+  }, [applyRead]);
+
+  // FLIP: the last commit left the survivors' old offsets in `flipRef`, and
+  // this runs before the browser paints. No dependency array: a pass without a
+  // flip is one guard read, and a missed pass would show the jump it exists to
+  // hide. `flipRef` is consumed here so an unrelated render cannot replay it.
+  useLayoutEffect(() => {
+    const flip = flipRef.current;
+    if (!flip) return;
+    flipRef.current = null;
+    if (flipRafRef.current !== null) {
+      cancelAnimationFrame(flipRafRef.current);
+      flipRafRef.current = null;
+    }
+    const list = listRef.current;
+    if (!list || prefersReducedMotion()) return; // reduced motion: final state, no slide
+    const els = new Map<string, HTMLElement>();
+    const next = new Map<string, number>();
+    list.querySelectorAll<HTMLElement>("[data-row-id]").forEach((el) => {
+      const id = el.dataset.rowId;
+      if (!id) return;
+      els.set(id, el);
+      next.set(id, el.offsetTop);
+    });
+    const deltas = flipDeltas(flip.offsets, next);
+    const written: HTMLElement[] = [];
+    for (const [id, delta] of deltas) {
+      const el = els.get(id);
+      if (!el) continue;
+      // `transition: none` parks the row at where it was; the flush below
+      // records that as the transition's start value and the rAF release lets
+      // `.slot` animate transform to none.
+      el.style.transition = "none";
+      el.style.transform = `translateY(${delta}px)`;
+      written.push(el);
+    }
+    if (written.length === 0) return;
+    void list.offsetHeight;
+    flipRafRef.current = requestAnimationFrame(() => {
+      flipRafRef.current = null;
+      for (const el of written) {
+        el.style.transition = "";
+        el.style.transform = "";
+      }
+    });
+    return () => {
+      if (flipRafRef.current !== null) {
+        cancelAnimationFrame(flipRafRef.current);
+        flipRafRef.current = null;
+      }
+      for (const el of written) {
+        el.style.transition = "";
+        el.style.transform = "";
+      }
+    };
+  });
+
+  // A hold or an arrival must not outlive the list.
+  useEffect(() => {
+    return () => {
+      if (holdTimerRef.current !== null) clearTimeout(holdTimerRef.current);
+      if (arrivingTimerRef.current !== null) clearTimeout(arrivingTimerRef.current);
+      if (flipRafRef.current !== null) cancelAnimationFrame(flipRafRef.current);
+    };
   }, []);
 
   // True only for the passphrase already on file when this mounted, so that
@@ -194,10 +384,9 @@ export default function MissionList({ onEdit, onCopy, editingId = null, onRead, 
   // a second before it is used.
   useEffect(() => {
     if (!passphrase) return;
-    const key = passphrase;
     const wait = instant.current ? 0 : 500;
     instant.current = false;
-    const debounce = setTimeout(() => void load(key), wait);
+    const debounce = setTimeout(() => void load(), wait);
 
     // Every poll costs a Class C transaction on the storage account, and this
     // page is left open for hours. Five minutes is fresh enough for a pipeline
@@ -206,14 +395,14 @@ export default function MissionList({ onEdit, onCopy, editingId = null, onRead, 
     // shorten this, and do not remove this note.
     const refresh = () => {
       if (document.hidden) return;
-      void load(key);
+      void load();
     };
     document.addEventListener("visibilitychange", refresh);
     // A write from another window of this planner: react to the write instead
     // of waiting out the interval. `storage` fires only in the *other*
     // windows, so this costs a transaction only when something changed.
     const onWrite = (e: StorageEvent) => {
-      if (e.key === MISSIONS_CHANGED_KEY) void load(key);
+      if (e.key === MISSIONS_CHANGED_KEY) void load();
     };
     window.addEventListener("storage", onWrite);
     const poll = setInterval(refresh, 300000);
@@ -237,54 +426,35 @@ export default function MissionList({ onEdit, onCopy, editingId = null, onRead, 
   // the store the moment it finishes. The poll and Refresh only re-read: they
   // never touch the Notice, which the page owns.
   const act = useCallback(
-    async (label: string, on: string, fn: () => Promise<Response>) => {
-      if (!passphrase || inFlight.current) return;
+    async (label: MissionAction, on: string) => {
+      if (missionClient.signedOut() || inFlight.current) return;
       inFlight.current = true;
       setAction((s) => beginAction(s, label, on));
-      let result: ActionResult;
-      try {
-        const res = await fn();
-        const body = await res.json().catch(() => ({}));
-        result = res.ok ? { ok: true, body } : { ok: false, status: res.status, body };
-        if (res.ok) noteMissionsChanged();
-      } catch (err) {
-        result = { ok: false, threw: err instanceof Error ? err.message : "unknown" };
-      }
+      const outcome = await missionClient.run(label, on);
       inFlight.current = false;
       setAction(IDLE);
-      const fresh = await load(passphrase);
-      const body = describeResult(label, result);
+      const fresh = await load();
       onNotice?.({
-        title: firstSentence(body),
-        body,
+        title: firstSentence(outcome.text),
+        body: outcome.text,
         missionName: fresh?.missions.find((m) => m.id === on)?.name ?? "",
-        failed: !result.ok,
+        failed: !outcome.ok,
       });
     },
-    [passphrase, load, onNotice],
-  );
-
-  const post = useCallback(
-    (path: string, body: unknown) =>
-      fetch(path, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "x-wayfinder-key": passphrase ?? "" },
-        body: JSON.stringify(body),
-      }),
-    [passphrase],
+    [load, onNotice],
   );
 
   const runAction = useCallback(
     (name: ActionName, row: MissionRow) => {
       switch (name) {
         case "Dispatch":
-          return act(name, row.id, () => post("/api/missions/dispatch", { id: row.id }));
+          return act(name, row.id);
         case "Withdraw":
-          return act(name, row.id, () => post("/api/missions/withdraw", { id: row.id }));
+          return act(name, row.id);
         case "Mark Flown":
-          return act(name, row.id, () => post("/api/missions/flown", { id: row.id, flown: true }));
+          return act(name, row.id);
         case "Unmark Flown":
-          return act(name, row.id, () => post("/api/missions/flown", { id: row.id, flown: false }));
+          return act(name, row.id);
         case "Remove":
           // Asks in a sheet, never the browser's own confirm box (spec § 8,
           // § 14) -- the words are the same ones that box used to show.
@@ -297,20 +467,15 @@ export default function MissionList({ onEdit, onCopy, editingId = null, onRead, 
           return onCopy(row);
       }
     },
-    [act, post, onEdit, onCopy],
+    [act, onEdit, onCopy],
   );
 
   const confirmRemove = useCallback(() => {
     if (!confirmRow) return;
     const row = confirmRow;
     setConfirmOpen(false);
-    void act("Remove", row.id, () =>
-      fetch(`/api/missions?id=${encodeURIComponent(row.id)}`, {
-        method: "DELETE",
-        headers: { "x-wayfinder-key": passphrase ?? "" },
-      }),
-    );
-  }, [act, confirmRow, passphrase]);
+    void act("Remove", row.id);
+  }, [act, confirmRow]);
 
   const all = useMemo(() => read?.missions ?? [], [read]);
   // The planner's own figures, derived from each Mission's Spec. They are one
@@ -325,7 +490,7 @@ export default function MissionList({ onEdit, onCopy, editingId = null, onRead, 
     return m;
   }, [all]);
 
-  const visible = showArchived ? all : all.filter((r) => !r.archived);
+  const visible = visibleMissions(all, showArchived);
   const archivedCount = read?.archived_count ?? 0;
 
   if (passphrase === null) return <p className={styles.quiet}>Reading the Mission list…</p>;
@@ -344,7 +509,7 @@ export default function MissionList({ onEdit, onCopy, editingId = null, onRead, 
         className={styles.gate}
         onSubmit={(e) => {
           e.preventDefault();
-          if (passphrase) void load(passphrase);
+          if (passphrase) void load();
         }}
       >
         <p className={styles.gateText}>
@@ -369,7 +534,7 @@ export default function MissionList({ onEdit, onCopy, editingId = null, onRead, 
   }
 
   return (
-    <div className={styles.list}>
+    <div className={styles.list} ref={listRef}>
       <div className={styles.bar}>
         {/* The operator is never left waiting on a timer with no way to ask. */}
         <span className={styles.age} role="status" aria-live="polite">
@@ -378,8 +543,8 @@ export default function MissionList({ onEdit, onCopy, editingId = null, onRead, 
         </span>
         <button
           onClick={() => {
-            if (!passphrase) return;
-            void load(passphrase);
+            if (missionClient.signedOut()) return;
+            void load();
           }}
           disabled={loading}
         >
@@ -392,7 +557,12 @@ export default function MissionList({ onEdit, onCopy, editingId = null, onRead, 
             type="button"
             className={`${styles.filter} ${showArchived ? "active" : ""}`}
             aria-pressed={showArchived}
-            onClick={() => setShowArchived((v) => !v)}
+            onClick={() => {
+              // The held read commits against the old filter first; both
+              // updates batch, so no frame shows a filtered-out row leaving.
+              flushHold();
+              setShowArchived((v) => !v);
+            }}
           >
             Show {archivedCount} archived
           </button>
@@ -426,21 +596,36 @@ export default function MissionList({ onEdit, onCopy, editingId = null, onRead, 
         </p>
       )}
 
-      {visible.map((row) => (
-        <Row
-          key={row.id}
-          row={row}
-          view={rowView(row, figures.get(row.id) ?? null, read?.stale_cards ?? [], read?.host?.notice ?? null)}
-          editing={row.id === editingId}
-          busy={action.running !== null}
-          running={(name) => isRunning(action, name, row.id)}
-          onAction={(name) => runAction(name, row)}
-          onDetails={() => {
-            setDetailsRow(row);
-            setDetailsOpen(true);
-          }}
-        />
-      ))}
+      {visible.map((row) => {
+        const isLeaving = leaving.has(row.id);
+        const isArriving = arriving.has(row.id);
+        return (
+          // The wrapper owns the FLIP transform and the two motion classes; the
+          // article's own `press` transform stays untouched. A dissolving row
+          // is inert and hidden from the tree; the Notice is what announces the
+          // result, so the list adds no live region of its own.
+          <div
+            key={row.id}
+            data-row-id={row.id}
+            className={`${styles.slot}${isLeaving ? ` ${styles.leaving}` : ""}${isArriving ? ` ${styles.arriving}` : ""}`}
+            inert={isLeaving || undefined}
+            aria-hidden={isLeaving || undefined}
+          >
+            <Row
+              row={row}
+              view={rowView(row, figures.get(row.id) ?? null, read?.stale_cards ?? [], read?.host?.notice ?? null)}
+              editing={row.id === editingId}
+              busy={action.running !== null}
+              running={(name) => isRunning(action, name, row.id)}
+              onAction={(name) => runAction(name, row)}
+              onDetails={() => {
+                setDetailsRow(row);
+                setDetailsOpen(true);
+              }}
+            />
+          </div>
+        );
+      })}
 
       <Sheet open={confirmOpen} onClose={() => setConfirmOpen(false)} labelledBy={removeHeadingId}>
         {confirmRow && (

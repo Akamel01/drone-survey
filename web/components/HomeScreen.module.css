@@ -1,0 +1,132 @@
+.root {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  overflow: hidden;
+  background: var(--canopy-900);
+  transition:
+    transform var(--dur-slow) var(--ease-emphasised),
+    opacity var(--dur-fast) var(--ease-out);
+}
+
+.root[data-leaving] {
+  transform: translateX(-100%);
+  opacity: 0;
+}
+
+.content {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  width: min(320px, 100% - 32px);
+  margin: 0 auto;
+  padding: 0 0 calc(32px + env(safe-area-inset-bottom));
+}
+
+.title {
+  margin: 0;
+  font-family: var(--display), var(--sans);
+  font-size: clamp(28px, 9vw, 40px);
+  font-weight: 700;
+  line-height: 1.1;
+  letter-spacing: -0.01em;
+  color: var(--on-glass);
+}
+
+.options,
+.waiting,
+.quiet {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  align-items: flex-start;
+}
+
+.options button {
+  width: 100%;
+  padding: 12px 16px;
+  font-weight: 600;
+}
+
+.waiting {
+  gap: 12px;
+}
+
+.quiet {
+  gap: 12px;
+}
+
+.waitingCopy,
+.quietCopy {
+  margin: 0;
+  color: var(--on-glass);
+}
+
+.email {
+  margin: 0;
+  color: var(--on-glass-2);
+  overflow-wrap: anywhere;
+}
+
+.waiting button {
+  padding: 10px 18px;
+  font-weight: 600;
+}
+
+.link {
+  display: inline-block;
+  padding: 10px 16px;
+  border-radius: 999px;
+  color: var(--on-glass);
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.problem {
+  margin: 0;
+  color: var(--warn);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .root[data-entrance="play"] .title {
+    animation: titleWipe 500ms var(--ease-out);
+  }
+
+  .root[data-entrance="play"] .options button,
+  .root[data-entrance="play"] .waiting,
+  .root[data-entrance="play"] .quiet {
+    animation: homeIn var(--dur-fast) var(--ease-out)
+      calc(500ms + var(--i, 0) * var(--stagger)) backwards;
+  }
+
+  @keyframes titleWipe {
+    from {
+      clip-path: inset(0 100% 0 0);
+    }
+    to {
+      clip-path: inset(0);
+    }
+  }
+
+  @keyframes homeIn {
+    from {
+      opacity: 0;
+      filter: blur(4px);
+    }
+    to {
+      opacity: 1;
+      filter: blur(0);
+    }
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .root {
+    transform: none !important;
+    transition: opacity var(--dur-fast) var(--ease-out) !important;
+  }
+}
