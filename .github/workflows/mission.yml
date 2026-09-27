@@ -9,12 +9,16 @@ on:
   push:
     paths:
       - "scripts/mission/**"
+      - "scripts/showcase/**"
+      - "fixtures/**"
       - "nodes/**"
       - "web/**"
       - ".github/workflows/mission.yml"
   pull_request:
     paths:
       - "scripts/mission/**"
+      - "scripts/showcase/**"
+      - "fixtures/**"
       - "nodes/**"
       - "web/**"
   workflow_dispatch:
@@ -61,6 +65,11 @@ jobs:
           python3 nodes/check_splat.py
           python3 nodes/check_head.py
           python3 nodes/check_showcase.py
+          python3 nodes/render-background/cloud_pass.py --self-test
+          python3 fixtures/showcase/generate_sky_plate.py --check
+          python3 scripts/showcase/hero_compare.py --self-test
+          python3 nodes/cut-island/cut_island.py --self-test
+          python3 nodes/grade/grade.py --self-test
           python3 pipeline/runner.py --selftest
           python3 nodes/retention/retention.py --selftest
           python3 nodes/check_retention.py

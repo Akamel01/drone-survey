@@ -34,6 +34,18 @@
       "notes": "Pinned Blender 5.2.2 image, gpu: true (C3/C4). Resumable (D7): skip-existing + PNG-parse validation keeps frame dirs across a retry; declared files still re-emit. Both framings share one angle array from one scene."
     },
     {
+      "name": "render-background",
+      "placement": "local",
+      "image": "drone-render-showcase:blender-5.2.2",
+      "gpu": true,
+      "command": [
+        "blender", "-b", "--factory-startup", "-P", "nodes/render-background/cloud_pass.py", "--",
+        "{in.island}", "{out.clouds_wide}", "{out.clouds_tall}"
+      ],
+      "inputs": {"island": {"node": "cut-island", "output": "island"}},
+      "outputs": {"clouds_wide": "clouds-wide.png", "clouds_tall": "clouds-tall.png"}
+    },
+    {
       "name": "grade-frames",
       "placement": "local",
       "command": [
@@ -41,15 +53,21 @@
         "--frames-wide", "{in.frames_wide}",
         "--frames-tall", "{in.frames_tall}",
         "--sky", "{in.sky}",
+        "--clouds-wide", "{in.clouds_wide}",
+        "--clouds-tall", "{in.clouds_tall}",
+        "--params", "nodes/grade/grade-params.json",
         "--graded-wide", "{out.graded_wide}",
-        "--graded-tall", "{out.graded_tall}"
+        "--graded-tall", "{out.graded_tall}",
+        "--out-report", "{out.grade_report}"
       ],
       "inputs": {
         "frames_wide": {"node": "render", "output": "frames_wide"},
-        "frames_tall": {"node": "render", "output": "frames_tall"}
+        "frames_tall": {"node": "render", "output": "frames_tall"},
+        "clouds_wide": {"node": "render-background", "output": "clouds_wide"},
+        "clouds_tall": {"node": "render-background", "output": "clouds_tall"}
       },
-      "outputs": {"graded_wide": "graded-wide", "graded_tall": "graded-tall"},
-      "notes": "Frame-dir loop over the shared grade() (M3, D2), so the turn look cannot fork from the stills look. Names only the render frame dirs plus the C5 sky input, never the Reconstruction or island dir (D4)."
+      "outputs": {"graded_wide": "graded-wide", "graded_tall": "graded-tall", "grade_report": "grade-report.json"},
+      "notes": "Frame-dir loop over the shared grade() (M3, D2), so the turn look cannot fork from the stills look. Names only the render frame dirs plus the C5 sky and M3 cloud inputs, never the Reconstruction or island dir (D4). Params are the checked-in grade-params.json; grade-report.json carries the digest the gate re-hashes."
     },
     {
       "name": "interpolate",
@@ -96,6 +114,7 @@
         "--cuts-dir", "{in.cuts}",
         "--cut-report", "{in.cut_report}",
         "--reconstruction", "{in.reconstruction}",
+        "--grade-report", "{in.grade_report}",
         "--out-verdict", "{out.verdict}"
       ],
       "inputs": {
@@ -103,7 +122,8 @@
         "frames_tall": {"node": "render", "output": "frames_tall"},
         "masters": {"node": "interpolate", "output": "masters"},
         "cuts": {"node": "cuts", "output": "cuts"},
-        "cut_report": {"node": "cut-island", "output": "cut_report"}
+        "cut_report": {"node": "cut-island", "output": "cut_report"},
+        "grade_report": {"node": "grade-frames", "output": "grade_report"}
       },
       "outputs": {"verdict": "verdict.json"},
       "notes": "Gate (C7 + M6): C4 on frame-0 of the render frame dirs (raw RGBA alpha), seam + direction on the frame dirs, counts/codecs on masters + §6 cuts, C2 re-hash of the Reconstruction against the report. Exits non-zero on failure; verdict.json declared so a silent gate fails."
