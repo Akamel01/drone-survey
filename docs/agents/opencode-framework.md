@@ -66,6 +66,28 @@ On a mark, the watcher stops every `opencode run` on that model. Each
 decisions are logged in `~/.opencode-runs/_models/watch.log`, and
 `python3 watch.py --selftest` tests them without spending tokens.
 
+**When a model hangs instead of failing** (#217). On 2026-09-27 at 05:39 UTC,
+Muse answered two child sessions with `Rate limit exceeded. Please try again
+later.` and then hung: a one-word request did not come back in 3 minutes. There
+was no stream of errors for the watcher to count, so both tickets sat idle for
+about 20 minutes. The watcher now tests models instead of only reading errors:
+
+- **Probe on error.** A rate-limit error makes the watcher send the model a
+  one-word request with a 60 s timeout (`watch.py --probe`). No answer means
+  the model is out, and its runs move to the next model within about a minute.
+- **Error, then silence.** A run whose last log line is an error and that has
+  been silent for 10 minutes is stuck. If its model does not answer a probe,
+  the model is marked out. If it does answer, the run is restarted on it
+  (`_models/preempt`).
+- **Probe before dispatch.** `dispatch.sh` probes a model before giving it a
+  session, so an expired mark never sends a ticket into a hang.
+- **Move back up.** Every 15 minutes, while any run is on DeepSeek, the watcher
+  probes Muse. Once Muse answers, those runs are preempted and continue on Muse,
+  in the same session.
+
+`watch.py --selftest` covers each rule with stub models: no tokens spent,
+nothing real killed.
+
 **Capabilities.** The registry (`models.json` in the skill) holds each model's
 window, output limit, reasoning variant (`high` for both) and strengths.
 autoforge's own registry has both models too, so its per-task budgets use their
@@ -149,9 +171,9 @@ API), so its work arrives as pushed branches. Locally, the orchestrator:
 
 - Ten tickets have landed through it, and at most one of them needed more than
   one round of review feedback.
-- A model switch has happened for real, mid-ticket, and the session carried on.
-  Until then the quota check matches on wording, not on a message seen in
-  practice; the first real one gets pinned in `dispatch.sh`.
+- ~~A model switch has happened for real, mid-ticket, and the session carried
+  on.~~ Done on 2026-09-27: #185 and #191 moved from Muse to DeepSeek in their
+  own sessions, and both carried on.
 - No run has lost its state: each can be resumed from its folder alone.
 
 Then the skill moves to its own repository and this document becomes a pointer
