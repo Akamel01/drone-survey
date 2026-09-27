@@ -277,8 +277,9 @@ const handlers: Record<string, Handler> = {
 for (const [name, c] of Object.entries(fixture.cases)) {
   test(`card ledger: ${name}`, () => {
     const rule = required<string>(name, c, "rule");
-    const handler = handlers[rule];
-    if (!handler) fail(name, `no handler for rule "${rule}"`);
-    handler(name, c);
+    // `hasOwn`, not truthiness: a rule named "constructor" must fail by name
+    // rather than resolve through Object.prototype (investigation F1).
+    if (!Object.hasOwn(handlers, rule)) fail(name, `no handler for rule "${rule}"`);
+    handlers[rule](name, c);
   });
 }
