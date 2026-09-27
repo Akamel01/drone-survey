@@ -298,6 +298,18 @@ export default function MapPane({
   const numberMarkersRef = useRef<Marker[]>([]);
   const [basemap, setBasemap] = useState<"esri" | "osm">("esri");
   const [showFootprint, setShowFootprint] = useState(false);
+  // The two map-control menus: one open at a time, closing dissolves (250ms,
+  // spec §9.1) before unmount, so closingMenu keeps the leaving menu painted.
+  const [openMenu, setOpenMenu] = useState<"base" | "overlays" | null>(null);
+  const [closingMenu, setClosingMenu] = useState<"base" | "overlays" | null>(null);
+  const baseBtnRef = useRef<HTMLButtonElement | null>(null);
+  const overlaysBtnRef = useRef<HTMLButtonElement | null>(null);
+  const baseMenuRef = useRef<HTMLDivElement | null>(null);
+  const overlaysMenuRef = useRef<HTMLDivElement | null>(null);
+  const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Set when a menu opens from the keyboard, so first-item focus happens once
+  // the menu is painted; a mouse open leaves focus on the button.
+  const focusMenuOnOpen = useRef(false);
   const [drawHint, setDrawHint] = useState<string | null>(null);
   // Why a finish did not happen. A double-click on a two-corner ring used to
   // commit nothing and say nothing, which reads exactly like a broken map.
@@ -331,8 +343,83 @@ export default function MapPane({
     return () => ro.disconnect();
   }, []);
 
-  // Leaving a draw mode half-finished must not leave the shape behind, so every
-  // mode change discards it. An effect on `mode` would cost a second render.
+  // Base map and overlays are different kinds of control, so they are two
+  // buttons with two menus, never one row of four pills (decision 19). One
+  // menu open at a time; every close returns focus to its button.
+  const openMapMenu = (m: "base" | "overlays") => {
+    if (closeTimer.current) clearTimeout(closeTimer.current);
+    setClosingMenu(null);
+    setOpenMenu(m);
+  };
+  const closeMapMenu = (m: "base" | "overlays") => {
+    if (closeTimer.current) clearTimeout(closeTimer.current);
+    setOpenMenu(null);
+    setClosingMenu(m);
+    closeTimer.current = setTimeout(() => setClosingMenu(null), 260);
+    (m === "base" ? baseBtnRef : overlaysBtnRef).current?.focus();
+  };
+
+  // Tap-outside and Escape close the open menu (same code for touch and
+  // mouse: pointerdown fires for both). The keydown listener runs on capture
+  // and stops an Escape there, so the map's own Escape handler below -- which
+  // cancels a draw -- does not also fire while a menu is open.
+  useEffect(() => {
+    if (!openMenu) return;
+    const onDown = (e: PointerEvent) => {
+      if (!toggleRef.current?.contains(e.target as Node)) closeMapMenu(openMenu);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        e.stopPropagation();
+        closeMapMenu(openMenu);
+      }
+    };
+    document.addEventListener("pointerdown", onDown);
+    document.addEventListener("keydown", onKey, true);
+    return () => {
+      document.removeEventListener("pointerdown", onDown);
+      document.removeEventListener("keydown", onKey, true);
+    };
+  }, [openMenu]);
+
+  // Keyboard-opened menus start on their first item (spec §10).
+  useEffect(() => {
+    if (!openMenu || !focusMenuOnOpen.current) return;
+    focusMenuOnOpen.current = false;
+    const root = openMenu === "base" ? baseMenuRef.current : overlaysMenuRef.current;
+    root?.querySelector<HTMLButtonElement>('[role^="menuitem"]')?.focus();
+  }, [openMenu]);
+
+  // Arrow keys move within a menu; the menu holds buttons, so Space and Enter
+  // activate without extra code.
+  const menuKeys = (e: React.KeyboardEvent, m: "base" | "overlays") => {
+    const root = m === "base" ? baseMenuRef.current : overlaysMenuRef.current;
+    const items = root ? [...root.querySelectorAll<HTMLButtonElement>('[role^="menuitem"]')] : [];
+    if (!items.length) return;
+    const i = items.indexOf(document.activeElement as HTMLButtonElement);
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      (items[i + 1] ?? items[0]).focus();
+    } else if (e.key === "ArrowUp") {
+      e.preventDefault();
+      (items[i - 1] ?? items[items.length - 1]).focus();
+    } else if (e.key === "Home") {
+      e.preventDefault();
+      items[0].focus();
+    } else if (e.key === "End") {
+      e.preventDefault();
+      items[items.length - 1].focus();
+    }
+  };
+  const menuBtnKeys = (e: React.KeyboardEvent, m: "base" | "overlays") => {
+    if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+      e.preventDefault();
+      focusMenuOnOpen.current = true;
+      openMapMenu(m);
+    }
+  };
+
+  // Leaving a draw mode half-finished must not leave the shape behind, so every  // mode change discards it. An effect on `mode` would cost a second render.
   const changeMode = (next: DrawMode) => {
     if (next !== "draw-circle") {
       circleCenterRef.current = null;
@@ -967,42 +1054,127 @@ export default function MapPane({
   const footprintLabel = preview.footprint_across_m
     ? `${Math.round(preview.footprint_across_m)} × ${Math.round(preview.footprint_along_m)} m`
     : "";
+  const overlaysOn = (showNumbers ? 1 : 0) + (showFootprint ? 1 : 0);
 
   return (
     <div ref={wrapRef} className={styles.wrap}>
       <div ref={containerRef} className={styles.map} />
       <div ref={toggleRef} className={styles.basemapToggle} role="group" aria-label="Map display">
-        <button
-          className={`${styles.pill} ${basemap === "esri" ? "active" : ""}`}
-          aria-pressed={basemap === "esri"}
-          onClick={() => toggleBasemap("esri")}
-        >
-          Satellite
-        </button>
-        <button
-          className={`${styles.pill} ${basemap === "osm" ? "active" : ""}`}
-          aria-pressed={basemap === "osm"}
-          onClick={() => toggleBasemap("osm")}
-        >
-          OSM
-        </button>
         {/* Near what it affects: display options for the map live on the map. */}
-        <button
-          className={`${styles.pill} ${showNumbers ? "active" : ""}`}
-          aria-pressed={showNumbers}
-          onClick={() => onShowNumbersChange(!showNumbers)}
-          title="Number each photo position in capture order"
-        >
-          Numbers
-        </button>
-        <button
-          className={`${styles.pill} ${showFootprint ? "active" : ""}`}
-          aria-pressed={showFootprint}
-          onClick={() => setShowFootprint(!showFootprint)}
-          title={`What one photograph covers at this altitude${footprintLabel ? `: ${footprintLabel}` : ""}`}
-        >
-          {showFootprint && footprintLabel ? footprintLabel : "Footprint"}
-        </button>
+        <div className={styles.menuWrap}>
+          <button
+            ref={baseBtnRef}
+            className={styles.pill}
+            aria-haspopup="menu"
+            aria-expanded={openMenu === "base"}
+            onClick={() => (openMenu === "base" ? closeMapMenu("base") : openMapMenu("base"))}
+            onKeyDown={(e) => menuBtnKeys(e, "base")}
+          >
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" aria-hidden="true">
+              <path d="M8 1.5 14.5 5 8 8.5 1.5 5Z" />
+              <path d="m1.5 8.5 6.5 3.5 6.5-3.5" />
+              <path d="m1.5 11.5 6.5 3.5 6.5-3.5" />
+            </svg>
+            {basemap === "esri" ? "Satellite" : "OSM"}
+          </button>
+          {(openMenu === "base" || closingMenu === "base") && (
+            <div
+              ref={baseMenuRef}
+              role="menu"
+              aria-label="Base map"
+              className={`${styles.menu} ${closingMenu === "base" ? styles.menuClosing : ""}`}
+              onKeyDown={(e) => menuKeys(e, "base")}
+            >
+              {(
+                [
+                  { id: "esri", label: "Satellite" },
+                  { id: "osm", label: "OSM" },
+                ] as const
+              ).map(({ id, label }, i) => (
+                <button
+                  key={id}
+                  role="menuitemradio"
+                  aria-checked={basemap === id}
+                  className={`${styles.menuItem} ${basemap === id ? styles.menuItemActive : ""}`}
+                  style={{ animationDelay: `calc(var(--stagger) * ${i})` }}
+                  onClick={() => {
+                    toggleBasemap(id);
+                    closeMapMenu("base");
+                  }}
+                >
+                  <span className={styles.menuCheck} aria-hidden="true">
+                    {basemap === id ? (
+                      <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="m3 8.5 3.5 3.5L13 4.5" />
+                      </svg>
+                    ) : null}
+                  </span>
+                  {label}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+        <div className={styles.menuWrap}>
+          <button
+            ref={overlaysBtnRef}
+            className={styles.pill}
+            aria-haspopup="menu"
+            aria-expanded={openMenu === "overlays"}
+            onClick={() => (openMenu === "overlays" ? closeMapMenu("overlays") : openMapMenu("overlays"))}
+            onKeyDown={(e) => menuBtnKeys(e, "overlays")}
+          >
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" aria-hidden="true">
+              <path d="M5.5 1.5h7a2 2 0 0 1 2 2v7" />
+              <rect x="1.5" y="5.5" width="9" height="9" rx="2" />
+            </svg>
+            {overlaysOn ? `Overlays · ${overlaysOn}` : "Overlays"}
+          </button>
+          {(openMenu === "overlays" || closingMenu === "overlays") && (
+            <div
+              ref={overlaysMenuRef}
+              role="menu"
+              aria-label="Overlays"
+              className={`${styles.menu} ${closingMenu === "overlays" ? styles.menuClosing : ""}`}
+              onKeyDown={(e) => menuKeys(e, "overlays")}
+            >
+              <button
+                role="menuitemcheckbox"
+                aria-checked={showNumbers}
+                className={`${styles.menuItem} ${showNumbers ? styles.menuItemActive : ""}`}
+                style={{ animationDelay: "calc(var(--stagger) * 0)" }}
+                onClick={() => onShowNumbersChange(!showNumbers)}
+                title="Number each photo position in capture order"
+              >
+                <span className={styles.menuCheck} aria-hidden="true">
+                  {showNumbers ? (
+                    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="m3 8.5 3.5 3.5L13 4.5" />
+                    </svg>
+                  ) : null}
+                </span>
+                Numbers
+              </button>
+              <button
+                role="menuitemcheckbox"
+                aria-checked={showFootprint}
+                className={`${styles.menuItem} ${showFootprint ? styles.menuItemActive : ""}`}
+                style={{ animationDelay: "calc(var(--stagger) * 1)" }}
+                onClick={() => setShowFootprint(!showFootprint)}
+                title={`What one photograph covers at this altitude${footprintLabel ? `: ${footprintLabel}` : ""}`}
+              >
+                <span className={styles.menuCheck} aria-hidden="true">
+                  {showFootprint ? (
+                    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="m3 8.5 3.5 3.5L13 4.5" />
+                    </svg>
+                  ) : null}
+                </span>
+                {showFootprint && footprintLabel ? footprintLabel : "Footprint"}
+              </button>
+            </div>
+          )}
+        </div>
       </div>
       {isDrawing(mode) && (
         <div className={`${styles.drawPanel} glass-smoke`}>

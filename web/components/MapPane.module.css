@@ -86,6 +86,7 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  gap: 8px;
   border-radius: 999px;
   border: 1px solid rgb(255 255 255 / 0.55);
   background: rgb(255 255 255 / 0.4);
@@ -97,6 +98,169 @@
   font-weight: 500;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
+  /* Press springs back on release (spec §11); the return runs this way. */
+  transition: transform var(--dur-press), box-shadow var(--dur-press);
+}
+
+/* Press (spec §11): on pointer-down -- :active starts at press, not release --
+   the button scales to 0.97 under a 6% white overlay (the inset wash), over
+   --dur-press. Same code serves touch and mouse. */
+.pill:active {
+  transform: scale(0.97);
+  box-shadow: inset 0 0 0 999px rgb(255 255 255 / 0.06), inset 0 1px 0 rgb(255 255 255 / 0.55);
+}
+
+/* The two menus anchor to their buttons; placement stays where the pills were,
+   so --toggle-h (measured off .basemapToggle in MapPane.tsx) keeps clearing
+   the Summary and the drawing panel exactly as before. */
+.menuWrap {
+  position: relative;
+}
+
+/* Same material as the buttons (option A: 40% white, dark ink, blur 20px),
+   menu radius 18 (spec §7). Opening morphs out of its button like the
+   reference Live Activity expand (spec §9.1): width and height together via
+   scale from the button corner, 500ms, --ease-emphasised, no overshoot. */
+.menu {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: 2;
+  min-width: 208px;
+  padding: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  border-radius: 18px;
+  border: 1px solid rgb(255 255 255 / 0.55);
+  background: rgb(255 255 255 / 0.4);
+  backdrop-filter: blur(20px) saturate(120%);
+  -webkit-backdrop-filter: blur(20px) saturate(120%);
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.55), 0 8px 32px rgb(0 0 0 / 0.25);
+  color: var(--ink);
+  transform-origin: top right;
+  animation: menuIn 500ms var(--ease-emphasised);
+}
+
+/* Closing dissolves: opacity + blur, 250ms, --ease-in, no movement (the
+   reference sheet exit). Kept mounted by closingMenu until it lands. */
+.menuClosing {
+  animation: menuOut 250ms var(--ease-in) forwards;
+}
+
+@keyframes menuIn {
+  from {
+    opacity: 0;
+    transform: scale(0.6);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes menuOut {
+  from {
+    opacity: 1;
+    filter: blur(0);
+  }
+  to {
+    opacity: 0;
+    filter: blur(4px);
+  }
+}
+
+/* Item radius 12 (spec §7); every item at least 44px tall. Items arrive
+   staggered by --stagger (delay set inline per item), each fading from a 4px
+   blur to sharp over 150ms. */
+.menuItem {
+  min-height: 44px;
+  width: 100%;
+  padding: 0 12px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  border: none;
+  border-radius: 12px;
+  background: transparent;
+  box-shadow: none;
+  color: var(--ink);
+  font-size: 14px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  text-align: left;
+  white-space: nowrap;
+  cursor: pointer;
+  animation: menuItemIn 150ms var(--ease-out) backwards;
+  transition: transform var(--dur-press), box-shadow var(--dur-press);
+}
+
+@keyframes menuItemIn {
+  from {
+    opacity: 0;
+    filter: blur(4px);
+  }
+  to {
+    opacity: 1;
+    filter: blur(0);
+  }
+}
+
+.menuItem:active {
+  transform: scale(0.97);
+  box-shadow: inset 0 0 0 999px rgb(255 255 255 / 0.06);
+}
+
+/* Selected base map / on-overlays: the active-pill formula (--pill-active,
+   --ink, weight 600) plus a check glyph. */
+.menuItemActive {
+  background: var(--pill-active);
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.menuCheck {
+  width: 16px;
+  flex: none;
+  display: inline-flex;
+}
+
+/* Crossfade only, no scaling (spec §12). !important outranks the global
+   reduced-motion kill-all in globals.css (a class beats `*`), restoring the
+   150ms crossfade the spec wants instead of an instant cut. */
+@media (prefers-reduced-motion: reduce) {
+  .menu {
+    animation: menuFade 150ms ease-out !important;
+    transform: none;
+  }
+  .menuClosing {
+    animation: menuFadeOut 150ms ease-out forwards !important;
+  }
+  .menuItem {
+    animation: menuFade 150ms ease-out !important;
+  }
+  .pill:active,
+  .menuItem:active {
+    transform: none;
+  }
+}
+
+@keyframes menuFade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes menuFadeOut {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
 }
 
 /* Selected: the reference's active-pill formula (spec §8), asserted here at
