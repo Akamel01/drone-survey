@@ -8,6 +8,7 @@ import { copyOf, localDate, sitesFrom, type MissionListRead, type SiteChoice } f
 import MapPane, { type DrawMode } from "@/components/MapPane";
 import HeroScene from "@/components/HeroScene";
 import MissionList from "@/components/MissionList";
+import Notice, { type NoticePayload } from "@/components/Notice";
 import Sidebar from "@/components/Sidebar";
 import SummaryBar from "@/components/SummaryBar";
 import styles from "./plan.module.css";
@@ -107,6 +108,15 @@ export default function PlanPage() {
   // The Sites already in the store. Taken from the Mission list's own read, so
   // one page load is one storage transaction rather than two.
   const [sites, setSites] = useState<SiteChoice[]>([]);
+  // The single reporting path for action results (M2 seam): one slot owned
+  // here, fed by children via onNotice (wired in M3/M4), rendered once below.
+  const [notice, setNotice] = useState<NoticePayload | null>(null);
+  const noticeKey = useRef(0);
+  const showNotice = useCallback((p: Omit<NoticePayload, "key">) => {
+    noticeKey.current += 1;
+    setNotice({ ...p, key: noticeKey.current });
+  }, []);
+  const dismissNotice = useCallback(() => setNotice(null), []);
 
   const collapseMissions = useRef<HTMLButtonElement>(null);
   const collapseSettings = useRef<HTMLButtonElement>(null);
@@ -246,6 +256,7 @@ export default function PlanPage() {
       data-missions={missionsOpen ? "open" : "closed"}
       data-settings={settingsOpen ? "open" : "closed"}
     >
+      <Notice key={notice?.key ?? "empty"} payload={notice} onDismiss={dismissNotice} />
       <div className={styles.top}>
         <section id="missions-panel" className={`${styles.missions} glass-smoke`} aria-label="Missions">
           <HeroScene playing={view === "missions"} />
@@ -263,7 +274,7 @@ export default function PlanPage() {
               ‹
             </button>
           </div>
-          <MissionList onEdit={editMission} onCopy={copyMission} editingId={editing.id} onRead={onListRead} />
+          <MissionList onEdit={editMission} onCopy={copyMission} editingId={editing.id} onRead={onListRead} onNotice={showNotice} />
         </section>
         <section className={styles.map} aria-label="Map">
           <MapPane
@@ -337,6 +348,7 @@ export default function PlanPage() {
           preview={preview_}
           editing={editing}
           onSaved={(row) => setEditing({ id: row.id, name: row.name })}
+          onNotice={showNotice}
           sites={sites}
         />
       </div>

@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { IDLE, beginAction, endAction, isRunning, describeResult, noticeShows, safeStorage, settleNotice } from "./actions.ts";
+import { IDLE, beginAction, isRunning, describeResult, safeStorage } from "./actions.ts";
 
 test("a press marks that one control busy, not every control", () => {
   const s = beginAction(IDLE, "Dispatch", "mission-a");
@@ -15,28 +15,15 @@ test("a second press while one is in flight is ignored", () => {
   assert.equal(beginAction(first, "Delete", "draft-b"), first);
 });
 
-test("a press clears the previous message", () => {
-  const failed = endAction(beginAction(IDLE, "Dispatch", "mission-a"), "Dispatch", "mission-a", {
-    ok: false,
-    status: 503,
-    body: { error: "Storage is not configured" },
-  });
-  assert.equal(failed.notice?.failed, true);
-  assert.equal(beginAction(failed, "Dispatch", "mission-a").notice, null);
-});
-
-test("a failure reports its reason on the row that failed", () => {
-  const s = endAction(beginAction(IDLE, "Dispatch", "mission-a"), "Dispatch", "mission-a", {
-    ok: false,
-    status: 503,
-    body: { error: "No Card is free; 2 needed, 0 available." },
-  });
-  assert.equal(s.running, null);
-  assert.deepEqual(s.notice, {
-    on: "mission-a",
-    text: "Dispatch failed: No Card is free; 2 needed, 0 available.",
-    failed: true,
-  });
+test("a failure names its reason in the glossary's words", () => {
+  assert.equal(
+    describeResult("Dispatch", {
+      ok: false,
+      status: 503,
+      body: { error: "No Card is free; 2 needed, 0 available." },
+    }),
+    "Dispatch failed: No Card is free; 2 needed, 0 available.",
+  );
 });
 
 test("a failure with no reason still names the status code", () => {
@@ -50,12 +37,13 @@ test("a failure with no reason still names the status code", () => {
 test("a success reports what the store did, in the glossary's words", () => {
   // Reserving at Dispatch is what lets this name the Card instead of hedging
   // about one (ADR 0022), so the message says which.
-  const s = endAction(beginAction(IDLE, "Dispatch", "mission-a"), "Dispatch", "mission-a", {
-    ok: true,
-    body: { key: "specs/field/2026-09-20/20260920T120000Z.json", cards: ["way finder 1", "way finder 2"] },
-  });
-  assert.equal(s.notice?.failed, false);
-  assert.equal(s.notice?.text, "Dispatched. way finder 1, way finder 2 are reserved for it.");
+  assert.equal(
+    describeResult("Dispatch", {
+      ok: true,
+      body: { key: "specs/field/2026-09-20/20260920T120000Z.json", cards: ["way finder 1", "way finder 2"] },
+    }),
+    "Dispatched. way finder 1, way finder 2 are reserved for it.",
+  );
   assert.equal(
     describeResult("Withdraw", { ok: true, body: { cards_released: ["way finder 1"] } }),
     "Withdrawn. way finder 1 released.",
@@ -67,23 +55,6 @@ test("a success reports what the store did, in the glossary's words", () => {
     describeResult("Mark Flown", { ok: true, body: { cards: [{ card: "way finder 1" }] } }),
     /^Marked Flown/,
   );
-});
-
-test("a result that arrives for something else does not free the running control", () => {
-  const s = beginAction(IDLE, "Dispatch", "mission-a");
-  const other = endAction(s, "Withdraw", "mission-b", { ok: true, body: {} });
-  assert.deepEqual(other.running, { label: "Dispatch", on: "mission-a" });
-});
-
-test("a notice goes once its row has moved on, and stays while it has not (#164)", () => {
-  const done = endAction(beginAction(IDLE, "Dispatch", "m"), "Dispatch", "m", {
-    ok: true,
-    body: { cards: ["way finder 1"] },
-  });
-  const settled = settleNotice(done, "dispatched");
-  assert.equal(noticeShows(settled.notice!, "dispatched"), true);
-  assert.equal(noticeShows(settled.notice!, "collected"), false, "stale once Collected");
-  assert.equal(noticeShows(done.notice!, "planned"), true, "not yet settled: still shown");
 });
 
 test("storage blocked outright reads as no storage, not a crash (#152)", () => {

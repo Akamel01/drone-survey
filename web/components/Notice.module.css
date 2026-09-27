@@ -1,0 +1,191 @@
+/* The Notice: the reference's Live Activity, the black shape at the notch
+   (spec § 8). Pure black, no transparency (spec § 5); fixed top-centre below
+   the safe-area inset (spec § 11); above the panels (z 10 beats their z 3)
+   with pointer events only on itself. Expanded is a fixed 355 px box centred
+   on the viewport -- over the map on a wide screen, never shrink-wrapped onto
+   one panel; compact is the content-hugging pill from the reference's second
+   frame. Press is UI-7's formula (MapPane .pill:active) driven by the shared
+   tokens, one rule for the notice tap and the close button; full unification
+   stays with UI-11 #187. */
+
+.notice {
+  position: fixed;
+  top: calc(env(safe-area-inset-top, 0px) + 12px);
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 10;
+  max-width: min(355px, calc(100vw - 38px));
+  background: var(--black);
+  color: var(--on-glass);
+  border-radius: 20px;
+  cursor: pointer;
+  pointer-events: auto;
+  transition:
+    transform var(--dur-press) var(--ease-out),
+    box-shadow var(--dur-press) var(--ease-out),
+    opacity 200ms var(--ease-in);
+}
+
+.expanded {
+  width: min(355px, calc(100vw - 38px));
+  padding: 14px 56px 14px 18px;
+}
+
+/* Compact pill (reference second frame): badge + result word + mission name
+   in the dark capsule. The result word is never truncated; a long mission
+   name gives way inside the capsule instead. The close control hides here --
+   Escape and a tap back to expanded still dismiss. */
+.compact {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  border-radius: 999px;
+  padding: 7px 7px 7px 14px;
+  overflow: hidden;
+}
+
+/* The leave beat: a short ease-in fade, exits faster than entrances (§ 9.3).
+   Reduced-motion needs no override here -- globals.css already zeroes every
+   ordinary element's transition, so this simply appears and disappears. */
+.leaving {
+  opacity: 0;
+}
+
+/* Press (spec § 11): on pointer-down the shape scales to 0.97 under a 6%
+   white inset wash, over --dur-press, springing back on release. The close
+   control shares the same formula. */
+.notice:active {
+  transform: translateX(-50%) scale(0.97);
+  box-shadow: inset 0 0 0 999px rgb(255 255 255 / 0.06);
+}
+
+/* The header row both states share: round icon badge, white glyph. Success
+   carries the reference's steel blue, failure the app's danger. */
+.head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.badge {
+  flex: none;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: var(--badge-blue);
+  color: #fff;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.badge.fail {
+  background: var(--danger);
+}
+
+.badge svg {
+  width: 16px;
+  height: 16px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.badge .dot {
+  fill: currentColor;
+  stroke: none;
+}
+
+.mission {
+  display: block;
+  margin-top: 8px;
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--on-glass-3);
+}
+
+.title {
+  display: block;
+  font-family: var(--display), var(--sans);
+  font-size: 17px;
+  font-weight: 500;
+  line-height: 1.3;
+  color: var(--on-glass);
+}
+
+.body {
+  margin: 4px 0 0;
+  font-size: 13px;
+  line-height: 1.4;
+  color: var(--on-glass-2);
+}
+
+.short {
+  font-family: var(--display), var(--sans);
+  font-size: 14px;
+  font-weight: 500;
+  white-space: nowrap;
+  color: var(--on-glass);
+}
+
+/* The reference's value capsule on the pill's right: dark, never the
+   notice black itself (spec § 8: #262626 on the notice). */
+.capsule {
+  margin-left: auto;
+  min-width: 0;
+  background: #262626;
+  border-radius: 999px;
+  padding: 8px 14px;
+  font-size: 13px;
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--on-glass);
+}
+
+/* Bare 24px thin X (spec § 8) padded to a 44px target (§ 11), same pattern
+   as the sheet's close control. */
+.close {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  padding: 10px;
+  min-width: 44px;
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: none;
+  border-radius: 12px;
+  color: var(--on-glass);
+  transition:
+    transform var(--dur-press) var(--ease-out),
+    box-shadow var(--dur-press) var(--ease-out);
+}
+
+.compact .close {
+  display: none;
+}
+
+.close svg {
+  width: 24px;
+  height: 24px;
+  stroke: currentColor;
+  stroke-width: 1.5;
+  fill: none;
+}
+
+.close:hover {
+  filter: brightness(1.15);
+}
+
+.close:active {
+  transform: scale(0.97);
+  box-shadow: inset 0 0 0 999px rgb(255 255 255 / 0.06);
+}

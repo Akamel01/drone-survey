@@ -4,16 +4,15 @@ import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react"
 import { preview } from "@/lib/mission";
 import type { MissionRow } from "@/lib/missionRecords";
 import Sheet from "./Sheet";
+import type { NoticePayload } from "./Notice";
 import {
   IDLE,
   MISSIONS_CHANGED_KEY,
   beginAction,
-  endAction,
+  describeResult,
   isRunning,
   noteMissionsChanged,
-  noticeShows,
   safeStorage,
-  settleNotice,
   type ActionResult,
   type ActionState,
 } from "@/lib/actions";
@@ -68,9 +67,17 @@ interface MissionListProps {
    *  store to offer them for choosing, and taking them from this read rather
    *  than fetching again keeps one page load to one storage transaction. */
   onRead?: (read: MissionListRead) => void;
+  /** Page-owned Notice slot. The page stamps `key` itself, so this takes the
+   *  payload without it. */
+  onNotice?: (p: Omit<NoticePayload, "key">) => void;
 }
 
-export default function MissionList({ onEdit, onCopy, editingId = null, onRead }: MissionListProps) {
+/** The Notice's compact title: the first sentence of the verbatim result. */
+function firstSentence(body: string): string {
+  return body.match(/^.*?[.!?…](?=\s|$)/)?.[0] ?? body;
+}
+
+export default function MissionList({ onEdit, onCopy, editingId = null, onRead, onNotice }: MissionListProps) {
   const [passphrase, setPassphrase] = useState<string | null>(null);
   // True until the first good read, whatever is typed meanwhile: the field
   // asking for the passphrase must not vanish mid-keystroke just because the
@@ -199,7 +206,6 @@ export default function MissionList({ onEdit, onCopy, editingId = null, onRead }
     // shorten this, and do not remove this note.
     const refresh = () => {
       if (document.hidden) return;
-      setAction((s) => ({ ...s, notice: null }));
       void load(key);
     };
     document.addEventListener("visibilitychange", refresh);
@@ -227,8 +233,9 @@ export default function MissionList({ onEdit, onCopy, editingId = null, onRead }
   }, [passphrase, load]);
 
   // The five-minute poll is far too slow to be an action's feedback, so every
-  // action reports its own outcome on the row it was pressed on and re-reads
-  // the store the moment it finishes.
+  // action reports its own outcome through the page-owned Notice and re-reads
+  // the store the moment it finishes. The poll and Refresh only re-read: they
+  // never touch the Notice, which the page owns.
   const act = useCallback(
     async (label: string, on: string, fn: () => Promise<Response>) => {
       if (!passphrase || inFlight.current) return;
@@ -244,11 +251,17 @@ export default function MissionList({ onEdit, onCopy, editingId = null, onRead }
         result = { ok: false, threw: err instanceof Error ? err.message : "unknown" };
       }
       inFlight.current = false;
-      setAction((s) => endAction(s, label, on, result));
+      setAction(IDLE);
       const fresh = await load(passphrase);
-      setAction((s) => settleNotice(s, fresh?.missions.find((m) => m.id === on)?.state));
+      const body = describeResult(label, result);
+      onNotice?.({
+        title: firstSentence(body),
+        body,
+        missionName: fresh?.missions.find((m) => m.id === on)?.name ?? "",
+        failed: !result.ok,
+      });
     },
-    [passphrase, load],
+    [passphrase, load, onNotice],
   );
 
   const post = useCallback(
@@ -355,9 +368,6 @@ export default function MissionList({ onEdit, onCopy, editingId = null, onRead }
     );
   }
 
-  const notice = action.notice;
-  const orphanNotice = notice && !visible.some((r) => r.id === notice.on);
-
   return (
     <div className={styles.list}>
       <div className={styles.bar}>
@@ -369,7 +379,6 @@ export default function MissionList({ onEdit, onCopy, editingId = null, onRead }
         <button
           onClick={() => {
             if (!passphrase) return;
-            setAction((s) => ({ ...s, notice: null }));
             void load(passphrase);
           }}
           disabled={loading}
@@ -409,12 +418,6 @@ export default function MissionList({ onEdit, onCopy, editingId = null, onRead }
         </p>
       ))}
 
-      {orphanNotice && (
-        <p className={notice.failed ? styles.stop : styles.done} role="status" aria-live="polite">
-          {notice.text}
-        </p>
-      )}
-
       {visible.length === 0 && !error && (
         <p className={styles.quiet}>
           {all.length === 0
@@ -431,7 +434,6 @@ export default function MissionList({ onEdit, onCopy, editingId = null, onRead }
           editing={row.id === editingId}
           busy={action.running !== null}
           running={(name) => isRunning(action, name, row.id)}
-          notice={notice?.on === row.id && noticeShows(notice, row.state) ? notice : null}
           onAction={(name) => runAction(name, row)}
           onDetails={() => {
             setDetailsRow(row);
@@ -498,7 +500,6 @@ function Row({
   editing,
   busy,
   running,
-  notice,
   onAction,
   onDetails,
 }: {
@@ -507,7 +508,6 @@ function Row({
   editing: boolean;
   busy: boolean;
   running: (name: ActionName) => boolean;
-  notice: { text: string; failed: boolean } | null;
   onAction: (name: ActionName) => void;
   onDetails: () => void;
 }) {
@@ -572,12 +572,6 @@ function Row({
         ))}
         {editing && <span className={styles.editingNote}>open in the editor</span>}
       </div>
-
-      {notice && (
-        <p className={notice.failed ? styles.stop : styles.done} role="status" aria-live="polite">
-          {notice.text}
-        </p>
-      )}
 
       {/* The old disclosure's contents now live in a sheet, on a light panel
           (spec § 8, § 14) -- this only opens it. */}

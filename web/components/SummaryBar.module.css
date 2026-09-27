@@ -214,13 +214,6 @@
   line-height: 1.5;
 }
 
-.dispatchOk {
-  margin-top: 4px;
-  color: var(--on-glass);
-  font-size: 12px;
-  font-family: var(--mono);
-}
-
 .problems {
   margin: 0;
   padding: 10px 16px 10px 32px;

@@ -49,3 +49,6 @@ __pycache__/
 
 # Agent-run artifacts — never in git
 .autoforge/
+
+# Local npm/vitest caches (root) — never in git
+node_modules/
