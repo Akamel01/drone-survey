@@ -55,7 +55,17 @@ interface MapPaneProps {
   /** Corner selected by tapping it on touch, for the Remove corner button. */
   selectedCorner: number | null;
   onSelectedCornerChange: (i: number | null) => void;
+  /** A source-level map failure — in practice the basemap tiles — so the page
+   *  can fall back to the hero scene. */
+  onBasemapError?: () => void;
+  /** The basemap's tiles are flowing again, so the page can drop its fallback. */
+  onBasemapLoaded?: () => void;
 }
+
+/** The source ids the basemaps in `lib/basemap.ts` carry. Error and sourcedata
+ *  events identify a source but not a layer, so this is what says the basemap
+ *  itself failed — or came back. */
+const isBasemap = (id?: string) => id === "esri" || id === "osm";
 
 const START = { lat: 49.1891, lon: -122.8396, zoom: 16 };
 type LL = [number, number];
@@ -157,8 +167,10 @@ function arrowImage(): ImageData {
 }
 
 function addLayers(map: MaplibreMap) {
-  if (map.getSource("aoi")) return; // already added for this style
+  // The icon lives on the style, not on our sources, so a style reissue (the
+  // basemap retry) drops it; restore it before the source guard returns.
   if (!map.hasImage("flight-arrow")) map.addImage("flight-arrow", arrowImage());
+  if (map.getSource("aoi")) return; // already added for this style
 
   map.addSource("aoi", { type: "geojson", data: fc([]) });
   map.addLayer({ id: "aoi-fill", type: "fill", source: "aoi", paint: { "fill-color": "#4fb8a8", "fill-opacity": 0.18 } });
@@ -268,6 +280,8 @@ export default function MapPane({
   onModeChange,
   selectedCorner,
   onSelectedCornerChange,
+  onBasemapError,
+  onBasemapLoaded,
 }: MapPaneProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<MaplibreMap | null>(null);
@@ -348,6 +362,8 @@ export default function MapPane({
     cancelDraw,
     selectedCorner,
     onSelectedCornerChange,
+    onBasemapError,
+    onBasemapLoaded,
   };
   const stateRef = useRef(latest);
   useEffect(() => {
@@ -371,8 +387,36 @@ export default function MapPane({
     map.addControl(new ScaleControl({ unit: "metric" }), "bottom-left");
 
     // A map that fails to add a source otherwise fails silently, and the data
-    // push below just returns early for ever. Say so instead.
-    map.on("error", (e) => console.error("[map]", e.error?.message ?? e));
+    // push below just returns early for ever. Say so instead. A failure tied to
+    // a source means its tiles never arrived, which is the page's cue to show
+    // the hero scene instead of an empty map.
+    let gone = false;
+    let tileRetryAt = 0;
+    map.on("error", (e) => {
+      console.error("[map]", e.error?.message ?? e);
+      // MapLibre puts `sourceId` on the event when a source's tiles fail,
+      // though its ErrorEvent type does not declare it.
+      if (isBasemap((e as { sourceId?: string }).sourceId)) {
+        stateRef.current.onBasemapError?.();
+        // MapLibre does not re-request tiles that errored, so a transient
+        // failure -- a 5xx, a DNS blip, a blocked route -- would strand the
+        // fallback until reload even though the network recovered. Reissuing
+        // the same style with `diff: false` makes it ask for the tiles again;
+        // the overlays re-add themselves on the resulting `style.load`.
+        // Throttled so a persistently failing tile cannot spin in a retry loop.
+        if (Date.now() - tileRetryAt > 30_000) {
+          tileRetryAt = Date.now();
+          setTimeout(() => {
+            if (!gone) map.setStyle(map.getStyle(), { diff: false });
+          }, 5_000);
+        }
+      }
+    });
+    // The same source delivering tiles again is the page's cue to drop the
+    // fallback, instead of staying on it until reload.
+    map.on("sourcedata", (e) => {
+      if (isBasemap(e.sourceId) && e.isSourceLoaded) stateRef.current.onBasemapLoaded?.();
+    });
     if (process.env.NODE_ENV !== "production") {
       (window as unknown as { __map?: MaplibreMap }).__map = map;
     }
@@ -728,6 +772,7 @@ export default function MapPane({
     window.addEventListener("keydown", onKeydown);
 
     return () => {
+      gone = true;
       window.removeEventListener("keydown", onKeydown);
       fit.disconnect();
       map.remove();

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { DEFAULT_SPEC, type CircleShape, type MissionSpec } from "@/lib/spec";
 import { preview, areaHectares } from "@/lib/mission";
 import type { MissionRow } from "@/lib/missionRecords";
@@ -42,14 +42,60 @@ export interface Editing {
 /** Which column a narrow screen shows. Wide screens show all three. */
 type View = "missions" | "map" | "settings";
 
+/** The control focus moves to when a panel folds or unfolds. */
+type FoldFocus = "missions-collapse" | "missions-tab" | "settings-collapse" | "settings-tab";
+
 const VIEWS: { id: View; label: string }[] = [
   { id: "missions", label: "Missions" },
   { id: "map", label: "Map" },
   { id: "settings", label: "Settings" },
 ];
 
+/** The tab bar's line icons: list, map, sliders (spec § 8 — 24 px, 1.5 stroke,
+ *  round caps, sized and stroked by the tab bar's own CSS). */
+function ViewIcon({ view }: { view: View }) {
+  if (view === "missions") {
+    return (
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <path d="M9 6h11M9 12h11M9 18h11" />
+        <path d="M4 6h.01M4 12h.01M4 18h.01" />
+      </svg>
+    );
+  }
+  if (view === "map") {
+    return (
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <path d="M9 4 3 6.5v13L9 17l6 2.5 6-2.5v-13L15 6.5 9 4Z" />
+        <path d="M9 4v13M15 6.5v13" />
+      </svg>
+    );
+  }
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M4 8h9M17 8h3M4 16h4M12 16h8" />
+      <circle cx="15" cy="8" r="2" />
+      <circle cx="10" cy="16" r="2" />
+    </svg>
+  );
+}
+
 export default function PlanPage() {
   const [view, setView] = useState<View>("missions");
+  // Wide screens: both floating panels start open, and folding one away is the
+  // operator's choice. Narrow screens switch whole views from the tab bar; the
+  // fold buttons are not shown there.
+  const [missionsOpen, setMissionsOpen] = useState(true);
+  const [settingsOpen, setSettingsOpen] = useState(true);
+  // The map has no surface without its basemap. Two independent signals: the
+  // browser's own, which clears when it clears; and MapPane's, which latches
+  // on a tile failure and clears when tiles flow again or the browser comes
+  // back (MapLibre does not always retry failed tiles on its own).
+  const [offline, setOffline] = useState(false);
+  const [mapFailed, setMapFailed] = useState(false);
+  const noNetwork = offline || mapFailed;
+  // The wide-screen fallback only: below 1000px it would be a hidden 0x0
+  // surface, and its hero scene would still decode a video and animate.
+  const [wide, setWide] = useState(false);
   const [spec, setSpecState] = useState<MissionSpec>(DEFAULT_SPEC);
   const [mode, setMode] = useState<DrawMode>("idle");
   // Off by default: the operator expects a number on every photo position to
@@ -62,11 +108,71 @@ export default function PlanPage() {
   // one page load is one storage transaction rather than two.
   const [sites, setSites] = useState<SiteChoice[]>([]);
 
+  const collapseMissions = useRef<HTMLButtonElement>(null);
+  const collapseSettings = useRef<HTMLButtonElement>(null);
+  const expandMissions = useRef<HTMLButtonElement>(null);
+  const expandSettings = useRef<HTMLButtonElement>(null);
+  // The control a fold is about to create, focused once it is on screen. Null
+  // on first mount: the page must not steal focus on load.
+  const foldFocus = useRef<FoldFocus | null>(null);
+
   useEffect(() => {
     // Today's date belongs to the client, never to the build: see DEFAULT_SPEC.
     // eslint-disable-next-line react-hooks/set-state-in-effect -- one-time client-only read of the clock
     setSpecState((s) => (s.date ? s : { ...s, date: localDate(new Date()) }));
   }, []);
+
+  useEffect(() => {
+    const goOffline = () => setOffline(true);
+    const goOnline = () => {
+      setOffline(false);
+      // The tile latch must clear too: MapLibre may not re-request on its own.
+      setMapFailed(false);
+    };
+    if (!navigator.onLine) goOffline();
+    addEventListener("offline", goOffline);
+    addEventListener("online", goOnline);
+    return () => {
+      removeEventListener("offline", goOffline);
+      removeEventListener("online", goOnline);
+    };
+  }, []);
+
+  useEffect(() => {
+    const mq = matchMedia("(min-width: 1000px)");
+    const onChange = () => setWide(mq.matches);
+    onChange();
+    mq.addEventListener("change", onChange);
+    return () => mq.removeEventListener("change", onChange);
+  }, []);
+
+  // Folding swaps a control for its replacement; focus follows so a keyboard
+  // user is not dropped at the top of the document (spec § 10).
+  useEffect(() => {
+    const target = foldFocus.current;
+    if (!target) return;
+    foldFocus.current = null;
+    const el: Record<FoldFocus, HTMLButtonElement | null> = {
+      "missions-collapse": collapseMissions.current,
+      "missions-tab": expandMissions.current,
+      "settings-collapse": collapseSettings.current,
+      "settings-tab": expandSettings.current,
+    };
+    el[target]?.focus();
+  }, [missionsOpen, settingsOpen]);
+
+  const handleBasemapError = useCallback(() => setMapFailed(true), []);
+  const handleBasemapLoaded = useCallback(() => setMapFailed(false), []);
+
+  const foldMissions = (open: boolean) => {
+    foldFocus.current = open ? "missions-collapse" : "missions-tab";
+    setMissionsOpen(open);
+  };
+
+  const foldSettings = (open: boolean) => {
+    foldFocus.current = open ? "settings-collapse" : "settings-tab";
+    setSettingsOpen(open);
+  };
 
   const setSpec = (updater: (s: MissionSpec) => MissionSpec) => setSpecState(updater);
   const setAoi = (aoi: [number, number][], shape: CircleShape | null = null) => {
@@ -115,11 +221,30 @@ export default function PlanPage() {
   const onListRead = (read: MissionListRead) => setSites(sitesFrom(read.missions));
 
   return (
-    <div className={styles.page} data-view={view}>
+    <div
+      className={styles.page}
+      data-view={view}
+      data-network={noNetwork ? "offline" : "online"}
+      data-missions={missionsOpen ? "open" : "closed"}
+      data-settings={settingsOpen ? "open" : "closed"}
+    >
       <div className={styles.top}>
-        <section className={styles.missions} aria-label="Missions">
+        <section id="missions-panel" className={`${styles.missions} glass-smoke`} aria-label="Missions">
           <HeroScene playing={view === "missions"} />
-          <h2 className={styles.heading}>Missions</h2>
+          <div className={styles.panelHead}>
+            <h2 className={styles.heading}>Missions</h2>
+            <button
+              ref={collapseMissions}
+              type="button"
+              className={styles.collapse}
+              aria-expanded={missionsOpen}
+              aria-controls="missions-panel"
+              aria-label="Collapse Missions"
+              onClick={() => foldMissions(false)}
+            >
+              ‹
+            </button>
+          </div>
           <MissionList onEdit={editMission} onCopy={copyMission} editingId={editing.id} onRead={onListRead} />
         </section>
         <section className={styles.map} aria-label="Map">
@@ -138,9 +263,39 @@ export default function PlanPage() {
           onModeChange={setMode}
           selectedCorner={selectedCorner}
           onSelectedCornerChange={setSelectedCorner}
+          onBasemapError={handleBasemapError}
+          onBasemapLoaded={handleBasemapLoaded}
           />
+          {noNetwork && wide && (
+            <div className={styles.noNetwork}>
+              <HeroScene playing showOnWide />
+              <div className={styles.cornerTL}>
+                <span>Mission</span>
+                <span>Control</span>
+              </div>
+              <div className={styles.cornerTR}>No network</div>
+              <div className={styles.cornerBL}>Esri World Imagery</div>
+              <div className={styles.cornerBR}>OpenStreetMap</div>
+              <p className={`glass-smoke ${styles.offlineStatement}`}>The map needs a connection.</p>
+            </div>
+          )}
         </section>
-        <section className={styles.settings} aria-label="Settings">
+        <section id="settings-panel" className={`${styles.settings} glass-smoke`} aria-label="Settings">
+          <HeroScene variant="still" playing={false} />
+          <div className={styles.panelHead}>
+            <h2 className={styles.heading}>Settings</h2>
+            <button
+              ref={collapseSettings}
+              type="button"
+              className={styles.collapse}
+              aria-expanded={settingsOpen}
+              aria-controls="settings-panel"
+              aria-label="Collapse Settings"
+              onClick={() => foldSettings(false)}
+            >
+              ›
+            </button>
+          </div>
           <Sidebar
           spec={spec}
           setSpec={setSpec}
@@ -154,7 +309,11 @@ export default function PlanPage() {
           />
         </section>
       </div>
-      <div className={styles.summary}>
+      {/* The network switch is otherwise silent to assistive tech. */}
+      <p className={styles.srOnly} role="status">
+        {noNetwork ? "The map needs a connection." : ""}
+      </p>
+      <div className={`glass-smoke ${styles.summary}`}>
         <SummaryBar
           spec={spec}
           preview={preview_}
@@ -163,6 +322,32 @@ export default function PlanPage() {
           sites={sites}
         />
       </div>
+      {!missionsOpen && (
+        <button
+          ref={expandMissions}
+          type="button"
+          className={`glass-smoke ${styles.edgeTab} ${styles.edgeTabLeft}`}
+          aria-expanded={false}
+          aria-controls="missions-panel"
+          aria-label="Expand Missions"
+          onClick={() => foldMissions(true)}
+        >
+          ›
+        </button>
+      )}
+      {!settingsOpen && (
+        <button
+          ref={expandSettings}
+          type="button"
+          className={`glass-smoke ${styles.edgeTab} ${styles.edgeTabRight}`}
+          aria-expanded={false}
+          aria-controls="settings-panel"
+          aria-label="Expand Settings"
+          onClick={() => foldSettings(true)}
+        >
+          ‹
+        </button>
+      )}
       <nav className={styles.views} aria-label="Show">
         {VIEWS.map((v) => (
           <button
@@ -172,7 +357,8 @@ export default function PlanPage() {
             aria-pressed={view === v.id}
             onClick={() => setView(v.id)}
           >
-            {v.label}
+            <ViewIcon view={v.id} />
+            <span>{v.label}</span>
           </button>
         ))}
       </nav>

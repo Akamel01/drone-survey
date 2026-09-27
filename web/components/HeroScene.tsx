@@ -14,6 +14,9 @@ export interface HeroSceneProps {
   playing: boolean;
   /** `still` renders the pre-blurred image only (deeper levels, Q10). */
   variant?: "live" | "still";
+  /** Show on wide screens too, where the scene is normally hidden in favour
+   *  of the map — the map-cannot-load fallback. */
+  showOnWide?: boolean;
 }
 
 const SPRITE = "/hero/v1/bird-sprite.webp";
@@ -140,7 +143,7 @@ function BirdLayer({ playing }: { playing: boolean }) {
   return <div ref={ref} className={styles.birds} />;
 }
 
-export default function HeroScene({ playing, variant = "live" }: HeroSceneProps) {
+export default function HeroScene({ playing, variant = "live", showOnWide = false }: HeroSceneProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [reduced, setReduced] = useState(false);
   const [pick, setPick] = useState<{ key: string; poster?: string; src?: string }>({ key: "" });
@@ -194,7 +197,8 @@ export default function HeroScene({ playing, variant = "live" }: HeroSceneProps)
     mq.addEventListener("change", onChange);
     return () => mq.removeEventListener("change", onChange);
   }, []);
-  const active = playing && !wide;
+  const active = playing && (!wide || showOnWide);
+  const sceneClass = showOnWide ? `${styles.scene} ${styles.sceneWide}` : styles.scene;
 
   // Play only while the Missions view is on screen and the page is visible.
   useEffect(() => {
@@ -244,7 +248,7 @@ export default function HeroScene({ playing, variant = "live" }: HeroSceneProps)
   if (variant === "still") {
     const blur = pick.poster?.replace("-poster-1440.jpg", "-blur.jpg");
     return (
-      <div className={styles.scene} aria-hidden="true">
+      <div className={sceneClass} aria-hidden="true">
         {/* eslint-disable-next-line @next/next/no-img-element -- versioned static, no optimizer */}
         <img src={blur} alt="" />
       </div>
@@ -253,7 +257,7 @@ export default function HeroScene({ playing, variant = "live" }: HeroSceneProps)
 
   if (reduced) {
     return (
-      <div className={styles.scene} aria-hidden="true">
+      <div className={sceneClass} aria-hidden="true">
         {/* eslint-disable-next-line @next/next/no-img-element -- versioned static, no optimizer */}
         <img src={pick.poster} alt="" />
       </div>
@@ -261,7 +265,7 @@ export default function HeroScene({ playing, variant = "live" }: HeroSceneProps)
   }
 
   return (
-    <div className={styles.scene} aria-hidden="true">
+    <div className={sceneClass} aria-hidden="true">
       {/* eslint-disable-next-line @next/next/no-img-element -- poster under video, versioned static */}
       <img src={active ? pick.poster : undefined} alt="" />
       <video
