@@ -42,7 +42,7 @@ jobs:
           python3 scripts/mission/b2.py --selftest
           python3 scripts/mission/b2_status.py --selftest
           python3 scripts/mission/collect.py --selftest
-          python3 scripts/mission/load.py --selftest
+          python3 scripts/mission/load_test.py
           python3 scripts/mission/calibrate.py --selftest
           python3 scripts/mission/kmz.py --selftest
       # ADR 0018: every Node carries a check, and the seam between Nodes runs
@@ -99,4 +99,40 @@ jobs:
           B2_READ_KEY_ID: ci
           B2_READ_APP_KEY: ci
           DISPATCH_SECRET: ci
+
+  # D15: the auth work needs a real Postgres, so it runs as its own job and
+  # only this job pays for the service. The web job above stays DB-free.
+  web-auth:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: postgres
+        ports:
+          - "5432:5432"
+        options: --health-cmd "pg_isready -U postgres" --health-interval 5s --health-timeout 5s --health-retries 10
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - run: npm ci
+      - name: Migrations apply
+        run: npm run db:migrate
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/postgres
+      - name: Migrations are idempotent
+        run: npm run db:migrate
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/postgres
+      - run: npm test
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/postgres
 
