@@ -103,6 +103,9 @@ export default function PlanPage() {
   // crowd the map, and they are right at 400 positions.
   const [showNumbers, setShowNumbers] = useState(false);
   const [editing, setEditing] = useState<Editing>({ id: null, name: "" });
+  // Bumped whenever a Mission is opened, so the Summary bar's figures count up
+  // once per open (M2 seam).
+  const [openToken, setOpenToken] = useState(0);
   // Corner tapped on the map, waiting on the on-map Remove corner button.
   const [selectedCorner, setSelectedCorner] = useState<number | null>(null);
   // The Sites already in the store. Taken from the Mission list's own read, so
@@ -235,6 +238,7 @@ export default function PlanPage() {
   const editMission = (row: MissionRow) => {
     setSpecState(row.spec);
     setEditing({ id: row.id, name: row.name });
+    setOpenToken((t) => t + 1);
     setView("map");
   };
 
@@ -242,6 +246,7 @@ export default function PlanPage() {
     const { spec: copied, editing: e } = copyOf(row, localDate(new Date()));
     setSpecState(copied);
     setEditing(e);
+    setOpenToken((t) => t + 1);
     setView("map");
   };
 
@@ -258,8 +263,13 @@ export default function PlanPage() {
     >
       <Notice key={notice?.key ?? "empty"} payload={notice} onDismiss={dismissNotice} />
       <div className={styles.top}>
-        <section id="missions-panel" className={`${styles.missions} glass-smoke`} aria-label="Missions">
+        <div className={styles.heroLayer} aria-hidden="true">
           <HeroScene playing={view === "missions"} />
+          <div className={styles.heroStill}>
+            <HeroScene variant="still" playing={false} />
+          </div>
+        </div>
+        <section id="missions-panel" className={`${styles.missions} glass-smoke`} aria-label="Missions" inert={!wide && view !== "missions"}>
           <div className={styles.panelHead}>
             <h2 className={styles.viewTitle}>Missions</h2>
             <button
@@ -276,7 +286,7 @@ export default function PlanPage() {
           </div>
           <MissionList onEdit={editMission} onCopy={copyMission} editingId={editing.id} onRead={onListRead} onNotice={showNotice} />
         </section>
-        <section className={styles.map} aria-label="Map">
+        <section className={styles.map} aria-label="Map" inert={!wide && view !== "map"}>
           <MapPane
           spec={spec}
           preview={preview_}
@@ -309,8 +319,7 @@ export default function PlanPage() {
             </div>
           )}
         </section>
-        <section id="settings-panel" className={`${styles.settings} glass-smoke`} aria-label="Settings">
-          <HeroScene variant="still" playing={false} />
+        <section id="settings-panel" className={`${styles.settings} glass-smoke`} aria-label="Settings" inert={!wide && view !== "settings"}>
           <div className={styles.panelHead}>
             <h2 className={styles.heading}>Settings</h2>
             <button
@@ -350,6 +359,7 @@ export default function PlanPage() {
           onSaved={(row) => setEditing({ id: row.id, name: row.name })}
           onNotice={showNotice}
           sites={sites}
+          countKey={openToken}
         />
       </div>
       {!missionsOpen && (
