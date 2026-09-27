@@ -392,6 +392,7 @@ def _change_survived_check() -> None:
     assert not change_survived(base, ours, theirs), "an overwrite from before ours landed erased ours"
     assert change_survived(base, ours, both), "a later writer who kept ours is not a conflict"
     assert not change_survived(base, {**base, "pool": ["A"]}, base), "a pool change undone is lost"
+    assert not change_survived(base, merge_verified(base, "t1"), base), "a verification stamp undone is lost"
 
 
 def _fixture_check() -> None:
