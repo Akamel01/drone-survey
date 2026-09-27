@@ -258,14 +258,67 @@ function addLayers(map: MaplibreMap) {
   map.addLayer({ id: "circle-handles-hit", type: "circle", source: "circle-handles", paint: { "circle-radius": 22, "circle-color": "#00000000", "circle-opacity": 0 } });
 }
 
+// The overlay colours (background here, plus the fixed text/border ink) are
+// untouched by the theme -- they have to read on satellite imagery whatever
+// the chrome around them looks like. Only the shape (a full pill, not a
+// corner-rounded box) and the type follow the new system.
 function labelMarker(text: string, background: string): HTMLElement {
   const el = document.createElement("div");
   el.textContent = text;
-  el.style.cssText = `background:${background};color:#06110f;font:600 10px/1 var(--mono, monospace);
-    letter-spacing:0.06em;padding:4px 6px;border-radius:4px;border:1px solid #06110f;white-space:nowrap;
-    transform:translateY(-14px);pointer-events:none`;
+  el.style.cssText = `background:${background};color:#06110f;font:600 11px/1 var(--mono, monospace);
+    letter-spacing:0.04em;padding:4px 10px;border-radius:999px;border:1px solid #06110f;white-space:nowrap;
+    font-variant-numeric:tabular-nums;transform:translateY(-14px);pointer-events:none`;
   return el;
 }
+
+/** The tab bar's line-style icons live in plan/page.tsx (24 px grid, 1.5 px
+ *  stroke, round caps and joins); the base-map icons below match that style so
+ *  the map controls read as the same system. */
+function SatelliteIcon() {
+  return (
+    <svg
+      className={styles.baseIcon}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <rect x="9.5" y="9.5" width="5" height="5" rx="1" transform="rotate(45 12 12)" />
+      <path d="M8.5 15.5 6.3 17.7M15.5 8.5l2.2-2.2" />
+      <rect x="2.6" y="14.6" width="4.4" height="4.4" rx="0.5" transform="rotate(45 4.8 16.8)" />
+      <rect x="17" y="5.2" width="4.4" height="4.4" rx="0.5" transform="rotate(45 19.2 7.4)" />
+      <path d="M4.8 14.9v3.8M19.2 5.5v3.8" />
+    </svg>
+  );
+}
+
+/** Folded street map with road lines — the OpenStreetMap base map's mark. */
+function OsmIcon() {
+  return (
+    <svg
+      className={styles.baseIcon}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M9 4 3 6.5v13L9 17l6 2.5 6-2.5v-13L15 6.5 9 4Z" />
+      <path d="M9 4v13M15 6.5v13" />
+      <path d="M3.8 14.2 8 12.6l2.8-3.4 4.4.8 5-2" />
+    </svg>
+  );
+}
+
+const BASEMAP_NAMES = {
+  esri: { button: "Satellite", item: "Satellite imagery" },
+  osm: { button: "Street map", item: "Street map (OpenStreetMap)" },
+} as const;
 
 export default function MapPane({
   spec,
@@ -283,6 +336,8 @@ export default function MapPane({
   onBasemapError,
   onBasemapLoaded,
 }: MapPaneProps) {
+  const wrapRef = useRef<HTMLDivElement>(null);
+  const toggleRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<MaplibreMap | null>(null);
   const homeMarkerRef = useRef<Marker | null>(null);
@@ -292,6 +347,18 @@ export default function MapPane({
   const numberMarkersRef = useRef<Marker[]>([]);
   const [basemap, setBasemap] = useState<"esri" | "osm">("esri");
   const [showFootprint, setShowFootprint] = useState(false);
+  // The two map-control menus: one open at a time, closing dissolves (250ms,
+  // spec §9.1) before unmount, so closingMenu keeps the leaving menu painted.
+  const [openMenu, setOpenMenu] = useState<"base" | "overlays" | null>(null);
+  const [closingMenu, setClosingMenu] = useState<"base" | "overlays" | null>(null);
+  const baseBtnRef = useRef<HTMLButtonElement | null>(null);
+  const overlaysBtnRef = useRef<HTMLButtonElement | null>(null);
+  const baseMenuRef = useRef<HTMLDivElement | null>(null);
+  const overlaysMenuRef = useRef<HTMLDivElement | null>(null);
+  const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Set when a menu opens from the keyboard, so first-item focus happens once
+  // the menu is painted; a mouse open leaves focus on the button.
+  const focusMenuOnOpen = useRef(false);
   const [drawHint, setDrawHint] = useState<string | null>(null);
   // Why a finish did not happen. A double-click on a two-corner ring used to
   // commit nothing and say nothing, which reads exactly like a broken map.
@@ -309,8 +376,99 @@ export default function MapPane({
   // live preview alone instead of overwriting it from the committed spec.
   const drawingRef = useRef(false);
 
-  // Leaving a draw mode half-finished must not leave the shape behind, so every
-  // mode change discards it. An effect on `mode` would cost a second render.
+  // The display-pill row's real height, read by the drawing / remove-corner
+  // panel below 1000px wide (MapPane.module.css) so it starts under the pills
+  // instead of over them -- the row can be one or two lines depending on how
+  // the footprint label wraps, so a measured value is the only one that stays
+  // true at every width and every label length.
+  useEffect(() => {
+    const wrap = wrapRef.current;
+    const toggle = toggleRef.current;
+    if (!wrap || !toggle) return;
+    const ro = new ResizeObserver(() => {
+      wrap.style.setProperty("--toggle-h", `${toggle.getBoundingClientRect().height}px`);
+    });
+    ro.observe(toggle);
+    return () => ro.disconnect();
+  }, []);
+
+  // Base map and overlays are different kinds of control, so they are two
+  // buttons with two menus, never one row of four pills (decision 19). One
+  // menu open at a time; every close returns focus to its button.
+  const openMapMenu = (m: "base" | "overlays") => {
+    if (closeTimer.current) clearTimeout(closeTimer.current);
+    setClosingMenu(null);
+    setOpenMenu(m);
+  };
+  const closeMapMenu = (m: "base" | "overlays") => {
+    if (closeTimer.current) clearTimeout(closeTimer.current);
+    setOpenMenu(null);
+    setClosingMenu(m);
+    closeTimer.current = setTimeout(() => setClosingMenu(null), 260);
+    (m === "base" ? baseBtnRef : overlaysBtnRef).current?.focus();
+  };
+
+  // Tap-outside and Escape close the open menu (same code for touch and
+  // mouse: pointerdown fires for both). The keydown listener runs on capture
+  // and stops an Escape there, so the map's own Escape handler below -- which
+  // cancels a draw -- does not also fire while a menu is open.
+  useEffect(() => {
+    if (!openMenu) return;
+    const onDown = (e: PointerEvent) => {
+      if (!toggleRef.current?.contains(e.target as Node)) closeMapMenu(openMenu);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        e.stopPropagation();
+        closeMapMenu(openMenu);
+      }
+    };
+    document.addEventListener("pointerdown", onDown);
+    document.addEventListener("keydown", onKey, true);
+    return () => {
+      document.removeEventListener("pointerdown", onDown);
+      document.removeEventListener("keydown", onKey, true);
+    };
+  }, [openMenu]);
+
+  // Keyboard-opened menus start on their first item (spec §10).
+  useEffect(() => {
+    if (!openMenu || !focusMenuOnOpen.current) return;
+    focusMenuOnOpen.current = false;
+    const root = openMenu === "base" ? baseMenuRef.current : overlaysMenuRef.current;
+    root?.querySelector<HTMLButtonElement>('[role^="menuitem"]')?.focus();
+  }, [openMenu]);
+
+  // Arrow keys move within a menu; the menu holds buttons, so Space and Enter
+  // activate without extra code.
+  const menuKeys = (e: React.KeyboardEvent, m: "base" | "overlays") => {
+    const root = m === "base" ? baseMenuRef.current : overlaysMenuRef.current;
+    const items = root ? [...root.querySelectorAll<HTMLButtonElement>('[role^="menuitem"]')] : [];
+    if (!items.length) return;
+    const i = items.indexOf(document.activeElement as HTMLButtonElement);
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      (items[i + 1] ?? items[0]).focus();
+    } else if (e.key === "ArrowUp") {
+      e.preventDefault();
+      (items[i - 1] ?? items[items.length - 1]).focus();
+    } else if (e.key === "Home") {
+      e.preventDefault();
+      items[0].focus();
+    } else if (e.key === "End") {
+      e.preventDefault();
+      items[items.length - 1].focus();
+    }
+  };
+  const menuBtnKeys = (e: React.KeyboardEvent, m: "base" | "overlays") => {
+    if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+      e.preventDefault();
+      focusMenuOnOpen.current = true;
+      openMapMenu(m);
+    }
+  };
+
+  // Leaving a draw mode half-finished must not leave the shape behind, so every  // mode change discards it. An effect on `mode` would cost a second render.
   const changeMode = (next: DrawMode) => {
     if (next !== "draw-circle") {
       circleCenterRef.current = null;
@@ -945,38 +1103,151 @@ export default function MapPane({
   const footprintLabel = preview.footprint_across_m
     ? `${Math.round(preview.footprint_across_m)} × ${Math.round(preview.footprint_along_m)} m`
     : "";
+  const overlaysOn = (showNumbers ? 1 : 0) + (showFootprint ? 1 : 0);
 
   return (
-    <div className={styles.wrap}>
+    <div ref={wrapRef} className={styles.wrap}>
       <div ref={containerRef} className={styles.map} />
-      <div className={styles.basemapToggle}>
-        <button className={basemap === "esri" ? "active" : ""} onClick={() => toggleBasemap("esri")}>
-          Satellite
-        </button>
-        <button className={basemap === "osm" ? "active" : ""} onClick={() => toggleBasemap("osm")}>
-          OSM
-        </button>
+      <div ref={toggleRef} className={styles.basemapToggle} role="group" aria-label="Map display">
         {/* Near what it affects: display options for the map live on the map. */}
-        <button
-          className={showNumbers ? "active" : ""}
-          onClick={() => onShowNumbersChange(!showNumbers)}
-          title="Number each photo position in capture order"
-        >
-          Numbers
-        </button>
-        <button
-          className={showFootprint ? "active" : ""}
-          onClick={() => setShowFootprint(!showFootprint)}
-          title={`What one photograph covers at this altitude${footprintLabel ? `: ${footprintLabel}` : ""}`}
-        >
-          {showFootprint && footprintLabel ? footprintLabel : "Footprint"}
-        </button>
+        <div className={styles.menuWrap}>
+          <button
+            ref={baseBtnRef}
+            className={styles.pill}
+            aria-haspopup="menu"
+            aria-expanded={openMenu === "base"}
+            aria-label={`Base map: ${BASEMAP_NAMES[basemap].button}`}
+            onClick={() => (openMenu === "base" ? closeMapMenu("base") : openMapMenu("base"))}
+            onKeyDown={(e) => menuBtnKeys(e, "base")}
+          >
+            <span className={styles.layersGlyph} aria-hidden="true">
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round">
+                <path d="M8 1.5 14.5 5 8 8.5 1.5 5Z" />
+                <path d="m1.5 8.5 6.5 3.5 6.5-3.5" />
+                <path d="m1.5 11.5 6.5 3.5 6.5-3.5" />
+              </svg>
+            </span>
+            {basemap === "esri" ? <SatelliteIcon /> : <OsmIcon />}
+          </button>
+          {(openMenu === "base" || closingMenu === "base") && (
+            <div
+              ref={baseMenuRef}
+              role="menu"
+              aria-label="Base map"
+              className={`${styles.menu} ${closingMenu === "base" ? styles.menuClosing : ""}`}
+              onKeyDown={(e) => menuKeys(e, "base")}
+            >
+              {(
+                [
+                  { id: "esri", Icon: SatelliteIcon },
+                  { id: "osm", Icon: OsmIcon },
+                ] as const
+              ).map(({ id, Icon }, i) => (
+                <button
+                  key={id}
+                  role="menuitemradio"
+                  aria-checked={basemap === id}
+                  aria-label={BASEMAP_NAMES[id].item}
+                  className={`${styles.menuItem} ${basemap === id ? styles.menuItemActive : ""}`}
+                  style={{ animationDelay: `calc(var(--stagger) * ${i})` }}
+                  onClick={() => {
+                    toggleBasemap(id);
+                    closeMapMenu("base");
+                  }}
+                >
+                  <span className={styles.menuCheck} aria-hidden="true">
+                    {basemap === id ? (
+                      <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="m3 8.5 3.5 3.5L13 4.5" />
+                      </svg>
+                    ) : null}
+                  </span>
+                  <span className={styles.menuItemIcon}>
+                    <Icon />
+                  </span>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+        <div className={styles.menuWrap}>
+          <button
+            ref={overlaysBtnRef}
+            className={styles.pill}
+            aria-haspopup="menu"
+            aria-expanded={openMenu === "overlays"}
+            aria-label={overlaysOn ? `Overlays, ${overlaysOn} on` : "Overlays, none on"}
+            onClick={() => (openMenu === "overlays" ? closeMapMenu("overlays") : openMapMenu("overlays"))}
+            onKeyDown={(e) => menuBtnKeys(e, "overlays")}
+          >
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" aria-hidden="true">
+              <path d="M5.5 1.5h7a2 2 0 0 1 2 2v7" />
+              <rect x="1.5" y="5.5" width="9" height="9" rx="2" />
+            </svg>
+            <span className={styles.btnLabel} aria-hidden="true">
+              {overlaysOn ? `Overlays · ${overlaysOn}` : "Overlays"}
+            </span>
+            {overlaysOn > 0 && (
+              <span className={styles.countBadge} aria-hidden="true">
+                {overlaysOn}
+              </span>
+            )}
+          </button>
+          {(openMenu === "overlays" || closingMenu === "overlays") && (
+            <div
+              ref={overlaysMenuRef}
+              role="menu"
+              aria-label="Overlays"
+              className={`${styles.menu} ${closingMenu === "overlays" ? styles.menuClosing : ""}`}
+              onKeyDown={(e) => menuKeys(e, "overlays")}
+            >
+              <button
+                role="menuitemcheckbox"
+                aria-checked={showNumbers}
+                className={`${styles.menuItem} ${showNumbers ? styles.menuItemActive : ""}`}
+                style={{ animationDelay: "calc(var(--stagger) * 0)" }}
+                onClick={() => onShowNumbersChange(!showNumbers)}
+                title="Number each photo position in capture order"
+              >
+                <span className={styles.menuCheck} aria-hidden="true">
+                  {showNumbers ? (
+                    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="m3 8.5 3.5 3.5L13 4.5" />
+                    </svg>
+                  ) : null}
+                </span>
+                Numbers
+              </button>
+              <button
+                role="menuitemcheckbox"
+                aria-checked={showFootprint}
+                className={`${styles.menuItem} ${showFootprint ? styles.menuItemActive : ""}`}
+                style={{ animationDelay: "calc(var(--stagger) * 1)" }}
+                onClick={() => setShowFootprint(!showFootprint)}
+                title={`What one photograph covers at this altitude${footprintLabel ? `: ${footprintLabel}` : ""}`}
+              >
+                <span className={styles.menuCheck} aria-hidden="true">
+                  {showFootprint ? (
+                    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="m3 8.5 3.5 3.5L13 4.5" />
+                    </svg>
+                  ) : null}
+                </span>
+                {showFootprint && footprintLabel ? footprintLabel : "Footprint"}
+              </button>
+            </div>
+          )}
+        </div>
       </div>
       {isDrawing(mode) && (
-        <div className={styles.drawPanel}>
+        <div className={`${styles.drawPanel} glass-smoke`}>
           <div className={styles.drawTitle}>{drawModeLabel(mode)}</div>
           <div className={styles.drawClick}>{clickMeaning}</div>
-          {drawNote && <div className={styles.drawNote}>{drawNote}</div>}
+          {drawNote && (
+            <div className={styles.drawNote} aria-live="polite">
+              {drawNote}
+            </div>
+          )}
           <div className={styles.drawActions}>
             {(mode === "draw-polygon" || mode === "append-polygon") && (
               <button onClick={finishDraw} disabled={spec.aoi.length < 3}>
@@ -989,7 +1260,7 @@ export default function MapPane({
       )}
       {/* Remove-corner action panel appears only when idle and a valid corner is selected. */}
       {mode === "idle" && selectedCorner != null && spec.mission_type !== "orbit" && !spec.shape && (
-        <div className={styles.drawPanel}>
+        <div className={`${styles.drawPanel} glass-smoke`}>
           <div className={styles.drawTitle}>Remove corner</div>
           <div className={styles.drawHint}>Tap the corner on the map to remove. Corners must remain at least three.</div>
           <div className={styles.drawActions}>
