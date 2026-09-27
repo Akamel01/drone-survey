@@ -512,7 +512,7 @@ function Row({
   onDetails: () => void;
 }) {
   return (
-    <article className={`${styles.row} glass-smoke ${TONE[view.headline.tone]} ${editing ? styles.editing : ""}`}>
+    <article className={`press ${styles.row} glass-smoke ${TONE[view.headline.tone]} ${editing ? styles.editing : ""}`} onTouchStart={() => undefined}>
       <header className={styles.head}>
         <h3 className={styles.title}>
           {row.name}

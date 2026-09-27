@@ -11,8 +11,10 @@
 .notice {
   position: fixed;
   top: calc(env(safe-area-inset-top, 0px) + 12px);
-  left: 50%;
-  transform: translateX(-50%);
+  left: 0;
+  right: 0;
+  margin-inline: auto;
+  width: max-content;
   z-index: 10;
   max-width: min(355px, calc(100vw - 38px));
   background: var(--black);
@@ -22,7 +24,6 @@
   pointer-events: auto;
   transition:
     transform var(--dur-press) var(--ease-out),
-    box-shadow var(--dur-press) var(--ease-out),
     opacity 200ms var(--ease-in);
 }
 
@@ -49,14 +50,6 @@
    ordinary element's transition, so this simply appears and disappears. */
 .leaving {
   opacity: 0;
-}
-
-/* Press (spec § 11): on pointer-down the shape scales to 0.97 under a 6%
-   white inset wash, over --dur-press, springing back on release. The close
-   control shares the same formula. */
-.notice:active {
-  transform: translateX(-50%) scale(0.97);
-  box-shadow: inset 0 0 0 999px rgb(255 255 255 / 0.06);
 }
 
 /* The header row both states share: round icon badge, white glyph. Success
@@ -164,9 +157,6 @@
   border: none;
   border-radius: 12px;
   color: var(--on-glass);
-  transition:
-    transform var(--dur-press) var(--ease-out),
-    box-shadow var(--dur-press) var(--ease-out);
 }
 
 .compact .close {
@@ -183,9 +173,4 @@
 
 .close:hover {
   filter: brightness(1.15);
-}
-
-.close:active {
-  transform: scale(0.97);
-  box-shadow: inset 0 0 0 999px rgb(255 255 255 / 0.06);
 }

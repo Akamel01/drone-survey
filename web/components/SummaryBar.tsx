@@ -9,6 +9,7 @@ import { describeSave, flightTimeDelta, saveProblem, type SiteChoice } from "@/l
 import { noteMissionsChanged } from "@/lib/actions";
 import type { NoticePayload } from "./Notice";
 import type { Editing } from "@/app/plan/page";
+import CountUp from "./CountUp";
 import styles from "./SummaryBar.module.css";
 
 interface SummaryBarProps {
@@ -24,6 +25,9 @@ interface SummaryBarProps {
   sites?: SiteChoice[];
   /** Page-owned Notice slot (M2 seam). Accepted but ignored until M4 wires it. */
   onNotice?: (p: Omit<NoticePayload, "key">) => void;
+  /** The open signal for the count-up. Changes only when a Mission opens, so a
+   *  slider edit moves the figures without animating them. Omitted = no count. */
+  countKey?: number;
 }
 
 // Saving is the planner's only write. Dispatch, Withdraw, Flown and Remove all
@@ -32,7 +36,7 @@ interface SummaryBarProps {
 // beside an editor cannot say which Mission it means (ADR 0021).
 type SaveState = { kind: "idle" } | { kind: "saving" };
 
-export default function SummaryBar({ spec, preview, editing, onSaved, sites = [], onNotice }: SummaryBarProps) {
+export default function SummaryBar({ spec, preview, editing, onSaved, sites = [], onNotice, countKey }: SummaryBarProps) {
   const [copied, setCopied] = useState(false);
   const [passphrase, setPassphrase] = useState("");
   const [save, setSave] = useState<SaveState>({ kind: "idle" });
@@ -117,22 +121,32 @@ export default function SummaryBar({ spec, preview, editing, onSaved, sites = []
           <div className={styles.lead}>
             <span className={styles.leadLabel}>Flight time</span>
             <div className={styles.leadRow}>
-              <span className={styles.leadFigure}>{preview.flight_time_min.toFixed(1)}</span>
+              <CountUp
+                value={preview.flight_time_min}
+                decimals={1}
+                countKey={countKey}
+                className={styles.leadFigure}
+              />
               <span className={styles.leadUnit}>min</span>
             </div>
             <p className={styles.leadDelta}>{flightTimeDelta(preview.parts, preview.part_minutes)}</p>
           </div>
           <div className={styles.tiles}>
-            <Tile label="GSD" value={preview.gsd_cm.toFixed(2)} unit="cm/px" />
-            <Tile label="Photos" value={String(preview.photo_count)} />
+            <Tile label="GSD" value={preview.gsd_cm.toFixed(2)} unit="cm/px" decimals={2} countKey={countKey} />
+            <Tile label="Photos" value={String(preview.photo_count)} countKey={countKey} />
             {/* The same three numbers mean different things for an orbit, so
                 they are named for what they are rather than left quietly
                 wrong. */}
-            <Tile label={isOrbit ? "Rings" : "Lines"} value={String(preview.line_count)} />
+            <Tile
+              label={isOrbit ? "Rings" : "Lines"}
+              value={String(preview.line_count)}
+              countKey={countKey}
+            />
             <Tile
               label={preview.parts > 1 ? "Flights" : "Flight"}
               value={String(preview.parts)}
               warn={preview.parts > 1}
+              countKey={countKey}
             />
           </div>
           <div className={styles.quiet}>
@@ -140,17 +154,23 @@ export default function SummaryBar({ spec, preview, editing, onSaved, sites = []
               label={isOrbit ? "Arc spacing" : "Fwd spacing"}
               value={preview.fwd_spacing_m.toFixed(1)}
               unit="m"
+              decimals={1}
+              countKey={countKey}
             />
             <QuietStat
               label={isOrbit ? "Ring spacing" : "Side spacing"}
               value={preview.side_spacing_m.toFixed(1)}
               unit="m"
+              decimals={1}
+              countKey={countKey}
             />
             <QuietStat
               label="Effective speed"
               value={preview.capped_speed_ms.toFixed(1)}
               unit="m/s"
               warn={preview.capped_speed_ms < spec.flight.speed_ms}
+              decimals={1}
+              countKey={countKey}
             />
           </div>
         </div>
@@ -220,12 +240,26 @@ function downloadMission(spec: MissionSpec, name: string) {
 /** One of the four boxed figures: GSD, Photos, Lines/Rings, Flights (spec's
  *  metric tile, § 8). Flight time itself leads above these instead of sitting
  *  among them (spec § 2 rule 4: one number leads). */
-function Tile({ label, value, unit, warn }: { label: string; value: string; unit?: string; warn?: boolean }) {
+function Tile({
+  label,
+  value,
+  unit,
+  warn,
+  decimals = 0,
+  countKey,
+}: {
+  label: string;
+  value: string;
+  unit?: string;
+  warn?: boolean;
+  decimals?: number;
+  countKey?: number;
+}) {
   return (
     <div className={styles.tile}>
       <span className={styles.tileLabel}>{label}</span>
       <span className={`mono ${styles.tileValue} ${warn ? styles.warn : ""}`}>
-        {value}
+        <CountUp value={Number(value)} decimals={decimals} countKey={countKey} />
         {unit ? ` ${unit}` : ""}
       </span>
     </div>
@@ -234,12 +268,26 @@ function Tile({ label, value, unit, warn }: { label: string; value: string; unit
 
 /** Spacing and speed: figures the operator checks less often than the four
  *  tiles, so they read as a quieter row rather than competing with them. */
-function QuietStat({ label, value, unit, warn }: { label: string; value: string; unit?: string; warn?: boolean }) {
+function QuietStat({
+  label,
+  value,
+  unit,
+  warn,
+  decimals = 1,
+  countKey,
+}: {
+  label: string;
+  value: string;
+  unit?: string;
+  warn?: boolean;
+  decimals?: number;
+  countKey?: number;
+}) {
   return (
     <div className={styles.quietStat}>
       <span className={styles.quietLabel}>{label}</span>
       <span className={`mono ${styles.quietValue} ${warn ? styles.warn : ""}`}>
-        {value}
+        <CountUp value={Number(value)} decimals={decimals} countKey={countKey} />
         {unit ? ` ${unit}` : ""}
       </span>
     </div>
