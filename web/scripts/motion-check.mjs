@@ -115,6 +115,14 @@ function tyOf(transform) {
   const m = /^matrix\(([^)]+)\)$/.exec(transform);
   return m ? Number(m[1].split(",")[5].trim()) : NaN;
 }
+/** At rest: identity and no residual Y translation. The sheet's property
+ *  under test is `translateY`, which bare `isIdentity` never reads — a stuck
+ *  `matrix(1, 0, 0, 1, 0, 44)` would otherwise read as identity. Every ui-19
+ *  "returns to rest" claim uses this, not `isIdentity` (#256). */
+function isRest(transform) {
+  if (transform === "none") return true;
+  return isIdentity(transform) && Math.abs(tyOf(transform)) <= 0.5;
+}
 
 // ---------------------------------------------------------------------------
 // Page setup
@@ -621,13 +629,13 @@ async function installRig(page) {
           up: (dy = 0) => send("pointerup", dy),
           open: () => dialog.hasAttribute("open"),
           hasSettling: () => [...dialog.classList].some((c) => c.includes("settling")),
-          identity: () => {
+          rest: () => {
             const t = getComputedStyle(dialog).transform;
             if (t === "none") return true;
             const m = /^matrix\(([^)]+)\)$/.exec(t);
             if (!m) return false;
-            const [a, b, c, d] = m[1].split(",").map((v) => Number(v.trim()));
-            return a === 1 && b === 0 && c === 0 && d === 1;
+            const v = m[1].split(",").map((x) => Number(x.trim()));
+            return v[0] === 1 && v[1] === 0 && v[2] === 0 && v[3] === 1 && Math.abs(v[5]) <= 0.5;
           },
           transform: () => getComputedStyle(dialog).transform,
           opacity: () => getComputedStyle(dialog).opacity,
@@ -770,7 +778,8 @@ async function sheetGesture(browser) {
     const txs = slow.frames.map(tyOf);
     check("sheet-springback", "first frame still offset (> 0)", txs[0] > 0, `${txs[0]}`);
     check("sheet-springback", "returns to rest monotone, no overshoot", txs.every((x) => x >= 0 && x <= txs[0]), txs.map((x) => x.toFixed(1)).join(","));
-    check("sheet-springback", "last frame is identity", isIdentity(slow.frames.at(-1)), slow.frames.at(-1));
+    check("sheet-springback", "last frame is at rest", isRest(slow.frames.at(-1)), slow.frames.at(-1));
+    check("sheet-springback", "last frame is at rest (|ty| <= 0.5)", Number.isFinite(txs.at(-1)) && Math.abs(txs.at(-1)) <= 0.5, `ty = ${txs.at(-1).toFixed(5)}px`);
     check("sheet-springback", ".settling gone by +500ms", slow.settlingAt500 === false);
 
     await closeSheet(page);
@@ -789,7 +798,7 @@ async function sheetGesture(browser) {
       const start = performance.now();
       let elapsed = null;
       while (performance.now() - start < 800) {
-        if (g.identity()) {
+        if (g.rest()) {
           elapsed = performance.now() - start;
           break;
         }
@@ -802,7 +811,8 @@ async function sheetGesture(browser) {
     check("sheet-rubber", "mid-drag offset is upward (ty < 0)", midTy < 0, `${midTy.toFixed(2)}px`);
     check("sheet-rubber", "mid-drag offset is damped (< 80px)", Math.abs(midTy) < 80, `${midTy.toFixed(2)}px`);
     check("sheet-rubber", "mid-drag offset is rubberBand(-80)", Math.abs(midTy - rubberBand(-80)) <= 1, `${midTy.toFixed(2)} vs ${rubberBand(-80).toFixed(2)}`);
-    check("sheet-rubber", "identity within 800ms", rubber.elapsed !== null && isIdentity(rubber.end), rubber.elapsed === null ? "never" : `${rubber.elapsed.toFixed(0)}ms`);
+    check("sheet-rubber", "at rest within 800ms", rubber.elapsed !== null && isRest(rubber.end), rubber.elapsed === null ? "never" : `${rubber.elapsed.toFixed(0)}ms`);
+    check("sheet-rubber", "at rest (|ty| <= 0.5)", Number.isFinite(tyOf(rubber.end)) && Math.abs(tyOf(rubber.end)) <= 0.5, `ty = ${tyOf(rubber.end).toFixed(5)}px`);
     check("sheet-rubber", "dialog stays open", rubber.open === true);
     check("sheet-rubber", "close count is 0", rubber.closes === 0, String(rubber.closes));
 
@@ -905,12 +915,12 @@ async function sheetReducedMotion(browser) {
       await g.sleep(160); // slow finish: the release must not read as a flick
       g.up(60);
       await g.frame();
-      const after1 = g.identity();
+      const after1 = g.rest();
       await g.frame();
-      const after2 = g.identity();
+      const after2 = g.rest();
       return { after1, after2, open: g.open() };
     });
-    check("sheet-reduced", "released 60px drag reaches identity within 2 rAF", slow.after2 === true, `after1=${slow.after1} after2=${slow.after2}`);
+    check("sheet-reduced", "released 60px drag reaches rest within 2 rAF", slow.after2 === true, `after1=${slow.after1} after2=${slow.after2}`);
     check("sheet-reduced", "dialog stays open after the drag", slow.open === true);
 
     const flick = await page.evaluate(async () => {

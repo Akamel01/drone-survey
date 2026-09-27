@@ -117,7 +117,7 @@ export default function Sheet({ open, onClose, labelledBy, children }: SheetProp
   // its own scrolling and its own clicks.
   const onHandleDown = (e: PointerEvent<HTMLDivElement>) => {
     const dialog = ref.current;
-    // A re-grab during a spring-back takes over from the current offset.
+    // A re-grab during a spring-back cancels it: the sheet snaps to rest, the new drag tracks from 0.
     if (dialog) endSettle(dialog);
     try {
       e.currentTarget.setPointerCapture(e.pointerId);
