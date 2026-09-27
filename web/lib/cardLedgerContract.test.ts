@@ -63,19 +63,41 @@ function ledgerOf(name: string, c: RawCase): CardLedger {
   return "ledger" in c ? readLedger(name, c.ledger) : fixture.ledger;
 }
 
-type Op = { op: "reserve" | "release"; cards?: string[]; spec_key: string; at?: string; apply_to?: "base" | "ours" };
+type Op = {
+  op: "reserve" | "release" | "pool" | "verify";
+  cards: string[];
+  spec_key: string;
+  at: string;
+  pool: string[];
+  apply_to?: "base" | "ours";
+};
+
+const OP_KEYS: Record<string, readonly string[]> = {
+  reserve: ["op", "cards", "spec_key", "at"],
+  release: ["op", "spec_key"],
+  pool: ["op", "pool"],
+  verify: ["op", "at"],
+};
 
 function readOp(name: string, side: "ours" | "after", raw: unknown): Op {
   if (typeof raw !== "object" || raw === null || Array.isArray(raw)) {
     fail(name, `${side} must be an op object`);
   }
   const op = raw as RawCase;
-  checkKeys(name, op, side === "after" ? ["op", "cards", "spec_key", "at", "apply_to"] : ["op", "cards", "spec_key", "at"]);
   const kind = required<string>(name, op, "op");
-  if (kind !== "reserve" && kind !== "release") fail(name, `${side}.op must be "reserve" or "release"`);
-  required<string>(name, op, "spec_key");
+  if (typeof kind !== "string" || !Object.hasOwn(OP_KEYS, kind)) {
+    fail(name, `${side}.op must be "reserve", "release", "pool" or "verify"`);
+  }
+  checkKeys(name, op, side === "after" ? [...OP_KEYS[kind], "apply_to"] : OP_KEYS[kind]);
   if (kind === "reserve") {
     if (!Array.isArray(op.cards)) fail(name, `${side}.cards must be an array on a reserve op`);
+    required<string>(name, op, "spec_key");
+    required<string>(name, op, "at");
+  } else if (kind === "release") {
+    required<string>(name, op, "spec_key");
+  } else if (kind === "pool") {
+    if (!Array.isArray(op.pool)) fail(name, `${side}.pool must be an array on a pool op`);
+  } else {
     required<string>(name, op, "at");
   }
   if (side === "after") {
@@ -87,11 +109,13 @@ function readOp(name: string, side: "ours" | "after", raw: unknown): Op {
 }
 
 function applyOp(op: Op, on: CardLedger): CardLedger {
-  // ponytail: two ops, one apply_to, by design; a third op means the case
-  // belongs in a per-side adapter harness, not here.
-  return op.op === "reserve"
-    ? withReservation(on, op.cards as string[], op.spec_key, op.at as string)
-    : withRelease(on, op.spec_key);
+  // ponytail: four ops, one apply_to; reserve/release are the planner's, pool/
+  // verify mirror the host's writers; anything beyond these belongs in a
+  // per-side adapter harness, not here.
+  if (op.op === "reserve") return withReservation(on, op.cards as string[], op.spec_key, op.at as string);
+  if (op.op === "release") return withRelease(on, op.spec_key);
+  if (op.op === "pool") return { ...on, pool: op.pool };
+  return { ...on, verified_at: op.at };
 }
 
 const handlers: Record<string, Handler> = {
