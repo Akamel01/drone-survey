@@ -125,6 +125,25 @@ bash scripts/save_b2_credentials.sh b2-read
 The web app needs `DISPATCH_SECRET`, `B2_KEY_ID`, `B2_APP_KEY`, `B2_BUCKET`
 (Vercel env on deployed, `vercel env pull` for local dev).
 
+Accounts add nine required variables, also in the Vercel environment. They are
+validated at start-up: a deployment missing any of them keeps building and
+running, and the auth endpoints answer 503 naming what is missing.
+
+- `DATABASE_URL` — Postgres connection string (Neon in production).
+- `BETTER_AUTH_SECRET` — signs sessions.
+- `BETTER_AUTH_URL` — this deployment's public base URL.
+- `OAUTH_PROXY_SECRET` — shared OAuth-proxy secret; the same value in
+  production, previews and local.
+- `GOOGLE_CLIENT_ID` — Google OAuth client id.
+- `GOOGLE_CLIENT_SECRET` — Google OAuth client secret.
+- `GITHUB_CLIENT_ID` — GitHub OAuth client id.
+- `GITHUB_CLIENT_SECRET` — GitHub OAuth client secret.
+- `OWNER_EMAIL` — the operator's email; that Account gets the operator
+  Workspace and the admin role.
+
+Local setup — `pglite://`, migrations, tests, evidence screenshots — is in
+[`web/README.md`](web/README.md).
+
 ## Layout
 
 - `00_raw/` … `09_exports/` — capture-to-deliverable data flow (gitignored).
