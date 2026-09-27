@@ -50,7 +50,7 @@ jobs:
       # check_head inspects image metadata with exiftool; Pillow builds its fixtures.
       # GDAL runs export-cog's own check, which was skipped here until a crash on
       # an empty Orthomosaic was found on the host instead.
-      - run: sudo apt-get update && sudo apt-get install -y libimage-exiftool-perl gdal-bin
+      - run: sudo apt-get update && sudo apt-get install -y libimage-exiftool-perl gdal-bin ffmpeg
       - run: pip install pillow
       - name: The Nodes' own checks
         run: |

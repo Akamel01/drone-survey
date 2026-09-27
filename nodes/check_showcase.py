@@ -286,7 +286,10 @@ def check_gate_cli():
 
 # --- M6: seam (D5) + direction (D4) + counts/codecs/sizes (D6) -------------------------------
 
-FIXTURES = Path(__file__).resolve().parent.parent / "fixtures" / "showcase"
+_GOLDENS_TMP = tempfile.TemporaryDirectory()
+_GOLDENS = load("showcase_goldens", NODES.parent / "fixtures" / "showcase" / "generate_goldens.py")
+_GOLDENS.generate(_GOLDENS_TMP.name)
+FIXTURES = Path(_GOLDENS_TMP.name)
 
 
 def check_seam():
