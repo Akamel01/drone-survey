@@ -69,13 +69,18 @@
       stopBirds();
       return;
     }
+    if (document.hidden) {
+      // Hidden: no source yet, so nothing is fetched; the visible
+      // `visibilitychange` branch re-applies and loads it then.
+      video.pause();
+      return;
+    }
     if (src !== loadedSrc) {
       loadedSrc = src;
       video.hidden = true;
       video.src = src;
-      if (document.hidden) video.pause();
-      else video.play().catch(() => {});
-    } else if (video.paused && !document.hidden) {
+      video.play().catch(() => {});
+    } else if (video.paused) {
       video.play().catch(() => {});
     }
     startBirds();
@@ -169,8 +174,9 @@
       video.pause();
       stopBirds();
     } else if (!reduced) {
-      if (video.paused) video.play().catch(() => {});
-      startBirds();
+      // A page loaded hidden never set its source; apply() sets it now,
+      // resumes playback and restarts the birds.
+      apply();
     }
   });
 
