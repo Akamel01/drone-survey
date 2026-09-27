@@ -188,7 +188,11 @@ export default function PlanPage() {
       "settings-collapse": collapseSettings.current,
       "settings-tab": expandSettings.current,
     };
-    el[target]?.focus();
+    // preventScroll: at unfold the collapse button still sits inside the
+    // translated panel for one frame; letting the browser scroll it into view
+    // would scroll the clipping `.top` container and drag the whole map with
+    // the fold (the harness samples consumer rects to catch exactly that).
+    el[target]?.focus({ preventScroll: true });
   }, [missionsOpen, settingsOpen]);
 
   const handleBasemapError = useCallback(() => setMapFailed(true), []);
@@ -269,7 +273,7 @@ export default function PlanPage() {
             <HeroScene variant="still" playing={false} />
           </div>
         </div>
-        <section id="missions-panel" className={`${styles.missions} glass-smoke`} aria-label="Missions" inert={!wide && view !== "missions"}>
+        <section id="missions-panel" className={`${styles.missions} glass-smoke`} aria-label="Missions" inert={wide ? !missionsOpen : view !== "missions"}>
           <div className={styles.panelHead}>
             <h2 className={styles.viewTitle}>Missions</h2>
             <button
@@ -319,7 +323,7 @@ export default function PlanPage() {
             </div>
           )}
         </section>
-        <section id="settings-panel" className={`${styles.settings} glass-smoke`} aria-label="Settings" inert={!wide && view !== "settings"}>
+        <section id="settings-panel" className={`${styles.settings} glass-smoke`} aria-label="Settings" inert={wide ? !settingsOpen : view !== "settings"}>
           <div className={styles.panelHead}>
             <h2 className={styles.heading}>Settings</h2>
             <button
@@ -362,32 +366,30 @@ export default function PlanPage() {
           countKey={openToken}
         />
       </div>
-      {!missionsOpen && (
-        <button
-          ref={expandMissions}
-          type="button"
-          className={`glass-smoke ${styles.edgeTab} ${styles.edgeTabLeft}`}
-          aria-expanded={false}
-          aria-controls="missions-panel"
-          aria-label="Expand Missions"
-          onClick={() => foldMissions(true)}
-        >
-          ›
-        </button>
-      )}
-      {!settingsOpen && (
-        <button
-          ref={expandSettings}
-          type="button"
-          className={`glass-smoke ${styles.edgeTab} ${styles.edgeTabRight}`}
-          aria-expanded={false}
-          aria-controls="settings-panel"
-          aria-label="Expand Settings"
-          onClick={() => foldSettings(true)}
-        >
-          ‹
-        </button>
-      )}
+      <button
+        ref={expandMissions}
+        type="button"
+        className={`glass-smoke ${styles.edgeTab} ${styles.edgeTabLeft}`}
+        aria-expanded={false}
+        aria-controls="missions-panel"
+        aria-label="Expand Missions"
+        onClick={() => foldMissions(true)}
+        inert={missionsOpen}
+      >
+        ›
+      </button>
+      <button
+        ref={expandSettings}
+        type="button"
+        className={`glass-smoke ${styles.edgeTab} ${styles.edgeTabRight}`}
+        aria-expanded={false}
+        aria-controls="settings-panel"
+        aria-label="Expand Settings"
+        onClick={() => foldSettings(true)}
+        inert={settingsOpen}
+      >
+        ‹
+      </button>
       <nav className={styles.views} aria-label="Show">
         {VIEWS.map((v) => (
           <button

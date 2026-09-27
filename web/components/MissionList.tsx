@@ -9,13 +9,13 @@ import {
   IDLE,
   MISSIONS_CHANGED_KEY,
   beginAction,
-  describeResult,
   isRunning,
-  noteMissionsChanged,
   safeStorage,
-  type ActionResult,
   type ActionState,
 } from "@/lib/actions";
+import * as missionClient from "@/lib/missionClient";
+import type { MissionAction } from "@/lib/missionClient";
+import { firstSentence } from "@/lib/notice";
 import { readPassphrase, subscribePassphrase, writePassphrase } from "@/lib/passphrase";
 import {
   asOfStamp,
@@ -88,11 +88,6 @@ interface MissionListProps {
   /** Page-owned Notice slot. The page stamps `key` itself, so this takes the
    *  payload without it. */
   onNotice?: (p: Omit<NoticePayload, "key">) => void;
-}
-
-/** The Notice's compact title: the first sentence of the verbatim result. */
-function firstSentence(body: string): string {
-  return body.match(/^.*?[.!?…](?=\s|$)/)?.[0] ?? body;
 }
 
 export default function MissionList({ onEdit, onCopy, editingId = null, onRead, onNotice }: MissionListProps) {
@@ -249,16 +244,15 @@ export default function MissionList({ onEdit, onCopy, editingId = null, onRead, 
     if (parked) commit(parked);
   }, [commit]);
 
-  const load = useCallback(async (key: string): Promise<MissionListRead | null> => {
+  const load = useCallback(async (): Promise<MissionListRead | null> => {
     setLoading(true);
     try {
       // Always the whole list: `archived_count` and the archived rows come in
       // one call, so the filter costs nothing and the count cannot disagree
       // with what the filter reveals.
-      const res = await fetch("/api/missions?archived=1", { headers: { "x-wayfinder-key": key } });
-      const body = await res.json().catch(() => ({}));
-      if (res.ok && Array.isArray(body.missions)) {
-        const fresh = body as MissionListRead;
+      const outcome = await missionClient.list();
+      if (outcome.ok) {
+        const fresh = outcome.read;
         const at = Date.now();
         applyRead(fresh);
         setReadAt(at);
@@ -270,9 +264,8 @@ export default function MissionList({ onEdit, onCopy, editingId = null, onRead, 
         if (ls) cacheRead(ls, fresh, at);
         reportRead.current?.(fresh);
         return fresh;
-      } else {
-        fallBackToCache(body.error ?? `The Mission list could not be read (HTTP ${res.status}).`);
       }
+      fallBackToCache(outcome.text);
     } catch (err) {
       fallBackToCache(
         `The store could not be reached: ${err instanceof Error ? err.message : "unknown"}.`,
@@ -391,10 +384,9 @@ export default function MissionList({ onEdit, onCopy, editingId = null, onRead, 
   // a second before it is used.
   useEffect(() => {
     if (!passphrase) return;
-    const key = passphrase;
     const wait = instant.current ? 0 : 500;
     instant.current = false;
-    const debounce = setTimeout(() => void load(key), wait);
+    const debounce = setTimeout(() => void load(), wait);
 
     // Every poll costs a Class C transaction on the storage account, and this
     // page is left open for hours. Five minutes is fresh enough for a pipeline
@@ -403,14 +395,14 @@ export default function MissionList({ onEdit, onCopy, editingId = null, onRead, 
     // shorten this, and do not remove this note.
     const refresh = () => {
       if (document.hidden) return;
-      void load(key);
+      void load();
     };
     document.addEventListener("visibilitychange", refresh);
     // A write from another window of this planner: react to the write instead
     // of waiting out the interval. `storage` fires only in the *other*
     // windows, so this costs a transaction only when something changed.
     const onWrite = (e: StorageEvent) => {
-      if (e.key === MISSIONS_CHANGED_KEY) void load(key);
+      if (e.key === MISSIONS_CHANGED_KEY) void load();
     };
     window.addEventListener("storage", onWrite);
     const poll = setInterval(refresh, 300000);
@@ -434,54 +426,35 @@ export default function MissionList({ onEdit, onCopy, editingId = null, onRead, 
   // the store the moment it finishes. The poll and Refresh only re-read: they
   // never touch the Notice, which the page owns.
   const act = useCallback(
-    async (label: string, on: string, fn: () => Promise<Response>) => {
-      if (!passphrase || inFlight.current) return;
+    async (label: MissionAction, on: string) => {
+      if (missionClient.signedOut() || inFlight.current) return;
       inFlight.current = true;
       setAction((s) => beginAction(s, label, on));
-      let result: ActionResult;
-      try {
-        const res = await fn();
-        const body = await res.json().catch(() => ({}));
-        result = res.ok ? { ok: true, body } : { ok: false, status: res.status, body };
-        if (res.ok) noteMissionsChanged();
-      } catch (err) {
-        result = { ok: false, threw: err instanceof Error ? err.message : "unknown" };
-      }
+      const outcome = await missionClient.run(label, on);
       inFlight.current = false;
       setAction(IDLE);
-      const fresh = await load(passphrase);
-      const body = describeResult(label, result);
+      const fresh = await load();
       onNotice?.({
-        title: firstSentence(body),
-        body,
+        title: firstSentence(outcome.text),
+        body: outcome.text,
         missionName: fresh?.missions.find((m) => m.id === on)?.name ?? "",
-        failed: !result.ok,
+        failed: !outcome.ok,
       });
     },
-    [passphrase, load, onNotice],
-  );
-
-  const post = useCallback(
-    (path: string, body: unknown) =>
-      fetch(path, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "x-wayfinder-key": passphrase ?? "" },
-        body: JSON.stringify(body),
-      }),
-    [passphrase],
+    [load, onNotice],
   );
 
   const runAction = useCallback(
     (name: ActionName, row: MissionRow) => {
       switch (name) {
         case "Dispatch":
-          return act(name, row.id, () => post("/api/missions/dispatch", { id: row.id }));
+          return act(name, row.id);
         case "Withdraw":
-          return act(name, row.id, () => post("/api/missions/withdraw", { id: row.id }));
+          return act(name, row.id);
         case "Mark Flown":
-          return act(name, row.id, () => post("/api/missions/flown", { id: row.id, flown: true }));
+          return act(name, row.id);
         case "Unmark Flown":
-          return act(name, row.id, () => post("/api/missions/flown", { id: row.id, flown: false }));
+          return act(name, row.id);
         case "Remove":
           // Asks in a sheet, never the browser's own confirm box (spec § 8,
           // § 14) -- the words are the same ones that box used to show.
@@ -494,20 +467,15 @@ export default function MissionList({ onEdit, onCopy, editingId = null, onRead, 
           return onCopy(row);
       }
     },
-    [act, post, onEdit, onCopy],
+    [act, onEdit, onCopy],
   );
 
   const confirmRemove = useCallback(() => {
     if (!confirmRow) return;
     const row = confirmRow;
     setConfirmOpen(false);
-    void act("Remove", row.id, () =>
-      fetch(`/api/missions?id=${encodeURIComponent(row.id)}`, {
-        method: "DELETE",
-        headers: { "x-wayfinder-key": passphrase ?? "" },
-      }),
-    );
-  }, [act, confirmRow, passphrase]);
+    void act("Remove", row.id);
+  }, [act, confirmRow]);
 
   const all = useMemo(() => read?.missions ?? [], [read]);
   // The planner's own figures, derived from each Mission's Spec. They are one
@@ -541,7 +509,7 @@ export default function MissionList({ onEdit, onCopy, editingId = null, onRead, 
         className={styles.gate}
         onSubmit={(e) => {
           e.preventDefault();
-          if (passphrase) void load(passphrase);
+          if (passphrase) void load();
         }}
       >
         <p className={styles.gateText}>
@@ -575,8 +543,8 @@ export default function MissionList({ onEdit, onCopy, editingId = null, onRead, 
         </span>
         <button
           onClick={() => {
-            if (!passphrase) return;
-            void load(passphrase);
+            if (missionClient.signedOut()) return;
+            void load();
           }}
           disabled={loading}
         >

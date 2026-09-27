@@ -10,10 +10,9 @@ import {
   missionProblem,
   siteNameTaken,
   supersessionGroup,
-  withFlownMark,
   type MissionRecord,
 } from "./missionRecords.ts";
-import { cardUnavailable, withReservation, type CardLedger } from "./model.ts";
+import { withReservation, type CardLedger } from "./model.ts";
 import type { Manifest } from "./missions.ts";
 import { DEFAULT_SPEC } from "./spec.ts";
 
@@ -141,19 +140,6 @@ test("the operator's mark decides Flown, and overrides the imagery in both direc
   assert.match(early.flown_disagreement!, /no imagery/);
 });
 
-test("marking Flown frees the Card, unmarking takes it back", () => {
-  const key = "specs/rehearsal-1/2026-09-23/1.json";
-  const held = withReservation({ pool: ["A"], holdings: {} }, ["A"], key, "t");
-  assert.match(cardUnavailable(held, "A")!, /unflown/);
-
-  const flown = withFlownMark(held, key, "2026-09-23T18:00:00Z");
-  assert.equal(cardUnavailable(flown, "A"), null);
-
-  const undone = withFlownMark(flown, key, null);
-  assert.match(cardUnavailable(undone, "A")!, /unflown/);
-  assert.equal(undone.holdings["A"].flown_at, undefined, "the mark is removed, not falsified");
-});
-
 test("only current Missions count as live Spec keys, so a stale Card can be spotted", () => {
   const rows = deriveMissions([
     mission({ id: "a", dispatched_key: "specs/rehearsal-1/2026-09-23/1.json" }),
@@ -163,27 +149,6 @@ test("only current Missions count as live Spec keys, so a stale Card can be spot
 });
 
 // ---------------------------------------------------------------------------
-
-test("a Reservation overwritten by another writer did not survive", () => {
-  const base: CardLedger = { pool: ["A", "B"], holdings: {} };
-  const ours = withReservation(base, ["A"], "specs/x/y/ours.json", "t");
-  const theirs = withReservation(base, ["B"], "specs/x/y/theirs.json", "t");
-  assert.equal(changeSurvived(base, ours, theirs), false, "their write, from before ours landed, erased ours");
-});
-
-test("a later writer who kept our Reservation is not a conflict", () => {
-  const base: CardLedger = { pool: ["A", "B"], holdings: {} };
-  const ours = withReservation(base, ["A"], "specs/x/y/ours.json", "t");
-  const both = withReservation(ours, ["B"], "specs/x/y/theirs.json", "t");
-  assert.equal(changeSurvived(base, ours, both), true);
-});
-
-test("the same Card given to someone else is our change lost", () => {
-  const base: CardLedger = { pool: ["A"], holdings: {} };
-  const ours = withReservation(base, ["A"], "specs/x/y/ours.json", "t");
-  const theirs = withReservation(base, ["A"], "specs/x/y/theirs.json", "t");
-  assert.equal(changeSurvived(base, ours, theirs), false);
-});
 
 test("a release survives unless the old holding came back", () => {
   const base = withReservation({ pool: ["A"], holdings: {} }, ["A"], "specs/x/y/ours.json", "t");

@@ -11,12 +11,14 @@ on:
       - "scripts/mission/**"
       - "nodes/**"
       - "web/**"
+      - "fixtures/**"
       - ".github/workflows/mission.yml"
   pull_request:
     paths:
       - "scripts/mission/**"
       - "nodes/**"
       - "web/**"
+      - "fixtures/**"
   workflow_dispatch:
 
 jobs:
