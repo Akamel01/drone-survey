@@ -65,6 +65,17 @@ input, select, button {
 .glass-clear { background: linear-gradient(180deg, rgb(255 255 255 / 0.06), transparent 60%), var(--glass-clear); backdrop-filter: blur(20px) saturate(120%); color: var(--on-glass); }
 .glass-clear-strong { background: linear-gradient(180deg, rgb(255 255 255 / 0.22), transparent 60%), var(--glass-clear-strong); color: var(--on-glass); backdrop-filter: blur(20px) saturate(120%); }
 
+/* Thin overlay scrollbars on glass (spec § 10): a translucent white thumb and
+   no visible track. Firefox reads the standard properties; Safari and older
+   Chromium read the WebKit pseudo-elements. Where a browser supports the
+   standard pair (modern Chromium, Safari 18.2+), it takes precedence and the
+   WebKit rules do not apply. */
+* { scrollbar-width: thin; scrollbar-color: rgb(255 255 255 / 0.25) transparent; }
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: rgb(255 255 255 / 0.25); background-clip: content-box; border: 3px solid transparent; border-radius: 999px; }
+::-webkit-scrollbar-thumb:hover, ::-webkit-scrollbar-thumb:active { background: rgb(255 255 255 / 0.4); background-clip: content-box; }
+
 .panel-light { background: var(--panel-light); border: none; box-shadow: none; }
 .panel-light-alt { background: var(--panel-light-alt); border: none; box-shadow: none; }
 .chip { background: var(--chip); padding: 4px 8px; border-radius:999px; display:inline-block; }
