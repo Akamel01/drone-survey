@@ -96,3 +96,19 @@ colour-managed render of the world. For a production Showcase the plate should
 be replaced by a sky rendered (or tone-mapped) from the same HDRI the
 Reconstruction's lighting uses, through the same view transform; the path
 exists in `scripts/hero/hero.py`'s world setup and only needs a render step.
+
+## Synthetic golden fixtures (`turn-3f/`, `dir-a/`, `dir-b/`)
+
+**What they are.** Seven 64×32 RGBA PNGs from
+`generate_goldens.py` (stdlib only, deterministic, `--check` reruns to a
+tempdir and byte-compares): `turn-3f/` is a 3-frame seam-closed turn
+(`frame_002` byte-identical to `frame_000`, bar at x 8→32→8);
+`dir-a`/`dir-b` are the same 2-frame pair in opposite order (bar 8→40 vs
+40→8). Opaque white bar on transparent black doubles as the island alpha
+mask the direction metric reads.
+
+**Why synthetic.** Per ADR 0018 bar, they pin the M6 seam metric (closing
+diff 0.0 ≤ consecutive max 63.8) and direction metric (masked centroid
+dx +32.0 vs −32.0, signs opposite by construction) before any Node is
+done. No golden 4K video needed. Generated 2026-09-26 by the AutoForge M1
+worker; regenerate with `python3 fixtures/showcase/generate_goldens.py`.
