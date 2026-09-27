@@ -86,6 +86,51 @@
   text-decoration: none;
 }
 
+.emailForm {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  animation: homeIn var(--dur-fast) var(--ease-out);
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  color: var(--on-glass-2);
+  font-size: 13px;
+}
+
+.field input {
+  min-height: 44px;
+  padding: 10px 14px;
+  font-size: 16px; /* 16 px: iOS does not zoom into the field */
+}
+
+.emailForm > button {
+  min-height: 44px;
+  padding: 10px 18px;
+  font-weight: 600;
+}
+
+.emailLinks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 16px;
+}
+
+/* Quiet text actions, still 44 px tall to a finger (spec § 11). */
+.textButton {
+  min-height: 44px;
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--on-glass);
+  font-size: 14px;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
 .problem {
   margin: 0;
   color: var(--warn);
