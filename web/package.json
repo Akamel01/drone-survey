@@ -8,6 +8,7 @@
     "start": "next start",
     "lint": "eslint",
     "test": "node --import ./scripts/test-hooks.mjs --test lib/*.test.ts",
+    "test:e2e": "node --test --test-concurrency=1 e2e/*.test.mjs",
     "db:migrate": "node scripts/migrate.mjs",
     "check:map-chrome": "node scripts/map-chrome-check.mjs",
     "check:scrollbar": "node scripts/scrollbar-check.mjs",
