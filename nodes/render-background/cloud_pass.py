@@ -32,6 +32,7 @@ MARGIN_PX = 96  # per side; the island camera's WxH window sits at the layer's c
 
 SAMPLES = render_island.K["samples"]  # 128, same as the island pass
 VOLUME_BOUNCES = 1  # Q6 fallback 1: bounded box, one volume bounce (architecture §2.6)
+VOLUME_BIASED = True  # biased ray-marching; 5.2.2 replaced the sampling enum with this bool
 VOLUME_STEP_RATE = 2.0  # "moderate": coarser than the 1.0 default, tuned by the pilot
 
 CLOUD_FEATURE = 0.25  # noise feature size, in island spans
@@ -75,6 +76,18 @@ def cloud_camera(bbox, res):
 
 
 # ─── self-test (no bpy) ─────────────────────────────────────────────────────
+class _FakeCycles:
+    """Stand-in for CyclesRenderSettings; only the knobs _cycles_volume reads."""
+
+    def __init__(self, **knobs):
+        self.__dict__.update(knobs)
+
+
+class _FakeScene:
+    def __init__(self, **knobs):
+        self.cycles = _FakeCycles(**knobs)
+
+
 def self_test():
     assert MARGIN_PX == 96, "the margin is frozen in architecture §2.6"
     assert SAMPLES == render_island.K["samples"] == 128
@@ -83,6 +96,24 @@ def self_test():
     assert output_res(render_island.TALL) == (2352, 3840)
     assert abs(_sensor_width(render_island.WIDE) - 37.8) < 1e-12  # 36 * 4032/3840
     assert _sensor_width(render_island.TALL) == render_island.SENSOR_WIDTH
+
+    # Volume API guards (H1 defect): 5.2.2 has volume_biased, no volume_sampling.
+    v522 = _FakeScene(volume_bounces=0, volume_biased=False, volume_step_rate=1.0, seed=7)
+    _cycles_volume(v522)
+    assert (v522.cycles.volume_bounces, v522.cycles.volume_biased,
+            v522.cycles.volume_step_rate, v522.cycles.seed) == (1, True, 2.0, 0)
+    legacy = _FakeScene(volume_bounces=0, volume_sampling="EQUIANGULAR", volume_step_rate=1.0)
+    _cycles_volume(legacy)
+    assert (legacy.cycles.volume_bounces, legacy.cycles.volume_sampling) == (1, "DISTANCE")
+    for missing in (dict(volume_biased=True), dict(volume_bounces=1)):
+        try:
+            _cycles_volume(_FakeScene(**missing))
+        except SystemExit as exc:
+            assert "cloud:" in str(exc), f"unclear refusal for {missing}"
+        else:
+            raise AssertionError(f"missing required volume knob accepted: {missing}")
+    print("volume: 5.2.2 volume_biased path, legacy volume_sampling path, "
+          "missing required knobs refuse")
 
     worst = 0.0
     for name, bbox in render_island._CASES:
@@ -128,15 +159,50 @@ def self_test():
 
 # ─── Blender scene: bounded volume under the shared sky ─────────────────────
 def _cycles_volume(sc):
-    """1 volume bounce, biased Distance sampling, a moderate step rate (§2.6)."""
-    sc.cycles.volume_bounces = VOLUME_BOUNCES
-    sc.cycles.volume_sampling = "DISTANCE"
-    sc.cycles.seed = 0  # explicit: same scene renders the same layer
+    """One volume bounce, biased sampling, a moderate step rate (§2.6).
+
+    The Cycles volume API drifts between Blender versions: 5.2.2 has
+    `volume_biased` and no `volume_sampling` enum, and the step-rate property
+    was renamed at some point.  Set what exists, log what was set, and fail
+    loudly only where the cost envelope cannot be held: the bounce count and
+    biased sampling are required; the step rate falls back to the default.
+    """
+    c = sc.cycles
+    applied = []
+    if not hasattr(c, "volume_bounces"):
+        raise SystemExit("cloud: cycles.volume_bounces missing; the 1-bounce "
+                         "budget (architecture §2.6) cannot be held")
+    c.volume_bounces = VOLUME_BOUNCES
+    applied.append(f"volume_bounces={VOLUME_BOUNCES}")
+    if hasattr(c, "volume_biased"):  # Blender 5.2.2+
+        c.volume_biased = VOLUME_BIASED
+        applied.append(f"volume_biased={VOLUME_BIASED}")
+    elif hasattr(c, "volume_sampling"):  # up to 5.1: enum, DISTANCE is the biased mode
+        c.volume_sampling = "DISTANCE"
+        applied.append("volume_sampling=DISTANCE")
+    else:
+        raise SystemExit("cloud: no biased/Distance volume sampling control in this "
+                         "Blender; the cost envelope cannot be held")
     for name in ("volume_step_rate", "volume_step_size"):  # renamed across versions
-        if hasattr(sc.cycles, name):
-            setattr(sc.cycles, name, VOLUME_STEP_RATE)
-            return
-    print("cloud: no volume step-rate property; Cycles defaults apply", file=sys.stderr)
+        if hasattr(c, name):
+            setattr(c, name, VOLUME_STEP_RATE)
+            applied.append(f"{name}={VOLUME_STEP_RATE}")
+            break
+    else:
+        print("cloud: no volume step-rate property; Cycles defaults apply", file=sys.stderr)
+    if hasattr(c, "seed"):
+        c.seed = 0  # explicit: same scene renders the same layer
+        applied.append("seed=0")
+    print("cloud: cycles volume " + ", ".join(applied), flush=True)
+
+
+def _output(node, *names):
+    """First output socket matching one of `names`; Blender renames sockets
+    (5.2.2's Noise Texture calls `Fac` `Factor`)."""
+    for sock in node.outputs:
+        if sock.name in names:
+            return sock
+    raise SystemExit(f"cloud: {node.bl_idname} has no {'/'.join(names)} output")
 
 
 def _cloud_material(span, zlo, zhi):
@@ -162,7 +228,7 @@ def _cloud_material(span, zlo, zhi):
     mask = nt.nodes.new("ShaderNodeMapRange")
     mask.inputs["From Min"].default_value = NOISE_WINDOW[0]
     mask.inputs["From Max"].default_value = NOISE_WINDOW[1]
-    nt.links.new(noise.outputs["Fac"], mask.inputs["Value"])
+    nt.links.new(_output(noise, "Fac", "Factor"), mask.inputs["Value"])
 
     sep = nt.nodes.new("ShaderNodeSeparateXYZ")
     nt.links.new(coords.outputs["Object"], sep.inputs["Vector"])
