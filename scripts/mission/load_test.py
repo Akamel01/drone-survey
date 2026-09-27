@@ -742,7 +742,7 @@ class CardLedgerContractTest(unittest.TestCase):
             if not isinstance(raw, dict):
                 fail(name, f"{side} must be an op object")
             kind = required(name, raw, "op")
-            if kind not in OP_KEYS:
+            if not isinstance(kind, str) or kind not in OP_KEYS:
                 fail(name, f'{side}.op must be "reserve", "release", "pool" or "verify"')
             check_keys(name, raw, OP_KEYS[kind] + (["apply_to"] if side == "after" else []))
             if kind == "reserve":

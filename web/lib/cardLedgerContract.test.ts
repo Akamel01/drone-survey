@@ -85,7 +85,7 @@ function readOp(name: string, side: "ours" | "after", raw: unknown): Op {
   }
   const op = raw as RawCase;
   const kind = required<string>(name, op, "op");
-  if (!Object.hasOwn(OP_KEYS, kind)) {
+  if (typeof kind !== "string" || !Object.hasOwn(OP_KEYS, kind)) {
     fail(name, `${side}.op must be "reserve", "release", "pool" or "verify"`);
   }
   checkKeys(name, op, side === "after" ? [...OP_KEYS[kind], "apply_to"] : OP_KEYS[kind]);
