@@ -21,6 +21,14 @@
   position: relative;
   padding: 16px;
   border-radius: 16px;
+  animation: sectionIn var(--dur-fast) var(--ease-out);
+}
+
+/* The Grid/Orbit swap replaces this Section's DOM node (the key in
+   Sidebar.tsx), so the incoming one fades in; the outgoing one leaves
+   instantly. Opacity only: no transform, no blur. */
+@keyframes sectionIn {
+  from { opacity: 0 }
 }
 
 .section h2 {
