@@ -33,7 +33,8 @@ route that reaches iOS at zero spend needs **no** vendor account, and the only p
 document is a native iOS build — the Apple Developer Program at 99 USD per membership year. Web
 Push on an installed iOS web app needs no Apple Developer Program membership (WebKit blog 13878,
 read 2026-09-27). For #234 (which architecture?): Web Push from the installed PWA is the only
-zero-spend push that appears from this product on iOS; the relay fallback removes the install
+zero-spend push that appears from this product on iOS (delivery unproven on device until the §c
+field test passes); the relay fallback removes the install
 requirement at the price of a notification in another app
 (`.autoforge/inputs/mobile-stack.md:138-141`).
 
@@ -64,8 +65,8 @@ Every route states its cost, its limits, and what the planner or host must run.
 
 | Route | Cost | Limits that matter | What must run (planner / host / operator) | Zero-spend verdict |
 |---|---|---|---|---|
-| **Web Push, sender on planner (Vercel)** | $0 — no vendor account; push services (FCM/APNs/Mozilla autopush/WNS) are free to use; the VAPID key pair is generated, not purchased | iOS 16.4+ with the web app installed to the Home Screen; permission after a direct user gesture; no silent pushes (Safari revokes permission); payload accepted ≥4,096 bytes; 404/410 prunes the subscription; APNs stores an undelivered message up to its TTL (≤30 days); `web-push` needs Node ≥16 | Planner: a route serving the VAPID **public** key, a passphrase-gated route accepting the browser's subscription, sender code plus the `web-push` dependency, VAPID private key in Vercel env (beside `DISPATCH_SECRET`). Host: nothing. Operator: install the PWA, tap to enable notifications | **YES** — but covers only the transitions the planner writes (rows 1–8, 14 of the discovery inventory); it cannot see Collected or Loaded |
-| **Web Push, sender on host (Linux)** | $0 for the service; the host's stdlib-only property changes (new Python dependencies) | Same iOS/browser limits as above; `pywebpush` pulls 5 direct dependencies (`aiohttp`, `cryptography`, `http-ece`, `requests`, `py-vapid`); the host's scripts are stdlib-only today (ADR 0016:487-493 relies on it) | Host: a send step after `collect.py` / `load.py` writes the report, the VAPID private key in `~/.config/wayfinder/*.env` (mode 600), a registry read. Planner: nothing extra | **YES** — covers the states only the host sees (9–12); the **split** (both senders, one key pair, one registry) is the recommended coverage story |
+| **Web Push, sender on planner (Vercel)** | $0 — no vendor account; push services (FCM/APNs/Mozilla autopush/WNS) are free to use; the VAPID key pair is generated, not purchased | iOS 16.4+ with the web app installed to the Home Screen; permission after a direct user gesture; no silent pushes (Safari revokes permission); payload accepted ≥4,096 bytes; 404/410 prunes the subscription; APNs stores an undelivered message up to its TTL (≤30 days); `web-push` needs Node ≥16 | Planner: a route serving the VAPID **public** key, a passphrase-gated route accepting the browser's subscription, sender code plus the `web-push` dependency, VAPID private key in Vercel env (beside `DISPATCH_SECRET`). Host: nothing. Operator: install the PWA, tap to enable notifications. Client prerequisites for this route do not exist in the repo at this commit — no PWA manifest (stable `id`), no service worker with a `push` handler (`web/app/layout.tsx` exports only metadata; `web/public` holds only `hero/`; `rg serviceWorker web` is empty) — so building them is a prerequisite of this route, tracked separately | **YES** — but covers only the transitions the planner writes (rows 1–8, 14 of the discovery inventory); it cannot see Collected or Loaded (delivery unproven on device until the §c field test passes) |
+| **Web Push, sender on host (Linux)** | $0 for the service; the host's stdlib-only property changes (new Python dependencies) | Same iOS/browser limits as above; `pywebpush` pulls 5 direct dependencies (`aiohttp`, `cryptography`, `http-ece`, `requests`, `py-vapid`); the host's scripts are stdlib-only today (ADR 0016:487-493 relies on it) | Host: a send step after `collect.py` / `load.py` writes the report, the VAPID private key in `~/.config/wayfinder/*.env` (mode 600), a registry read. Planner: nothing extra | **YES** — covers the states only the host sees (9–12); the **split** (both senders, one key pair, one registry) is the recommended coverage story (delivery unproven on device until the §c field test passes) |
 | **Store watcher as sender (B2 Event Notifications / Vercel Cron / GitHub Actions)** | B2 Event Notifications free at our volume (Class D, first 2,500/day) but **support-gated**; Vercel Cron Hobby included but minimum **once per day**; GitHub Actions 5-minute schedule ≥288 runs/day ≈ 8,640 billed minutes/month — over the private-repo free allowance (2,000–3,000) | Vercel Hobby: min 1/day, ±59 min precision; GitHub: shortest interval 5 min; B2 events: webhook only, 3-second timeout, at-least-once delivery, payload carries no object contents | Whichever service runs, plus a receiver route that answers 200 within 3 s, verifies HMAC, dedupes by `eventId` and semantic key | **NO** — no watcher is both free and timely; the writers already run at the moment of change, so a watcher adds latency and duplicate derivation for nothing |
 | **APNs direct (native iOS)** | Apple Developer Program **99 USD per membership year**; APNs itself charges nothing per notification | Payload 4 KB (5 KB VoIP); no published send quota (FCM notes APNs limits exist); token-based auth: ES256 JWT, `.p8` key, `kid`/`iss` claims, JWT exp ≤1 day, don't refresh more than once per hour | App: native build + APNs key created in the Apple Member Center (Account Holder/Admin role). Sender: provider server, HTTP/2 + TLS 1.2 POST to APNs | **NO** — the account is the wall; breaks `PRODUCT.md:48` |
 | **FCM (native Android)** | FCM is "No-cost" on the free Spark plan; no billing account required | 600k messages/minute per project default; 429 above; 240/min and 5,000/hour per Android device; collapsible burst 20 with 1 per 3 minutes refill; payload 4,096 bytes | App: FCM SDK + a Firebase project + Google Play services on the device. Sender: app server or Cloud Function using the Admin SDK or the FCM v1 API with a service-account JSON | **YES for the Android half** — an APK sideloads with no store fee; it serves no iOS need |
@@ -92,11 +93,12 @@ so **no store watcher is needed for correctness** — and no watcher is even aff
 cadence one would need (see the verdict table row and "The B2 store as a trigger" below).
 
 Why a split is forced, in one paragraph: no existing process sees every transition. The planner
-holds the only server-side B2 credentials and is gated by the Wayfinder passphrase
-(`web/lib/auth.ts:11-40`; ADR 0017:20-22); the host is unreachable from the planner —
-"residential NAT, Tailscale only" (ADR 0019:3-6). The host writes only the status objects
-(manifest, Ledger, skip list); the planner writes only the Mission records and the Specs. Planner
-transitions are request/response — the Vercel function is alive at the change. Host transitions
+holds the only B2 credentials on the Vercel side and is gated by the Wayfinder passphrase
+(`web/lib/auth.ts:11-40`; ADR 0017:20-22); the host holds its own scoped keys in
+`~/.config/wayfinder/` (README.md:116-124); the browser holds none; the host is unreachable from
+the planner — "residential NAT, Tailscale only" (ADR 0019:3-6). The host writes only the status
+objects (manifest, Ledger, skip list); the planner writes only the Mission records and the Specs.
+Planner transitions are request/response — the Vercel function is alive at the change. Host transitions
 are cron runs that already make outbound HTTPS to B2 (`scripts/mission/b2.py:63,85`). A sender at
 each writer therefore covers every transition by construction, with zero extra processes and zero
 extra polling (`.autoforge/discovery/report.md` §1 ordering note).
@@ -749,7 +751,10 @@ and an array of entries keyed by `endpoint`:
 
 Keep `endpoint` as data inside the JSON, never as the B2 object key — arbitrary URL text must not
 build store key paths (`web/lib/keys.ts:49-59` is the existing "refuse anything that could climb
-out of the prefix" guard for the analogous case). `vapid_public_key_sha256_8` exists so a
+out of the prefix" guard for the analogous case). Before any send, the sender requires `https://`
+plus a host allow-list (`*.push.apple.com`, `fcm.googleapis.com`,
+`updates.push.services.mozilla.com`, `*.notify.windows.com`) and records refused entries with a
+reason. `vapid_public_key_sha256_8` exists so a
 post-rotation send can see, without guessing, which key a subscription was created under.
 
 **Who writes it.** The browser never holds a store credential (ADR 0016:232-235), so it POSTs its
@@ -780,7 +785,9 @@ and the repo treats Class C as the scarce resource: a 30-second status poll spen
 authorizations in a day (`web/lib/b2.ts:41-45`; ADR 0021:73-77). The session cache keeps one
 authorization per key id for 12 hours (`web/lib/b2.ts:45-52`), so a send path adds no authorize per
 message. `b2_list_file_names` is Class C and "billing is per 1000 files/versions returned"
-(Backblaze API docs, read 2026-09-27); `b2_get_upload_url` and `b2_authorize_account` are Class C;
+(Backblaze API docs, read 2026-09-27); `b2_get_upload_url` is Class A; `b2_authorize_account` and
+`b2_list_file_names` are Class C (https://www.backblaze.com/cloud-storage/transaction-pricing, read
+2026-09-27);
 current pages say Class A/B/C calls are free for pay-as-you-go, while the transaction-pricing page
 still lists the 2,500/day free allowance then "$0.004 per 10,000" (pages disagree slightly; the
 design takes the stricter reading the repo already assumes). **Design consequence: read the
@@ -826,8 +833,12 @@ the file grows by one short line per notified transition, matching "Nothing is d
 
 1. **Record only after the send succeeds.** Read last-seen; compute candidate transitions; send;
    then write the new keys. If the send fails, the key stays unwritten and the failure is recorded
-   in `last_error`, so the host retries on its next cron minute and the planner retries on its next
-   related write. Writing the key before sending would turn a send failure into a permanent miss —
+   in `last_error`, but only **transient** outcomes are retried — network error, 429 honouring
+   `Retry-After`, and 5xx — with a capped attempt count and last-attempt timestamp per transition
+   key, so the "do not hammer" rule above is kept. A permanent 4xx other than 404/410 (e.g. Apple's
+   `VapidPkHashMismatch` after a key rotation on an entry that missed the re-subscribe flow) is not
+   retried: the entry is marked `blocked`/`gone` with the reason and surfaced once on the notice
+   surface. Writing the key before sending would turn a send failure into a permanent miss —
    the one direction that is not acceptable.
 2. **Across restarts:** the key lives in the store, so a restarted host or a cold Vercel function
    re-derives "seen" from the same object it already has to read.
@@ -919,6 +930,7 @@ is never silent, and never merely a code" (`scripts/mission/b2_status.py:113-114
 | iOS evicts IndexedDB / Cache Storage / website data under pressure | Offline records, the outbox, or the push subscription could be cleared | **Unverified** — no primary source. Keep the outbox small, flush when online, re-register the subscription on every launch, keep `gone_at` tombstones |
 | `notificationclick` does not fire depending on how the app was opened | Tapping a notification opens the wrong place or nothing | Field test steps 3–4 (direct answer c); copy names the Mission; the app resumes on the Missions list rather than a deep link |
 | VAPID key rotation invalidates every existing subscription | Notifications stop after any key change | RFC 8292 §4.2 requires a fresh browser subscription; re-subscribe on app start; `vapid_public_key_sha256_8` in the registry spots entries on the old key; rotation is a two-place operation under the split |
+| Origin / domain change invalidates every existing subscription | Notifications stop on the old origin, and permission must be granted again from the new one | Permissions are per web app/origin (WebKit blog 13878, read 2026-09-27); re-subscribe from the new origin, keep the old entries as `gone`; monitor when #244 or a domain decision lands |
 | Stale or expired subscription (404/410) | Sends fail silently if unhandled | Mark `gone_at`, never delete; surface "Notifications are off for this phone. Enable them again to get Loaded notices." |
 | A failed send stays silent | Violates `PRODUCT.md:66`; operator misses a Loaded | Planner notice surface + host manifest `_notice` / sender `last_error`; the store write never depends on the send |
 | Rare dedupe race sends the same notification twice | One redundant notification | Accepted: duplicate, never missed; no lock added (Implementation notes) |
@@ -957,9 +969,11 @@ as resolved rather than dropped.
 - **iOS notification action buttons** — secondary (Stack Overflow) only; treated as unsupported
   in the design, and the field test measures tap behaviour.
 - **B2 exact billing for download/upload vs "Class C"** — the repo comment says
-  `b2_authorize_account` is Class C (`web/lib/b2.ts:41-45`) and Backblaze docs confirm that plus
-  `b2_list_file_names` / `b2_get_upload_url`; the two pricing pages read disagree on whether
-  A/B/C are free outright or carry a 2,500/day allowance. The design assumes the stricter reading.
+  `b2_authorize_account` is Class C (`web/lib/b2.ts:41-45`) and Backblaze docs confirm that
+  (`b2_get_upload_url` is Class A; `b2_authorize_account` and `b2_list_file_names` are Class C —
+  https://www.backblaze.com/cloud-storage/transaction-pricing, read 2026-09-27); the two pricing
+  pages read disagree on whether A/B/C are free outright or carry a 2,500/day allowance. The
+  design assumes the stricter reading.
 - **Safari website-data eviction under storage pressure** (and with it subscription loss) — no
   primary source; carried over from `.autoforge/inputs/mobile-stack.md:362`.
 - **A field measurement of iOS delivery** — research only; the field test in direct answer (c) is
