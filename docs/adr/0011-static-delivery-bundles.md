@@ -60,3 +60,12 @@ delivery non-compliant in a way that is trivial to fix and easy to forget.
 Finally, unlisted URLs should at least carry the free mitigations: robots
 exclusion, a no-index header, and no third-party analytics that would leak the
 URL through a referrer header.
+
+## Revision, 2026-09-27
+
+A Delivery Bundle holds **at least one** deliverable kind — an Orthomosaic, a
+splat, or a Showcase. A Showcase-only Bundle is legitimate: the delivery
+contract is self-containment, and a Bundle is defined as the deliverables plus
+whatever is needed to view them (CONTEXT.md), with no minimum set. This is the
+destination tracked by map #189; the `bundle` Node's input guard follows suit
+(at least one of `--ortho` / `--splat-scene` / `--showcase`).
