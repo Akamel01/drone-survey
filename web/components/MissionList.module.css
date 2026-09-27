@@ -8,6 +8,56 @@
   gap: 10px;
 }
 
+/* Every row is wrapped in one of these. The FLIP transform lands here and
+   nowhere else, so the article's own press transition stays untouched. */
+.slot {
+  transition: transform var(--dur-base) var(--ease-out);
+}
+
+/* The dissolve (spec § 9.1): opacity and blur, no movement. Declared after
+   `.slot` because both set `transition` at the same specificity. */
+.leaving {
+  opacity: 0;
+  filter: blur(4px);
+  pointer-events: none;
+  transition:
+    opacity var(--dur-base) var(--ease-in),
+    filter var(--dur-base) var(--ease-in);
+}
+
+/* The blur-in (spec § 9.1). A from-only keyframe ends at the computed style,
+   so a stale class is invisible rather than wrong. */
+.arriving {
+  animation: rowArrive var(--dur-fast) var(--ease-out) both;
+}
+
+@keyframes rowArrive {
+  from {
+    opacity: 0;
+    filter: blur(4px);
+  }
+}
+
+/* `globals.css` kills every transition and animation under reduced motion; a
+   class-scoped `!important` outranks it (plan.module.css precedent), so the
+   two state changes are still crossfades -- just without movement or blur. */
+@media (prefers-reduced-motion: reduce) {
+  .leaving {
+    filter: none;
+    transition: opacity var(--dur-fast) var(--ease-out) !important;
+  }
+
+  .arriving {
+    animation: rowArriveSoft var(--dur-fast) var(--ease-out) both !important;
+  }
+}
+
+@keyframes rowArriveSoft {
+  from {
+    opacity: 0;
+  }
+}
+
 .bar {
   display: flex;
   flex-wrap: wrap;
