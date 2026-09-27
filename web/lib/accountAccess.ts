@@ -52,6 +52,20 @@ export async function requireApprovedAccount(request: Request): Promise<AccountG
   return { ok: true, session };
 }
 
+/** The Accounts API: an approved admin only (403 otherwise), checked on the
+ *  server from the session's role, never from anything the page sends. */
+export async function requireAdmin(request: Request): Promise<AccountGate> {
+  const gate = await requireApprovedAccount(request);
+  if (!gate.ok) return gate;
+  if ((gate.session.user as { role?: string | null }).role !== "admin") {
+    return {
+      ok: false,
+      response: Response.json({ error: "Only the operator can see and change Accounts." }, { status: 403 }),
+    };
+  }
+  return gate;
+}
+
 /** Server components: the signed-in account and its approval, or null when
  *  unconfigured, signed out, or the store is unreachable. Never throws. */
 export async function getAccount(): Promise<(User & { approved: boolean }) | null> {

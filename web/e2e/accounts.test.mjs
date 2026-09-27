@@ -21,7 +21,8 @@
 //   4  e2e-owner   T3 owner -> /plan
 //   5  e2e-other   T3 other -> pending
 //   6  e2e-owner   T3.5 planner sign-out
-// T6 closes with GET /authorize === 6 and POST /token === 6.
+//   7  e2e-remove  T4.5 the Account the operator removes
+// T6 closes with GET /authorize === 7 and POST /token === 7.
 //
 // Rate limit (D4): better-auth's default is 3 sign-in POSTs per rolling 10 s
 // for this run's 127.0.0.1; respectSignInRateLimit() mirrors that window
@@ -50,6 +51,7 @@ const IDENTITIES = [
   { id: "e2e-owner", name: "Owner Example", email: OWNER_EMAIL }, // T3 owner -> /plan
   { id: "e2e-other", name: "Other Example", email: "e2e-other@example.com" }, // T3 other -> pending
   { id: "e2e-owner", name: "Owner Example", email: OWNER_EMAIL }, // T3.5 planner sign-out
+  { id: "e2e-remove", name: "Remove Me", email: "e2e-remove@example.com" }, // T4.5 the Account the operator removes
 ];
 
 let standin;
@@ -454,6 +456,78 @@ test("a tampered session cookie is refused", async () => {
 });
 
 // ---------------------------------------------------------------------------
+// T4.5 -- Approval (#243): the operator approves and removes Accounts
+// ---------------------------------------------------------------------------
+
+test("the operator approves and removes Accounts in Settings; nobody else can", async () => {
+  // A throwaway Account for the operator to remove.
+  const doomed = await browser.newContext();
+  const doomedPage = await doomed.newPage();
+  await doomedPage.goto(`${base}/`, { waitUntil: "domcontentloaded" });
+  await clickPill(doomedPage, standin, "Continue with GitHub");
+  await waitForPending(doomedPage, IDENTITIES[6].email);
+  captured.removedUserId = (await getSession(doomed)).user.id;
+
+  // A pending Account can neither read nor change the Accounts, even by
+  // calling the API directly: the role is checked on the server.
+  const read = await doomed.request.get(`${base}/api/accounts`);
+  assert.equal(read.status(), 403, "a pending Account cannot read the Accounts");
+  const write = await doomed.request.post(`${base}/api/accounts`, {
+    data: { id: captured.githubUserId, action: "approve" },
+  });
+  assert.equal(write.status(), 403, "a pending Account cannot approve anyone");
+
+  // The operator, in Settings.
+  const page = await ownerContext.newPage();
+  await page.goto(`${base}/plan`, { waitUntil: "domcontentloaded" });
+  const accounts = page.locator("#settings-panel").getByRole("region", { name: "Accounts" });
+  const row = (email) => accounts.locator("li").filter({ hasText: email });
+  await shown(row(IDENTITIES[2].email));
+  await shown(row(IDENTITIES[6].email).getByText("Waiting for approval"));
+
+  // E2E_SHOTS=<dir>: the Accounts section at both sizes, for the pull request.
+  if (process.env.E2E_SHOTS) {
+    mkdirSync(process.env.E2E_SHOTS, { recursive: true });
+    await accounts.scrollIntoViewIfNeeded();
+    await accounts.screenshot({ path: path.join(process.env.E2E_SHOTS, "accounts-1440.png") });
+    const phone = await browser.newContext({ viewport: { width: 375, height: 812 }, isMobile: true, hasTouch: true });
+    await phone.addCookies(await ownerContext.cookies());
+    const phonePage = await phone.newPage();
+    await phonePage.goto(`${base}/plan`, { waitUntil: "domcontentloaded" });
+    await phonePage.getByRole("navigation", { name: "Show" }).getByRole("button", { name: "Settings" }).click();
+    const phoneAccounts = phonePage.getByRole("region", { name: "Accounts" });
+    await shown(phoneAccounts.getByText("Waiting for approval").first());
+    await phoneAccounts.scrollIntoViewIfNeeded();
+    await phonePage.waitForTimeout(600);
+    await phonePage.screenshot({ path: path.join(process.env.E2E_SHOTS, "accounts-375.png") });
+    await phone.close();
+  }
+
+  // Approve the GitHub Account (T2).
+  await row(IDENTITIES[2].email).getByRole("button", { name: "Approve", exact: true }).click();
+  await shown(row(IDENTITIES[2].email).getByText("Approved", { exact: true }));
+  assert.equal(await row(IDENTITIES[2].email).getByRole("button", { name: "Approve" }).count(), 0);
+
+  // Remove the throwaway Account, through the confirmation sheet.
+  await row(IDENTITIES[6].email).getByRole("button", { name: "Remove", exact: true }).click();
+  const sheet = page.getByRole("dialog");
+  await shown(sheet.getByText(/^Remove /));
+  await sheet.getByRole("button", { name: "Remove", exact: true }).click();
+  await row(IDENTITIES[6].email).waitFor({ state: "detached", timeout: 15_000 });
+  assert.equal(await getSession(doomed), null, "the removed Account is signed out everywhere");
+
+  // The API agrees.
+  const list = await ownerContext.request.get(`${base}/api/accounts`);
+  assert.equal(list.status(), 200);
+  const { accounts: rows } = await list.json();
+  assert.equal(rows.find((r) => r.email === IDENTITIES[2].email)?.approved, true);
+  assert.equal(rows.some((r) => r.email === IDENTITIES[6].email), false);
+
+  await page.close();
+  await doomed.close();
+});
+
+// ---------------------------------------------------------------------------
 // T5 -- the account gate, after the app stops (PGlite single owner)
 // ---------------------------------------------------------------------------
 
@@ -572,7 +646,7 @@ test("the database rows match every flow", async (t) => {
     assert.equal(users.rows.length, 1, "exactly one user for the GitHub email");
     assert.equal(users.rows[0].id, captured.githubUserId);
     assert.equal(users.rows[0].role, "user");
-    assert.equal(users.rows[0].approved, false);
+    assert.equal(users.rows[0].approved, true, "the operator approved it in T4.5");
 
     const accounts = await pool.query('SELECT "providerId", "accountId" FROM "account" WHERE "userId" = $1', [
       captured.githubUserId,
@@ -655,6 +729,22 @@ test("the database rows match every flow", async (t) => {
       captured.pendingUserId,
     ]);
     assert.equal(members.rows[0]?.role, "owner");
+  });
+
+  await t.test("the removed Account: no user, sessions, sign-in links or Workspace", async () => {
+    const id = captured.removedUserId;
+    assert.ok(id, "T4.5 captured the removed Account");
+    for (const [table, column] of [
+      ["user", "id"],
+      ["session", '"userId"'],
+      ["account", '"userId"'],
+      ["member", '"userId"'],
+    ]) {
+      const { rows } = await pool.query(`SELECT count(*)::int AS n FROM "${table}" WHERE ${column} = $1`, [id]);
+      assert.equal(rows[0].n, 0, `no ${table} row is left for the removed Account`);
+    }
+    const orgs = await pool.query('SELECT id FROM "organization" WHERE slug = $1', [`u-${id}`]);
+    assert.equal(orgs.rows.length, 0, "its own Workspace is gone");
   });
 
   // The identity queue was consumed exactly (R3).

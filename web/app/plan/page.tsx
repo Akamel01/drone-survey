@@ -350,6 +350,7 @@ export default function PlanPage() {
           sites={sites}
           editing={editing}
           onNameChange={(name) => setEditing((e) => ({ ...e, name }))}
+          onNotice={showNotice}
           />
         </section>
       </div>

@@ -10,6 +10,8 @@ import { isDrawing, type DrawMode } from "./MapPane";
 import styles from "./Sidebar.module.css";
 import { authClient, signOutToHome } from "@/lib/authClient";
 import { accountLabel } from "@/lib/home";
+import AccountsSection from "./AccountsSection";
+import type { NoticePayload } from "./Notice";
 
 interface SidebarProps {
   spec: MissionSpec;
@@ -26,6 +28,8 @@ interface SidebarProps {
   /** The stored Mission the editor is working on, and its Mission Name. */
   editing: Editing;
   onNameChange: (name: string) => void;
+  /** Where Settings reports an action's result (the Accounts section's). */
+  onNotice?: (p: Omit<NoticePayload, "key">) => void;
 }
 
 // Plain metric area: m² under a square kilometre, km² above.
@@ -183,6 +187,7 @@ export default function Sidebar({
   sites,
   editing,
   onNameChange,
+  onNotice,
 }: SidebarProps) {
   const flight = spec.flight;
   const camera = spec.camera;
@@ -699,6 +704,8 @@ export default function Sidebar({
           <span className="mono">{preview.start_corner || "—"}</span>
         </div>
       </Section>
+
+      <AccountsSection onNotice={onNotice} />
 
       <SignedInLine />
 
