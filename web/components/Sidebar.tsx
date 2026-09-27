@@ -274,11 +274,13 @@ export default function Sidebar({
             {rings.map((a, i) => {
               const { deg, clamped } = orbitTilt(a, orbit.target_height_m, orbit.radius_m);
               const finite = Number.isFinite(deg);
-              // Sign applied after rounding, so a ring level with the subject
+              // Sign taken from the rounded value, so a ring level with the
+              // subject — or a hair below it, where raw deg is in (-0.5, 0) —
               // reads "tilt 0°", never "tilt −0°" (griller DP3).
-              const tilt = finite ? `${deg < 0 ? "−" : ""}${Math.abs(Math.round(deg))}°` : "—";
+              const rounded = Math.round(deg);
+              const tilt = finite ? `${rounded < 0 ? "−" : ""}${Math.abs(rounded)}°` : "—";
               const tiltLabel = finite
-                ? `tilt ${Math.round(deg)} degrees${clamped ? ", at the gimbal's limit" : ""}`
+                ? `tilt ${rounded} degrees${clamped ? ", at the gimbal's limit" : ""}`
                 : "tilt unknown";
               return (
                 <Fragment key={i}>
