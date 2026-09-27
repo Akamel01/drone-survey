@@ -1,12 +1,14 @@
 /* The Notice: the reference's Live Activity, the black shape at the notch
    (spec § 8). Pure black, no transparency (spec § 5); fixed top-centre below
    the safe-area inset (spec § 11); above the panels (z 10 beats their z 3)
-   with pointer events only on itself. Expanded is a fixed 355 px box centred
-   on the viewport -- over the map on a wide screen, never shrink-wrapped onto
-   one panel; compact is the content-hugging pill from the reference's second
-   frame. Press is UI-7's formula (MapPane .pill:active) driven by the shared
-   tokens, one rule for the notice tap and the close button; full unification
-   stays with UI-11 #187. */
+   with pointer events only on itself.
+
+   The root always carries the expanded box's geometry and the visible extent
+   is a measured clip-path (D2), so arrival, expand and collapse are clip
+   geometry -- never a width/height transition (spec § 9.3). Both layers stay
+   mounted and crossfade inside it (D4). Press is UI-7's formula (MapPane
+   .pill:active) driven by the shared tokens, so the root's `transform` stays
+   free for it (D9). */
 
 .notice {
   position: fixed;
@@ -14,42 +16,156 @@
   left: 0;
   right: 0;
   margin-inline: auto;
-  width: max-content;
+  width: min(355px, calc(100vw - 38px));
   z-index: 10;
-  max-width: min(355px, calc(100vw - 38px));
   background: var(--black);
   color: var(--on-glass);
   border-radius: 20px;
   cursor: pointer;
   pointer-events: auto;
+  transform-origin: top center;
+  /* Resting compact: the pill's measured rect, fully round. The measured px
+     are written by the layout effect from the real pill rect (D3), so the
+     clip always matches the pill whatever the payload/font. */
+  clip-path: inset(0 var(--px) var(--pb) var(--px) round 999px);
   transition:
     transform var(--dur-press) var(--ease-out),
-    opacity 200ms var(--ease-in);
+    clip-path var(--dur-base) var(--ease-in);
+  /* Mount-only arrival (spec §9.1 row 1): the clip widens from 60% of the
+     pill, 200ms ease-out. The per-payload remount replays it (D7); the
+     failure's 200ms auto-expand lands exactly on its end, same end values. */
+  animation: pillArrive 200ms var(--ease-out);
 }
 
+/* Expanded (spec §9.1 row 3): the whole panel, radius 20 (D11 keeps UI-8's
+   20; §7's 44 belongs to parent #176), 500ms --ease-emphasised out of the
+   pill. Collapse is this class's removal -- the base rule's 250ms --ease-in. */
 .expanded {
-  width: min(355px, calc(100vw - 38px));
-  padding: 14px 56px 14px 18px;
+  clip-path: inset(0 0 0 0 round 20px);
+  transition:
+    transform var(--dur-press) var(--ease-out),
+    clip-path 500ms var(--ease-emphasised);
 }
 
-/* Compact pill (reference second frame): badge + result word + mission name
-   in the dark capsule. The result word is never truncated; a long mission
-   name gives way inside the capsule instead. The close control hides here --
-   Escape and a tap back to expanded still dismiss. */
-.compact {
+@keyframes pillArrive {
+  from {
+    clip-path: inset(0 var(--nx) var(--pb) var(--nx) round 999px);
+  }
+  to {
+    clip-path: inset(0 var(--px) var(--pb) var(--px) round 999px);
+  }
+}
+
+/* The compact pill layer (CR3): absolutely positioned, top-aligned and
+   centred, so its measured rect is exactly the clip's resting rect. The
+   result word is never truncated; a long mission name gives way inside the
+   capsule instead. */
+.compactLayer {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  margin-inline: auto;
+  width: max-content;
+  max-width: 100%;
   display: flex;
   align-items: center;
   gap: 10px;
-  border-radius: 999px;
+  /* §11's 44px touch floor: the pill is the toggle target (grilling §6). */
+  min-height: 44px;
   padding: 7px 7px 7px 14px;
+  border-radius: 999px;
   overflow: hidden;
+  opacity: 1;
+  transition: opacity var(--dur-fast) var(--ease-in);
 }
 
-/* The leave beat: a short ease-in fade, exits faster than entrances (§ 9.3).
-   Reduced-motion needs no override here -- globals.css already zeroes every
-   ordinary element's transition, so this simply appears and disappears. */
-.leaving {
+/* The expanded layer is in flow and defines the box height at all times. */
+.expandedLayer {
+  padding: 14px 56px 14px 18px;
   opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--dur-fast) var(--ease-in);
+}
+
+/* Layers crossfade while the clip grows (D4): --ease-out expanding,
+   --ease-in collapsing; only the visible layer takes pointer events (D5). */
+.expanded .compactLayer {
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--dur-fast) var(--ease-out);
+}
+
+.expanded .expandedLayer {
+  opacity: 1;
+  pointer-events: auto;
+  transition: opacity var(--dur-fast) var(--ease-out);
+}
+
+/* Expanded content arrives staggered (spec §9.1 row 4): 150ms each, blur
+   4px -> 0, delays 0 / --stagger / --stagger / 2x --stagger. Scoped to
+   .expanded so it restarts on every expand; blur stays on the content
+   children, never the box/wrapper (R6). */
+.expanded .head,
+.expanded .mission,
+.expanded .body,
+.expanded .close {
+  animation: contentIn var(--dur-fast) var(--ease-out) backwards;
+}
+
+.expanded .mission,
+.expanded .body {
+  animation-delay: var(--stagger);
+}
+
+.expanded .close {
+  animation-delay: calc(var(--stagger) * 2);
+}
+
+@keyframes contentIn {
+  from {
+    opacity: 0;
+    filter: blur(4px);
+  }
+  to {
+    opacity: 1;
+    filter: blur(0);
+  }
+}
+
+/* The title wipe (spec §9.1 row 2): the compact short title is revealed
+   left->right over 500ms --ease-out. Mount-scoped, so it never replays on
+   collapse. */
+.wipe {
+  display: inline-block;
+  animation: titleWipe 500ms var(--ease-out);
+}
+
+@keyframes titleWipe {
+  from {
+    clip-path: inset(0 100% 0 0);
+  }
+  to {
+    clip-path: inset(0 0 0 0);
+  }
+}
+
+/* One leave beat for every dismissal -- the 4s timer, the close button and
+   Escape (D6): opacity + 4px blur, 250ms --ease-in, no movement. The class
+   persists the last geometry (CR2), so the dissolve never moves the box. */
+.leaving {
+  animation: noticeLeave var(--dur-base) var(--ease-in) forwards;
+}
+
+@keyframes noticeLeave {
+  from {
+    opacity: 1;
+    filter: blur(0);
+  }
+  to {
+    opacity: 0;
+    filter: blur(4px);
+  }
 }
 
 /* The header row both states share: round icon badge, white glyph. Success
@@ -159,7 +275,9 @@
   color: var(--on-glass);
 }
 
-.compact .close {
+/* Hidden unless expanded, so a compact (or leaving-from-compact) notice
+   holds no focusable element -- UI-8's Tab order (D5). */
+.notice:not(.expanded) .close {
   display: none;
 }
 
@@ -173,4 +291,58 @@
 
 .close:hover {
   filter: brightness(1.15);
+}
+
+/* Reduced motion (spec §12, D8): geometry snaps to its final state and only
+   150ms opacity crossfades remain. !important outranks the global kill-all
+   in globals.css (a class beats `*`), the MapPane precedent. */
+@media (prefers-reduced-motion: reduce) {
+  .notice {
+    animation: none !important;
+    transition: transform var(--dur-press) var(--ease-out) !important;
+  }
+
+  .compactLayer,
+  .expandedLayer {
+    transition: opacity 150ms ease-out !important;
+  }
+
+  /* Arrival keeps its fade, never its clip growth. */
+  .compactLayer {
+    animation: noticeFade 150ms ease-out !important;
+  }
+
+  /* The shorthand kills the stagger delays; opacity only, no blur. */
+  .expanded .head,
+  .expanded .mission,
+  .expanded .body,
+  .expanded .close {
+    animation: noticeFade 150ms ease-out !important;
+  }
+
+  .wipe {
+    animation: none !important;
+  }
+
+  .leaving {
+    animation: noticeFadeOut 150ms ease-out forwards !important;
+  }
+}
+
+@keyframes noticeFade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes noticeFadeOut {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
 }
