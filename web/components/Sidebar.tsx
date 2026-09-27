@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, useEffect, useRef, useState, type ReactNode } from "react";
+import { Children, cloneElement, Fragment, isValidElement, useEffect, useId, useRef, useState, type ReactElement, type ReactNode } from "react";
 import { newSiteId, type MissionSpec, type MissionType, type TurnMode } from "@/lib/spec";
 import { orbitTilt, type Preview } from "@/lib/mission";
 import { MISSION_NAME_MAX, missionNameProblem } from "@/lib/missionRecords";
@@ -8,6 +8,8 @@ import { siteTwin, type SiteChoice } from "@/lib/missionView";
 import type { Editing } from "@/app/plan/page";
 import { isDrawing, type DrawMode } from "./MapPane";
 import styles from "./Sidebar.module.css";
+import { authClient, signOutToHome } from "@/lib/authClient";
+import { accountLabel } from "@/lib/home";
 
 interface SidebarProps {
   spec: MissionSpec;
@@ -135,11 +137,30 @@ function Field({
   info?: ReactNode;
   children: ReactNode;
 }) {
+  // The control sits outside the <label> (the label row also holds the info
+  // button), so name it explicitly from the label text alone (UI-12 audit: the
+  // Altitude slider had no accessible name).
+  const labelId = useId();
+  type Named = { "aria-label"?: string; "aria-labelledby"?: string };
+  const kids = Children.toArray(children);
+  const first = kids.findIndex(
+    (child) =>
+      isValidElement<Named>(child) &&
+      (child.type === "input" || child.type === "select") &&
+      !child.props["aria-label"] &&
+      !child.props["aria-labelledby"],
+  );
+  const control =
+    first === -1
+      ? children
+      : kids.map((child, i) =>
+          i === first ? cloneElement(child as ReactElement<Named>, { "aria-labelledby": labelId }) : child,
+        );
   return (
     <div className={styles.field}>
       <div className={styles.fieldHead}>
         <label>
-          {label}
+          <span id={labelId}>{label}</span>
           {info ? <Info>{info}</Info> : null}
         </label>
         <span className={`mono ${styles.value}`}>
@@ -147,7 +168,7 @@ function Field({
           {unit ? ` ${unit}` : ""}
         </span>
       </div>
-      {children}
+      {control}
     </div>
   );
 }
@@ -679,7 +700,23 @@ export default function Sidebar({
         </div>
       </Section>
 
+      <SignedInLine />
+
     </aside>
+  );
+}
+
+function SignedInLine() {
+  const { data, error } = authClient.useSession();
+  if (error || !data?.user) return null;
+  const { name, email } = data.user;
+  return (
+    <div className={styles.accountLine}>
+      <span className={styles.accountText}>Signed in as {accountLabel(name, email)} ·</span>
+      <button type="button" onClick={() => void signOutToHome()}>
+        Sign out
+      </button>
+    </div>
   );
 }
 

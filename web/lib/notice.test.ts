@@ -2,8 +2,8 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 
 import {
+  ARRIVAL_MS,
   COLLAPSE_MS,
-  COMPACT_BEAT_MS,
   COMPACT_TITLE,
   DISMISS_MS,
   LEAVE_MS,
@@ -22,39 +22,35 @@ import { describeSave } from "./missionView.ts";
 
 // --- timing: spec §9.1, mirrored from Notice.tsx -------------------------------
 
-test("collapse delay is 4s, leave is 200ms", () => {
+test("arrival beat is 200ms, leave is 250ms, dismiss is collapse + leave", () => {
   assert.equal(COLLAPSE_MS, 4000);
-  assert.equal(COMPACT_BEAT_MS, 250);
-  assert.equal(LEAVE_MS, 200);
-  assert.equal(DISMISS_MS, 4450);
+  assert.equal(ARRIVAL_MS, 200);
+  assert.equal(LEAVE_MS, 250);
+  assert.equal(DISMISS_MS, 4250);
 });
 
-test("success starts expanded and collapses at 4s", () => {
-  assert.equal(initialPhase(), "expanded");
-  assert.equal(phaseAt(0, false), "expanded");
-  assert.equal(phaseAt(COLLAPSE_MS - 1, false), "expanded");
-  assert.equal(phaseAt(COLLAPSE_MS, false), "compact");
-});
-
-test("compact holds a brief beat, then the notice leaves and dismisses", () => {
-  assert.equal(phaseAt(COLLAPSE_MS + COMPACT_BEAT_MS - 1, false), "compact");
-  assert.equal(phaseAt(COLLAPSE_MS + COMPACT_BEAT_MS, false), "leaving");
+test("every notice arrives compact; a success leaves at 4s", () => {
+  assert.equal(initialPhase(), "compact");
+  assert.equal(phaseAt(0, false), "compact");
+  assert.equal(phaseAt(COLLAPSE_MS - 1, false), "compact");
+  assert.equal(phaseAt(COLLAPSE_MS, false), "leaving");
   assert.equal(phaseAt(DISMISS_MS - 1, false), "leaving");
   assert.equal(dismissAt(false), DISMISS_MS);
 });
 
-test("failure never times out: expanded at any age, no dismiss scheduled", () => {
-  assert.equal(phaseAt(0, true), "expanded");
-  assert.equal(phaseAt(COLLAPSE_MS, true), "expanded");
+test("failure auto-expands at 200ms and never times out", () => {
+  assert.equal(phaseAt(0, true), "compact");
+  assert.equal(phaseAt(ARRIVAL_MS - 1, true), "compact");
+  assert.equal(phaseAt(ARRIVAL_MS, true), "expanded");
   assert.equal(phaseAt(30000, true), "expanded");
   assert.equal(dismissAt(true), null);
 });
 
-test("a superseding payload restarts from expanded (timers are per payload)", () => {
+test("a superseding payload restarts from compact (timers are per payload)", () => {
   // phaseAt is pure in elapsed-since-payload: a new payload means elapsed 0,
   // which is how the component's cleared timers + key remount reset the cycle.
-  assert.equal(phaseAt(0, false), "expanded");
-  assert.equal(phaseAt(0, true), "expanded");
+  assert.equal(phaseAt(0, false), "compact");
+  assert.equal(phaseAt(0, true), "compact");
 });
 
 test("tap toggles compact/expanded; a leaving notice stays leaving", () => {

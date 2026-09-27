@@ -347,7 +347,8 @@ export function liveSpecKeys(rows: MissionRow[]): Set<string> {
  *
  *  This is what actually frees the Card: `cardUnavailable` reads `flown_at`,
  *  so marking Flown and releasing are the same act, and unmarking takes the
- *  Card back (ADR 0022). Returns a new Ledger; never mutates. */
+ *  Card back (ADR 0022). Unmarking is exactly `null`: a falsy-but-present
+ *  value is still a mark. Returns a new Ledger; never mutates. */
 export function withFlownMark(ledger: CardLedger, spec_key: string, at: string | null): CardLedger {
   const holdings: Record<string, CardHolding> = {};
   for (const [card, held] of Object.entries(ledger.holdings)) {
@@ -359,14 +360,14 @@ export function withFlownMark(ledger: CardLedger, spec_key: string, at: string |
     // Removed rather than set false: absent is "not answered", which is not
     // the same claim as "did not fly".
     delete rest.flown_at;
-    holdings[card] = at ? { ...rest, flown_at: at } : rest;
+    holdings[card] = at !== null ? { ...rest, flown_at: at } : rest;
   }
   return { ...ledger, holdings };
 }
 
 export type LedgerMerge = { ok: true; ledger: CardLedger } | { ok: false; reason: string };
 
-function same(a: CardHolding | undefined, b: CardHolding | undefined): boolean {
+function same(a: unknown, b: unknown): boolean {
   return JSON.stringify(a ?? null) === JSON.stringify(b ?? null);
 }
 
@@ -376,10 +377,14 @@ function same(a: CardHolding | undefined, b: CardHolding | undefined): boolean {
  * The store has no compare-and-swap, so a write can be overwritten by another
  * writer that read before it landed -- and both are told they succeeded. Two
  * Dispatches racing lost a Reservation exactly that way (#152). Only the
- * Cards we changed are checked: anything else in `after` is someone else's
- * business, and a later writer who kept our change is not a conflict.
+ * fields we changed are checked -- the pool, when verification last happened,
+ * and the Cards: anything else in `after` is someone else's business, and a
+ * later writer who kept our change is not a conflict.
  */
 export function changeSurvived(base: CardLedger, next: CardLedger, after: CardLedger): boolean {
+  for (const key of ["pool", "verified_at"] as const) {
+    if (!same(base[key], next[key]) && !same(after[key], next[key])) return false;
+  }
   const cards = new Set([...Object.keys(base.holdings), ...Object.keys(next.holdings)]);
   for (const card of cards) {
     if (same(base.holdings[card], next.holdings[card])) continue;

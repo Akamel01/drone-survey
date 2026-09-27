@@ -51,7 +51,16 @@
   align-items: center;
 }
 
+/* 18 px to the eye, 44 px to a finger (spec § 11): the hit area is a
+   transparent ring around the glyph. */
+.info::before {
+  content: "";
+  position: absolute;
+  inset: -13px;
+}
+
 .info {
+  position: relative;
   appearance: none;
   -webkit-appearance: none;
   display: inline-flex;
@@ -352,4 +361,17 @@
 .sidebar input[type="checkbox"]:checked::after {
   background: var(--ink);
   transform: translate(20px, -50%);
+}
+
+.accountLine {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 0 16px;
+}
+
+.accountText {
+  color: var(--on-glass-2);
+  font-size: 12px;
 }

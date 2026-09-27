@@ -197,6 +197,23 @@ def with_release(ledger: dict, spec_key: str) -> dict:
     return {**ledger, "holdings": holdings}
 
 
+def with_flown_mark(ledger: dict, spec_key: str, at: str | None) -> dict:
+    """Mark every holding of a Spec Flown, or take the mark back when `at` is
+    None. The planner makes the mark and the host holds the rule so both
+    languages assert the same one. Unmarking deletes `flown_at` rather than
+    falsifying it: absent is "not answered", not the same claim as "did not
+    fly". Returns a new Ledger; never mutates. (Contract-only: no call site.)
+    """
+    holdings = {}
+    for card, held in ledger.get("holdings", {}).items():
+        if held["spec_key"] != spec_key:
+            holdings[card] = held
+            continue
+        rest = {k: v for k, v in held.items() if k != "flown_at"}
+        holdings[card] = {**rest, "flown_at": at} if at is not None else rest
+    return {**ledger, "holdings": holdings}
+
+
 def cards_for(ledger: dict, spec_key: str) -> list[dict]:
     """The Cards a Spec holds, in flight order. Empty means no Reservation."""
     return sorted((h for h in ledger.get("holdings", {}).values() if h["spec_key"] == spec_key),
@@ -375,6 +392,7 @@ def _change_survived_check() -> None:
     assert not change_survived(base, ours, theirs), "an overwrite from before ours landed erased ours"
     assert change_survived(base, ours, both), "a later writer who kept ours is not a conflict"
     assert not change_survived(base, {**base, "pool": ["A"]}, base), "a pool change undone is lost"
+    assert not change_survived(base, merge_verified(base, "t1"), base), "a verification stamp undone is lost"
 
 
 def _fixture_check() -> None:
