@@ -10,6 +10,7 @@
 // One-time browser install on a clean machine (playwright-core ships no
 // browser): `npx playwright-core install chromium`.
 import assert from "node:assert/strict";
+import { mkdirSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { chromium } from "playwright-core";
@@ -17,8 +18,11 @@ import { chromium } from "playwright-core";
 const BASE = process.argv[2] ?? "http://127.0.0.1:3101";
 const SHOTS = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
-  "../../docs/ui-theme/screenshots/ui-7",
+  "../../docs/ui-theme/screenshots/ui-13",
 );
+// Playwright writes files but will not create parents, so make the shot dir up
+// front (a fresh clone has no ui-13 directory yet).
+mkdirSync(SHOTS, { recursive: true });
 
 // Both buttons are icon-led: the accessible name carries what the icons show.
 const baseBtn = (page) => page.getByRole("button", { name: /^Base map: / }).first();
@@ -32,7 +36,7 @@ const focusedName = (page) => page.evaluate(() => document.activeElement?.getAtt
 async function openPlan(context, viewport) {
   const page = await context.newPage();
   await page.setViewportSize(viewport);
-  await page.goto(`${BASE}/plan`, { waitUntil: "networkidle" });
+  await page.goto(`${BASE}/plan`, { waitUntil: "load" });
   // Narrow screens open on the Missions view; switch to the map first.
   const mapTab = page.getByRole("navigation", { name: "Show" }).getByRole("button", { name: "Map" });
   if (await mapTab.isVisible()) await mapTab.click();
@@ -40,6 +44,75 @@ async function openPlan(context, viewport) {
   // Let the satellite tiles land so the evidence shots show the real basemap.
   await page.waitForTimeout(2500);
   return page;
+}
+
+// AC1: each menu sizes to its widest item and stays inside the viewport. The
+// panel's own 500ms opening scale would skew the box, so wait for its
+// animations to settle before measuring. The 2px tolerance absorbs subpixel
+// rounding only -- the old 208px floor leaves a ~122px band, far outside it.
+async function assertMenuHugsContent(page, viewportName) {
+  for (const [label, open, menu] of [
+    ["Base map", baseBtn, baseMenu],
+    ["Overlays", overlaysBtn, overlaysMenu],
+  ]) {
+    await open(page).click();
+    await menu(page).waitFor();
+    await menu(page)
+      .evaluate((el) => Promise.all(el.getAnimations().map((a) => a.finished)))
+      .catch(() => {});
+    const m = await menu(page).evaluate((el) => {
+      const r = el.getBoundingClientRect();
+      const menuPad = (parseFloat(getComputedStyle(el).paddingLeft) || 0) * 2; // 6px each side
+      const items = [...el.querySelectorAll('[role^="menuitem"]')];
+      // An item is stretched to the panel (width:100%), so its own box says
+      // nothing about how wide its contents need to be. Sum the item's flex
+      // runs instead -- a child element's rect, or a text node's range rect
+      // (a range over the whole button collapses to the last text run) -- plus
+      // the gaps between them and the item's own padding.
+      const content = Math.max(
+        ...items.map((it) => {
+          const cs = getComputedStyle(it);
+          const pad = (parseFloat(cs.paddingLeft) || 0) + (parseFloat(cs.paddingRight) || 0);
+          const gap = parseFloat(cs.gap) || 0;
+          const runs = [...it.childNodes].filter(
+            (n) =>
+              n.nodeType === Node.ELEMENT_NODE ||
+              (n.nodeType === Node.TEXT_NODE && n.textContent.trim()),
+          );
+          const inner = runs.reduce((sum, n) => {
+            if (n.nodeType === Node.ELEMENT_NODE) return sum + n.getBoundingClientRect().width;
+            const range = document.createRange();
+            range.selectNodeContents(n);
+            return sum + range.getBoundingClientRect().width;
+          }, 0);
+          return inner + gap * Math.max(0, runs.length - 1) + pad;
+        }),
+      );
+      return {
+        width: r.width,
+        left: r.left,
+        right: r.right,
+        content,
+        menuPad,
+        vw: window.innerWidth,
+      };
+    });
+    const band = m.width - (m.content + m.menuPad);
+    assert.ok(
+      band <= 2,
+      `${viewportName} ${label}: ${band.toFixed(1)}px empty band beside the items ` +
+        `(menu ${m.width.toFixed(1)}, content ${m.content.toFixed(1)})`,
+    );
+    assert.ok(
+      m.left >= 0 && m.right <= m.vw,
+      `${viewportName} ${label}: menu [${m.left.toFixed(1)}, ${m.right.toFixed(1)}] escapes the ${m.vw}px viewport`,
+    );
+    console.log(
+      `${viewportName} ${label}: menu ${m.width.toFixed(1)}px, content ${m.content.toFixed(1)}px, band ${band.toFixed(1)}px`,
+    );
+    await page.keyboard.press("Escape");
+    await menu(page).waitFor({ state: "hidden" });
+  }
 }
 
 async function mouseAndKeyboard(page) {
@@ -167,14 +240,18 @@ async function shots(browser, label, viewport, mobile) {
 const browser = await chromium.launch();
 try {
   const desktop = await browser.newContext({ viewport: { width: 1440, height: 900 } });
-  await mouseAndKeyboard(await openPlan(desktop, { width: 1440, height: 900 }));
+  const desktopPage = await openPlan(desktop, { width: 1440, height: 900 });
+  await mouseAndKeyboard(desktopPage);
+  await assertMenuHugsContent(desktopPage, "1440x900");
   await desktop.close();
   const mobile = await browser.newContext({
     viewport: { width: 375, height: 812 },
     hasTouch: true,
     isMobile: true,
   });
-  await touch(await openPlan(mobile, { width: 375, height: 812 }));
+  const mobilePage = await openPlan(mobile, { width: 375, height: 812 });
+  await touch(mobilePage);
+  await assertMenuHugsContent(mobilePage, "375x812");
   await mobile.close();
   await shots(browser, "1440", { width: 1440, height: 900 }, false);
   await shots(browser, "375", { width: 375, height: 812 }, true);
