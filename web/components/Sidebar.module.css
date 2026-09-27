@@ -1,61 +1,71 @@
 .sidebar {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
   width: 360px;
   flex: none;
   height: 100%;
   overflow-y: auto;
-  background: var(--canopy-700);
-  border-left: 1px solid var(--glass-edge);
+  background: transparent;
   padding: 16px;
 }
 
-/* The panel scrolls, so it clips sideways too. Anything that pops out has to be
-   measured from a box as wide as the panel, never from the 15px icon. */
+/* Each Section is its own smoke-glass group (spec § 5): the same material as
+   the floating panel it sits inside, applied a second time. Doubling it does
+   not just look layered -- measured against the brightest backdrop the panel
+   can sit on (the wide screen's #cfcfcf stub tile, the phone's blurred hero
+   still), one layer of smoke glass does not reliably clear 4.5:1 for white
+   text; two does, with margin, regardless of what is behind the panel. See
+   the ticket report for the measured ratios. */
 .section {
   position: relative;
-  margin-bottom: 24px;
-  padding-bottom: 20px;
-  border-bottom: 1px solid var(--glass-edge);
-}
-
-.section:last-child {
-  border-bottom: none;
+  padding: 16px;
+  border-radius: 16px;
 }
 
 .section h2 {
   display: flex;
   align-items: center;
-  font-size: 12px;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  color: var(--on-glass-3);
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--on-glass-2);
   margin: 0 0 12px;
 }
 
 /* Explanation on demand: worth reading once, not worth occupying the panel
-   permanently. Keyboard focus reveals it as well as hover. */
+   permanently. Hover and keyboard focus reveal it (desktop); a tap toggles it
+   open via Info's own state (touch) -- see Sidebar.tsx. */
+/* Not itself positioned: the bubble's containing block must stay the field
+   or section around it, so it spans that full width rather than the width of
+   this small inline wrapper. */
+.infoWrap {
+  display: inline-flex;
+  align-items: center;
+}
+
 .info {
+  appearance: none;
+  -webkit-appearance: none;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   flex: none;
-  width: 15px;
-  height: 15px;
+  width: 18px;
+  height: 18px;
   margin-left: 6px;
+  padding: 0;
   border: 1px solid var(--glass-edge);
   border-radius: 50%;
-  color: var(--on-glass-3);
-  font-size: 10px;
-  font-style: italic;
-  text-transform: none;
-  letter-spacing: 0;
-  cursor: help;
+  background: transparent;
+  color: var(--on-glass-2);
+  font: italic 500 11px/1 var(--sans);
+  cursor: pointer;
 }
 
 .info:hover,
 .info:focus-visible {
-  border-color: var(--warn);
-  color: var(--warn);
-  outline: none;
+  border-color: var(--on-glass);
+  color: var(--on-glass);
 }
 
 .infoBubble {
@@ -71,9 +81,6 @@
   box-shadow: 0 8px 20px rgba(0, 0, 0, 0.45);
   color: var(--on-glass-2);
   font: 400 12px/1.55 var(--sans);
-  font-style: normal;
-  text-transform: none;
-  letter-spacing: 0;
   text-align: left;
   opacity: 0;
   visibility: hidden;
@@ -82,9 +89,9 @@
   pointer-events: none;
 }
 
-.info:hover .infoBubble,
-.info:focus .infoBubble,
-.info:focus-within .infoBubble {
+.info:hover ~ .infoBubble,
+.info:focus-visible ~ .infoBubble,
+.infoBubble[data-open] {
   opacity: 1;
   visibility: visible;
   transform: translateY(0);
@@ -110,82 +117,61 @@
 }
 
 .fieldHead label {
-  color: var(--on-glass-3);
+  color: var(--on-glass-2);
 }
 
 .value {
   color: var(--on-glass-2);
 }
 
+/* Raised from --on-glass-3 (measured 4.28:1 at worst against this panel's own
+   background -- short of 4.5:1) to --on-glass-2, which clears it with margin
+   in every measured case. */
 .hint {
   font-size: 12px;
-  color: var(--on-glass-3);
+  color: var(--on-glass-2);
   margin-top: 2px;
 }
 
+/* --warn is kept for every operational warning across the app (spec § 3.2),
+   but as plain text on glass it does not reach 4.5:1 against the brightest
+   backdrop this panel can sit on. A small solid-ish scrim behind it fixes
+   that without touching the shared warning colour. */
 .warnHint {
-  font-size: 12px;
-  color: var(--warn);
+  display: inline-block;
   margin-top: 4px;
+  padding: 5px 9px;
+  border-radius: 10px;
+  background: rgb(0 0 0 / 0.28);
+  border: 1px solid rgb(224 169 79 / 0.4);
+  color: var(--warn);
+  font-size: 12px;
+  line-height: 1.4;
 }
 
-.modeButtons {
-  display: flex;
-  gap: 6px;
-  margin-bottom: 10px;
-  flex-wrap: wrap;
-}
-
-/* Shape is a mutually exclusive choice; commands are actions. Keeping them
-   visually different is what stops the row reading as one undifferentiated set. */
+/* Segmented pills (spec § 8): plain pill buttons, reusing the app's shared
+   "white pill, dark ink when on" pattern (globals.css `button` / `.active`)
+   rather than a bespoke divided control. */
 .segmented {
   display: flex;
+  gap: 8px;
   width: 100%;
-  border: 1px solid var(--glass-edge);
-  border-radius: 6px;
-  overflow: hidden;
-  background: var(--canopy-700);
 }
 
-.segment,
-.segmentOn {
+.segmented > button {
   flex: 1;
-  border: none;
-  border-radius: 0;
-  padding: 7px 8px;
-  background: transparent;
-  color: var(--on-glass-3);
-  transition: background 120ms ease-out, color 120ms ease-out;
+  min-height: 44px;
+  font-weight: 500;
 }
 
-.segment + .segment,
-.segment + .segmentOn,
-.segmentOn + .segment {
-  border-left: 1px solid var(--glass-edge);
-}
-
-.segment:hover {
-  color: var(--on-glass-2);
-  background: var(--canopy-700);
-}
-
-.segmentOn {
-  background: #fff;
-  color: var(--on-glass);
-  color: #06110f;
+.segmented > button:global(.active) {
   font-weight: 600;
-}
-/* P1/P5: align with new tokens */
-.segmentOn {
-  background: var(--pill-active);
-  color: var(--on-glass);
 }
 
 .groupLabel {
-  font-size: 11px;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  color: var(--on-glass-3);
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--on-glass-2);
   margin: 14px 0 6px;
 }
 
@@ -217,23 +203,137 @@
 }
 
 .ringUnit {
-  color: var(--on-glass-3);
+  color: var(--on-glass-2);
   font-size: 12px;
 }
 
 .readout {
   display: flex;
   justify-content: space-between;
-  color: var(--on-glass-3);
+  color: var(--on-glass-2);
 }
 
-.note {
-  font-size: 12px;
-  line-height: 1.5;
-  color: var(--warn);
-  background: rgba(224, 169, 79, 0.08);
-  border: 1px solid rgba(224, 169, 79, 0.35);
-  border-radius: 4px;
-  padding: 8px;
-  margin: 10px 0 0;
+/* Every button in the panel is a touch target, at least 44 px tall, except
+   the info glyph: it stays small (spec § 11 -- a small element keeps its
+   visual size and gets a padded hit area, not a full 44 px box that would
+   overlap its neighbours in this dense a list). */
+.sidebar button:not(.info) {
+  min-height: 44px;
+}
+
+/* Number, text and date fields, and selects: glass fields with white text
+   (globals.css already gives the fill, border and colour); this panel only
+   adds the touch-sized height and a readable placeholder. */
+.sidebar input[type="number"],
+.sidebar input[type="text"],
+.sidebar input[type="date"],
+.sidebar select {
+  min-height: 44px;
+  padding: 8px 12px;
+}
+
+.sidebar input::placeholder {
+  color: var(--on-glass-2);
+  opacity: 1;
+}
+
+/* Sliders: a glass track, a white thumb, a 44 px hit area. The thumb's own
+   box is 44 px square -- its full hit area -- drawn as a small white circle
+   so it still reads as a slim control. */
+.sidebar input[type="range"] {
+  appearance: none;
+  -webkit-appearance: none;
+  display: block;
+  width: 100%;
+  height: 44px;
+  margin: 0;
+  padding: 0;
+  background: transparent;
+  cursor: pointer;
+}
+
+.sidebar input[type="range"]::-webkit-slider-runnable-track {
+  height: 4px;
+  border-radius: 999px;
+  background: var(--glass-clear);
+  border: 1px solid var(--glass-edge);
+}
+
+.sidebar input[type="range"]::-moz-range-track {
+  height: 4px;
+  border-radius: 999px;
+  background: var(--glass-clear);
+  border: 1px solid var(--glass-edge);
+}
+
+.sidebar input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 44px;
+  height: 44px;
+  margin-top: -20px; /* (track 4px - thumb 44px) / 2: centres the thumb on the track */
+  border-radius: 50%;
+  border: none;
+  background: radial-gradient(circle, #fff 0 8px, transparent 9px);
+}
+
+.sidebar input[type="range"]::-moz-range-thumb {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  border: none;
+  background: radial-gradient(circle, #fff 0 8px, transparent 9px);
+}
+
+/* Exposure lock: the one checkbox in this panel, styled as a small glass
+   switch. Its own box is the full 44 px hit area; the visible track and knob
+   sit centred and smaller inside it, "white pill, dark ink when on" like the
+   segmented pills and their surrounding glass fields. */
+.sidebar input[type="checkbox"] {
+  appearance: none;
+  -webkit-appearance: none;
+  position: relative;
+  width: 44px;
+  height: 44px;
+  margin: 0;
+  padding: 0;
+  border: none;
+  background: transparent;
+  flex: none;
+  cursor: pointer;
+}
+
+.sidebar input[type="checkbox"]::before {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 40px;
+  height: 22px;
+  border-radius: 999px;
+  background: var(--glass-clear);
+  border: 1px solid var(--glass-edge);
+  transform: translate(-50%, -50%);
+}
+
+.sidebar input[type="checkbox"]::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: calc(50% - 19px);
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #fff;
+  transform: translateY(-50%);
+  transition: transform var(--dur-fast) var(--ease-out), background var(--dur-fast) var(--ease-out);
+}
+
+.sidebar input[type="checkbox"]:checked::before {
+  background: var(--pill-active);
+  border-color: transparent;
+}
+
+.sidebar input[type="checkbox"]:checked::after {
+  background: var(--ink);
+  transform: translate(20px, -50%);
 }

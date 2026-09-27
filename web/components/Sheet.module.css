@@ -1,0 +1,178 @@
+/* The sheet: a layer over its parent, blurred and dimmed behind it (spec § 8).
+   Phone: rises from the bottom, full width, a grab handle to drag it away.
+   Wide screen (>= 1000px, the app's own breakpoint): a centred panel, no
+   wider than ~560 px (§ 10). The <dialog> element itself is the panel --
+   sized and positioned below, styled by the shared `glass-smoke` class for
+   its material. */
+
+.sheet {
+  position: fixed;
+  inset: auto 0 0 0;
+  margin: 0;
+  width: 100%;
+  max-width: 100%;
+  max-height: 88vh;
+  border: none;
+  border-radius: 20px 20px 0 0;
+  padding: 10px 20px calc(20px + env(safe-area-inset-bottom));
+  overflow-y: auto;
+
+  /* Closed / exit state: no movement on the way out, only fade and blur
+     (spec § 9.1 "Sheet dismisses" -- opacity + blur, no movement). This is
+     also what a drag-dismiss resets to before calling close(), so it exits
+     the same way whatever dismissed it. */
+  opacity: 0;
+  filter: blur(6px);
+  transform: translateY(0);
+  transition:
+    opacity var(--dur-base) var(--ease-in),
+    filter var(--dur-base) var(--ease-in),
+    overlay var(--dur-base) allow-discrete,
+    display var(--dur-base) allow-discrete;
+}
+
+.sheet[open] {
+  opacity: 1;
+  filter: blur(0);
+  transform: translateY(0);
+  transition:
+    opacity var(--dur-slow) var(--ease-out),
+    transform var(--dur-slow) var(--ease-out),
+    filter var(--dur-slow) var(--ease-out),
+    overlay var(--dur-slow) allow-discrete,
+    display var(--dur-slow) allow-discrete;
+}
+
+/* The entrance only: rises from below. Exit does not reverse this -- the
+   resting (closed) rule above has no transform, so leaving is a plain fade. */
+@starting-style {
+  .sheet[open] {
+    opacity: 0;
+    transform: translateY(100%);
+  }
+}
+
+/* While a drag is tracked the pointer sets `transform` inline every move;
+   the CSS transition above would fight that 1:1 tracking, so it is
+   suspended for as long as `.dragging` is on the element. */
+.sheet.dragging {
+  transition: none;
+}
+
+.sheet::backdrop {
+  backdrop-filter: blur(0) brightness(1);
+  transition:
+    backdrop-filter var(--dur-base) var(--ease-in),
+    overlay var(--dur-base) allow-discrete,
+    display var(--dur-base) allow-discrete;
+}
+
+.sheet[open]::backdrop {
+  backdrop-filter: blur(32px) brightness(0.7);
+  transition:
+    backdrop-filter var(--dur-slow) var(--ease-out),
+    overlay var(--dur-slow) allow-discrete,
+    display var(--dur-slow) allow-discrete;
+}
+
+@starting-style {
+  .sheet[open]::backdrop {
+    backdrop-filter: blur(0) brightness(1);
+  }
+}
+
+.handle {
+  width: 36px;
+  height: 5px;
+  border-radius: 999px;
+  background: var(--glass-edge);
+  margin: 2px auto 10px;
+  touch-action: none;
+  cursor: grab;
+}
+
+.dragging .handle {
+  cursor: grabbing;
+}
+
+.close {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  padding: 10px;
+  min-width: 44px;
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: none;
+  border-radius: 12px;
+  color: var(--on-glass);
+}
+
+.close svg {
+  width: 24px;
+  height: 24px;
+  stroke: currentColor;
+  stroke-width: 1.5;
+  fill: none;
+}
+
+.close:hover {
+  filter: brightness(1.15);
+}
+
+.body {
+  padding-top: 6px;
+}
+
+/* Wide screen: a centred panel, not a bottom sheet -- the browser's own
+   modal centring (UA default `margin: auto` on a fixed-inset dialog) does
+   the placement; this only bounds its size and drops the phone shape. */
+@media (min-width: 1000px) {
+  .sheet {
+    position: fixed;
+    inset: 0;
+    margin: auto;
+    width: min(560px, calc(100% - 32px));
+    max-height: 80vh;
+    border-radius: 20px;
+    padding: 24px;
+    transform: scale(1);
+  }
+
+  .sheet[open] {
+    transform: scale(1);
+  }
+
+  @starting-style {
+    .sheet[open] {
+      opacity: 0;
+      transform: scale(0.96);
+    }
+  }
+
+  .handle {
+    display: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  /* globals.css already zeroes `transition` on every ordinary element; the
+     backdrop is a pseudo-element, which `*` does not reach, so it needs its
+     own rule. With no transition, `@starting-style` has nothing to animate
+     from and the sheet simply appears and disappears (spec § 12). */
+  .sheet::backdrop,
+  .sheet[open]::backdrop {
+    transition: none;
+  }
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  .sheet::backdrop,
+  .sheet[open]::backdrop {
+    background: rgb(10 14 15 / 0.75);
+    backdrop-filter: none;
+  }
+}

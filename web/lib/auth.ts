@@ -26,11 +26,13 @@ export function authProblem(request: Request): Response | null {
   }
   const given = request.headers.get("x-wayfinder-key") ?? "";
   if (!given || !secretMatches(given, expected)) {
+    // Named to no location: this is read from more than one field now (the
+    // Missions view's own, and the Summary's beside Save -- plan decision
+    // 17), and naming one of them here would point the operator at a box
+    // elsewhere, which is exactly what that decision removes.
     return Response.json(
       {
-        error:
-          "That passphrase is not the one this deployment expects. Retype it in the box beside Save, " +
-          "along the bottom of the map; it is stored only in this browser.",
+        error: "That passphrase is not the one this deployment expects. Retype it; it is kept only in this browser.",
       },
       { status: 401 },
     );

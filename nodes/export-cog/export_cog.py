@@ -158,15 +158,27 @@ def alpha_mean(info: dict) -> float | None:
     return None
 
 
+# GDAL's own words when the colour bands' sample (masked by alpha) holds no data
+# pixel at all. That is a measurement -- 0% valid -- not a failure to measure.
+NO_VALID_SAMPLE = "no valid pixels found in sampling"
+
+
 def valid_fraction(path: Path) -> float:
     """Share of pixels the alpha band marks as data (ODM writes alpha 0 or 255)."""
     try:
         from osgeo import gdal
-        info = gdal.Info(str(path), options=gdal.InfoOptions(format="json", approxStats=True))
+        try:
+            info = gdal.Info(str(path), options=gdal.InfoOptions(format="json", approxStats=True))
+        except RuntimeError as e:
+            if NO_VALID_SAMPLE in str(e):
+                return 0.0
+            raise
     except ImportError:
         if shutil.which("gdalinfo") is None:
             sys.exit("export-cog: neither osgeo nor gdalinfo available to measure valid pixels")
         result = subprocess.run(["gdalinfo", "-json", "-approx_stats", str(path)], capture_output=True, text=True)
+        if NO_VALID_SAMPLE in result.stderr:
+            return 0.0
         if result.returncode != 0:
             sys.exit(f"export-cog: gdalinfo failed: {result.stderr}")
         info = json.loads(result.stdout)

@@ -48,16 +48,19 @@ jobs:
       # ADR 0018: every Node carries a check, and the seam between Nodes runs
       # too. They are offline by construction, so they run here on every change.
       # check_head inspects image metadata with exiftool; Pillow builds its fixtures.
-      - run: sudo apt-get update && sudo apt-get install -y libimage-exiftool-perl
+      # GDAL runs export-cog's own check, which was skipped here until a crash on
+      # an empty Orthomosaic was found on the host instead.
+      - run: sudo apt-get update && sudo apt-get install -y libimage-exiftool-perl gdal-bin
       - run: pip install pillow
       - name: The Nodes' own checks
         run: |
-          # The heavy evidence needs docker/GDAL and a dataset that lives on the
+          # The heavy evidence needs docker and a dataset that lives on the
           # compute host; --allow-skips marks that gap deliberate and prints it, so a
           # green run never silently means "nothing ran" (decision on #68).
           python3 nodes/check_ortho.py --allow-skips
           python3 nodes/check_splat.py
           python3 nodes/check_head.py
+          python3 nodes/check_showcase.py
           python3 pipeline/runner.py --selftest
           python3 nodes/retention/retention.py --selftest
           python3 nodes/check_retention.py

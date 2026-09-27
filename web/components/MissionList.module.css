@@ -1,4 +1,4 @@
-/* One Mission, one card. The dense line this replaces is the design that
+/* One Mission, one row. The dense line this replaces is the design that
    failed: it is read at the desk before leaving and again with the Controller
    in hand, so the state and the next action have to carry from arm's length. */
 
@@ -12,14 +12,15 @@
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
   font-size: 12px;
   color: var(--on-glass-3);
 }
 
 .bar button {
-  padding: 4px 10px;
+  padding: 6px 12px;
   font-size: 12px;
+  min-height: 32px;
 }
 
 .age {
@@ -30,12 +31,12 @@
   color: var(--warn);
 }
 
+/* The archived toggle: a segmented pill, not a checkbox (spec § 8). Its
+   `active` state is the shared, unscoped class every other pill in the app
+   uses (`button.active` in globals.css) — literal in the JSX for the same
+   reason the tab bar's is (plan.module.css). */
 .filter {
-  display: flex;
-  align-items: center;
-  gap: 6px;
   margin-left: auto;
-  cursor: pointer;
 }
 
 .quiet {
@@ -43,16 +44,42 @@
   color: var(--on-glass-3);
 }
 
-.card {
-  background: rgba(255, 255, 255, 0.045);
-  border: 1px solid rgba(255, 255, 255, 0.09);
-  /* The tone lives on the left edge, not in the text colour: a whole card
+/* The passphrase in place (plan decision 17): the field itself, wherever the
+   list would otherwise be, at every width — never a message pointing at the
+   Summary's box. */
+.gate {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  align-items: flex-start;
+}
+
+.gateText {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--on-glass-3);
+}
+
+.gateInput {
+  width: 100%;
+  min-height: 44px;
+  padding: 8px 12px;
+  font-size: 15px;
+}
+
+.gate button {
+  min-height: 44px;
+  padding: 0 20px;
+}
+
+.row {
+  position: relative;
+  border-radius: 20px;
+  padding: 16px;
+  /* The tone lives on the left edge, not in the text colour: a whole row
      tinted red is unreadable, and a grey note is how a mismatch gets missed. */
-  border-left-width: 4px;
-  border-radius: 10px;
-  padding: 14px;
-  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.35);
-  backdrop-filter: saturate(1.2) blur(8px);
+  border-left: 4px solid transparent;
 }
 
 .toneGo {
@@ -72,7 +99,8 @@
 }
 
 .editing {
-  outline: 1px solid var(--on-glass);
+  outline: 2px solid var(--on-glass);
+  outline-offset: -2px;
 }
 
 .head {
@@ -100,12 +128,17 @@
   letter-spacing: 0;
 }
 
-.state {
+/* The lifecycle state, as a chip (spec § 8): a small pill of its own rather
+   than a bare label, so it reads as one fact among the row's others. */
+.chip {
   flex: none;
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: var(--glass-clear);
   font-size: 11px;
   text-transform: uppercase;
   letter-spacing: 0.06em;
-  color: var(--on-glass-3);
+  color: var(--on-glass-2);
 }
 
 /* The answer, at the size of an answer. "Open way finder 2" is the whole point
@@ -172,12 +205,16 @@
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
 }
 
+/* Dispatch is the primary white pill (globals.css `.primary`); every other
+   row action is the default clear-glass pill (globals.css `button`) — both
+   reused as-is, only the sizing below is this row's own. */
 .actions button {
-  padding: 5px 10px;
-  font-size: 12px;
+  padding: 8px 16px;
+  font-size: 13px;
+  min-height: 36px;
   transition: transform 100ms ease-out;
 }
 
@@ -186,7 +223,7 @@
 }
 
 .actions button:focus-visible,
-.more summary:focus-visible {
+.more:focus-visible {
   outline: 2px solid var(--on-glass);
   outline-offset: 2px;
 }
@@ -196,18 +233,87 @@
    color: var(--on-glass);
  }
 
+/* The row's own trigger for its details sheet: plain text, not a pill --
+   it is a disclosure, not an action (spec § 8, § 14). */
 .more {
+  display: block;
   margin-top: 10px;
+  padding: 0;
+  min-height: 44px;
+  background: none;
+  border: none;
   font-size: 12px;
   color: var(--on-glass-3);
-}
-
-.more summary {
   cursor: pointer;
+  text-align: left;
 }
 
-.more summary:hover {
+.more:hover {
   color: var(--on-glass);
+}
+
+/* The removal sheet's own text, on the sheet's smoke glass -- not a light
+   panel, since there is no one object to put on one, only a decision. */
+.sheetTitle {
+  margin: 0 0 8px;
+  font-size: 18px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.sheetText {
+  margin: 0 0 20px;
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--on-glass-2);
+}
+
+.sheetActions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.sheetActions button {
+  min-height: 44px;
+  padding: 0 20px;
+}
+
+/* A Mission's details: the one object in focus, so it gets the light panel
+   (spec § 8, § 14, § 15) -- ink text, not the sheet's own on-glass white. */
+.detailsPanel {
+  padding: 20px;
+  border-radius: 20px;
+  color: var(--ink-2);
+}
+
+.detailsTitle {
+  margin: 0 0 12px;
+  font-size: 20px;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  color: var(--ink);
+}
+
+.detailsLine {
+  margin: 0 0 8px;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+/* Touch: 44 px is the floor for every row action, not just Dispatch (spec
+   § 11). Above 999 px a pointer is precise enough for the smaller size above. */
+@media (max-width: 999px) {
+  .actions button {
+    min-height: 44px;
+    padding: 10px 18px;
+    font-size: 14px;
+  }
+
+  .bar button {
+    min-height: 44px;
+    padding: 10px 16px;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -219,17 +325,17 @@
   }
 }
 
+/* The row's own opaque/high-contrast fallback is `glass-smoke`'s (globals.css)
+   — combined on the same element, so only what it does not cover lives here. */
 @media (prefers-reduced-transparency: reduce) {
-  .card {
-    backdrop-filter: none;
-    background: var(--canopy-700);
+  .chip {
+    background: var(--canopy-500);
   }
 }
 
 @media (prefers-contrast: more) {
-  .card {
-    background: var(--canopy-700);
-    border-color: var(--on-glass);
+  .chip {
+    border: 1px solid var(--on-glass);
   }
 }
 

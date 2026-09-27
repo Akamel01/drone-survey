@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import json
 import math
+import os
 import shutil
 import subprocess
 import sys
@@ -39,9 +40,10 @@ import register  # noqa: E402
 import export_cog  # noqa: E402
 import solve  # noqa: E402
 
-# odm_data_bellus's real ODM CLI project, present only on the compute host
+# The golden Capture (docs/research/golden-capture.md): odm_data_bellus's 122
+# images plus its surveyed gcp_list.txt, present only on the compute host
 # (BOUNDARIES: read-only, never written by this check or anything else here).
-BELLUS_PROJECT = Path.home() / "drone" / "datasets" / "code"
+BELLUS_PROJECT = Path.home() / "drone" / "golden" / "bellus-v1"
 
 # Measured, not guessed -- and NOT "a few tens of pixels" (#22 DONE
 # CRITERION #3's hope). Investigated rather than papered over: a real no-gcp
@@ -342,8 +344,9 @@ def check_bellus_real_projection():
     check."""
     images_dir = BELLUS_PROJECT / "images"
     gcp_path = BELLUS_PROJECT / "gcp_list.txt"
-    if not images_dir.is_dir() or not gcp_path.is_file():
-        _skip("check_bellus_real_projection", f"{BELLUS_PROJECT} not reachable (real dataset lives only on the compute host, see #22 BOUNDARIES)")
+    missing = [str(p) for p in (images_dir, gcp_path) if not p.exists()]
+    if missing:
+        _skip("check_bellus_real_projection", f"missing {', '.join(missing)} (real dataset lives only on the compute host, see #22 BOUNDARIES)")
         return
     if shutil.which("docker") is None:
         _skip("check_bellus_real_projection", "docker not on PATH")
@@ -454,6 +457,104 @@ def check_cog_validator():
         check("export-cog: refuses a mostly-empty Orthomosaic", r.returncode != 0 and "floor" in r.stderr, r.stderr)
 
 
+# #174's review: valid_fraction()'s except-RuntimeError branch (export_cog.py,
+# ~line 170) only runs where `from osgeo import gdal` succeeds, which is only
+# true inside this Node's own GDAL Docker image (module docstring). CI
+# installs `gdal-bin` (.github/workflows/mission.yml), which gives the
+# setup-python interpreter no osgeo -- so check_cog_validator above, run
+# there, only ever exercises the gdalinfo-subprocess fallback and passes
+# identically on export_cog.py before and after that branch was added.
+# Exercise the osgeo path itself by putting a stand-in `osgeo` package on the
+# subprocess's PYTHONPATH (ADR 0018: subprocess-per-Node, no fixture
+# library/mocking framework). The stand-in's gdal.Open() reports a
+# structurally valid COG -- so validate() passes and the check is actually
+# about valid_fraction(), not a validator failure -- and its gdal.Info()
+# raises the same RuntimeError text real GDAL raises on an all-nodata sample.
+_FAKE_OSGEO_GDAL = '''\
+class _Band:
+    def GetBlockSize(self):
+        return (512, 512)
+
+    def GetOverviewCount(self):
+        return 1
+
+
+class _SpatialRef:
+    def GetAuthorityCode(self, target):
+        return "3857"
+
+
+class _Dataset:
+    def GetMetadata(self, domain=None):
+        return {"LAYOUT": "COG"}
+
+    def GetRasterBand(self, n):
+        return _Band()
+
+    def GetMetadataItem(self, item, domain=None):
+        return "8"
+
+    def GetSpatialRef(self):
+        return _SpatialRef()
+
+
+def UseExceptions():
+    pass
+
+
+def Open(path):
+    return _Dataset()
+
+
+def InfoOptions(**kwargs):
+    return kwargs
+
+
+def Info(path, options=None):
+    raise RuntimeError("ERROR 1: no valid pixels found in sampling")
+'''
+
+
+def check_export_cog_osgeo_path():
+    if shutil.which("gdal_create") is None or shutil.which("gdal_translate") is None:
+        _skip("export-cog osgeo-bindings check", "gdal_create/gdal_translate not on PATH")
+        return
+    with tempfile.TemporaryDirectory() as tmp:
+        tmp = Path(tmp)
+        fake_root = tmp / "fake_osgeo"
+        osgeo_pkg = fake_root / "osgeo"
+        osgeo_pkg.mkdir(parents=True)
+        (osgeo_pkg / "__init__.py").write_text("")
+        (osgeo_pkg / "gdal.py").write_text(_FAKE_OSGEO_GDAL)
+
+        # Same all-nodata fixture as check_cog_validator's own empty.tif above.
+        empty = tmp / "empty.tif"
+        result = subprocess.run(
+            ["gdal_create", "-outsize", "2048", "2048", "-bands", "4", "-ot", "Byte",
+             "-burn", "128", "-burn", "128", "-burn", "128", "-burn", "0",
+             "-co", "PHOTOMETRIC=RGB", "-co", "ALPHA=YES",
+             "-a_srs", "EPSG:4326", "-a_ullr", "-1", "1", "1", "-1", str(empty)],
+            capture_output=True, text=True,
+        )
+        if result.returncode != 0:
+            _skip("export-cog osgeo-bindings check", f"gdal_create failed: {result.stderr}")
+            return
+
+        out = tmp / "out"
+        env = {**os.environ, "PYTHONPATH": str(fake_root) + os.pathsep + os.environ.get("PYTHONPATH", "")}
+        r = subprocess.run(
+            [PY, str(REPO_ROOT / "nodes" / "export-cog" / "export_cog.py"),
+             "--in", str(empty), "--out", str(out)],
+            capture_output=True, text=True, env=env,
+        )
+        check("export-cog (osgeo bindings): refuses a mostly-empty Orthomosaic instead of crashing",
+              r.returncode != 0 and "floor" in r.stderr and "Traceback" not in r.stderr, r.stdout + r.stderr)
+        report = out / "validator_output.txt"
+        report_text = report.read_text() if report.is_file() else ""
+        check("export-cog (osgeo bindings): report records 0% valid pixels",
+              "valid_pixel_fraction=0.0000" in report_text, report_text or "<no report written>")
+
+
 # A missing prerequisite must not read as a pass. The heavy evidence needs
 # docker, GDAL and a dataset that lives on the compute host; when any is absent
 # this check says so and fails, unless the operator marks the gap deliberate.
@@ -484,6 +585,90 @@ def check_reconstruct_cli_refuses_a_missing_input() -> None:
         print("[ok] reconstruct: entry point refuses a missing input and says so")
 
 
+def check_second_solve_hands_reconstruct_a_task() -> None:
+    """The seam between solve's second pass and the reconstruct chain, against a
+    stand-in NodeODM. It broke once without any check noticing: the Manifest's
+    "no ground control" fact sent the second pass down the CLI route, which left
+    no NodeODM task, so every reconstruct stage after it had nothing to restart.
+    Also pins the hand-off between reconstruct stages and the final removal."""
+    import http.server
+    import threading
+    import zipfile
+
+    calls = []
+    cameras = {"cam": {"projection_type": "brown", "width": 4, "height": 3,
+                       "focal_x": 0.7, "focal_y": 0.7, "c_x": 0.01, "c_y": 0.01}}
+
+    class FakeNodeODM(http.server.BaseHTTPRequestHandler):
+        def log_message(self, *a):
+            pass
+
+        def _send(self, body: bytes, ctype="application/json"):
+            self.send_response(200)
+            self.send_header("Content-Type", ctype)
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+        def do_GET(self):
+            calls.append(("GET", self.path, b""))
+            if self.path.endswith("/download/all.zip"):
+                import io
+                buf = io.BytesIO()
+                with zipfile.ZipFile(buf, "w") as zf:
+                    zf.writestr("cameras.json", json.dumps(cameras))
+                self._send(buf.getvalue(), "application/zip")
+            elif self.path.endswith("/output"):
+                self._send(b"[]")
+            else:
+                self._send(json.dumps({"status": {"code": 40}}).encode())
+
+        def do_POST(self):
+            body = self.rfile.read(int(self.headers.get("Content-Length", 0)))
+            calls.append(("POST", self.path, body))
+            reply = {"uuid": "task-1"} if self.path == "/task/new" else {"success": True}
+            self._send(json.dumps(reply).encode())
+
+    server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), FakeNodeODM)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    host = f"http://127.0.0.1:{server.server_address[1]}"
+    env = {**os.environ, "EXECUTION_CONTEXT": json.dumps({"ground_control_points": False})}
+    try:
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp = Path(tmp)
+            (tmp / "images").mkdir()
+            (tmp / "images" / "a.jpg").write_bytes(b"jpeg")
+            (tmp / "gcp_list.txt").write_text("")  # register's "no Anchors" file
+
+            def node(script, *args):
+                r = subprocess.run([PY, str(REPO_ROOT / "nodes" / script), *args],
+                                   capture_output=True, text=True, timeout=60, env=env)
+                check(f"{script} {args[-1]}: exits 0", r.returncode == 0, r.stdout + r.stderr)
+
+            node("solve/solve.py", "--in", str(tmp / "images"), "--gcp", str(tmp / "gcp_list.txt"),
+                 "--out", str(tmp / "solved"), "--host", host)
+            new = [body for method, path, body in calls if path == "/task/new"]
+            check("solve, second pass with no ground control: submits to NodeODM", len(new) == 1)
+            check("solve, second pass with no ground control: uploads no gcp_list.txt",
+                  new and b'filename="gcp_list.txt"' not in new[0])
+            task = json.loads((tmp / "solved" / "task.json").read_text()) if (tmp / "solved" / "task.json").is_file() else {}
+            check("solve, second pass: task.json names the real task and host",
+                  task.get("uuid") == "task-1" and task.get("host") == host, str(task))
+
+            node("reconstruct/reconstruct.py", "--in", str(tmp / "solved"), "--out", str(tmp / "dense"),
+                 "--rerun-from", "opensfm", "--end-with", "odm_filterpoints")
+            restarts = [json.loads(body)["uuid"] for method, path, body in calls if path == "/task/restart"]
+            check("reconstruct: restarts the task solve made", restarts == ["task-1"], str(restarts))
+            check("reconstruct: hands the task on to the next stage", (tmp / "dense" / "task.json").is_file())
+
+            node("reconstruct/reconstruct.py", "--in", str(tmp / "dense"), "--out", str(tmp / "report"),
+                 "--rerun-from", "odm_report", "--end-with", "odm_postprocess")
+            removed = [json.loads(body)["uuid"] for method, path, body in calls if path == "/task/remove"]
+            check("reconstruct, final stage: removes the task from NodeODM", removed == ["task-1"], str(removed))
+    finally:
+        server.shutdown()
+
+
 def main() -> None:
     check_latlon_to_utm()
     check_utm_round_trip()
@@ -493,8 +678,10 @@ def main() -> None:
     check_register_cli_no_anchors()
     check_register_cli_end_to_end(accepted)
     check_reconstruct_cli_refuses_a_missing_input()
+    check_second_solve_hands_reconstruct_a_task()
     check_bellus_real_projection()
     check_cog_validator()
+    check_export_cog_osgeo_path()
 
     if FAILURES:
         print(f"\n{len(FAILURES)} check(s) failed: {FAILURES}", file=sys.stderr)

@@ -232,7 +232,7 @@ export default function PlanPage() {
         <section id="missions-panel" className={`${styles.missions} glass-smoke`} aria-label="Missions">
           <HeroScene playing={view === "missions"} />
           <div className={styles.panelHead}>
-            <h2 className={styles.heading}>Missions</h2>
+            <h2 className={styles.viewTitle}>Missions</h2>
             <button
               ref={collapseMissions}
               type="button"

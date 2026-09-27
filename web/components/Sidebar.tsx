@@ -1,6 +1,6 @@
 "use client";
 
-import type { ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { newSiteId, type MissionSpec, type MissionType, type TurnMode } from "@/lib/spec";
 import type { Preview } from "@/lib/mission";
 import { MISSION_NAME_MAX, missionNameProblem } from "@/lib/missionRecords";
@@ -39,20 +39,52 @@ const coord = (p: [number, number] | null) => (p ? `${p[0].toFixed(5)}, ${p[1].t
  * Explanation on demand.
  *
  * These notes are worth reading once and then only when wondered about, so they
- * sit behind an icon rather than occupying the panel permanently. Hover or
- * keyboard focus reveals them, so the keyboard route works as well as the mouse.
+ * sit behind an icon rather than occupying the panel permanently. Hover and
+ * keyboard focus reveal them for a mouse or a keyboard; a tap opens and closes
+ * them explicitly, since neither hover nor focus is guaranteed on a touch
+ * screen (Safari in particular does not focus a plain element on tap).
  */
 function Info({ children }: { children: ReactNode }) {
+  const [open, setOpen] = useState(false);
+  const wrapRef = useRef<HTMLSpanElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const closeOutside = (e: PointerEvent) => {
+      if (wrapRef.current && !wrapRef.current.contains(e.target as Node)) setOpen(false);
+    };
+    const closeOnEscape = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setOpen(false);
+    };
+    document.addEventListener("pointerdown", closeOutside);
+    document.addEventListener("keydown", closeOnEscape);
+    return () => {
+      document.removeEventListener("pointerdown", closeOutside);
+      document.removeEventListener("keydown", closeOnEscape);
+    };
+  }, [open]);
+
   return (
-    <span className={styles.info} tabIndex={0} role="note">
-      i<span className={styles.infoBubble}>{children}</span>
+    <span className={styles.infoWrap} ref={wrapRef}>
+      <button
+        type="button"
+        className={styles.info}
+        aria-expanded={open}
+        aria-label="More information"
+        onClick={() => setOpen((o) => !o)}
+      >
+        i
+      </button>
+      <span className={styles.infoBubble} role="note" data-open={open || undefined}>
+        {children}
+      </span>
     </span>
   );
 }
 
 function Section({ title, info, children }: { title: string; info?: ReactNode; children: ReactNode }) {
   return (
-    <section className={styles.section}>
+    <section className={`${styles.section} glass-smoke`}>
       <h2>
         {title}
         {info ? <Info>{info}</Info> : null}
@@ -77,9 +109,10 @@ function Segmented<T extends string>({
       {options.map((o) => (
         <button
           key={o.value}
+          type="button"
           role="radio"
           aria-checked={value === o.value}
-          className={value === o.value ? styles.segmentOn : styles.segment}
+          className={value === o.value ? "active" : undefined}
           onClick={() => onChange(o.value)}
         >
           {o.label}

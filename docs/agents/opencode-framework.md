@@ -1,7 +1,9 @@
 # Working tickets through opencode
 
-Status: in trial from 2026-09-25 (#196). Documented here until it has proved
-stable and reliable; see [Proven when](#proven-when).
+Status: in trial from 2026-09-25 (#196); the worker for every local session
+(operator, 2026-09-26, #213). Documented here until it has proved stable and
+reliable; see [Proven when](#proven-when). Cloud sessions, which have no
+opencode, work tickets as described in [`workflow.md`](workflow.md).
 
 Claude Code orchestrates and opencode does the work. The point is to spend the
 orchestrator's tokens on judgement (what to build, whether it is right) and the
@@ -128,6 +130,20 @@ proved itself it moves to a repository of its own.
 - **Parallel runs**: only tickets whose "What to build" names different files.
 - **Tickets opencode does not take**: those labelled `ready-for-human`, and
   research tickets marked deferred (#195).
+
+## Taking over another session's work
+
+A cloud session cannot open pull requests (its proxy refuses GitHub's GraphQL
+API), so its work arrives as pushed branches. Locally, the orchestrator:
+
+1. Checks that each branch merges cleanly with `main` and with the others, in
+   dependency order.
+2. Opens a pull request for each branch (`Closes #N`), carrying over the
+   worker's notes from its commit messages.
+3. Reviews it like any other ticket. Fix rounds go to opencode on that same
+   branch: `OC_BRANCH=<branch> dispatch.sh <issue> main "<feedback>"`. The
+   session is told about the open pull request and pushes to it rather than
+   opening another.
 
 ## Proven when
 

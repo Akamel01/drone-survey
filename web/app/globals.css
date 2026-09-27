@@ -76,7 +76,7 @@ button.primary { background: var(--pill-active); color: var(--ink); font-weight:
 button:disabled { opacity: 0.5; cursor: default; }
 
 input[type="range"] { width: 100%; }
-input[type="number"], input[type="text"], input[type="date"], select {
+input[type="number"], input[type="text"], input[type="date"], input[type="password"], select {
   background: var(--glass-clear); border: 1px solid var(--glass-edge); border-radius: 12px; padding: 4px 6px; color: var(--on-glass); width: 100%; }
 
 :focus-visible { outline: 2px solid #fff; outline-offset: 2px; box-shadow: 0 0 0 4px rgba(0,0,0,.35); }

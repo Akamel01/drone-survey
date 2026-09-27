@@ -1,8 +1,9 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import { preview } from "@/lib/mission";
 import type { MissionRow } from "@/lib/missionRecords";
+import Sheet from "./Sheet";
 import {
   IDLE,
   MISSIONS_CHANGED_KEY,
@@ -16,6 +17,7 @@ import {
   type ActionResult,
   type ActionState,
 } from "@/lib/actions";
+import { readPassphrase, subscribePassphrase, writePassphrase } from "@/lib/passphrase";
 import {
   asOfStamp,
   cacheRead,
@@ -43,11 +45,9 @@ import styles from "./MissionList.module.css";
 // reach them -- the old screen's rules lived inside its JSX, which is why
 // nothing could assert that a mismatch withheld the affirmation.
 
-const PASSPHRASE_KEY = "drone-planner.wayfinder-key";
-
-/** The tone of an answer, carried on the card's left edge rather than by
+/** The tone of an answer, carried on the row's left edge rather than by
  *  tinting its text: a grey note is how a mismatch gets missed, and a whole
- *  card in red is unreadable. */
+ *  row in red is unreadable. */
 const TONE: Record<RowView["headline"]["tone"], string> = {
   go: styles.toneGo,
   stop: styles.toneStop,
@@ -72,6 +72,11 @@ interface MissionListProps {
 
 export default function MissionList({ onEdit, onCopy, editingId = null, onRead }: MissionListProps) {
   const [passphrase, setPassphrase] = useState<string | null>(null);
+  // True until the first good read, whatever is typed meanwhile: the field
+  // asking for the passphrase must not vanish mid-keystroke just because the
+  // value it is bound to briefly went from empty to something (plan decision
+  // 17). It only steps aside once the store has actually answered.
+  const [gate, setGate] = useState(true);
   const [read, setRead] = useState<MissionListRead | null>(null);
   const [readAt, setReadAt] = useState<number | null>(null);
   /** False while showing the last cached read instead of a live one. */
@@ -81,6 +86,15 @@ export default function MissionList({ onEdit, onCopy, editingId = null, onRead }
   const [showArchived, setShowArchived] = useState(false);
   const [blocked, setBlocked] = useState(false);
   const [action, setAction] = useState<ActionState>(IDLE);
+  // The row a sheet is open about, and whether it is open, held apart: the
+  // row is kept through the close animation so the sheet has something to
+  // show while it fades, rather than going blank a frame before it is gone.
+  const [confirmRow, setConfirmRow] = useState<MissionRow | null>(null);
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [detailsRow, setDetailsRow] = useState<MissionRow | null>(null);
+  const [detailsOpen, setDetailsOpen] = useState(false);
+  const removeHeadingId = useId();
+  const detailsHeadingId = useId();
   // The clock the age is measured against, advanced on a timer rather than
   // read during render: a render is not an event, and a screen that re-reads
   // the clock whenever React happens to re-run it cannot be trusted to say
@@ -111,6 +125,7 @@ export default function MissionList({ onEdit, onCopy, editingId = null, onRead }
         setNow(at);
         setLive(true);
         setError(null);
+        setGate(false);
         const ls = safeStorage();
         if (ls) cacheRead(ls, fresh, at);
         reportRead.current?.(fresh);
@@ -138,21 +153,44 @@ export default function MissionList({ onEdit, onCopy, editingId = null, onRead }
         setRead(cached.read);
         setReadAt(cached.read_at);
         setLive(false);
+        setGate(false);
       } else {
         setLive(true);
       }
     }
   }, []);
 
+  // True only for the passphrase already on file when this mounted, so that
+  // one loads at once, the way it always did. Consumed by the first pass of
+  // the effect below, whichever value that turns out to be -- so a passphrase
+  // that arrives by typing, with nothing stored before it, still waits out the
+  // debounce like any later edit rather than firing on its first keystroke.
+  const instant = useRef(false);
+
+  // Resolved once: what is already on file, and -- from here on -- whatever
+  // any field showing the passphrase writes, wherever it was typed (shared
+  // with the Summary's own field; `lib/passphrase.ts` is the mechanism).
   useEffect(() => {
-    const ls = safeStorage();
-    // null marks storage that is blocked outright: no passphrase can be kept.
-    const key = ls ? (ls.getItem(PASSPHRASE_KEY) ?? "") : null;
+    const initial = readPassphrase();
     // eslint-disable-next-line react-hooks/set-state-in-effect -- one-time client-only read of localStorage
-    setPassphrase(key ?? "");
-    setBlocked(key === null);
-    if (!key) return;
-    void load(key);
+    setPassphrase(initial ?? "");
+    setBlocked(initial === null);
+    setGate(!initial);
+    instant.current = !!initial;
+    return subscribePassphrase(setPassphrase);
+  }, []);
+
+  // Loads with the current passphrase and keeps the list fresh while one is
+  // known. Firing this on every keystroke -- typed here or in the Summary's
+  // field, now that the two agree live -- would spend a store transaction per
+  // character, so a value that changes after the page has settled waits half
+  // a second before it is used.
+  useEffect(() => {
+    if (!passphrase) return;
+    const key = passphrase;
+    const wait = instant.current ? 0 : 500;
+    instant.current = false;
+    const debounce = setTimeout(() => void load(key), wait);
 
     // Every poll costs a Class C transaction on the storage account, and this
     // page is left open for hours. Five minutes is fresh enough for a pipeline
@@ -176,15 +214,17 @@ export default function MissionList({ onEdit, onCopy, editingId = null, onRead }
     // Ageing the "checked N min ago" label is not a poll and asks the store
     // for nothing; it only keeps the screen from claiming to be fresher than
     // it is while the operator reads it.
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- ages a label against the clock, not a fetch
     setNow(Date.now());
     const clock = setInterval(() => setNow(Date.now()), 30000);
     return () => {
+      clearTimeout(debounce);
       clearInterval(poll);
       clearInterval(clock);
       document.removeEventListener("visibilitychange", refresh);
       window.removeEventListener("storage", onWrite);
     };
-  }, [load]);
+  }, [passphrase, load]);
 
   // The five-minute poll is far too slow to be an action's feedback, so every
   // action reports its own outcome on the row it was pressed on and re-reads
@@ -233,23 +273,31 @@ export default function MissionList({ onEdit, onCopy, editingId = null, onRead }
         case "Unmark Flown":
           return act(name, row.id, () => post("/api/missions/flown", { id: row.id, flown: false }));
         case "Remove":
-          if (!window.confirm(`Remove “${row.name}”? It is archived, not deleted — nothing is lost.`)) {
-            return;
-          }
-          return act(name, row.id, () =>
-            fetch(`/api/missions?id=${encodeURIComponent(row.id)}`, {
-              method: "DELETE",
-              headers: { "x-wayfinder-key": passphrase ?? "" },
-            }),
-          );
+          // Asks in a sheet, never the browser's own confirm box (spec § 8,
+          // § 14) -- the words are the same ones that box used to show.
+          setConfirmRow(row);
+          setConfirmOpen(true);
+          return;
         case "Edit":
           return onEdit(row);
         case "Copy":
           return onCopy(row);
       }
     },
-    [act, post, passphrase, onEdit, onCopy],
+    [act, post, onEdit, onCopy],
   );
+
+  const confirmRemove = useCallback(() => {
+    if (!confirmRow) return;
+    const row = confirmRow;
+    setConfirmOpen(false);
+    void act("Remove", row.id, () =>
+      fetch(`/api/missions?id=${encodeURIComponent(row.id)}`, {
+        method: "DELETE",
+        headers: { "x-wayfinder-key": passphrase ?? "" },
+      }),
+    );
+  }, [act, confirmRow, passphrase]);
 
   const all = useMemo(() => read?.missions ?? [], [read]);
   // The planner's own figures, derived from each Mission's Spec. They are one
@@ -277,12 +325,33 @@ export default function MissionList({ onEdit, onCopy, editingId = null, onRead }
       </p>
     );
   }
-  if (passphrase === "") {
+  if (gate) {
     return (
-      <p className={styles.quiet}>
-        The Missions in the store appear here once the Wayfinder passphrase is typed into the box
-        beside Save, along the bottom of the map. It is typed once per browser and kept only there.
-      </p>
+      <form
+        className={styles.gate}
+        onSubmit={(e) => {
+          e.preventDefault();
+          if (passphrase) void load(passphrase);
+        }}
+      >
+        <p className={styles.gateText}>
+          Type the Wayfinder passphrase to read the Missions in the store. It is typed once per browser
+          and kept only here — the same field as the one beside Save.
+        </p>
+        <input
+          type="password"
+          className={styles.gateInput}
+          placeholder="Wayfinder passphrase"
+          aria-label="Wayfinder passphrase"
+          value={passphrase}
+          onChange={(e) => writePassphrase(e.target.value)}
+          autoFocus
+        />
+        <button type="submit" className="primary" disabled={!passphrase || loading}>
+          {loading ? "Checking…" : "Show Missions"}
+        </button>
+        {error && <p className={styles.stop}>{error.replace(/\.?$/, ".")}</p>}
+      </form>
     );
   }
 
@@ -308,16 +377,16 @@ export default function MissionList({ onEdit, onCopy, editingId = null, onRead }
           {loading ? "Checking…" : "Refresh"}
         </button>
         {archivedCount > 0 && (
-          <label className={styles.filter}>
-            <input
-              type="checkbox"
-              checked={showArchived}
-              onChange={(e) => setShowArchived(e.target.checked)}
-            />
-            {/* Withdrawn, Superseded and Flown are archived, never deleted, so
-                they are behind a filter rather than absent (ADR 0021). */}
-            Show {archivedCount} archived (Withdrawn, Superseded, Flown)
-          </label>
+          // Withdrawn, Superseded and Flown are archived, never deleted, so
+          // they are behind a filter rather than absent (ADR 0021).
+          <button
+            type="button"
+            className={`${styles.filter} ${showArchived ? "active" : ""}`}
+            aria-pressed={showArchived}
+            onClick={() => setShowArchived((v) => !v)}
+          >
+            Show {archivedCount} archived
+          </button>
         )}
       </div>
 
@@ -355,7 +424,7 @@ export default function MissionList({ onEdit, onCopy, editingId = null, onRead }
       )}
 
       {visible.map((row) => (
-        <MissionCard
+        <Row
           key={row.id}
           row={row}
           view={rowView(row, figures.get(row.id) ?? null, read?.stale_cards ?? [], read?.host?.notice ?? null)}
@@ -364,16 +433,66 @@ export default function MissionList({ onEdit, onCopy, editingId = null, onRead }
           running={(name) => isRunning(action, name, row.id)}
           notice={notice?.on === row.id && noticeShows(notice, row.state) ? notice : null}
           onAction={(name) => runAction(name, row)}
+          onDetails={() => {
+            setDetailsRow(row);
+            setDetailsOpen(true);
+          }}
         />
       ))}
+
+      <Sheet open={confirmOpen} onClose={() => setConfirmOpen(false)} labelledBy={removeHeadingId}>
+        {confirmRow && (
+          <>
+            <h3 id={removeHeadingId} className={styles.sheetTitle}>
+              Remove “{confirmRow.name}”?
+            </h3>
+            <p className={styles.sheetText}>It is archived, not deleted — nothing is lost.</p>
+            <div className={styles.sheetActions}>
+              <button type="button" onClick={() => setConfirmOpen(false)}>
+                Cancel
+              </button>
+              <button type="button" className="primary" onClick={confirmRemove}>
+                Remove
+              </button>
+            </div>
+          </>
+        )}
+      </Sheet>
+
+      <Sheet open={detailsOpen} onClose={() => setDetailsOpen(false)} labelledBy={detailsHeadingId}>
+        {detailsRow && (
+          <div className={`panel-light ${styles.detailsPanel}`}>
+            <h3 id={detailsHeadingId} className={styles.detailsTitle}>
+              {detailsRow.name}
+            </h3>
+            <div className={`${styles.detailsLine} mono`}>{detailsRow.spec_key ?? detailsRow.id}</div>
+            {detailsRow.collected_at && (
+              <div className={styles.detailsLine}>Collected {detailsRow.collected_at}</div>
+            )}
+            {detailsRow.loaded_at && <div className={styles.detailsLine}>Loaded {detailsRow.loaded_at}</div>}
+            {detailsRow.flown_evidence_at && (
+              <div className={styles.detailsLine}>Imagery arrived {detailsRow.flown_evidence_at}</div>
+            )}
+            {detailsRow.superseded_by && (
+              <div className={styles.detailsLine}>Superseded by the Mission saved after it.</div>
+            )}
+            {detailsRow.edit === "guarded" && (
+              <div className={styles.detailsLine}>
+                Editing is guarded: a file for this Mission is already on the Controller, and withdrawing
+                cannot reach it.
+              </div>
+            )}
+          </div>
+        )}
+      </Sheet>
     </div>
   );
 }
 
 /** One Mission: its state and its next action first, everything else beneath.
- *  A card rather than a dense line, because this is read at the desk before
+ *  A row rather than a dense line, because this is read at the desk before
  *  leaving and again with the Controller in hand (ADR 0021). */
-function MissionCard({
+function Row({
   row,
   view,
   editing,
@@ -381,6 +500,7 @@ function MissionCard({
   running,
   notice,
   onAction,
+  onDetails,
 }: {
   row: MissionRow;
   view: RowView;
@@ -389,9 +509,10 @@ function MissionCard({
   running: (name: ActionName) => boolean;
   notice: { text: string; failed: boolean } | null;
   onAction: (name: ActionName) => void;
+  onDetails: () => void;
 }) {
   return (
-    <article className={`${styles.card} ${TONE[view.headline.tone]} ${editing ? styles.editing : ""}`}>
+    <article className={`${styles.row} glass-smoke ${TONE[view.headline.tone]} ${editing ? styles.editing : ""}`}>
       <header className={styles.head}>
         <h3 className={styles.title}>
           {row.name}
@@ -399,7 +520,7 @@ function MissionCard({
             {row.site} · {row.date}
           </span>
         </h3>
-        <span className={`mono ${styles.state}`}>{view.stateLabel}</span>
+        <span className={`mono ${styles.chip}`}>{view.stateLabel}</span>
       </header>
 
       {/* The answer first: this screen exists to say whether the Mission will
@@ -458,24 +579,11 @@ function MissionCard({
         </p>
       )}
 
-      <details className={styles.more}>
-        <summary>Details</summary>
-        <div className={`${styles.detail} mono`}>{row.spec_key ?? row.id}</div>
-        {row.collected_at && <div className={styles.detail}>Collected {row.collected_at}</div>}
-        {row.loaded_at && <div className={styles.detail}>Loaded {row.loaded_at}</div>}
-        {row.flown_evidence_at && (
-          <div className={styles.detail}>Imagery arrived {row.flown_evidence_at}</div>
-        )}
-        {row.superseded_by && (
-          <div className={styles.detail}>Superseded by the Mission saved after it.</div>
-        )}
-        {row.edit === "guarded" && (
-          <div className={styles.detail}>
-            Editing is guarded: a file for this Mission is already on the Controller, and withdrawing
-            cannot reach it.
-          </div>
-        )}
-      </details>
+      {/* The old disclosure's contents now live in a sheet, on a light panel
+          (spec § 8, § 14) -- this only opens it. */}
+      <button type="button" className={styles.more} onClick={onDetails}>
+        Details
+      </button>
     </article>
   );
 }
