@@ -5,11 +5,14 @@ import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { authClient, signOutToHome } from "@/lib/authClient";
 import { markHomeEntrancePlayed, shouldPlayHomeEntrance, type HomeState } from "@/lib/home";
+import EmailSignIn from "./EmailSignIn";
 import HeroScene from "./HeroScene";
 import styles from "./HomeScreen.module.css";
 
 export interface HomeScreenProps {
   state: HomeState;
+  /** Email and password is offered only where its mail can be sent (#247). */
+  emailEnabled?: boolean;
   email?: string | null;
   name?: string | null;
 }
@@ -19,11 +22,12 @@ const OPTIONS = [
   { provider: "github" as const, label: "Continue with GitHub" },
 ];
 
-export default function HomeScreen({ state, email }: HomeScreenProps) {
+export default function HomeScreen({ state, email, emailEnabled = false }: HomeScreenProps) {
   const router = useRouter();
   const rootRef = useRef<HTMLElement>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [problem, setProblem] = useState<string | null>(null);
+  const [withEmail, setWithEmail] = useState(false);
 
   useEffect(() => {
     if (!shouldPlayHomeEntrance(state)) return;
@@ -58,7 +62,8 @@ export default function HomeScreen({ state, email }: HomeScreenProps) {
       <HeroScene playing showOnWide />
       <div className={styles.content}>
         <h1 className={styles.title}>Mission Control</h1>
-        {state === "signedout" && (
+        {state === "signedout" && withEmail && <EmailSignIn onBack={() => setWithEmail(false)} />}
+        {state === "signedout" && !withEmail && (
           <div className={styles.options}>
             {OPTIONS.map((option, index) => (
               <button
@@ -72,6 +77,20 @@ export default function HomeScreen({ state, email }: HomeScreenProps) {
                 {option.label}
               </button>
             ))}
+            {emailEnabled && (
+              <button
+                type="button"
+                className="glass-clear-strong"
+                style={{ "--i": OPTIONS.length } as CSSProperties}
+                disabled={busy !== null}
+                onClick={() => {
+                  setProblem(null);
+                  setWithEmail(true);
+                }}
+              >
+                Continue with email
+              </button>
+            )}
           </div>
         )}
         {state === "pending" && (

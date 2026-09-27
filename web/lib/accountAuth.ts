@@ -13,6 +13,8 @@ import { oAuthProxy } from "better-auth/plugins/oauth-proxy";
 import { organization } from "better-auth/plugins/organization";
 import type { Pool } from "pg";
 import { getPool } from "./accountDb.ts";
+import { emailSignInEnabled, resetMail, sendMail, verificationMail } from "./accountMail.ts";
+import { PASSWORD_MIN } from "./emailSignIn.ts";
 
 /** The migration path has a DATABASE_URL but no BETTER_AUTH_SECRET (D5). The
  *  endpoint gate (accountAccess.accountAuthHandler) runs before any request,
@@ -84,6 +86,23 @@ async function createAuth() {
         enabled: true,
         trustedProviders: [],
       },
+    },
+    // Email and password (#247): on only where its mail can be sent
+    // (lib/accountMail.ts). A new Account must confirm its email before its
+    // first sign-in; the confirming link signs it in. A password reset signs
+    // the Account out everywhere else.
+    emailAndPassword: {
+      enabled: emailSignInEnabled(),
+      requireEmailVerification: true,
+      minPasswordLength: PASSWORD_MIN,
+      maxPasswordLength: 128,
+      revokeSessionsOnPasswordReset: true,
+      sendResetPassword: async ({ user, url }) => sendMail(resetMail(user.email, url)),
+    },
+    emailVerification: {
+      sendOnSignUp: true,
+      autoSignInAfterVerification: true,
+      sendVerificationEmail: async ({ user, url }) => sendMail(verificationMail(user.email, url)),
     },
     trustedOrigins: [
       ...(onVercel ? [] : ["http://localhost:3000"]),

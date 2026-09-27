@@ -29,7 +29,7 @@
 // before every click, and every sign-in asserts its POST is not a 429.
 
 import assert from "node:assert/strict";
-import { existsSync, mkdirSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync } from "node:fs";
 import path from "node:path";
 import { after, before, test } from "node:test";
 
@@ -92,7 +92,27 @@ function authEnvFor(origin, oauthStandin) {
     AUTH_TEST_GITHUB_AUTHORIZATION_URL: `${oauthStandin.baseUrl}/authorize`,
     AUTH_TEST_GITHUB_TOKEN_URL: `${oauthStandin.baseUrl}/token`,
     AUTH_TEST_GITHUB_USERINFO_URL: `${oauthStandin.baseUrl}/userinfo`,
+    AUTH_TEST_MAIL_DIR: mailDir,
   };
+}
+
+/** Email and password (#247): the test inbox, one JSON file per mail. */
+const mailDir = path.join(webRoot, ".e2e-mail");
+
+/** The newest mail to `to` written after `since`, waited for up to 15 s. */
+async function readMail(to, since) {
+  const deadline = Date.now() + 15_000;
+  for (;;) {
+    const found = (existsSync(mailDir) ? readdirSync(mailDir) : [])
+      .map((name) => ({ name, at: statSync(path.join(mailDir, name)).mtimeMs }))
+      .filter((f) => f.at >= since)
+      .sort((a, b) => b.at - a.at)
+      .map((f) => JSON.parse(readFileSync(path.join(mailDir, f.name), "utf8")))
+      .find((mail) => mail.to === to);
+    if (found) return { ...found, url: found.text.match(/https?:\/\/\S+/)?.[0] };
+    if (Date.now() > deadline) throw new Error(`no mail to ${to} arrived in the test inbox`);
+    await new Promise((resolve) => setTimeout(resolve, 200));
+  }
 }
 
 /** The build needs the same placeholders the DB-free `web` CI job passes
@@ -175,16 +195,24 @@ async function clickPill(page, oauthStandin, label) {
   await page.waitForTimeout(250);
   await respectSignInRateLimit();
   const authorizeP = page
-    .waitForRequest((request) => request.url().startsWith(`${oauthStandin.baseUrl}/authorize`), { timeout: 30_000 })
+    .waitForRequest((request) => request.url().startsWith(`${oauthStandin.baseUrl}/authorize`), { timeout: 45_000 })
     .catch(() => null);
-  const signInP = page
-    .waitForResponse(
-      (response) => response.request().method() === "POST" && response.url().includes("/api/auth/sign-in/social"),
-      { timeout: 30_000 },
-    )
-    .catch(() => null);
-  await page.getByRole("button", { name: label, exact: true }).click();
-  const [authorize, signIn] = await Promise.all([authorizeP, signInP]);
+  // A click that lands before the page has hydrated does nothing (the button
+  // is server-rendered), and a loaded CI runner can hydrate late: if no
+  // sign-in POST follows, click again. An unhandled click sends nothing, so
+  // it costs no rate-limit budget.
+  let signIn = null;
+  for (let attempt = 0; attempt < 3 && !signIn; attempt++) {
+    const signInP = page
+      .waitForResponse(
+        (response) => response.request().method() === "POST" && response.url().includes("/api/auth/sign-in/social"),
+        { timeout: 10_000 },
+      )
+      .catch(() => null);
+    await page.getByRole("button", { name: label, exact: true }).click();
+    signIn = await signInP;
+  }
+  const authorize = await authorizeP;
   assert.ok(authorize, `clicking "${label}" started GET /authorize at the stand-in`);
   assert.equal(authorize.method(), "GET");
   assert.ok(authorize.url().startsWith(`${oauthStandin.baseUrl}/authorize`));
@@ -246,6 +274,9 @@ before(async () => {
     console.log(`e2e store: ${store} (fresh)`);
   }
 
+  rmSync(mailDir, { recursive: true, force: true });
+  mkdirSync(mailDir, { recursive: true });
+
   const { startOAuthStandin } = await import("../lib/oauthStandin.ts");
   standin = await startOAuthStandin(IDENTITIES);
   const port = await freePort();
@@ -285,6 +316,7 @@ after(async () => {
   if (standin) await standin.stop();
   await closeDb();
   if (pgliteDir) rmSync(pgliteDir, { recursive: true, force: true });
+  rmSync(mailDir, { recursive: true, force: true });
 });
 
 // ---------------------------------------------------------------------------
@@ -531,6 +563,124 @@ test("the operator approves and removes Accounts in Settings; nobody else can", 
 // T5 -- the account gate, after the app stops (PGlite single owner)
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// T4.7 -- email and password (#247)
+// ---------------------------------------------------------------------------
+
+const EMAIL_USER = "e2e-email@example.com";
+
+test("email and password: sign up, confirm by mail, sign in, a wrong password, and a reset", async () => {
+  const first = "correct-horse-1";
+  const second = "battery-staple-2";
+  const context = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+  const page = await context.newPage();
+  const status = page.getByRole("status");
+  const openEmail = async () => {
+    await page.goto(`${base}/`, { waitUntil: "domcontentloaded" });
+    await page.getByRole("button", { name: "Continue with email", exact: true }).click();
+  };
+  // The pending screen's Sign out already sits at "/", so wait for the
+  // signed-out screen itself, not the URL, before reloading.
+  const signOutHere = async () => {
+    await page.getByRole("button", { name: "Sign out", exact: true }).click();
+    await shown(page.getByRole("button", { name: "Continue with Google", exact: true }));
+    assert.equal(await getSession(context), null, "signed out");
+  };
+  const signIn = async (password) => {
+    await page.getByLabel("Email", { exact: true }).fill(EMAIL_USER);
+    await page.getByLabel(/^Password/).fill(password);
+    await respectSignInRateLimit();
+    await page.getByRole("button", { name: "Sign in", exact: true }).click();
+  };
+
+  // Sign up: a short password is refused before anything is sent.
+  await openEmail();
+  // E2E_SHOTS=<dir>: the email form at both sizes, for the pull request.
+  if (process.env.E2E_SHOTS) {
+    mkdirSync(process.env.E2E_SHOTS, { recursive: true });
+    await page.waitForTimeout(800);
+    await page.screenshot({ path: path.join(process.env.E2E_SHOTS, "email-1440.png") });
+    const phone = await browser.newContext({ viewport: { width: 375, height: 812 }, isMobile: true, hasTouch: true });
+    const phonePage = await phone.newPage();
+    await phonePage.goto(`${base}/`, { waitUntil: "domcontentloaded" });
+    await phonePage.getByRole("button", { name: "Continue with email", exact: true }).click();
+    await phonePage.getByRole("button", { name: "Create an account", exact: true }).click();
+    await phonePage.waitForTimeout(800);
+    await phonePage.screenshot({ path: path.join(process.env.E2E_SHOTS, "email-375.png") });
+    await phonePage.goto(`${base}/`, { waitUntil: "domcontentloaded" });
+    await phonePage.waitForTimeout(3000);
+    await phonePage.screenshot({ path: path.join(process.env.E2E_SHOTS, "home-375.png") });
+    await phone.close();
+  }
+  await page.getByRole("button", { name: "Create an account", exact: true }).click();
+  await page.getByLabel("Email", { exact: true }).fill(EMAIL_USER);
+  await page.getByLabel(/^Password/).fill("short");
+  await page.getByRole("button", { name: "Create account", exact: true }).click();
+  await shown(status.filter({ hasText: "at least 10 characters" }));
+  await page.getByLabel(/^Password/).fill(first);
+  const signedUpAt = Date.now() - 1000;
+  await respectSignInRateLimit();
+  await page.getByRole("button", { name: "Create account", exact: true }).click();
+  await shown(page.getByText(`Check ${EMAIL_USER}`));
+
+  // Before confirming, signing in is refused and says why.
+  await page.getByRole("button", { name: "Back to sign in", exact: true }).click();
+  await signIn(first);
+  await shown(status.filter({ hasText: "Confirm your email" }));
+
+  // The confirming link signs the Account in: pending, like any new Account.
+  const verification = await readMail(EMAIL_USER, signedUpAt);
+  assert.ok(verification.url, "the verification mail carries a link");
+  await page.goto(verification.url, { waitUntil: "domcontentloaded" });
+  await waitForPending(page, EMAIL_USER);
+  const session = await getSession(context);
+  assert.equal(session.user.email, EMAIL_USER);
+  assert.equal(session.user.emailVerified, true);
+  assert.equal(session.user.approved, false);
+  captured.emailUserId = session.user.id;
+
+  // Signed out: a wrong password is refused, the right one signs in.
+  await signOutHere();
+  await openEmail();
+  await signIn("not-the-password");
+  await shown(status.filter({ hasText: "do not match" }));
+  await signIn(first);
+  await waitForPending(page, EMAIL_USER);
+
+  // A reset: the form answers the same for an unknown address, sending nothing.
+  await signOutHere();
+  await openEmail();
+  await page.getByRole("button", { name: "Forgot password?", exact: true }).click();
+  await page.getByLabel("Email", { exact: true }).fill("nobody@example.com");
+  await page.getByRole("button", { name: "Send reset link", exact: true }).click();
+  await shown(page.getByText("If nobody@example.com has an Account"));
+  await assert.rejects(readMail("nobody@example.com", 0), /no mail/);
+
+  await page.getByRole("button", { name: "Back to sign in", exact: true }).click();
+  await page.getByRole("button", { name: "Forgot password?", exact: true }).click();
+  await page.getByLabel("Email", { exact: true }).fill(EMAIL_USER);
+  const askedAt = Date.now() - 1000;
+  await page.getByRole("button", { name: "Send reset link", exact: true }).click();
+  await shown(page.getByText(`If ${EMAIL_USER} has an Account`));
+  const reset = await readMail(EMAIL_USER, askedAt);
+  assert.ok(reset.url, "the reset mail carries a link");
+  await page.goto(reset.url, { waitUntil: "domcontentloaded" });
+  await page.waitForURL((url) => url.pathname === "/reset-password", { timeout: 20_000 });
+  await page.getByLabel(/^New password/).fill(second);
+  await page.getByLabel("The same password again", { exact: true }).fill(second);
+  await page.getByRole("button", { name: "Change password", exact: true }).click();
+  await shown(page.getByText("Your password is changed"));
+
+  // The old password no longer works; the new one does.
+  await openEmail();
+  await signIn(first);
+  await shown(status.filter({ hasText: "do not match" }));
+  await signIn(second);
+  await waitForPending(page, EMAIL_USER);
+
+  await context.close();
+});
+
 test("the account gate: 401 without a session, 403 for a pending Account; a tampered or expired cookie is refused", async () => {
   await stopApp();
   // The in-process instance must agree with the server it drove on the cookie
@@ -729,6 +879,25 @@ test("the database rows match every flow", async (t) => {
       captured.pendingUserId,
     ]);
     assert.equal(members.rows[0]?.role, "owner");
+  });
+
+  await t.test("the email Account: verified, one credential sign-in, pending, its own Workspace", async () => {
+    const users = await pool.query('SELECT id, role, approved, "emailVerified" FROM "user" WHERE lower(email) = $1', [
+      EMAIL_USER,
+    ]);
+    assert.equal(users.rows.length, 1, "exactly one user for the email address");
+    assert.equal(users.rows[0].id, captured.emailUserId);
+    assert.equal(users.rows[0].emailVerified, true);
+    assert.equal(users.rows[0].approved, false);
+    assert.equal(users.rows[0].role, "user");
+    const accounts = await pool.query('SELECT "providerId", password FROM "account" WHERE "userId" = $1', [
+      captured.emailUserId,
+    ]);
+    assert.equal(accounts.rows.length, 1);
+    assert.equal(accounts.rows[0].providerId, "credential");
+    assert.ok(accounts.rows[0].password && !accounts.rows[0].password.includes("battery-staple-2"), "the password is stored hashed");
+    const orgs = await pool.query('SELECT id FROM "organization" WHERE slug = $1', [`u-${captured.emailUserId}`]);
+    assert.equal(orgs.rows.length, 1, "the email Account's Workspace is u-<id>");
   });
 
   await t.test("the removed Account: no user, sessions, sign-in links or Workspace", async () => {
