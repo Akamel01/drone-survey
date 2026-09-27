@@ -42,7 +42,7 @@ jobs:
           python3 scripts/mission/b2.py --selftest
           python3 scripts/mission/b2_status.py --selftest
           python3 scripts/mission/collect.py --selftest
-          python3 scripts/mission/load.py --selftest
+          python3 scripts/mission/load_test.py
           python3 scripts/mission/calibrate.py --selftest
           python3 scripts/mission/kmz.py --selftest
       # ADR 0018: every Node carries a check, and the seam between Nodes runs

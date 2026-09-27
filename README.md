@@ -77,7 +77,7 @@ Prove the whole mission path without hardware:
 ```bash
 python3 scripts/mission/e2e_test.py
 python3 scripts/mission/collect.py --selftest
-python3 scripts/mission/load.py --selftest
+python3 scripts/mission/load_test.py
 ```
 
 Run the planner:
