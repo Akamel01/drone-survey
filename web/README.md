@@ -48,6 +48,10 @@ Optional:
   tests only.
 - `AUTH_TEST_GITHUB_AUTHORIZATION_URL`, `AUTH_TEST_GITHUB_TOKEN_URL`,
   `AUTH_TEST_GITHUB_USERINFO_URL` — same for GitHub.
+- The six `AUTH_TEST_*` stand-ins above are ignored whenever `VERCEL_ENV` is set
+  (production or preview), where the real `GOOGLE_*`/`GITHUB_*` credentials are
+  used instead; `localhost:*` hosts and `http://localhost:3000` origins are only
+  added off Vercel.
 - `AUTH_TRUSTED_HOSTS` — comma-separated extra hosts allowed in `baseURL`.
 - `AUTH_TRUSTED_ORIGINS` — comma-separated extra trusted origins.
 - `OWNER_WORKSPACE_SLUG` — the operator Workspace's slug (default `operator`).
