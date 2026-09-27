@@ -5,34 +5,37 @@
 // reading in missionView.ts is: everything below is a pure function, the
 // component renders what it returns and decides nothing about timing.
 
-// Success timing (spec §9.1, grilling §3): expanded ~4s → compact for a brief
-// beat → 200ms `--ease-in` leave, then dismiss. Failures carry no timers.
+// Success timing (spec §9.1, grilling §3): every notice arrives compact; a
+// success rests there until 4s, then leaves over 250ms `--ease-in` and
+// dismisses. A failure auto-expands at 200ms and carries no timers.
+export const ARRIVAL_MS = 200;
 export const COLLAPSE_MS = 4000;
-export const COMPACT_BEAT_MS = 250;
-export const LEAVE_MS = 200;
+export const LEAVE_MS = 250;
 
 /** Elapsed-since-payload at which a success dismisses itself. */
-export const DISMISS_MS = COLLAPSE_MS + COMPACT_BEAT_MS + LEAVE_MS;
+export const DISMISS_MS = COLLAPSE_MS + LEAVE_MS;
 
 /** The ellipsis the compact pill appends to its stripped title. */
 export const COMPACT_TITLE = "…";
 
-/** Expanded shows mission + title + body; compact the short title; leaving is
- *  the short ease-in fade before dismiss. */
+/** Expanded shows mission + title + body; compact the short title (and is the
+ *  arrival state); leaving is the short ease-in dissolve before dismiss. */
 export type NoticePhase = "expanded" | "compact" | "leaving";
 
-/** A new payload always arrives expanded — which is also what a superseding
- *  payload (parent remounts per key) and a re-announced identical failure do. */
+/** A new payload always arrives compact — which is also what a superseding
+ *  payload (parent remounts per key) and a re-announced identical failure do.
+ *  Arrival itself is a mount-only CSS animation, not a phase. */
 export function initialPhase(): NoticePhase {
-  return "expanded";
+  return "compact";
 }
 
-/** Which phase a notice shown `elapsedMs` ago is in. Failures never leave
- *  `expanded`: no timers are armed for them. */
+/** Which phase a notice shown `elapsedMs` ago is in, on the timer path only
+ *  (taps and dismissals are `togglePhase`'s and the component's business).
+ *  A failure auto-expands at `ARRIVAL_MS` and then stays; a success leaves at
+ *  `COLLAPSE_MS`. */
 export function phaseAt(elapsedMs: number, failed: boolean): NoticePhase {
-  if (failed || elapsedMs < COLLAPSE_MS) return "expanded";
-  if (elapsedMs < COLLAPSE_MS + COMPACT_BEAT_MS) return "compact";
-  return "leaving";
+  if (failed) return elapsedMs < ARRIVAL_MS ? "compact" : "expanded";
+  return elapsedMs < COLLAPSE_MS ? "compact" : "leaving";
 }
 
 /** When a success dismisses itself, or null: failures stay until dismissed. */
