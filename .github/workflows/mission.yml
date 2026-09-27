@@ -141,6 +141,8 @@ jobs:
   # #242: the sign-up and sign-in flows over a real browser and a real database.
   web-e2e:
     runs-on: ubuntu-latest
+    # The suite takes about a minute; a hang must fail, not hold a runner.
+    timeout-minutes: 15
     services:
       postgres:
         image: postgres:17

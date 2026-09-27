@@ -269,7 +269,12 @@ before(async () => {
   console.log(`app: ${base} (pid ${server.proc.pid})`);
 
   browser = await launchBrowser();
-  process.on("exit", () => server?.proc.kill("SIGKILL")); // SIGKILL on npm is not forwarded; after() owns the graceful path
+  process.on("exit", () => {
+    // A last resort if after() never ran: the server's whole process group.
+    try {
+      if (server) process.kill(-server.proc.pid, "SIGKILL");
+    } catch {}
+  });
 });
 
 after(async () => {

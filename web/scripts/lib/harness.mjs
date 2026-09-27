@@ -63,10 +63,14 @@ export async function launchBrowser() {
 
 export function spawnServer(env, port) {
   const lines = [];
+  // Its own process group: `npm run start` is a wrapper, and on Linux the
+  // Next.js server it starts outlives a signal sent to npm alone, holding this
+  // process's pipes open so the test run never exits (CI, #242).
   const proc = spawn("npm", ["run", "start", "--", "-p", String(port)], {
     cwd: webRoot,
     env,
     stdio: ["ignore", "pipe", "pipe"],
+    detached: true,
   });
   proc.stdout.on("data", (chunk) => lines.push(...String(chunk).split("\n").filter(Boolean)));
   proc.stderr.on("data", (chunk) => lines.push(...String(chunk).split("\n").filter(Boolean)));
@@ -89,7 +93,14 @@ export async function waitReady(server, url, label, timeoutMs = 60_000) {
 
 export async function stopServer(server) {
   if (!server) return;
-  server.proc.kill("SIGTERM");
+  const group = (signal) => {
+    try {
+      process.kill(-server.proc.pid, signal); // the whole group: npm and the server it started
+    } catch {}
+  };
+  group("SIGTERM");
   await Promise.race([server.exit, new Promise((resolve) => setTimeout(resolve, 5_000))]);
-  if (server.proc.exitCode === null) server.proc.kill("SIGKILL");
+  group("SIGKILL");
+  server.proc.stdout?.destroy();
+  server.proc.stderr?.destroy();
 }
