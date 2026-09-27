@@ -422,7 +422,12 @@ export default function MapPane({
     const toggle = toggleRef.current;
     if (!wrap || !toggle) return;
     const ro = new ResizeObserver(() => {
-      wrap.style.setProperty("--toggle-h", `${toggle.getBoundingClientRect().height}px`);
+      const box = toggle.getBoundingClientRect();
+      wrap.style.setProperty("--toggle-h", `${box.height}px`);
+      // The notice (a sibling of the map, not inside it) centres itself
+      // between the Missions panel and these buttons on a wide screen, so it
+      // never covers them; it reads their width from the document.
+      document.documentElement.style.setProperty("--map-controls-w", `${box.width}px`);
     });
     ro.observe(toggle);
     return () => ro.disconnect();

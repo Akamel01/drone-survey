@@ -125,7 +125,7 @@ export default function PlanPage() {
   const collapseSettings = useRef<HTMLButtonElement>(null);
   const expandMissions = useRef<HTMLButtonElement>(null);
   const expandSettings = useRef<HTMLButtonElement>(null);
-  const pageRef = useRef<HTMLDivElement>(null);
+  const pageRef = useRef<HTMLElement>(null);
   const summaryRef = useRef<HTMLDivElement>(null);
   // The control a fold is about to create, focused once it is on screen. Null
   // on first mount: the page must not steal focus on load.
@@ -257,7 +257,7 @@ export default function PlanPage() {
   const onListRead = (read: MissionListRead) => setSites(sitesFrom(read.missions));
 
   return (
-    <div
+    <main
       ref={pageRef}
       className={styles.page}
       data-view={view}
@@ -265,6 +265,8 @@ export default function PlanPage() {
       data-missions={missionsOpen ? "open" : "closed"}
       data-settings={settingsOpen ? "open" : "closed"}
     >
+      {/* The page's one top-level heading; the panels carry the h2s (UI-12 audit). */}
+      <h1 className="visually-hidden">Mission Control</h1>
       <Notice key={notice?.key ?? "empty"} payload={notice} onDismiss={dismissNotice} />
       <div className={styles.top}>
         <div className={styles.heroLayer} aria-hidden="true">
@@ -404,6 +406,6 @@ export default function PlanPage() {
           </button>
         ))}
       </nav>
-    </div>
+    </main>
   );
 }
