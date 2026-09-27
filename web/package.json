@@ -12,6 +12,7 @@
     "check:map-chrome": "node scripts/map-chrome-check.mjs",
     "check:scrollbar": "node scripts/scrollbar-check.mjs",
     "check:motion": "node --import ./scripts/test-hooks.mjs scripts/motion-check.mjs",
+    "check:showcase-player": "node scripts/showcase-player-check.mjs",
     "check:mission-rows": "node --import ./scripts/test-hooks.mjs scripts/mission-rows-check.mjs"
   },
   "dependencies": {
