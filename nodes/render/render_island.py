@@ -1,11 +1,17 @@
-"""Render a cut island (C1 dir) to the Showcase raw stills (C3).
+"""Render a cut island (C1 dir) to the Showcase turn frames (M2).
 
-    blender -b --factory-startup -P render_island.py -- ISLAND_DIR RAW_WIDE RAW_TALL
-    python3 render_island.py --self-test        # framing math, no Blender needed
+    blender -b --factory-startup -P render_island.py -- ISLAND_DIR FRAMES_WIDE FRAMES_TALL
+    python3 render_island.py --self-test        # turn math + resume, no Blender needed
 
 The scene is the render subset of scripts/hero/hero.py:506-555: the overcast
 HDRI sky, one soft sun, the camera, Cycles/OPTIX, AgX and denoising.  Nothing
 is generated on the captured top -- no trees, moss or grass.
+
+Turn (D1): frame i (0-based) sits at i/243*2pi, the island turning under a
+fixed camera (hero.py:529-538).  242 unique renders + frame_243 as a
+byte-copy of frame_000 (first==last exact) = 243 files per framing dir.
+Both framings share one angle array, so same direction holds by
+construction.  Resume (D7): skip-existing + PNG-parse validation.
 
 Art constants below are the hero's (scripts/hero/hero.py:16-30); everything
 else in its K is geometry or dressing and does not exist here.
@@ -25,8 +31,10 @@ K = dict(
     cam_elev=8.0,
 )
 
-WIDE = (3840, 2160)  # C3 raw-wide.png
-TALL = (2160, 3840)  # C3 raw-tall.png
+WIDE = (3840, 2160)  # frames-wide/ (M2; was C3 raw-wide.png)
+TALL = (2160, 3840)  # frames-tall/ (M2; was C3 raw-tall.png)
+
+N_FRAMES = 243  # files per framing dir; last is a byte-copy of first (D1)
 
 ASSETS = "/opt/showcase/assets"  # baked into the image, never a home directory
 SKY = "kloofendal_overcast_puresky/kloofendal_overcast_puresky_4k.hdr"
@@ -165,6 +173,80 @@ def project(cam, point):
             _dot(v, cam["up"]) / (depth * cam["tan_v"]), depth)
 
 
+# ─── turn (D1) + resume (D7): pure Python, no bpy ───────────────────────────
+def turn_angles(n=N_FRAMES):
+    """Shared angle array: rendered frame i sits at i/n*2pi (D1).
+
+    One array drives both framings, so same direction holds by construction.
+    Length n-1: the nth file is a byte-copy of the first, not a render.
+    """
+    return [i / n * 2.0 * math.pi for i in range(n - 1)]
+
+
+def frame_path(out_dir, i):
+    return os.path.join(out_dir, f"frame_{i:03d}.png")
+
+
+def is_valid_png(path, res):
+    """True when path is a complete PNG at res -- a kill mid-write fails this."""
+    import struct
+    try:
+        if os.path.getsize(path) < 45:
+            return False
+        with open(path, "rb") as f:
+            head = f.read(33)
+            if len(head) < 33 or head[:8] != b"\x89PNG\r\n\x1a\n":
+                return False
+            length, kind = struct.unpack(">I4s", head[8:16])
+            if kind != b"IHDR" or length != 13:
+                return False
+            w, h = struct.unpack(">II", head[16:24])
+            if (w, h) != tuple(res):
+                return False
+            f.seek(-12, os.SEEK_END)
+            tail = f.read(12)
+        if len(tail) < 12:
+            return False
+        tlen, tkind = struct.unpack(">I4s", tail[:8])
+        return (tlen, tkind) == (0, b"IEND")
+    except OSError:
+        return False
+
+
+def _union_bbox(bbox):
+    """Smallest Z-up box around bbox covering every Z-rotation of it.
+
+    The camera is framed once on this (fixed camera); the island turns under
+    it, so every angle must fit without moving the camera.
+    """
+    (x0, y0, z0), (x1, y1, z1) = bbox
+    cx, cy = (x0 + x1) / 2.0, (y0 + y1) / 2.0
+    h = max(math.hypot(x - cx, y - cy) for x in (x0, x1) for y in (y0, y1))
+    return ((cx - h, cy - h, z0), (cx + h, cy + h, z1))
+
+
+def render_turn(render_one, out_dir, res, n=N_FRAMES):
+    """Run the turn: render only missing/invalid frames, close with the copy.
+
+    render_one(i, angle, path) renders one frame (Blender in prod, a stub in
+    self-test).  Returns (rendered, skipped).  The closing copy is always
+    refreshed, so first==last holds even if frame 0 was re-rendered.
+    """
+    import shutil
+    os.makedirs(out_dir, exist_ok=True)
+    angles = turn_angles(n)  # the one shared array (wide and tall call this)
+    rendered, skipped = 0, 0
+    for i, angle in enumerate(angles):
+        path = frame_path(out_dir, i)
+        if is_valid_png(path, res):
+            skipped += 1
+            continue
+        render_one(i, angle, path)
+        rendered += 1
+    shutil.copyfile(frame_path(out_dir, 0), frame_path(out_dir, n - 1))
+    return rendered, skipped
+
+
 # ─── self-test (no bpy) ──────────────────────────────────────────────────────
 _CASES = (
     ("cube", ((-3.0, -3.0, -2.0), (3.0, 3.0, 2.0))),
@@ -203,8 +285,105 @@ def self_test():
         assert all(abs(off_a[i] - off_b[i]) < 1e-9 for i in range(3)), \
             f"framing is not translation invariant ({k})"
     assert a["distance"] == b["distance"], "framing is not translation invariant (distance)"
+    # M2 turn: 243-count + 4K res per framing (critic N1), shared angles (D1).
+    assert N_FRAMES == 243, f"turn must hold 243 files, got {N_FRAMES}"
+    assert WIDE == (3840, 2160) and TALL == (2160, 3840)
+    wide_angles, tall_angles = turn_angles(), turn_angles()
+    assert wide_angles == tall_angles, "wide/tall must share one angle array"
+    assert len(wide_angles) == N_FRAMES - 1
+    assert wide_angles[0] == 0.0
+    assert wide_angles == [i / N_FRAMES * 2.0 * math.pi for i in range(N_FRAMES - 1)]
+    # Fixed camera framed on the union box holds every rotated corner in frame.
+    for name, bbox in _CASES:
+        cam = frame_camera(_union_bbox(bbox), *WIDE)
+        c = _center(bbox)
+        for deg in range(0, 360, 15):
+            t = math.radians(deg)
+            co, si = math.cos(t), math.sin(t)
+            for p in _corners(bbox):
+                dx, dy = p[0] - c[0], p[1] - c[1]
+                ndc_x, ndc_y, depth = project(
+                    cam, (c[0] + dx * co - dy * si, c[1] + dx * si + dy * co, p[2]))
+                assert depth > 0.0, f"{name}@{deg}: corner behind the camera"
+                assert abs(ndc_x) <= cam["fit"] + 1e-9, f"{name}@{deg}: corner outside x"
+                assert abs(ndc_y) <= cam["fit"] + 1e-9, f"{name}@{deg}: corner outside y"
+    print(f"turn: shared angles ok ({N_FRAMES - 1} renders + closing copy); "
+          f"fixed camera holds all 24 angles x {len(_CASES)} bboxes")
+    _resume_sim()
     print(f"self-test ok: {len(_CASES)} synthetic bboxes x 2 aspects; "
           f"translation invariant")
+
+
+def _stub_png(path, res):
+    """Minimal valid PNG at res (IHDR only what resume validates; 1px IDAT)."""
+    import struct
+    import zlib
+    w, h = res
+
+    def chunk(kind, data):
+        c = struct.pack(">I", len(data)) + kind + data
+        return c + struct.pack(">I", zlib.crc32(kind + data) & 0xFFFFFFFF)
+
+    with open(path, "wb") as f:
+        f.write(b"\x89PNG\r\n\x1a\n"
+                + chunk(b"IHDR", struct.pack(">IIBBBBB", w, h, 8, 2, 0, 0, 0))
+                + chunk(b"IDAT", zlib.compress(b"\x00" + b"\x00" * 3 * w))
+                + chunk(b"IEND", b""))
+
+
+def _resume_sim():
+    """Kill-resume incl. mid-write (D7): first missing/invalid re-renders,
+    valid frames never re-render, first==last byte-identical."""
+    import shutil
+    import tempfile
+    n, res, calls = 5, (64, 32), []
+
+    def stub(i, angle, path):
+        calls.append(i)
+        assert angle == i / n * 2.0 * math.pi, "stub must see the shared angles"
+        _stub_png(path, res)
+
+    work = tempfile.mkdtemp(prefix="turn-resume-")
+    try:
+        d = os.path.join(work, "frames")
+        assert render_turn(stub, d, res, n) == (n - 1, 0)  # fresh: all render
+        assert len(calls) == n - 1
+        with open(frame_path(d, 0), "rb") as f:
+            first = f.read()
+        with open(frame_path(d, n - 1), "rb") as f:
+            assert f.read() == first, "first==last must be byte-identical"
+        assert sorted(os.listdir(d)) == [f"frame_{i:03d}.png" for i in range(n)]
+        calls.clear()
+        assert render_turn(stub, d, res, n) == (0, n - 1)  # nothing re-renders
+        assert calls == []
+        # Kill simulation: one frame missing, one killed mid-write (truncated).
+        keep = {i: open(frame_path(d, i), "rb").read() for i in (0, 1)}
+        os.unlink(frame_path(d, 2))
+        with open(frame_path(d, 3), "wb") as f:
+            f.write(first[:20])
+        assert not is_valid_png(frame_path(d, 3), res)
+        assert render_turn(stub, d, res, n) == (2, n - 3)
+        assert sorted(calls) == [2, 3], f"resume must start at first gap, got {calls}"
+        for i, blob in keep.items():
+            with open(frame_path(d, i), "rb") as f:
+                assert f.read() == blob, f"valid frame {i} was re-rendered"
+        with open(frame_path(d, n - 1), "rb") as f:
+            with open(frame_path(d, 0), "rb") as g:
+                assert f.read() == g.read(), "first==last after resume"
+        # Mid-write past the header: valid IHDR but cut IDAT, no IEND.
+        calls.clear()
+        with open(frame_path(d, 1), "rb") as f:
+            full = f.read()
+        assert len(full) > 50
+        with open(frame_path(d, 1), "wb") as f:
+            f.write(full[:50])
+        assert not is_valid_png(frame_path(d, 1), res)
+        assert render_turn(stub, d, res, n) == (1, n - 2)
+        assert calls == [1], f"truncated tail must re-render, got {calls}"
+        print(f"resume-sim: fresh {n - 1}+copy, steady-state 0 re-renders, "
+              f"kill-sim re-rendered [2, 3] only, tail-cut re-rendered [1], first==last ok")
+    finally:
+        shutil.rmtree(work, ignore_errors=True)
 
 
 # ─── Blender scene (hero subset) ─────────────────────────────────────────────
@@ -316,7 +495,8 @@ def _cycles(sc):
     sc.view_settings.look = "AgX - Medium High Contrast"
 
 
-def render(island_dir, raw_wide, raw_tall):
+def render(island_dir, wide_dir, tall_dir):
+    """Render the 243-file turn into FRAMES_WIDE + FRAMES_TALL (fixed camera)."""
     import bpy
     from mathutils import Vector
 
@@ -326,12 +506,18 @@ def render(island_dir, raw_wide, raw_tall):
 
     bpy.ops.wm.read_factory_settings(use_empty=True)
     bpy.ops.wm.obj_import(filepath=obj_path, forward_axis="Y", up_axis="Z")
-    if not any(ob.type == "MESH" for ob in bpy.context.scene.objects):
+    meshes = [ob for ob in bpy.context.scene.objects if ob.type == "MESH"]
+    if not meshes:
         raise SystemExit("render: island.obj imported no mesh objects")
     _resolve_missing_images(island_dir)
+    root = bpy.data.objects.new("Turn", None)  # the island turns under the camera
+    bpy.context.scene.collection.objects.link(root)
+    for ob in meshes:
+        ob.parent = root
+        ob.matrix_parent_inverse = root.matrix_world.inverted()
 
-    bbox = _scene_bbox()
-    print(f"render: island bbox {bbox}", flush=True)
+    bbox = _union_bbox(_scene_bbox())  # one fixed camera fits every angle
+    print(f"render: turn bbox {bbox}", flush=True)
 
     sc = bpy.context.scene
     _sky(sc)
@@ -342,23 +528,34 @@ def render(island_dir, raw_wide, raw_tall):
     cam.data.sensor_fit = "AUTO"
     cam.data.sensor_width = SENSOR_WIDTH
     _cycles(sc)
-    sc.render.film_transparent = True  # C3: Grading composites the sky
+    sc.render.film_transparent = True  # Grading composites the sky
     sc.render.image_settings.file_format = "PNG"
     sc.render.image_settings.color_mode = "RGBA"
     sc.render.resolution_percentage = 100
 
-    for (res_x, res_y), path in ((WIDE, raw_wide), (TALL, raw_tall)):
-        spec = frame_camera(bbox, res_x, res_y)
+    def frame_one_framing(res, out_dir):
+        spec = frame_camera(bbox, *res)  # placed once; never moves mid-turn
         cam.data.lens = spec["lens"]
         cam.location = spec["location"]
         cam.rotation_euler = (Vector(spec["target"]) - Vector(spec["location"])
                               ).to_track_quat("-Z", "Y").to_euler()
         cam.data.clip_start = max(0.01, spec["distance"] / 1000.0)
         cam.data.clip_end = spec["distance"] + 2.0 * _diag(bbox)
-        sc.render.resolution_x, sc.render.resolution_y = res_x, res_y
-        sc.render.filepath = os.path.abspath(path)
-        bpy.ops.render.render(write_still=True)
-        print(f"render: wrote {path} {res_x}x{res_y}", flush=True)
+        sc.render.resolution_x, sc.render.resolution_y = res
+
+        def render_one(i, angle, path):
+            root.rotation_euler = (0.0, 0.0, angle)
+            sc.render.filepath = os.path.abspath(path)
+            bpy.ops.render.render(write_still=True)
+            print(f"render: frame {i} ({math.degrees(angle):.2f}deg) -> {path}",
+                  flush=True)
+
+        rendered, skipped = render_turn(render_one, out_dir, res)
+        print(f"render: {out_dir} {res[0]}x{res[1]} "
+              f"{rendered} rendered, {skipped} resumed", flush=True)
+
+    frame_one_framing(WIDE, wide_dir)
+    frame_one_framing(TALL, tall_dir)
 
 
 def _argv(argv):
@@ -373,7 +570,7 @@ def main(argv):
     if len(args) != 3:
         raise SystemExit(
             "usage: blender -b --factory-startup -P render_island.py -- "
-            "ISLAND_DIR RAW_WIDE RAW_TALL   (or: python3 render_island.py --self-test)")
+            "ISLAND_DIR FRAMES_WIDE FRAMES_TALL   (or: python3 render_island.py --self-test)")
     render(*args)
 
 
