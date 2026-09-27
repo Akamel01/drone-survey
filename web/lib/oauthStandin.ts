@@ -13,7 +13,8 @@
 //    (@better-auth/core/dist/oauth2/utils.mjs:17) reads token_type/expires_in,
 //    and the token's code_verifier is accepted but not checked.
 //  - GET /userinfo (Authorization: Bearer <access_token>) returns
-//    { id, name, email, image }; the plugin's default fetchUserInfo
+//    { id, name, email, image, email_verified } (the last from the identity's
+//    emailVerified, absent meaning true); the plugin's default fetchUserInfo
 //    (generic-oauth/index.mjs:37) maps picture->image and email_verified, and
 //    the account subject falls back to `id` when there is no `sub`.
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
@@ -25,6 +26,9 @@ export type StandinIdentity = {
   name: string;
   email: string;
   image?: string | null;
+  /** What /userinfo reports as `email_verified`; absent means true (the
+   *  common case, and the pre-R2 behaviour). */
+  emailVerified?: boolean;
 };
 
 export type OAuthStandin = {
@@ -114,7 +118,7 @@ export async function startOAuthStandin(identities: StandinIdentity[]): Promise<
           name: identity.name,
           email: identity.email,
           image: identity.image ?? null,
-          email_verified: true,
+          email_verified: identity.emailVerified ?? true,
         });
       }
       return json(response, 404, { error: `standin: nothing at ${path}` });
