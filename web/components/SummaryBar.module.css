@@ -276,8 +276,12 @@
 /* A short screen -- a phone on its side, or a desktop window at 200 % zoom
    (1440 x 900 is 720 x 450 CSS px) -- left the map 98 px under a 64vh
    Summary, too little for its own Base map and Overlays menus. There the
-   Summary scrolls inside a lower cap instead (UI-26). */
-@media (max-width: 999px) and (max-height: 560px) {
+   Summary scrolls inside a lower cap instead. "Short" is measured in text:
+   a media query reads rem as the browser's default font size, so 35rem is
+   560 px at the default and 1120 px with the text doubled, where an
+   upright phone's Summary would otherwise fill its cap and leave Settings a
+   200 px strip (UI-26). */
+@media (max-width: 999px) and (max-height: 35rem) {
   .wrap {
     max-height: 38vh;
   }
