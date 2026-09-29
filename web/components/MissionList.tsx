@@ -60,11 +60,6 @@ import styles from "./MissionList.module.css";
 // reach them -- the old screen's rules lived inside its JSX, which is why
 // nothing could assert that a mismatch withheld the affirmation.
 
-/** The settle-phase class hook. M3 owns the rule: until it lands this is the
- *  unstyled global, after it lands the module class wins. */
-const settlingClass =
-  (styles as unknown as Record<string, string | undefined>).settling ?? "settling";
-
 /** The tone of an answer, carried on the row's left edge rather than by
  *  tinting its text: a grey note is how a mismatch gets missed, and a whole
  *  row in red is unreadable. */
@@ -142,10 +137,10 @@ export default function MissionList({ onEdit, onCopy, editingId = null, onRead, 
   // carry the leaving row any more, and the render still needs its id.
   const [leaving, setLeaving] = useState<ReadonlySet<string>>(EMPTY_SET);
   const [arriving, setArriving] = useState<ReadonlySet<string>>(EMPTY_SET);
-  // The Mark Flown row settling into its Flown reading (departure case), and
+  // The Mark Flown rows settling into their Flown reading (departure case), and
   // the one-shot content crossfade id (filter-on case: still on screen, no
-  // hold, never inert). Both render under the same `settlingClass` hook.
-  const [settlingId, setSettlingId] = useState<string | null>(null);
+  // hold, never inert). Both render under the same `styles.settling` hook.
+  const [settlingIds, setSettlingIds] = useState<ReadonlySet<string>>(EMPTY_SET);
   const [flashId, setFlashId] = useState<string | null>(null);
   // The parked read the settling row renders its Flown reading from, as state
   // (not the ref): the render may not read refs.
@@ -154,7 +149,7 @@ export default function MissionList({ onEdit, onCopy, editingId = null, onRead, 
   // load/poll/Refresh/storage/cache, consumed exactly once by `applyRead`.
   const flownMarkerRef = useRef<FlownMarker>(null);
   const flownSeqRef = useRef(0);
-  const settlingIdRef = useRef<string | null>(null);
+  const settlingIdsRef = useRef<ReadonlySet<string>>(EMPTY_SET);
   const flashTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const inFlight = useRef(false);
   const listRef = useRef<HTMLDivElement>(null);
@@ -203,8 +198,8 @@ export default function MissionList({ onEdit, onCopy, editingId = null, onRead, 
     setRead(fresh);
     leavingRef.current = EMPTY_SET;
     setLeaving(EMPTY_SET);
-    settlingIdRef.current = null;
-    setSettlingId(null);
+    settlingIdsRef.current = EMPTY_SET;
+    setSettlingIds(EMPTY_SET);
     setSettlingRead(null);
     if (arrivals.length > 0) {
       setArriving((prev) => new Set([...prev, ...arrivals]));
@@ -226,8 +221,13 @@ export default function MissionList({ onEdit, onCopy, editingId = null, onRead, 
     (fresh: MissionListRead, id: string, leaverIds: string[]) => {
       pendingReadRef.current = fresh;
       leavingRef.current = new Set(leaverIds);
-      settlingIdRef.current = id;
-      setSettlingId(id);
+      // Add this mark's id to the settled set: an overlapping Mark Flown
+      // retargets the one chain but never strands the earlier row on its
+      // pre-Flown reading.
+      const nextSettling = new Set(settlingIdsRef.current);
+      nextSettling.add(id);
+      settlingIdsRef.current = nextSettling;
+      setSettlingIds(nextSettling);
       setSettlingRead(fresh);
       setFlashId(null);
       if (holdTimerRef.current !== null) clearTimeout(holdTimerRef.current);
@@ -236,8 +236,8 @@ export default function MissionList({ onEdit, onCopy, editingId = null, onRead, 
         flashTimerRef.current = null;
       }
       const toLeaving = () => {
-        settlingIdRef.current = null;
-        setSettlingId(null);
+        settlingIdsRef.current = EMPTY_SET;
+        setSettlingIds(EMPTY_SET);
         const nextSet = new Set(leavingRef.current);
         setLeaving(nextSet);
         holdTimerRef.current = setTimeout(() => {
@@ -307,21 +307,26 @@ export default function MissionList({ onEdit, onCopy, editingId = null, onRead, 
         }
       }
       // A poll mid-settle recomputes from the DOM against itself: the
-      // settling row is still rendered, so the same leavers keep the first
+      // settling rows are still rendered, so the same leavers keep the first
       // deadline and only update the parked read; a newly departed row owns a
-      // new chain. (R2)
-      const settling = settlingIdRef.current;
-      if (settling !== null) {
-        if (nextLeaving.includes(settling)) {
-          pendingReadRef.current = fresh;
-          setSettlingRead(fresh);
-          if (nextLeaving.some((id) => !leavingRef.current.has(id))) {
-            startFlownChain(fresh, settling, nextLeaving);
-          }
-          return;
+      // new chain. Settled ids no longer leaving stop settling. (R2)
+      const settled = [...settlingIdsRef.current].filter((id) => nextLeaving.includes(id));
+      if (settled.length > 0) {
+        if (settled.length !== settlingIdsRef.current.size) {
+          const kept = new Set(settled);
+          settlingIdsRef.current = kept;
+          setSettlingIds(kept);
         }
-        settlingIdRef.current = null;
-        setSettlingId(null);
+        pendingReadRef.current = fresh;
+        setSettlingRead(fresh);
+        if (nextLeaving.some((id) => !leavingRef.current.has(id))) {
+          startFlownChain(fresh, settled[0], nextLeaving);
+        }
+        return;
+      }
+      if (settlingIdsRef.current.size > 0) {
+        settlingIdsRef.current = EMPTY_SET;
+        setSettlingIds(EMPTY_SET);
         setSettlingRead(null);
       }
       if (nextLeaving.length === 0) {
@@ -377,8 +382,8 @@ export default function MissionList({ onEdit, onCopy, editingId = null, onRead, 
     pendingReadRef.current = null;
     leavingRef.current = EMPTY_SET;
     setLeaving(EMPTY_SET);
-    settlingIdRef.current = null;
-    setSettlingId(null);
+    settlingIdsRef.current = EMPTY_SET;
+    setSettlingIds(EMPTY_SET);
     setSettlingRead(null);
     setFlashId(null);
     flownMarkerRef.current = null;
@@ -794,7 +799,7 @@ export default function MissionList({ onEdit, onCopy, editingId = null, onRead, 
       {visible.map((row) => {
         const isLeaving = leaving.has(row.id);
         const isArriving = arriving.has(row.id);
-        const isSettling = settlingId === row.id;
+        const isSettling = settlingIds.has(row.id);
         const isFlash = flashId === row.id;
         // The settling row reads Flown from the parked read, not from the
         // committed one still on screen: chip + headline crossfade under the
@@ -822,7 +827,7 @@ export default function MissionList({ onEdit, onCopy, editingId = null, onRead, 
           <div
             key={row.id}
             data-row-id={row.id}
-            className={`${styles.slot}${isLeaving && !isSettling ? ` ${styles.leaving}` : ""}${isArriving ? ` ${styles.arriving}` : ""}${isSettling || isFlash ? ` ${settlingClass}` : ""}`}
+            className={`${styles.slot}${isLeaving && !isSettling ? ` ${styles.leaving}` : ""}${isArriving ? ` ${styles.arriving}` : ""}${isSettling || isFlash ? ` ${styles.settling}` : ""}`}
             inert={isLeaving || isSettling || undefined}
             aria-hidden={isLeaving || isSettling || undefined}
           >

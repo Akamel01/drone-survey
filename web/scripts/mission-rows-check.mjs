@@ -1253,6 +1253,119 @@ async function flownSettle(browser) {
 }
 
 // ---------------------------------------------------------------------------
+// UI-25 (#294) M7 fix — overlapping marks: a second Mark Flown while the first
+// row still settles must not strand the first row on its pre-Flown reading.
+// ---------------------------------------------------------------------------
+
+async function flownOverlap(browser) {
+  const { context, page } = await contextFor(browser, {
+    width: 1440,
+    height: 900,
+    seed: SETTLE_SEED,
+    manifest: SETTLE_MANIFEST,
+    rowReady: true,
+  });
+  try {
+    const run = await page.evaluate(
+      async ({ first, second, gap, deadline }) => {
+        const { byId, frame, settleSnap } = window.__h;
+        const mark = (id) => {
+          const btn = [...byId(id).querySelectorAll("button")].find((b) => b.textContent.trim() === "Mark Flown");
+          if (!btn) throw new Error(`Mark Flown button not found in ${id}`);
+          btn.click();
+        };
+        const snap = (el) => {
+          const f = byId(el);
+          return f ? settleSnap(f) : null;
+        };
+        const frames = [];
+        mark(first);
+        const tFirst = performance.now();
+        let tSecond = null;
+        while (performance.now() - tFirst < deadline) {
+          const t = performance.now();
+          if (tSecond === null && t - tFirst >= gap) {
+            mark(second);
+            tSecond = performance.now();
+          }
+          frames.push({ t, first: snap(first), second: snap(second) });
+          if (tSecond !== null && !byId(first) && !byId(second)) break;
+          await frame();
+        }
+        return { frames, tFirst, tSecond };
+      },
+      { first: SETTLE_A, second: SETTLE_B, gap: 400, deadline: 3000 },
+    );
+    const { frames, tSecond } = run;
+    const tSettleA = frames.find((f) => f.first?.settling)?.t ?? null;
+    const tSettleB = frames.find((f) => f.second?.settling)?.t ?? null;
+    const went = (side) => frames.some((f, i) => i > 0 && !f[side] && frames[i - 1][side]);
+
+    check(
+      "overlap",
+      "the first row settles before the second is marked",
+      tSettleA !== null && tSecond !== null && tSettleA < tSecond,
+      `first settle at ${tSettleA === null ? "never" : Math.round(tSettleA - run.tFirst)}ms, second mark at ${tSecond === null ? "never" : Math.round(tSecond - run.tFirst)}ms`,
+    );
+    check(
+      "overlap",
+      "the second mark lands mid-chain",
+      tSettleA !== null && tSecond !== null && tSecond - tSettleA < 1000,
+      `${tSettleA !== null && tSecond !== null ? Math.round(tSecond - tSettleA) : "?"}ms after the first settle`,
+    );
+    check(
+      "overlap",
+      "the second row settles Flown",
+      tSettleB !== null && frames.some((f) => f.second?.settling && f.second.chipText === "Flown"),
+      tSettleB === null ? "never settling" : `settle at ${Math.round(tSettleB - run.tFirst)}ms`,
+    );
+    check(
+      "overlap",
+      "the first row is still settling after the second mark",
+      tSecond !== null && frames.some((f) => f.first?.settling && f.t > tSecond + 50),
+      `${frames.filter((f) => f.first?.settling && tSecond !== null && f.t > tSecond + 50).length} samples after the mark`,
+    );
+    const lit = frames.filter((f) => f.first && tSettleA !== null && f.t >= tSettleA);
+    // The dissolve itself renders the committed read (the existing single-mark
+    // behaviour); the reading and the settle state are asserted up to the
+    // moment the row enters `.leaving`.
+    const beforeLeaving = lit.filter((f) => !f.first.leaving);
+    check(
+      "overlap",
+      "the first row keeps its Flown reading until it enters .leaving",
+      beforeLeaving.length > 0 && beforeLeaving.every((f) => f.first.chipText === "Flown"),
+      `${beforeLeaving.filter((f) => f.first.chipText !== "Flown").length} stale samples of ${beforeLeaving.length}`,
+    );
+    check(
+      "overlap",
+      "the first row stays inert until it dissolves",
+      lit.length > 0 && lit.every((f) => f.first.inert),
+      `${lit.filter((f) => !f.first.inert).length} interactive samples of ${lit.length}`,
+    );
+    check(
+      "overlap",
+      "the first row stays settling until it enters .leaving",
+      lit.length > 0 && lit.every((f) => f.first.leaving || f.first.settling),
+      `${lit.filter((f) => !f.first.leaving && !f.first.settling).length} bare samples of ${lit.length}`,
+    );
+    check(
+      "overlap",
+      "the first row enters .leaving before it detaches",
+      lit.some((f) => f.first.leaving) && went("first"),
+      `${lit.filter((f) => f.first.leaving).length} leaving samples`,
+    );
+    check(
+      "overlap",
+      "both rows detach",
+      went("first") && went("second"),
+      `first gone ${went("first")}, second gone ${went("second")}`,
+    );
+  } finally {
+    await context.close();
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Reduced motion — 150ms opacity crossfades, no FLIP, soft arrival
 // ---------------------------------------------------------------------------
 
@@ -1626,6 +1739,7 @@ try {
   await archivedToggle(browser);
   await holdRule(browser);
   await flownSettle(browser);
+  await flownOverlap(browser);
   await reducedMotion(browser);
   await mobileRemove(browser);
   await desktopVideo(browser);
