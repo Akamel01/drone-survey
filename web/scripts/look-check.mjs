@@ -1221,7 +1221,9 @@ async function enlargedSection(browser) {
         const text = got.problems.filter((p) => p.kind === "text");
         const ctl = got.problems.filter((p) => p.kind === "control");
         const list = (ps) => ps.slice(0, 8).map((p) => `${p.what}: ${p.why}`).join("; ");
-        check(section, `${label}: no text clipped or overlapped (${got.lines} lines)`, got.lines > 0 && text.length === 0, list(text));
+        // Something must have been measured; the phone's Base map menu is
+        // icons only, so a scene may have controls and no text.
+        check(section, `${label}: no text clipped or overlapped (${got.lines} lines)`, got.lines + got.controls > 0 && text.length === 0, list(text));
         check(section, `${label}: every control reachable and clear (${got.controls} controls)`, ctl.length === 0, list(ctl));
         const flow = got.problems.filter((p) => p.kind === "reflow");
         check(section, `${label}: neither the page nor a panel scrolls sideways`, !got.sideways && flow.length === 0,

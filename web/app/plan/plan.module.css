@@ -407,12 +407,15 @@
     padding: 8px 12px;
     /* Content-driven and anchored at the bottom: at 200 % text it grew to
        nearly the window's height, lifting the attribution above it into the
-       map's top controls, and on a shorter window its top -- the lead figure
-       -- would have left the screen. It stops at half the map and scrolls
-       inside the glass instead. The 640 px floor is above the tallest it is
-       at the default text size (the narrowest wide window, 1000 px, where it
-       is a single column), so at the default nothing changes (UI-26). */
-    max-height: min(calc(100% - 24px), max(50%, 640px));
+       Base map and Overlays pills, and on a shorter window its top -- the
+       lead figure -- would have left the screen. It stops below that top
+       band instead and scrolls inside the glass. The band: the 12 px insets
+       top and bottom, the attribution's 24 px lift and its 4 px padding, and
+       the attribution line and pill row (4rem together, growing with the
+       text). At the default text size the Summary is shorter than this in
+       every wide window 800 px tall or more, so nothing changes there
+       (UI-26). */
+    max-height: calc(100% - 52px - 4rem);
     overflow-y: auto;
   }
 
