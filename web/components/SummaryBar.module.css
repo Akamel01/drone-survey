@@ -194,21 +194,25 @@
   white-space: nowrap;
 }
 
-/* Danger text has to hold 4.5:1 over whatever is behind the glass, down to
-   the bright satellite imagery the map can show (spec § 12) -- the shared
-   smoke-glass tint alone does not get there, so these two carry their own
-   near-opaque backing rather than sitting directly on it. */
-.dispatchError {
-  margin-top: 4px;
-  padding: 8px 12px;
-  border-radius: 10px;
-  background: rgb(20 12 10 / 0.9);
-  box-shadow: inset 0 0 0 1px rgb(224 112 79 / 0.35);
-  color: var(--danger);
+/* UI-22 save hint: neutral text beside disabled Save, saveProblem wording
+   verbatim. Shape follows .passphraseHint, but 12px is deliberate (matches
+   the ex-.dispatchError body text, not the 11px .passphraseHint). Full-width
+   <p> under Save: without its own flex basis a bare <p> in .actions would
+   squeeze the buttons. No backing box, no error colour, no animation. */
+.saveHint {
+  flex: 1 1 100%;
+  min-width: 0;
+  margin: 0;
+  overflow-wrap: anywhere;
   font-size: 12px;
   line-height: 1.5;
+  color: var(--on-glass-2);
 }
 
+/* Danger text has to hold 4.5:1 over whatever is behind the glass, down to
+   the bright satellite imagery the map can show (spec § 12) -- the shared
+   smoke-glass tint alone does not get there, so the problems list carries
+   its own near-opaque backing rather than sitting directly on it. */
 .problems {
   margin: 0;
   padding: 10px 16px 10px 32px;
