@@ -35,12 +35,17 @@ import {
 } from "@/lib/missionView";
 import {
   ENTER_MS,
+  FLOWN_COUNT_MS,
+  SETTLE_MS,
   arrivingIds,
   flipDeltas,
   holdMs,
   leavingIds,
+  settleFlown,
   visibleMissions,
+  type FlownMarker,
 } from "@/lib/missionListMotion";
+import type { FirstRunStep } from "@/lib/firstRun";
 import styles from "./MissionList.module.css";
 
 // One Mission, one row, one state.
@@ -54,6 +59,11 @@ import styles from "./MissionList.module.css";
 // it may be called ready all come from `lib/missionView.ts`, where a test can
 // reach them -- the old screen's rules lived inside its JSX, which is why
 // nothing could assert that a mismatch withheld the affirmation.
+
+/** The settle-phase class hook. M3 owns the rule: until it lands this is the
+ *  unstyled global, after it lands the module class wins. */
+const settlingClass =
+  (styles as unknown as Record<string, string | undefined>).settling ?? "settling";
 
 /** The tone of an answer, carried on the row's left edge rather than by
  *  tinting its text: a grey note is how a mismatch gets missed, and a whole
@@ -91,9 +101,13 @@ interface MissionListProps {
   /** Page-owned Notice slot. The page stamps `key` itself, so this takes the
    *  payload without it. */
   onNotice?: (p: Omit<NoticePayload, "key">) => void;
+  /** First-run navigation: the list reports which step the operator chose,
+   *  the page decides what "there" means per viewport (M4). Final copy is
+   *  M5's; the labels below are draft slots. */
+  onFirstRunNavigate?: (step: FirstRunStep) => void;
 }
 
-export default function MissionList({ onEdit, onCopy, editingId = null, onRead, onNotice }: MissionListProps) {
+export default function MissionList({ onEdit, onCopy, editingId = null, onRead, onNotice, onFirstRunNavigate }: MissionListProps) {
   const [passphrase, setPassphrase] = useState<string | null>(null);
   // True until the first good read, whatever is typed meanwhile: the field
   // asking for the passphrase must not vanish mid-keystroke just because the
@@ -128,6 +142,20 @@ export default function MissionList({ onEdit, onCopy, editingId = null, onRead, 
   // carry the leaving row any more, and the render still needs its id.
   const [leaving, setLeaving] = useState<ReadonlySet<string>>(EMPTY_SET);
   const [arriving, setArriving] = useState<ReadonlySet<string>>(EMPTY_SET);
+  // The Mark Flown row settling into its Flown reading (departure case), and
+  // the one-shot content crossfade id (filter-on case: still on screen, no
+  // hold, never inert). Both render under the same `settlingClass` hook.
+  const [settlingId, setSettlingId] = useState<string | null>(null);
+  const [flashId, setFlashId] = useState<string | null>(null);
+  // The parked read the settling row renders its Flown reading from, as state
+  // (not the ref): the render may not read refs.
+  const [settlingRead, setSettlingRead] = useState<MissionListRead | null>(null);
+  // The operator's own Mark Flown cause: set only in `act()`, never by
+  // load/poll/Refresh/storage/cache, consumed exactly once by `applyRead`.
+  const flownMarkerRef = useRef<FlownMarker>(null);
+  const flownSeqRef = useRef(0);
+  const settlingIdRef = useRef<string | null>(null);
+  const flashTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const inFlight = useRef(false);
   const listRef = useRef<HTMLDivElement>(null);
   // The newest read parked while rows dissolve; it commits when the hold ends.
@@ -175,6 +203,9 @@ export default function MissionList({ onEdit, onCopy, editingId = null, onRead, 
     setRead(fresh);
     leavingRef.current = EMPTY_SET;
     setLeaving(EMPTY_SET);
+    settlingIdRef.current = null;
+    setSettlingId(null);
+    setSettlingRead(null);
     if (arrivals.length > 0) {
       setArriving((prev) => new Set([...prev, ...arrivals]));
       if (arrivingTimerRef.current !== null) clearTimeout(arrivingTimerRef.current);
@@ -185,9 +216,58 @@ export default function MissionList({ onEdit, onCopy, editingId = null, onRead, 
     }
   }, []);
 
+  /** The Flown moment as one timer chain on `holdTimerRef`: settle crossfade
+   *  (SETTLE_MS, skipped under reduced motion where the reading shows at
+   *  once) → reading hold (FLOWN_COUNT_MS) → the existing dissolve via
+   *  `holdMs`. Totals match `flownHoldMs`. `leavingRef` already names the
+   *  leavers so a mid-settle poll keeps the first deadline; the row stays out
+   *  of `.leaving` until the dissolve phase. */
+  const startFlownChain = useCallback(
+    (fresh: MissionListRead, id: string, leaverIds: string[]) => {
+      pendingReadRef.current = fresh;
+      leavingRef.current = new Set(leaverIds);
+      settlingIdRef.current = id;
+      setSettlingId(id);
+      setSettlingRead(fresh);
+      setFlashId(null);
+      if (holdTimerRef.current !== null) clearTimeout(holdTimerRef.current);
+      if (flashTimerRef.current !== null) {
+        clearTimeout(flashTimerRef.current);
+        flashTimerRef.current = null;
+      }
+      const toLeaving = () => {
+        settlingIdRef.current = null;
+        setSettlingId(null);
+        const nextSet = new Set(leavingRef.current);
+        setLeaving(nextSet);
+        holdTimerRef.current = setTimeout(() => {
+          holdTimerRef.current = null;
+          const read = pendingReadRef.current;
+          pendingReadRef.current = null;
+          if (read) commit(read);
+          else {
+            leavingRef.current = EMPTY_SET;
+            setLeaving(EMPTY_SET);
+          }
+        }, holdMs(prefersReducedMotion()));
+      };
+      if (prefersReducedMotion()) {
+        holdTimerRef.current = setTimeout(toLeaving, FLOWN_COUNT_MS);
+      } else {
+        holdTimerRef.current = setTimeout(() => {
+          holdTimerRef.current = setTimeout(toLeaving, FLOWN_COUNT_MS);
+        }, SETTLE_MS);
+      }
+    },
+    [commit],
+  );
+
   /** The read path's one gate. A read that would unmount a visible row makes
    *  that row dissolve first and waits out the hold; any other read commits at
-   *  once, so idle re-polls never move. */
+   *  once, so idle re-polls never move. The operator's own Mark Flown settles
+   *  first (Flown reading under `.settling`, row inert) and every other cause
+   *  — poll, Refresh, storage, cache fallback, inferred Flown — never matches,
+   *  because only `act()` sets the marker and it is consumed once, here. */
   const applyRead = useCallback(
     (fresh: MissionListRead) => {
       const rendered = new Set<string>();
@@ -197,6 +277,53 @@ export default function MissionList({ onEdit, onCopy, editingId = null, onRead, 
       });
       const nextVisible = visibleMissions(fresh.missions, showArchivedRef.current).map((r) => r.id);
       const nextLeaving = leavingIds(rendered, nextVisible);
+      const marker = flownMarkerRef.current;
+      if (marker !== null) {
+        flownMarkerRef.current = null;
+        if (settleFlown(marker, nextLeaving) && fresh.missions.some((m) => m.id === marker.id)) {
+          startFlownChain(fresh, marker.id, nextLeaving);
+          return;
+        }
+        // No departure for the marked id: filter-on Mark Flown, a cache
+        // fallback, or a row already gone. Silent consume, normal commit, and
+        // a one-shot 150ms content crossfade if it is still on screen — no
+        // hold, never inert.
+        if (nextLeaving.length === 0) {
+          if (holdTimerRef.current !== null) {
+            clearTimeout(holdTimerRef.current);
+            holdTimerRef.current = null;
+          }
+          pendingReadRef.current = null;
+          commit(fresh);
+          if (nextVisible.includes(marker.id)) {
+            setFlashId(marker.id);
+            if (flashTimerRef.current !== null) clearTimeout(flashTimerRef.current);
+            flashTimerRef.current = setTimeout(() => {
+              flashTimerRef.current = null;
+              setFlashId(null);
+            }, SETTLE_MS);
+          }
+          return;
+        }
+      }
+      // A poll mid-settle recomputes from the DOM against itself: the
+      // settling row is still rendered, so the same leavers keep the first
+      // deadline and only update the parked read; a newly departed row owns a
+      // new chain. (R2)
+      const settling = settlingIdRef.current;
+      if (settling !== null) {
+        if (nextLeaving.includes(settling)) {
+          pendingReadRef.current = fresh;
+          setSettlingRead(fresh);
+          if (nextLeaving.some((id) => !leavingRef.current.has(id))) {
+            startFlownChain(fresh, settling, nextLeaving);
+          }
+          return;
+        }
+        settlingIdRef.current = null;
+        setSettlingId(null);
+        setSettlingRead(null);
+      }
       if (nextLeaving.length === 0) {
         // Nothing to dissolve. A hold this read supersedes ends now rather
         // than committing a stale read later.
@@ -229,21 +356,32 @@ export default function MissionList({ onEdit, onCopy, editingId = null, onRead, 
         }, holdMs(prefersReducedMotion()));
       }
     },
-    [commit],
+    [commit, startFlownChain],
   );
 
   /** A view action ends the hold now: the parked read commits, dissolving
    *  stops. The filter toggle calls this before it flips, so no frame paints a
-   *  filtered-out row still wearing `.leaving`. */
+   *  filtered-out row still wearing `.leaving`. It owns every phase: settle,
+   *  hold, dissolve, the one-shot crossfade — and a mid-settle marker, whose
+   *  outcome the Notice already confirmed. (R3) */
   const flushHold = useCallback(() => {
     if (holdTimerRef.current !== null) {
       clearTimeout(holdTimerRef.current);
       holdTimerRef.current = null;
     }
+    if (flashTimerRef.current !== null) {
+      clearTimeout(flashTimerRef.current);
+      flashTimerRef.current = null;
+    }
     const parked = pendingReadRef.current;
     pendingReadRef.current = null;
     leavingRef.current = EMPTY_SET;
     setLeaving(EMPTY_SET);
+    settlingIdRef.current = null;
+    setSettlingId(null);
+    setSettlingRead(null);
+    setFlashId(null);
+    flownMarkerRef.current = null;
     if (parked) commit(parked);
   }, [commit]);
 
@@ -355,6 +493,7 @@ export default function MissionList({ onEdit, onCopy, editingId = null, onRead, 
   useEffect(() => {
     return () => {
       if (holdTimerRef.current !== null) clearTimeout(holdTimerRef.current);
+      if (flashTimerRef.current !== null) clearTimeout(flashTimerRef.current);
       if (arrivingTimerRef.current !== null) clearTimeout(arrivingTimerRef.current);
       if (flipRafRef.current !== null) cancelAnimationFrame(flipRafRef.current);
     };
@@ -436,6 +575,14 @@ export default function MissionList({ onEdit, onCopy, editingId = null, onRead, 
       const outcome = await missionClient.run(label, on);
       inFlight.current = false;
       setAction(IDLE);
+      // The cause, set here and nowhere else: only the operator's own Mark
+      // Flown that the store accepted arms the settle. Polls, Refresh,
+      // storage events and cache fallbacks never touch it, so an inferred or
+      // re-read Flown can never replay the moment. Consumed once by applyRead.
+      if (label === "Mark Flown" && outcome.ok) {
+        flownSeqRef.current += 1;
+        flownMarkerRef.current = { id: on, seq: flownSeqRef.current };
+      }
       const fresh = await load();
       onNotice?.({
         title: firstSentence(outcome.text),
@@ -614,32 +761,72 @@ export default function MissionList({ onEdit, onCopy, editingId = null, onRead, 
         </p>
       ))}
 
-      {visible.length === 0 && !error && (
-        <p className={styles.quiet}>
-          {all.length === 0
-            ? "No Missions in the store yet. Plan one, name it, and it appears here."
-            : "Every Mission here is archived. Tick the filter above to see them."}
-        </p>
-      )}
+      {visible.length === 0 && !error &&
+        (all.length === 0 ? (
+          <>
+            <p className={styles.quiet}>
+              No Missions in the store yet. Plan one, name it, and it appears here.
+            </p>
+            {/* First run: three inline steps, no exit animation, replacement
+                stays commit-timed. Draft labels only — M5 owns final copy.
+                The `.gate` wrapper reuses its 44px button precedent with no
+                new CSS; the list reports the step, the page navigates (M4). */}
+            <div className={styles.gate}>
+              <button type="button" onClick={() => onFirstRunNavigate?.("draw")}>
+                Draw the area to fly
+              </button>
+              <button type="button" onClick={() => onFirstRunNavigate?.("site")}>
+                Choose the Site and settings
+              </button>
+              <button type="button" onClick={() => onFirstRunNavigate?.("name")}>
+                Name the Mission and save
+              </button>
+            </div>
+          </>
+        ) : (
+          <p className={styles.quiet}>
+            Every Mission here is archived. Tick the filter above to see them.
+          </p>
+        ))}
 
       {visible.map((row) => {
         const isLeaving = leaving.has(row.id);
         const isArriving = arriving.has(row.id);
+        const isSettling = settlingId === row.id;
+        const isFlash = flashId === row.id;
+        // The settling row reads Flown from the parked read, not from the
+        // committed one still on screen: chip + headline crossfade under the
+        // settle hook while the rail already rests quiet. Falls back to the
+        // committed reading if the parked read no longer carries the row.
+        const parked = isSettling ? (settlingRead?.missions.find((m) => m.id === row.id) ?? null) : null;
+        const settledView = parked
+          ? (() => {
+              const p = preview(parked.spec);
+              return rowView(
+                parked,
+                { photo_count: p.photo_count, path_length_m: p.path_length_m, parts: p.parts },
+                settlingRead?.stale_cards ?? [],
+                settlingRead?.host?.notice ?? null,
+              );
+            })()
+          : null;
         return (
           // The wrapper owns the FLIP transform and the two motion classes; the
-          // article's own `press` transform stays untouched. A dissolving row
-          // is inert and hidden from the tree; the Notice is what announces the
-          // result, so the list adds no live region of its own.
+          // article's own `press` transform stays untouched. A dissolving or
+          // settling row is inert and hidden from the tree; the Notice is what
+          // announces the result, so the list adds no live region of its own.
+          // The settle hook never joins `.leaving`: no border-color transition,
+          // the rail cuts to quiet instantly under the content crossfade (M3).
           <div
             key={row.id}
             data-row-id={row.id}
-            className={`${styles.slot}${isLeaving ? ` ${styles.leaving}` : ""}${isArriving ? ` ${styles.arriving}` : ""}`}
-            inert={isLeaving || undefined}
-            aria-hidden={isLeaving || undefined}
+            className={`${styles.slot}${isLeaving && !isSettling ? ` ${styles.leaving}` : ""}${isArriving ? ` ${styles.arriving}` : ""}${isSettling || isFlash ? ` ${settlingClass}` : ""}`}
+            inert={isLeaving || isSettling || undefined}
+            aria-hidden={isLeaving || isSettling || undefined}
           >
             <Row
-              row={row}
-              view={rowView(row, figures.get(row.id) ?? null, read?.stale_cards ?? [], read?.host?.notice ?? null)}
+              row={parked ?? row}
+              view={settledView ?? rowView(row, figures.get(row.id) ?? null, read?.stale_cards ?? [], read?.host?.notice ?? null)}
               editing={row.id === editingId}
               busy={action.running !== null}
               running={(name) => isRunning(action, name, row.id)}
