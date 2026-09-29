@@ -50,6 +50,12 @@ export function count(n: number): string {
   return WORDS[n] ?? String(n);
 }
 
+/** An orbit's area in hectares from its radius: `areaHectares` returns 0 for
+ *  an orbit (its `aoi` is empty by design), so Details reads the radius. */
+export function orbitAreaHectares(radiusM: number): number {
+  return (Math.PI * radiusM * radiusM) / 10000;
+}
+
 /** The planner's own figures for a Mission, as `preview()` computes them. The
  *  row carries its Spec, so these are derived where they are read rather than
  *  trusted from a summary file the host also writes into. */

@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { preview } from "@/lib/mission";
+import { areaHectares, preview } from "@/lib/mission";
 import type { MissionRow } from "@/lib/missionRecords";
 import Sheet from "./Sheet";
 import type { NoticePayload } from "./Notice";
@@ -21,8 +21,11 @@ import {
   asOfStamp,
   cacheRead,
   cachedRead,
+  cardList,
   checkedAgo,
+  flightTimeDelta,
   hostLines,
+  orbitAreaHectares,
   rowView,
   unreadableLine,
   type ActionName,
@@ -492,6 +495,19 @@ export default function MissionList({ onEdit, onCopy, editingId = null, onRead, 
 
   const visible = visibleMissions(all, showArchived);
   const archivedCount = read?.archived_count ?? 0;
+  // Details reads the same view the row does, plus the full preview the
+  // narrowed Figures drops (flight time, part minutes): derived where read.
+  const detailsFigures = detailsRow ? (figures.get(detailsRow.id) ?? null) : null;
+  const detailsPreview = detailsRow ? preview(detailsRow.spec) : null;
+  const detailsView = detailsRow
+    ? rowView(detailsRow, detailsFigures, read?.stale_cards ?? [], read?.host?.notice ?? null)
+    : null;
+  const detailsOrbit = detailsRow?.spec.mission_type === "orbit";
+  const detailsAreaHa = detailsRow
+    ? detailsOrbit
+      ? orbitAreaHectares(detailsRow.spec.orbit.radius_m)
+      : areaHectares(detailsRow.spec.aoi)
+    : 0;
 
   if (passphrase === null) return <p className={styles.quiet}>Reading the Mission list…</p>;
   if (blocked) {
@@ -647,18 +663,56 @@ export default function MissionList({ onEdit, onCopy, editingId = null, onRead, 
       </Sheet>
 
       <Sheet open={detailsOpen} onClose={() => setDetailsOpen(false)} labelledBy={detailsHeadingId}>
-        {detailsRow && (
+        {detailsRow && detailsView && detailsPreview && (
           <div className={`panel-light ${styles.detailsPanel}`}>
             <h3 id={detailsHeadingId} className={styles.detailsTitle}>
               {detailsRow.name}
             </h3>
             <div className={`${styles.detailsLine} mono`}>{detailsRow.spec_key ?? detailsRow.id}</div>
+            {/* The explanation for this state: a held row's refusal text arrives
+                here as headline.detail, never substituted; a blocked row lists
+                every blocker, the row having shown only the first. */}
+            {detailsView.blockers.length > 0 ? (
+              detailsView.blockers.map((why) => (
+                <p key={why} className={styles.detailsLine}>
+                  {why}
+                </p>
+              ))
+            ) : (
+              <p className={styles.detailsLine}>{detailsView.headline.detail}</p>
+            )}
+            <div className={styles.detailsLine}>
+              {detailsRow.site} · {detailsRow.date}
+            </div>
+            <div className={styles.detailsLine}>
+              {detailsOrbit ? `Orbit area ${detailsAreaHa.toFixed(2)} ha` : `Area ${detailsAreaHa.toFixed(2)} ha`}
+            </div>
+            <div className={styles.detailsLine}>
+              Flight time {detailsPreview.flight_time_min.toFixed(1)} min
+            </div>
+            <div className={styles.detailsLine}>
+              {flightTimeDelta(detailsPreview.parts, detailsPreview.part_minutes)}
+            </div>
+            {detailsView.reason && <div className={styles.detailsLine}>{detailsView.reason}</div>}
+            <div className={styles.detailsLine}>{detailsPreview.photo_count} photos</div>
+            {detailsView.flights.length > 0 && (
+              <div className={styles.detailsLine}>Cards: {cardList(detailsRow.cards)}</div>
+            )}
+            <div className={styles.detailsLine}>Saved {detailsRow.created_at}</div>
             {detailsRow.collected_at && (
               <div className={styles.detailsLine}>Collected {detailsRow.collected_at}</div>
             )}
             {detailsRow.loaded_at && <div className={styles.detailsLine}>Loaded {detailsRow.loaded_at}</div>}
+            {detailsRow.flown_marked ? (
+              <div className={styles.detailsLine}>You marked this Flown.</div>
+            ) : null}
             {detailsRow.flown_evidence_at && (
               <div className={styles.detailsLine}>Imagery arrived {detailsRow.flown_evidence_at}</div>
+            )}
+            {detailsView.disagreement && (
+              <div className={styles.detailsLine}>
+                {detailsView.disagreement} Both answers are kept; yours is the one that decides.
+              </div>
             )}
             {detailsRow.superseded_by && (
               <div className={styles.detailsLine}>Superseded by the Mission saved after it.</div>
