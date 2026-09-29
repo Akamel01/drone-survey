@@ -28,6 +28,28 @@
   letter-spacing: 0.08em;
   color: var(--on-glass-3);
   margin: 0 0 12px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* Pending-Approval count pill (MapPane .countBadge geometry): visual only,
+   the meaning lives on the host control's accessible name. Unmounted at zero,
+   never animated (spec §9.3/§12). */
+.pendingBadge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: var(--badge-blue, var(--ink));
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  pointer-events: none;
 }
 
 /* The Missions view's own screen title (spec § 6, § 15 "Mission row"):
@@ -228,6 +250,15 @@
     color: var(--on-glass-3);
     font-size: 11px;
     line-height: 1;
+    position: relative;
+  }
+
+  /* Phone Settings tab badge: overlays the icon corner, label span untouched
+     (spec §11 keeps the 11px label). */
+  .tabBadge {
+    position: absolute;
+    top: 2px;
+    right: calc(50% - 22px);
   }
 
   .views button svg {
@@ -415,6 +446,14 @@
 
   .edgeTabRight {
     right: 12px;
+  }
+
+  /* Folded Settings edge-tab badge: overlays the strip corner, never a target
+     of its own (host keeps its size, badge is pointer-events none). */
+  .edgeBadge {
+    position: absolute;
+    top: 4px;
+    right: 4px;
   }
 
   /* Folding leaves a tab behind: it fades in after the panel's dissolve and
