@@ -680,6 +680,9 @@ phase_run() {
   else
     say "running: npm run $script $*"
   fi
+  # Everything the check writes from here on comes back (phase_fetch), wherever
+  # it writes it: evidence folders differ per check and per ticket.
+  touch "$BRANCH_DIR/.run-start"
   set +e
   if [ "$mode" = serve ]; then
     ( cd "$WEB" && "$NPM_BIN" run "$script" -- "http://127.0.0.1:$PORT" ) 2>&1 | tee "$LOGS/check.log"
@@ -706,6 +709,11 @@ fetch_add() {
   if grep -qxF -- "$rel" "$list" 2>/dev/null; then
     return 0
   fi
+  # A file inside a folder already listed would go into the tar twice, and the
+  # second copy unpacks as a hard link to itself, which fails the fetch.
+  while IFS= read -r have; do
+    case "$rel/" in "$have"/*) return 0 ;; esac
+  done < "$list"
   printf '%s\n' "$rel" >> "$list"
   warn "fetched $rel"
 }
@@ -723,6 +731,12 @@ phase_fetch() {
   for rel in "$@"; do
     fetch_add "$list" "$rel"
   done
+  if [ -f "$BRANCH_DIR/.run-start" ]; then
+    ( cd "$WORKTREE" && find . -type f -newer "$BRANCH_DIR/.run-start" \
+        -not -path '*/node_modules/*' -not -path './web/.next/*' \
+        -not -name '*.tsbuildinfo' -not -name 'next-env.d.ts' ) | sed 's|^\./||' |
+      while IFS= read -r rel; do fetch_add "$list" "$rel"; done
+  fi
   fetch_add "$list" "$(map_web_path "${E2E_SHOTS:-}" 2>/dev/null || true)"
   fetch_add "$list" "$(map_web_path "${SHOT_DIR:-}" 2>/dev/null || true)"
   if [ -s "$list" ]; then
