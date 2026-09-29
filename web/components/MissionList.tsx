@@ -480,6 +480,16 @@ export default function MissionList({ onEdit, onCopy, editingId = null, onRead, 
     void act("Remove", row.id);
   }, [act, confirmRow]);
 
+  // Focus returns to the row that opened Details, whichever way the sheet
+  // closed: every dismissal funnels through `onClose` (Sheet), so one restore
+  // here covers Escape, the close control and drag. A row archived or
+  // filtered while open misses the query and simply keeps focus where it is.
+  const closeDetails = useCallback(() => {
+    const id = detailsRow?.id;
+    setDetailsOpen(false);
+    if (id) listRef.current?.querySelector<HTMLElement>(`[data-row-id="${id}"] .more`)?.focus();
+  }, [detailsRow]);
+
   const all = useMemo(() => read?.missions ?? [], [read]);
   // The planner's own figures, derived from each Mission's Spec. They are one
   // half of the mismatch check, so they must come from the Spec the row
@@ -662,7 +672,7 @@ export default function MissionList({ onEdit, onCopy, editingId = null, onRead, 
         )}
       </Sheet>
 
-      <Sheet open={detailsOpen} onClose={() => setDetailsOpen(false)} labelledBy={detailsHeadingId}>
+      <Sheet open={detailsOpen} onClose={closeDetails} labelledBy={detailsHeadingId}>
         {detailsRow && detailsView && detailsPreview && (
           <div className={`panel-light ${styles.detailsPanel}`}>
             <h3 id={detailsHeadingId} className={styles.detailsTitle}>
