@@ -44,8 +44,10 @@ export function describeResult(label: string, result: ActionResult): string {
   // glossary's words. There is no "draft" and no "queued" (ADR 0021). Keying on
   // the body's shape alone made Mark Flown -- which also returns `cards` --
   // announce "Dispatched" (#164).
-  if (label === "Mark Flown") return "Marked Flown. Its Card is free for the next Mission.";
-  if (label === "Unmark Flown") return "Unmarked. It holds its Card again.";
+  // A Mission can span several Cards (Reservation, Card Ledger), so a claim
+  // about the Cards it held is plural — matching the row detail and #294.
+  if (label === "Mark Flown") return "Marked Flown. Its Cards are free for the next Mission.";
+  if (label === "Unmark Flown") return "Unmarked. It holds its Cards again.";
   if (label === "Dispatch" && Array.isArray(body.cards) && body.cards.length > 0) {
     return `Dispatched. ${body.cards.join(", ")} ${body.cards.length === 1 ? "is" : "are"} reserved for it.`;
   }

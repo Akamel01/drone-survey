@@ -768,18 +768,20 @@ export default function MissionList({ onEdit, onCopy, editingId = null, onRead, 
               No Missions in the store yet. Plan one, name it, and it appears here.
             </p>
             {/* First run: three inline steps, no exit animation, replacement
-                stays commit-timed. Draft labels only — M5 owns final copy.
-                The `.gate` wrapper reuses its 44px button precedent with no
-                new CSS; the list reports the step, the page navigates (M4). */}
+                stays commit-timed. Copy in the hero voice (#294): step 3 lands
+                on the Mission Name field and says where Save lives rather than
+                promising one "there". The `.gate` wrapper reuses its 44px
+                button precedent with no new CSS; the list reports the step,
+                the page navigates (M4). */}
             <div className={styles.gate}>
               <button type="button" onClick={() => onFirstRunNavigate?.("draw")}>
                 Draw the area to fly
               </button>
               <button type="button" onClick={() => onFirstRunNavigate?.("site")}>
-                Choose the Site and settings
+                Choose the Site and its settings
               </button>
               <button type="button" onClick={() => onFirstRunNavigate?.("name")}>
-                Name the Mission and save
+                Name the Mission, then save at the bottom
               </button>
             </div>
           </>

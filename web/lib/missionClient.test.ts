@@ -126,8 +126,8 @@ test("run: every action reports its own success sentence", async () => {
     ["Dispatch", { cards: ["way finder 1"] }, "Dispatched. way finder 1 is reserved for it."],
     ["Withdraw", { cards_released: ["way finder 1"] }, "Withdrawn. way finder 1 released."],
     ["Withdraw", { cards_released: [] }, "Withdrawn. It held no Card."],
-    ["Mark Flown", {}, "Marked Flown. Its Card is free for the next Mission."],
-    ["Unmark Flown", {}, "Unmarked. It holds its Card again."],
+    ["Mark Flown", {}, "Marked Flown. Its Cards are free for the next Mission."],
+    ["Unmark Flown", {}, "Unmarked. It holds its Cards again."],
     ["Remove", { archived: "m1" }, "Removed from the list. It is archived, not deleted — nothing is lost."],
   ];
   for (const [action, body, text] of cases) {
