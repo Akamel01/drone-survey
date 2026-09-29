@@ -30,6 +30,8 @@ interface SidebarProps {
   onNameChange: (name: string) => void;
   /** Where Settings reports an action's result (the Accounts section's). */
   onNotice?: (p: Omit<NoticePayload, "key">) => void;
+  /** Where the Accounts section reports how many Accounts wait for Approval. */
+  onPendingCount?: (n: number) => void;
 }
 
 // Plain metric area: m² under a square kilometre, km² above.
@@ -188,6 +190,7 @@ export default function Sidebar({
   editing,
   onNameChange,
   onNotice,
+  onPendingCount,
 }: SidebarProps) {
   const flight = spec.flight;
   const camera = spec.camera;
@@ -705,7 +708,7 @@ export default function Sidebar({
         </div>
       </Section>
 
-      <AccountsSection onNotice={onNotice} />
+      <AccountsSection onNotice={onNotice} onPendingCount={onPendingCount} />
 
       <SignedInLine />
 

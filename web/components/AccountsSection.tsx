@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useId, useState } from "react";
 import type { AccountRow } from "@/lib/accountAdmin";
+import { pendingCount } from "@/lib/accountAdmin";
 import { authClient } from "@/lib/authClient";
 import { accountsClient } from "@/lib/accountsClient";
 import type { NoticePayload } from "./Notice";
@@ -19,7 +20,7 @@ function signedUp(iso: string): string {
  * first, with Approve and Remove; approved ones with Remove. Only the admin
  * sees it, and the API checks the role again on every call.
  */
-export default function AccountsSection({ onNotice }: { onNotice?: (p: Omit<NoticePayload, "key">) => void }) {
+export default function AccountsSection({ onNotice, onPendingCount }: { onNotice?: (p: Omit<NoticePayload, "key">) => void; onPendingCount?: (n: number) => void }) {
   const { data } = authClient.useSession();
   const isAdmin = (data?.user as { role?: string | null } | undefined)?.role === "admin";
   const [accounts, setAccounts] = useState<AccountRow[] | null>(null);
@@ -34,13 +35,15 @@ export default function AccountsSection({ onNotice }: { onNotice?: (p: Omit<Noti
     let live = true;
     void accountsClient.list().then((result) => {
       if (!live) return;
-      if (result.ok) setAccounts(result.accounts);
-      else setProblem(result.text);
+      if (result.ok) {
+        setAccounts(result.accounts);
+        onPendingCount?.(pendingCount(result.accounts));
+      } else setProblem(result.text);
     });
     return () => {
       live = false;
     };
-  }, [isAdmin]);
+  }, [isAdmin, onPendingCount]);
 
   const act = useCallback(
     async (action: "approve" | "remove", row: AccountRow) => {
@@ -50,13 +53,14 @@ export default function AccountsSection({ onNotice }: { onNotice?: (p: Omit<Noti
       const who = row.name || row.email;
       if (result.ok) {
         setAccounts(result.accounts);
+        onPendingCount?.(pendingCount(result.accounts));
         const text = action === "approve" ? `Approved: ${who} can now reach their Workspace.` : `Removed: ${who} is signed out everywhere.`;
         onNotice?.({ title: action === "approve" ? "Approved" : "Removed", body: text, missionName: row.email, failed: false });
       } else {
         onNotice?.({ title: action === "approve" ? "Not approved" : "Not removed", body: result.text, missionName: row.email, failed: true });
       }
     },
-    [onNotice],
+    [onNotice, onPendingCount],
   );
 
   if (!isAdmin) return null;
