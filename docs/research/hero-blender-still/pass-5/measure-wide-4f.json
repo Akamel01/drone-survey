@@ -1,0 +1,51 @@
+{
+  "grain_acf_halfmax_x": {
+    "attr": "4f",
+    "note": "",
+    "region": "x0.02-0.50:y0.02-0.42",
+    "unit": "px",
+    "value": 1.0
+  },
+  "grain_acf_halfmax_y": {
+    "attr": "4f",
+    "note": "",
+    "region": "x0.02-0.50:y0.02-0.42",
+    "unit": "px",
+    "value": 1.0
+  },
+  "grain_acf_zerocross_x": {
+    "attr": "4f",
+    "note": "",
+    "region": "x0.02-0.50:y0.02-0.42",
+    "unit": "px",
+    "value": 1.0
+  },
+  "grain_acf_zerocross_y": {
+    "attr": "4f",
+    "note": "",
+    "region": "x0.02-0.50:y0.02-0.42",
+    "unit": "px",
+    "value": 1.0
+  },
+  "grain_sigma_B": {
+    "attr": "4f",
+    "note": "TOOL (ESRGAN/RIFE); native 4K",
+    "region": "x0.02-0.50:y0.02-0.42",
+    "unit": "levels",
+    "value": 0.4427869247982691
+  },
+  "grain_sigma_G": {
+    "attr": "4f",
+    "note": "TOOL (ESRGAN/RIFE); native 4K",
+    "region": "x0.02-0.50:y0.02-0.42",
+    "unit": "levels",
+    "value": 0.4430721565038667
+  },
+  "grain_sigma_R": {
+    "attr": "4f",
+    "note": "TOOL (ESRGAN/RIFE); native 4K",
+    "region": "x0.02-0.50:y0.02-0.42",
+    "unit": "levels",
+    "value": 0.4430507353374694
+  }
+}

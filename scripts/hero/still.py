@@ -54,8 +54,8 @@ def srgb(hexstr):
 STOPS = {
     "tall": [(0.02, "#3C5D7B"), (0.10, "#436580"), (0.25, "#587998"),
              (0.40, "#7896B0"), (0.55, "#92AAC0"), (0.68, "#C4CCD5"),
-             (0.72, "#C4CCD6"), (0.80, "#B2C0D0"), (0.90, "#96A8BC"),
-             (1.00, "#879BB2")],
+             (0.72, "#C4CCD6"), (0.80, "#A9BBCF"), (0.90, "#8098B2"),
+             (1.00, "#7690AB")],
     "wide": [(0.02, "#496784"), (0.10, "#506E89"), (0.25, "#66839D"),
              (0.40, "#8AA1B8"), (0.55, "#B9C5D3"), (0.58, "#CBD4DE"),
              (0.62, "#C3CCD7"), (0.70, "#AFBECE"), (0.80, "#A0B2C4"),
@@ -74,12 +74,14 @@ LAYERS = [  # top to bottom
     # (+prot) so measure.py's max-chroma row lands on a pebble course, not on
     # the shadowed humus under the turf lip (pass 3's grey "pebble" median)
     (0.18, (0.030, 0.028, 0.025), -0.08, 0),        # humus under the turf
-    (0.08, (0.015, 0.015, 0.006), 0.015, 1),        # pebble band
-    (0.15, (0.0110, 0.0130, 0.0176), 0.02, 0),      # soil -> #1B1E24
-    (0.08, (0.015, 0.015, 0.006), 0.015, 1),        # pebble band
-    (0.17, (0.0110, 0.0130, 0.0176), 0.03, 0),      # sediment -> soil target
-    (0.09, (0.015, 0.015, 0.006), 0.015, 1),        # pebble band
-    (0.14, (0.0110, 0.0130, 0.0176), 0.01, 0),      # dark soil
+    # pass 5: pebble courses twice as thick (soil thinner) so they can fill
+    # measure.py's +-3 %-of-island-height pebble window
+    (0.16, (0.015, 0.015, 0.006), 0.015, 1),        # pebble band
+    (0.10, (0.0110, 0.0130, 0.0176), 0.02, 0),      # soil -> #1B1E24
+    (0.16, (0.015, 0.015, 0.006), 0.015, 1),        # pebble band
+    (0.12, (0.0110, 0.0130, 0.0176), 0.03, 0),      # sediment -> soil target
+    (0.18, (0.015, 0.015, 0.006), 0.015, 1),        # pebble band
+    (0.10, (0.0110, 0.0130, 0.0176), 0.01, 0),      # dark soil
     (0.20, (0.0027, 0.0037, 0.0056), 0.05, 0),      # weathered rock -> #090C11
 ]
 
@@ -95,19 +97,19 @@ K2 = {
     "tall": dict(
         lens=50.0, dist=22.23, elev=8.0, shift_x=-0.204, shift_y=0.146,
         fstop=2.0, focus_dist=22.23, exposure=0.0, sensor_fit="AUTO",
-        ridges=[(20000.0, 0.640, 0.050, 0.93, 0.15),
-                (11000.0, 0.700, 0.110, 0.80, 0.15),
-                (6000.0, 0.770, 0.110, 0.62, 0.15),
-                (3200.0, 0.820, 0.140, 0.34, 0.35),
-                (1800.0, 0.960, 0.200, 0.55, -0.20)],
-        haze_right=0.5,      # extra haze toward the frame's right (S2 mask)
+        ridges=[(20000.0, 0.640, 0.050, 0.88, 0.15),
+                (11000.0, 0.670, 0.080, 0.80, 0.15),
+                (6000.0, 0.690, 0.090, 0.68, 0.25),
+                (3200.0, 0.705, 0.110, 0.55, 0.35),
+                (1800.0, 0.720, 0.200, 0.50, -0.40)],
+        haze_right=0.75,     # extra haze toward the frame's right (S2 mask)
         haze_right_from=0.45,
         grass_value=0.24,    # hero turf s0 #242E11 tall, #1B250A wide
         fir_fill=False,      # extra crown copies (4h: tall has room, wide not)
     ),
     "wide": dict(
-        lens=50.0, dist=29.67, elev=8.0, shift_x=-0.27, shift_y=0.031,
-        fstop=2.8, focus_dist=29.67, exposure=0.0, sensor_fit="HORIZONTAL",
+        lens=50.0, dist=30.35, elev=8.0, shift_x=-0.27, shift_y=0.028,
+        fstop=2.8, focus_dist=30.35, exposure=0.0, sensor_fit="HORIZONTAL",
         ridges=[(20000.0, 0.430, 0.060, 0.97, 0.15),
                 (11000.0, 0.500, 0.120, 0.93, 0.35),
                 (6000.0, 0.600, 0.130, 0.84, 0.25),
@@ -130,7 +132,7 @@ K2 = {
     # and its firs are ~15 % shorter relative to the island.
     # Pass 3: the hero's strata are about twice as thick, and its underside is
     # a mass of big boulders rather than a smooth cone.
-    "under": 2.1,            # ADR-223-02 set 1.9 (from 2.7); pass 2 2.4; pass 3 2.1
+    "under": 1.94,           # ADR-223-02 set 1.9 (from 2.7); pass 2 2.4; pass 3 2.1; pass 5 1.94
     "layers_scale": 1.5,     # LAYERS thicknesses x this (strata 1.09 -> 1.64)
     "lumps": 0.55,           # hero.py 0.34
     "under_boulders": 50,    # hero.py 20
@@ -152,7 +154,8 @@ K2 = {
     "moss_top_value": 0.40,  # moss Value on the island top
     "moss_y": (-2.2, 0.3),   # world y ramp: front (low in frame) -> back
     "tint_firs": (0.25, 0.32, 0.18),
-    "fir_turns": (1.57,),       # extra crown copies per fir (radians)   # the hero's spruces are darker
+    "fir_turns": (1.57,),
+    "fir_fill_scale": 0.75,       # extra crown copies per fir (radians)   # the hero's spruces are darker
     # pebble courses are the gravel texture (hero.py mat_strata, HSV s 0.7
     # v 0.8): the hero's are dark olive (#212111), ours read grey (#262626)
     "pebble_hsv": (1.3, 0.35),
@@ -383,7 +386,7 @@ def fill_firs(k2):
             extra.name = "FirFill_" + ob.name
             bpy.context.scene.collection.objects.link(extra)
             extra.rotation_euler.z += turn
-            extra.scale = ob.scale * 0.85
+            extra.scale = ob.scale * k2["fir_fill_scale"]
 
 
 def bulk_underside(k2):
