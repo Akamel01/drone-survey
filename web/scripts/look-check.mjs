@@ -9,7 +9,10 @@
 // contrast and reduced motion; a keyboard walk of the planner; the Mission
 // rows (three Planned rows lead with the answer, one held row keeps its
 // stop tone) and the Details open/announce/focus-return walk at phone and
-// desktop widths; the frame rate
+// desktop widths; enlarged text (UI-26): the home page, the planner's views,
+// the map menus, the Notice and the sheets at 200 % browser zoom and at
+// doubled default text, desktop and phone layouts, each hit-tested for
+// clipped or overlapped text and hidden or colliding controls; the frame rate
 // of panning the map under glass on a throttled phone; and two screenshots the
 // operator decides on (the phone Map tab, a long Missions list over the hero).
 // Like motion-check, a fetch wrapper answers /api/missions from memory and a
@@ -121,19 +124,27 @@ function note(section, name, detail = "") {
   console.log(`NOTE ${section}/${name}${detail ? ` — ${detail}` : ""}`);
 }
 
-async function pageFor(browser, { width, height, mobile = false, missions = 1, media = {} }) {
+async function pageFor(browser, { width, height, mobile = false, missions = 1, media = {}, dsf, failDispatch = false }) {
   const context = await browser.newContext({
     viewport: { width, height },
+    deviceScaleFactor: dsf,
     hasTouch: mobile,
     isMobile: mobile,
     reducedMotion: media.reducedMotion ?? "no-preference",
   });
   await context.addInitScript(
-    ({ body, key }) => {
+    ({ body, key, failDispatch }) => {
       localStorage.setItem(key, "evidence");
       const orig = window.fetch.bind(window);
       window.fetch = (input, init) => {
         const url = typeof input === "string" ? input : input && input.url ? input.url : String(input);
+        // A refused Dispatch: a failure Notice expands and stays (UI-26).
+        if (failDispatch && url.includes("/api/missions/dispatch")) {
+          const error = "The Controller refused the Load: no Card is reserved for this Mission, so nothing was written. Reserve a Card, then Dispatch again.";
+          return Promise.resolve(
+            new Response(JSON.stringify({ error }), { status: 409, headers: { "Content-Type": "application/json" } }),
+          );
+        }
         if (url.includes("/api/missions")) {
           return Promise.resolve(
             new Response(JSON.stringify(body), { status: 200, headers: { "Content-Type": "application/json" } }),
@@ -142,7 +153,7 @@ async function pageFor(browser, { width, height, mobile = false, missions = 1, m
         return orig(input, init);
       };
     },
-    { body: payload(missions), key: PASSPHRASE_KEY },
+    { body: payload(missions), key: PASSPHRASE_KEY, failDispatch },
   );
   const page = await context.newPage();
   if (media.features) {
@@ -919,6 +930,340 @@ async function ui25ShotsSection(browser) {
 }
 
 // ---------------------------------------------------------------------------
+// Enlarged text: 200 % browser zoom and doubled default text (UI-26, #295)
+// ---------------------------------------------------------------------------
+
+// Browser zoom at 200 % halves the CSS viewport and doubles the device pixel
+// ratio, and a context with those numbers lays out exactly what the zoomed
+// window does: 1440 x 900 becomes 720 x 450 CSS px, the narrow (phone)
+// layout; 2560 x 1440 becomes 1280 x 720 and keeps the desktop layout.
+// Text-only enlargement doubles the browser's default font size (Chrome:
+// Settings > Appearance > Font size), set through CDP before the page loads.
+const ENLARGED_PASSES = [
+  { name: "zoom200-1440x900", width: 720, height: 450, dsf: 2 },
+  { name: "zoom200-2560x1440", width: 1280, height: 720, dsf: 2 },
+  { name: "text200-1440x900", width: 1440, height: 900, fontSize: 32 },
+  { name: "text200-375x812", width: 375, height: 812, mobile: true, fontSize: 32 },
+];
+const ENLARGED_OUT = path.resolve(HERE, "../../.autoforge/evidence/295");
+
+/** Runs in the page. Every visible control and text line under the roots is
+ *  brought into view through the scroll containers a person can scroll, then
+ *  hit-tested: a control must be what a tap at its centre and four inner
+ *  points lands on (else it is hidden or collides), and a text line must be
+ *  the topmost painted thing at its centre and both ends (else it is clipped
+ *  or overlapped) and stay inside the button or link that holds it. The page
+ *  must not scroll sideways. */
+function auditEnlarged(rootSels) {
+  const roots = rootSels.flatMap((s) => [...document.querySelectorAll(s)]);
+  const problems = [];
+  const opaque = (el) => {
+    for (let a = el; a; a = a.parentElement) if (Number(getComputedStyle(a).opacity) === 0) return false;
+    return true;
+  };
+  const shown = (el) => {
+    const r = el.getBoundingClientRect();
+    return r.width > 1 && r.height > 1 && getComputedStyle(el).visibility === "visible" && !el.closest("[inert]") && opaque(el);
+  };
+  const name = (el) => {
+    if (!el) return "nothing";
+    const cls = typeof el.className === "string" ? el.className.split(" ").find((c) => c && c !== "press") ?? "" : "";
+    const short = cls.replace(/^.*?__/, "").replace(/__.*$/, "");
+    const text = (el.getAttribute("aria-label") || el.textContent || "").trim().replace(/\s+/g, " ").slice(0, 32);
+    return `${el.tagName.toLowerCase()}${short ? "." + short : ""}${text ? ` "${text}"` : ""}`;
+  };
+  // Only containers a person can scroll: overflow auto/scroll with somewhere
+  // to go. A hidden-overflow box never scrolls for them, so it never scrolls
+  // here either.
+  const reveal = (el, rectOf) => {
+    for (let a = el.parentElement; a; a = a.parentElement) {
+      const cs = getComputedStyle(a);
+      const y = /auto|scroll/.test(cs.overflowY) && a.scrollHeight > a.clientHeight;
+      const x = /auto|scroll/.test(cs.overflowX) && a.scrollWidth > a.clientWidth;
+      if (!x && !y) continue;
+      const r = rectOf();
+      const p = a.getBoundingClientRect();
+      if (y) a.scrollTop += r.top + r.height / 2 - (p.top + a.clientTop + a.clientHeight / 2);
+      if (x) a.scrollLeft += r.left + r.width / 2 - (p.left + a.clientLeft + a.clientWidth / 2);
+    }
+    const r = rectOf();
+    window.scrollBy(r.left + r.width / 2 - innerWidth / 2, r.top + r.height / 2 - innerHeight / 2);
+  };
+  const inView = (x, y) => x >= 0 && y >= 0 && x < innerWidth && y < innerHeight;
+  const round = (v) => Math.round(v);
+
+  // Reflow: a panel that scrolls down must not also scroll sideways. MapLibre
+  // pans its own canvas and is not a panel.
+  for (const root of roots) {
+    for (const el of [root, ...root.querySelectorAll("*")]) {
+      if (el.closest(".maplibregl-map") || !shown(el)) continue;
+      const cs = getComputedStyle(el);
+      if (/auto|scroll/.test(cs.overflowX) && el.scrollWidth > el.clientWidth + 1) {
+        problems.push({ kind: "reflow", what: name(el), why: `scrolls sideways (${el.scrollWidth} px of content in ${el.clientWidth})` });
+      }
+    }
+  }
+
+  // Controls, hit-tested as a pointer would: pointer-events as they are. A
+  // control clipped to a shape (the Notice) is judged by the text inside it.
+  const operable = 'button, a[href], input:not([type="hidden"]), select, textarea, summary, [role="button"], [role="radio"], [tabindex]:not([tabindex="-1"])';
+  const controls = roots
+    .flatMap((root) => [root, ...root.querySelectorAll(operable)])
+    .filter((el, i, all) => el.matches(operable) && all.indexOf(el) === i)
+    .filter((el) => el.tagName !== "CANVAS" && getComputedStyle(el).clipPath === "none" && shown(el));
+  for (const el of controls) {
+    reveal(el, () => el.getBoundingClientRect());
+    const r = el.getBoundingClientRect();
+    const pts = [
+      [r.left + r.width / 2, r.top + r.height / 2],
+      [r.left + r.width * 0.15, r.top + r.height / 2],
+      [r.right - r.width * 0.15, r.top + r.height / 2],
+      [r.left + r.width / 2, r.top + r.height * 0.15],
+      [r.left + r.width / 2, r.bottom - r.height * 0.15],
+    ];
+    for (const [x, y] of pts) {
+      if (!inView(x, y)) {
+        problems.push({ kind: "control", what: name(el), why: `off-screen at (${round(x)}, ${round(y)}) with no way to scroll to it` });
+        break;
+      }
+      const hit = document.elementFromPoint(x, y);
+      if (!hit || !(hit === el || el.contains(hit))) {
+        problems.push({ kind: "control", what: name(el), why: `covered by ${name(hit)} at (${round(x)}, ${round(y)})` });
+        break;
+      }
+    }
+  }
+
+  // Text, hit-tested as paint: every element takes part, so a line under a
+  // pointer-events-free layer still counts as covered, and a layer faded to
+  // nothing does not.
+  const probe = document.createElement("style");
+  probe.textContent = "*, *::before, *::after { pointer-events: auto !important; }";
+  document.head.append(probe);
+  let lines = 0;
+  for (const root of roots) {
+    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+    for (let n = walker.nextNode(); n; n = walker.nextNode()) {
+      const parent = n.parentElement;
+      if (!parent || !n.textContent.trim() || parent.closest("select, option, script, style, noscript, svg, template")) continue;
+      if (!shown(parent)) continue;
+      const range = document.createRange();
+      range.selectNodeContents(n);
+      const count = [...range.getClientRects()].length;
+      const holder = parent.closest("button, a[href]");
+      for (let i = 0; i < count; i++) {
+        const rectOf = () => range.getClientRects()[i];
+        if (!rectOf() || rectOf().width < 2 || rectOf().height < 2) continue;
+        lines++;
+        reveal(parent, rectOf);
+        const r = rectOf();
+        const what = `${name(parent)} line ${i + 1}`;
+        if (holder) {
+          const h = holder.getBoundingClientRect();
+          const slack = r.height * 0.25;
+          if (r.left < h.left - 1 || r.right > h.right + 1 || r.top < h.top - slack || r.bottom > h.bottom + slack) {
+            problems.push({ kind: "text", what, why: `spills out of ${name(holder)}` });
+            continue;
+          }
+        }
+        const inset = Math.min(4, r.width / 4);
+        const cy = r.top + r.height / 2;
+        for (const [x, y] of [[r.left + r.width / 2, cy], [r.left + inset, cy], [r.right - inset, cy]]) {
+          if (!inView(x, y)) {
+            problems.push({ kind: "text", what, why: `off-screen at (${round(x)}, ${round(y)}) with no way to scroll to it` });
+            break;
+          }
+          // A hit area stretched past a box by a pseudo-element (the info
+          // glyph's 44 px ring) paints nothing there, so it covers nothing.
+          const hit = document.elementsFromPoint(x, y).find((e) => {
+            if (!opaque(e)) return false;
+            if (e === parent || parent.contains(e)) return true;
+            const b = e.getBoundingClientRect();
+            return x >= b.left && x <= b.right && y >= b.top && y <= b.bottom;
+          });
+          if (!hit || !(hit === parent || parent.contains(hit))) {
+            problems.push({ kind: "text", what, why: `clipped or covered by ${name(hit)} at (${round(x)}, ${round(y)})` });
+            break;
+          }
+        }
+      }
+    }
+  }
+  probe.remove();
+
+  // The map keeps a surface to work on: the share of a 12 x 12 grid over its
+  // canvas that is on screen and not under the chrome.
+  let map = null;
+  const canvas = document.querySelector("canvas.maplibregl-canvas");
+  if (canvas && shown(canvas) && roots.some((root) => root.contains(canvas))) {
+    const c = canvas.getBoundingClientRect();
+    let free = 0;
+    for (let i = 0; i < 12; i++) {
+      for (let j = 0; j < 12; j++) {
+        const x = c.left + ((i + 0.5) * c.width) / 12;
+        const y = c.top + ((j + 0.5) * c.height) / 12;
+        if (inView(x, y) && document.elementFromPoint(x, y) === canvas) free++;
+      }
+    }
+    const visH = Math.max(0, Math.min(c.bottom, innerHeight) - Math.max(c.top, 0));
+    map = { freeShare: free / 144, visibleHeight: round(visH), viewportHeight: innerHeight };
+  }
+
+  return {
+    problems,
+    controls: controls.length,
+    lines,
+    map,
+    sideways: document.documentElement.scrollWidth > innerWidth + 1 ? document.documentElement.scrollWidth : 0,
+    rootFont: getComputedStyle(document.documentElement).fontSize,
+    summary: (() => {
+      const s = document.querySelector('main > [class*="summary"]');
+      return s && shown(s) ? { height: round(s.getBoundingClientRect().height), content: s.scrollHeight } : null;
+    })(),
+  };
+}
+
+async function enlargedSection(browser) {
+  const section = "enlarged";
+  fs.mkdirSync(ENLARGED_OUT, { recursive: true });
+  // The wide Summary's height cap (plan.module.css) is for enlarged text
+  // only: at the default size, in the narrowest wide window, where it is
+  // tallest, it must still show everything without scrolling.
+  {
+    const { context, page } = await pageFor(browser, { width: 1000, height: 800, missions: 4 });
+    try {
+      await openPlanner(page);
+      const s = await page.evaluate(() => {
+        const el = document.querySelector('main > [class*="summary"]');
+        return { height: Math.round(el.getBoundingClientRect().height), content: el.scrollHeight, client: el.clientHeight };
+      });
+      check(section, "1000x800 default text: the wide Summary shows everything unscrolled", s.content <= s.client + 1, JSON.stringify(s));
+    } finally {
+      await context.close();
+    }
+  }
+  const tab = (label) => async (page) => {
+    await page.getByRole("navigation", { name: "Show" }).getByRole("button", { name: label }).click();
+    await page.waitForTimeout(700);
+  };
+  const menu = (nth) => async (page) => {
+    await page.locator('[class*="basemapToggle"] button').nth(nth).click();
+    await page.waitForTimeout(700);
+  };
+  const sheet = (button) => async (page) => {
+    await page.locator("article", { hasText: "North half" }).getByRole("button", { name: button, exact: true }).click();
+    await page.locator("dialog[open]").waitFor({ timeout: 10000 });
+    await page.waitForTimeout(1000);
+  };
+  for (const pass of ENLARGED_PASSES) {
+    const narrow = pass.width < 1000;
+    // The sign-in forms only render where sign-in is configured, which this
+    // build is not; the reset-password form is the same layout and renders
+    // from a token alone, and four more fields stand in for the longest one
+    // (sign-up), so the column is taller than a short window.
+    const tallForm = async (page) => {
+      await page.evaluate(() => {
+        const field = document.querySelector("main form label");
+        for (let i = 0; i < 4; i++) field.before(field.cloneNode(true));
+      });
+      await page.waitForTimeout(300);
+    };
+    const scenes = [
+      { name: "home", url: "/", roots: ["main"] },
+      { name: "home-tall-form", url: "/reset-password?token=look-check", setup: [tallForm], roots: ["main"] },
+      { name: "first-run", missions: 0, roots: ["main"] },
+      { name: "missions", roots: ["main"] },
+      ...(narrow
+        ? [
+            { name: "map", setup: [tab("Map")], roots: ["main"] },
+            { name: "settings", setup: [tab("Settings")], roots: ["main"] },
+          ]
+        : []),
+      // An open menu covers the map chrome under it by design; what it must
+      // not be is covered or cut itself.
+      { name: "basemap-menu", setup: [...(narrow ? [tab("Map")] : []), menu(0)], roots: ['[class*="basemapToggle"]'] },
+      { name: "overlays-menu", setup: [...(narrow ? [tab("Map")] : []), menu(1)], roots: ['[class*="basemapToggle"]'] },
+      // The Notice sits over the page by design (the notch, spec § 11); what
+      // it must not hide on a wide screen is the map's own buttons.
+      { name: "notice", setup: [raiseNotice], roots: ['[class*="notice"]', ...(narrow ? [] : ['[class*="basemapToggle"]'])] },
+      { name: "notice-expanded", failDispatch: true, setup: [raiseNotice, async (p) => p.waitForTimeout(900)], roots: ['[class*="notice"]', ...(narrow ? [] : ['[class*="basemapToggle"]'])] },
+      { name: "details-sheet", setup: [sheet("Details")], roots: ["dialog[open]"] },
+      { name: "remove-sheet", setup: [sheet("Remove")], roots: ["dialog[open]"] },
+    ];
+    for (const scene of scenes) {
+      const label = `${pass.name} ${scene.name}`;
+      const { context, page } = await pageFor(browser, {
+        width: pass.width,
+        height: pass.height,
+        mobile: !!pass.mobile,
+        dsf: pass.dsf,
+        missions: scene.missions ?? 4,
+        failDispatch: !!scene.failDispatch,
+      });
+      try {
+        if (pass.fontSize) {
+          const cdp = await context.newCDPSession(page);
+          await cdp.send("Page.setFontSizes", { fontSizes: { standard: pass.fontSize, fixed: Math.round((pass.fontSize * 13) / 16) } });
+        }
+        if (scene.url) {
+          await page.goto(`${BASE}${scene.url}`, { waitUntil: "load" });
+          if (PREVIEW_CSS) await page.addStyleTag({ content: PREVIEW_CSS });
+          await page.waitForTimeout(2500);
+        } else {
+          await openPlanner(page, { empty: scene.missions === 0 });
+        }
+        for (const step of scene.setup ?? []) await step(page);
+        await page.screenshot({ path: path.join(ENLARGED_OUT, `${pass.name}-${scene.name}.png`) });
+        const got = await page.evaluate(auditEnlarged, scene.roots);
+        if (pass.fontSize) {
+          check(section, `${label}: the default font size is doubled`, got.rootFont === `${pass.fontSize}px`, got.rootFont);
+        }
+        const text = got.problems.filter((p) => p.kind === "text");
+        const ctl = got.problems.filter((p) => p.kind === "control");
+        const list = (ps) => ps.slice(0, 8).map((p) => `${p.what}: ${p.why}`).join("; ");
+        // Something must have been measured; the phone's Base map menu is
+        // icons only, so a scene may have controls and no text.
+        check(section, `${label}: no text clipped or overlapped (${got.lines} lines)`, got.lines + got.controls > 0 && text.length === 0, list(text));
+        check(section, `${label}: every control reachable and clear (${got.controls} controls)`, ctl.length === 0, list(ctl));
+        const flow = got.problems.filter((p) => p.kind === "reflow");
+        check(section, `${label}: neither the page nor a panel scrolls sideways`, !got.sideways && flow.length === 0,
+          [got.sideways ? `page ${got.sideways} px wide in ${pass.width}` : "", list(flow)].filter(Boolean).join("; "));
+        if (got.map) note(section, `${label}: map surface`, JSON.stringify({ ...got.map, summary: got.summary }));
+        if (pass.fontSize) {
+          // Text sized in px ignores the setting outright: put the default
+          // back and every line must have grown by at least half.
+          const sizes = () =>
+            page.evaluate((sels) => {
+              const out = [];
+              for (const root of sels.flatMap((s) => [...document.querySelectorAll(s)])) {
+                const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+                for (let n = walker.nextNode(); n; n = walker.nextNode()) {
+                  const el = n.parentElement;
+                  if (!el || !n.textContent.trim() || el.closest("select, option, script, style, noscript, svg, template")) continue;
+                  out.push({ text: n.textContent.trim().slice(0, 24), size: parseFloat(getComputedStyle(el).fontSize) });
+                }
+              }
+              return out;
+            }, scene.roots);
+          const big = await sizes();
+          const cdp = await context.newCDPSession(page);
+          await cdp.send("Page.setFontSizes", { fontSizes: { standard: 16, fixed: 13 } });
+          await page.waitForTimeout(300);
+          const base = await sizes();
+          const fixed = big.filter((b, i) => base[i] && b.size < base[i].size * 1.5);
+          check(section, `${label}: text grows with the browser's text size (${big.length} runs)`, big.length === base.length && fixed.length === 0,
+            fixed.slice(0, 8).map((f) => `"${f.text}" ${f.size}px`).join("; "));
+        }
+      } catch (error) {
+        check(section, `${label}: scene opens`, false, String(error.message ?? error).split("\n")[0]);
+      } finally {
+        await context.close();
+      }
+    }
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Frame rate: panning the map under glass on a throttled phone
 // ---------------------------------------------------------------------------
 
@@ -1032,6 +1377,7 @@ try {
   if (want("keyboard")) await keyboardSection(browser);
   if (want("first-run")) await firstRunSection(browser);
   if (want("mission-rows")) await missionRowsSection(browser);
+  if (want("enlarged")) await enlargedSection(browser);
   if (want("fps")) await fpsSection(browser);
   if (want("operator")) await operatorShots(browser);
   // Gated on an explicit ONLY: a bare run must not write evidence PNGs into

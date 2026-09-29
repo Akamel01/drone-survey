@@ -7,7 +7,7 @@
 }
 
 .section h2 {
-  font-size: 14px;
+  font-size: 0.875rem;
   font-weight: 600;
   color: var(--on-glass-2);
   margin: 0 0 12px;
@@ -15,7 +15,7 @@
 
 .quiet {
   margin: 0;
-  font-size: 13px;
+  font-size: 0.8125rem;
   color: var(--on-glass-2);
 }
 
@@ -47,19 +47,19 @@
 }
 
 .name {
-  font-size: 15px;
+  font-size: 0.9375rem;
   font-weight: 600;
   color: var(--on-glass);
 }
 
 .meta {
-  font-size: 12px;
+  font-size: 0.75rem;
   color: var(--on-glass-2);
   overflow-wrap: anywhere;
 }
 
 .state {
-  font-size: 12px;
+  font-size: 0.75rem;
   color: var(--on-glass-2);
 }
 
@@ -77,14 +77,14 @@
 
 .sheetTitle {
   margin: 0 0 8px;
-  font-size: 18px;
+  font-size: 1.125rem;
   font-weight: 600;
   letter-spacing: -0.01em;
 }
 
 .sheetText {
   margin: 0 0 20px;
-  font-size: 14px;
+  font-size: 0.875rem;
   line-height: 1.5;
   color: var(--on-glass-2);
 }

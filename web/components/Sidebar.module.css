@@ -34,7 +34,7 @@
 .section h2 {
   display: flex;
   align-items: center;
-  font-size: 14px;
+  font-size: 0.875rem;
   font-weight: 600;
   color: var(--on-glass-2);
   margin: 0 0 12px;
@@ -67,15 +67,16 @@
   align-items: center;
   justify-content: center;
   flex: none;
-  width: 18px;
-  height: 18px;
+  /* 18 px at the default text size; rem keeps the glyph inside its ring. */
+  width: 1.125rem;
+  height: 1.125rem;
   margin-left: 6px;
   padding: 0;
   border: 1px solid var(--glass-edge);
   border-radius: 50%;
   background: transparent;
   color: var(--on-glass-2);
-  font: italic 500 11px/1 var(--sans);
+  font: italic 500 0.6875rem/1 var(--sans);
   cursor: pointer;
 }
 
@@ -97,7 +98,7 @@
   border-radius: 5px;
   box-shadow: 0 8px 20px rgba(0, 0, 0, 0.45);
   color: var(--on-glass-2);
-  font: 400 12px/1.55 var(--sans);
+  font: 400 0.75rem/1.55 var(--sans);
   text-align: left;
   opacity: 0;
   visibility: hidden;
@@ -145,7 +146,7 @@
    background -- short of 4.5:1) to --on-glass-2, which clears it with margin
    in every measured case. */
 .hint {
-  font-size: 12px;
+  font-size: 0.75rem;
   color: var(--on-glass-2);
   margin-top: 2px;
 }
@@ -162,15 +163,18 @@
   background: rgb(0 0 0 / 0.28);
   border: 1px solid rgb(224 169 79 / 0.4);
   color: var(--warn);
-  font-size: 12px;
+  font-size: 0.75rem;
   line-height: 1.4;
 }
 
 /* Segmented pills (spec § 8): plain pill buttons, reusing the app's shared
    "white pill, dark ink when on" pattern (globals.css `button` / `.active`)
    rather than a bespoke divided control. */
+/* Wraps rather than running off the panel when enlarged text makes the pills
+   wider than it (UI-26). */
 .segmented {
   display: flex;
+  flex-wrap: wrap;
   gap: 8px;
   width: 100%;
 }
@@ -186,7 +190,7 @@
 }
 
 .groupLabel {
-  font-size: 12px;
+  font-size: 0.75rem;
   font-weight: 500;
   color: var(--on-glass-2);
   margin: 14px 0 6px;
@@ -221,14 +225,14 @@
 
 .ringUnit {
   color: var(--on-glass-2);
-  font-size: 12px;
+  font-size: 0.75rem;
 }
 
 /* The computed per-ring tilt: read-only text beside the height, kept on one
    line so input + unit + tilt + Remove still fit the narrow row. */
 .ringTilt {
   color: var(--on-glass-2);
-  font-size: 12px;
+  font-size: 0.75rem;
   white-space: nowrap;
 }
 
@@ -373,5 +377,5 @@
 
 .accountText {
   color: var(--on-glass-2);
-  font-size: 12px;
+  font-size: 0.75rem;
 }
