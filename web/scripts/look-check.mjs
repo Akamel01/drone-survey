@@ -661,6 +661,37 @@ async function missionRowsSection(browser) {
 }
 
 // ---------------------------------------------------------------------------
+// UI-23 (#292) evidence shots: Details open and the Planned row list, at 375
+// and 1440. Gated behind ONLY=details-shots so a normal check:look run
+// writes nothing; the PNGs are committed on the oc/292-shots assets branch,
+// never on the feature branch.
+// ---------------------------------------------------------------------------
+
+async function detailsShotsSection(browser) {
+  const section = "details-shots";
+  const OUT23 = path.resolve(HERE, "../../docs/ui-theme/screenshots/ui-23");
+  fs.mkdirSync(OUT23, { recursive: true });
+  for (const vp of [
+    { width: 375, height: 812, mobile: true },
+    { width: 1440, height: 900 },
+  ]) {
+    const { context, page } = await pageFor(browser, { ...vp, missions: 4 });
+    try {
+      await openPlanner(page);
+      await page.screenshot({ path: path.join(OUT23, `list-${vp.width}.png`) });
+      note(section, `${vp.width}: Planned row list`, `list-${vp.width}.png`);
+      await page.locator("article", { hasText: "North half" }).getByRole("button", { name: "Details", exact: true }).click();
+      await page.locator("dialog[open]").waitFor({ timeout: 10000 });
+      await page.waitForTimeout(900);
+      await page.screenshot({ path: path.join(OUT23, `details-${vp.width}.png`) });
+      note(section, `${vp.width}: Details open`, `details-${vp.width}.png`);
+    } finally {
+      await context.close();
+    }
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Frame rate: panning the map under glass on a throttled phone
 // ---------------------------------------------------------------------------
 
@@ -775,6 +806,9 @@ try {
   if (want("mission-rows")) await missionRowsSection(browser);
   if (want("fps")) await fpsSection(browser);
   if (want("operator")) await operatorShots(browser);
+  // Gated on an explicit ONLY: a bare run must not write evidence PNGs into
+  // the tree.
+  if ((process.env.ONLY ?? "").split(",").includes("details-shots")) await detailsShotsSection(browser);
 } finally {
   await browser.close();
 }
