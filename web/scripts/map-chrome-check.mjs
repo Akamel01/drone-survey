@@ -14,6 +14,7 @@ import { mkdirSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { chromium } from "playwright-core";
+import { chromiumLaunchOptions } from "./lib/harness.mjs";
 
 const BASE = process.argv[2] ?? "http://127.0.0.1:3101";
 const SHOTS = path.resolve(
@@ -237,7 +238,7 @@ async function shots(browser, label, viewport, mobile) {
   console.log(`${label} screenshots saved`);
 }
 
-const browser = await chromium.launch();
+const browser = await chromium.launch(chromiumLaunchOptions());
 try {
   const desktop = await browser.newContext({ viewport: { width: 1440, height: 900 } });
   const desktopPage = await openPlan(desktop, { width: 1440, height: 900 });

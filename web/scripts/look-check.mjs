@@ -20,6 +20,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { chromium } from "playwright-core";
 import { MISSIONS_CHANGED_KEY } from "../lib/actions.ts";
+import { chromiumLaunchOptions } from "./lib/harness.mjs";
 import { DEFAULT_SPEC } from "../lib/spec.ts";
 import { deriveMissions } from "../lib/missionRecords.ts";
 
@@ -1020,7 +1021,7 @@ async function operatorShots(browser) {
 
 // ---------------------------------------------------------------------------
 
-const browser = await chromium.launch();
+const browser = await chromium.launch(chromiumLaunchOptions());
 try {
   const only = process.env.ONLY ? process.env.ONLY.split(",") : null;
   const want = (g) => !only || only.includes(g);

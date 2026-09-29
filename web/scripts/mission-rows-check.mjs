@@ -16,6 +16,7 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { chromium } from "playwright-core";
+import { chromiumLaunchOptions } from "./lib/harness.mjs";
 import { DEFAULT_SPEC } from "../lib/spec.ts";
 import { deriveMissions } from "../lib/missionRecords.ts";
 import { MISSIONS_CHANGED_KEY } from "../lib/actions.ts";
@@ -1722,7 +1723,7 @@ async function stills(browser) {
 // Run
 // ---------------------------------------------------------------------------
 
-const browser = await chromium.launch();
+const browser = await chromium.launch(chromiumLaunchOptions());
 try {
   {
     const { context, page } = await contextFor(browser, { width: 1440, height: 900 });
