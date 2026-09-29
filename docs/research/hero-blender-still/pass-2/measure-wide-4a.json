@@ -1,0 +1,289 @@
+{
+  "haze_deltaE_vs_haze_token": {
+    "attr": "4a",
+    "note": "",
+    "region": "x0.02-0.30:y0.50-0.60",
+    "unit": "dE76",
+    "value": 22.926683897180446
+  },
+  "haze_hex": {
+    "attr": "4a",
+    "note": "",
+    "region": "x0.02-0.30:y0.50-0.60",
+    "unit": "hex",
+    "value": "#BAC5D2"
+  },
+  "sky_anchor_0.02_best_token": {
+    "attr": "4a",
+    "note": "",
+    "region": "x0.02-0.30:y0.02-0.58",
+    "unit": "token",
+    "value": "sky_top"
+  },
+  "sky_anchor_0.02_deltaE_min": {
+    "attr": "4a",
+    "note": "nearest of the four settled sky/haze tokens",
+    "region": "x0.02-0.30:y0.02-0.58",
+    "unit": "dE76",
+    "value": 19.279296213457737
+  },
+  "sky_anchor_0.10_best_token": {
+    "attr": "4a",
+    "note": "",
+    "region": "x0.02-0.30:y0.02-0.58",
+    "unit": "token",
+    "value": "sky_top"
+  },
+  "sky_anchor_0.10_deltaE_min": {
+    "attr": "4a",
+    "note": "nearest of the four settled sky/haze tokens",
+    "region": "x0.02-0.30:y0.02-0.58",
+    "unit": "dE76",
+    "value": 4.375974621240828
+  },
+  "sky_anchor_0.25_best_token": {
+    "attr": "4a",
+    "note": "",
+    "region": "x0.02-0.30:y0.02-0.58",
+    "unit": "token",
+    "value": "sky_mid"
+  },
+  "sky_anchor_0.25_deltaE_min": {
+    "attr": "4a",
+    "note": "nearest of the four settled sky/haze tokens",
+    "region": "x0.02-0.30:y0.02-0.58",
+    "unit": "dE76",
+    "value": 9.02532649882135
+  },
+  "sky_anchor_0.40_best_token": {
+    "attr": "4a",
+    "note": "",
+    "region": "x0.02-0.30:y0.02-0.58",
+    "unit": "token",
+    "value": "sky_mid"
+  },
+  "sky_anchor_0.40_deltaE_min": {
+    "attr": "4a",
+    "note": "nearest of the four settled sky/haze tokens",
+    "region": "x0.02-0.30:y0.02-0.58",
+    "unit": "dE76",
+    "value": 4.399500562532224
+  },
+  "sky_anchor_0.55_best_token": {
+    "attr": "4a",
+    "note": "",
+    "region": "x0.02-0.30:y0.02-0.58",
+    "unit": "token",
+    "value": "sky_low"
+  },
+  "sky_anchor_0.55_deltaE_min": {
+    "attr": "4a",
+    "note": "nearest of the four settled sky/haze tokens",
+    "region": "x0.02-0.30:y0.02-0.58",
+    "unit": "dE76",
+    "value": 4.161593896828614
+  },
+  "sky_anchor_0.68_best_token": {
+    "attr": "4a",
+    "note": "",
+    "region": "x0.02-0.30:y0.02-0.58",
+    "unit": "token",
+    "value": "haze"
+  },
+  "sky_anchor_0.68_deltaE_min": {
+    "attr": "4a",
+    "note": "nearest of the four settled sky/haze tokens",
+    "region": "x0.02-0.30:y0.02-0.58",
+    "unit": "dE76",
+    "value": 6.851326428969233
+  },
+  "sky_deltaE_horizon_vs_haze": {
+    "attr": "4a",
+    "note": "",
+    "region": "x0.02-0.30:y0.02-0.58",
+    "unit": "dE76",
+    "value": 6.851326428969233
+  },
+  "sky_deltaE_horizon_vs_sky_low": {
+    "attr": "4a",
+    "note": "",
+    "region": "x0.02-0.30:y0.02-0.58",
+    "unit": "dE76",
+    "value": 23.93835162633098
+  },
+  "sky_deltaE_horizon_vs_sky_mid": {
+    "attr": "4a",
+    "note": "",
+    "region": "x0.02-0.30:y0.02-0.58",
+    "unit": "dE76",
+    "value": 14.61595730588033
+  },
+  "sky_deltaE_horizon_vs_sky_top": {
+    "attr": "4a",
+    "note": "",
+    "region": "x0.02-0.30:y0.02-0.58",
+    "unit": "dE76",
+    "value": 15.209218363925729
+  },
+  "sky_deltaE_mid_vs_haze": {
+    "attr": "4a",
+    "note": "",
+    "region": "x0.02-0.30:y0.02-0.58",
+    "unit": "dE76",
+    "value": 10.656984390577813
+  },
+  "sky_deltaE_mid_vs_sky_low": {
+    "attr": "4a",
+    "note": "",
+    "region": "x0.02-0.30:y0.02-0.58",
+    "unit": "dE76",
+    "value": 14.420248343272073
+  },
+  "sky_deltaE_mid_vs_sky_mid": {
+    "attr": "4a",
+    "note": "",
+    "region": "x0.02-0.30:y0.02-0.58",
+    "unit": "dE76",
+    "value": 2.600823626251274
+  },
+  "sky_deltaE_mid_vs_sky_top": {
+    "attr": "4a",
+    "note": "",
+    "region": "x0.02-0.30:y0.02-0.58",
+    "unit": "dE76",
+    "value": 18.253278866233842
+  },
+  "sky_deltaE_top_vs_haze": {
+    "attr": "4a",
+    "note": "",
+    "region": "x0.02-0.30:y0.02-0.58",
+    "unit": "dE76",
+    "value": 18.615751943606174
+  },
+  "sky_deltaE_top_vs_sky_low": {
+    "attr": "4a",
+    "note": "",
+    "region": "x0.02-0.30:y0.02-0.58",
+    "unit": "dE76",
+    "value": 32.960818447357326
+  },
+  "sky_deltaE_top_vs_sky_mid": {
+    "attr": "4a",
+    "note": "",
+    "region": "x0.02-0.30:y0.02-0.58",
+    "unit": "dE76",
+    "value": 19.138965032550875
+  },
+  "sky_deltaE_top_vs_sky_top": {
+    "attr": "4a",
+    "note": "",
+    "region": "x0.02-0.30:y0.02-0.58",
+    "unit": "dE76",
+    "value": 4.995727286066762
+  },
+  "sky_hex_anchor_0.02": {
+    "attr": "4a",
+    "note": "",
+    "region": "x0.02-0.30:y0.02-0.58",
+    "unit": "hex",
+    "value": "#2C3E4F"
+  },
+  "sky_hex_anchor_0.10": {
+    "attr": "4a",
+    "note": "",
+    "region": "x0.02-0.30:y0.02-0.58",
+    "unit": "hex",
+    "value": "#506E89"
+  },
+  "sky_hex_anchor_0.25": {
+    "attr": "4a",
+    "note": "",
+    "region": "x0.02-0.30:y0.02-0.58",
+    "unit": "hex",
+    "value": "#66839D"
+  },
+  "sky_hex_anchor_0.40": {
+    "attr": "4a",
+    "note": "",
+    "region": "x0.02-0.30:y0.02-0.58",
+    "unit": "hex",
+    "value": "#8AA1B8"
+  },
+  "sky_hex_anchor_0.55": {
+    "attr": "4a",
+    "note": "",
+    "region": "x0.02-0.30:y0.02-0.58",
+    "unit": "hex",
+    "value": "#B8C4D2"
+  },
+  "sky_hex_anchor_0.68": {
+    "attr": "4a",
+    "note": "",
+    "region": "x0.02-0.30:y0.02-0.58",
+    "unit": "hex",
+    "value": "#777C82"
+  },
+  "sky_hex_horizon": {
+    "attr": "4a",
+    "note": "",
+    "region": "x0.02-0.30:y0.02-0.58",
+    "unit": "hex",
+    "value": "#777C82"
+  },
+  "sky_hex_mid": {
+    "attr": "4a",
+    "note": "",
+    "region": "x0.02-0.30:y0.02-0.58",
+    "unit": "hex",
+    "value": "#7F98B0"
+  },
+  "sky_hex_top": {
+    "attr": "4a",
+    "note": "",
+    "region": "x0.02-0.30:y0.02-0.58",
+    "unit": "hex",
+    "value": "#4C6A86"
+  },
+  "sky_r2_B": {
+    "attr": "4a",
+    "note": "",
+    "region": "x0.02-0.30:y0.02-0.58",
+    "unit": "1",
+    "value": 0.978333408680624
+  },
+  "sky_r2_G": {
+    "attr": "4a",
+    "note": "",
+    "region": "x0.02-0.30:y0.02-0.58",
+    "unit": "1",
+    "value": 0.9780199723654717
+  },
+  "sky_r2_R": {
+    "attr": "4a",
+    "note": "",
+    "region": "x0.02-0.30:y0.02-0.58",
+    "unit": "1",
+    "value": 0.9694515133095049
+  },
+  "sky_slope_B": {
+    "attr": "4a",
+    "note": "",
+    "region": "x0.02-0.30:y0.02-0.58",
+    "unit": "levels/%H",
+    "value": 1.577215979407067
+  },
+  "sky_slope_G": {
+    "attr": "4a",
+    "note": "",
+    "region": "x0.02-0.30:y0.02-0.58",
+    "unit": "levels/%H",
+    "value": 1.8534116275847763
+  },
+  "sky_slope_R": {
+    "attr": "4a",
+    "note": "",
+    "region": "x0.02-0.30:y0.02-0.58",
+    "unit": "levels/%H",
+    "value": 2.2200455332995372
+  }
+}

@@ -1,0 +1,22 @@
+# Pass-2 preview probes (not passes): tall 540x960 / wide 960x540 renders on akamel-linux via
+# render_still.sh --res, scored on the Mac with the pinned measure.py's own island_mask / 4d / 4a.
+# Preview R^2 reads low at 540 px: the 5-px "same" moving average zero-pads the strip ends, which
+# weigh more at 540 rows (the hero's own 960-px panel reads R^2 B 0.939 by the same code).
+
+probe     change                                                     tall S2 / p1              wide S2 / p1
+p2-pr1-t  ridge strips + haze/fog material, basalt matte, sky stops  PASS / 3.07               -
+p2-pr2    wider/higher ridges, 5 layers                              FAIL y1 0.891 / 3.07      FAIL x0 0.550 / 3.86
+p2-pr3    peaked crests, massif envelope, fog_right curtain          PASS / 3.07               FAIL y1 0.841 / 3.86
+p2-pr4    under 2.4, tree_scale 0.30, bluer rock, less haze          FAIL y0 0.484 / 3.86      FAIL y0 0.328 / 4.07
+p2-pr5    fog below relief (fog_top < 0)                             FAIL (same camera)        FAIL (same camera)
+p2-pr6    camera refit (tall 20.56/-0.221/0.162, wide 28.0/0.039)    FAIL y1 0.899 / 3.86      FAIL x0 0.550 / 4.07
+p2-pr7    wisps off iso-height stripes; right-side haze ramp         PASS / 3.86               FAIL x0 0.550 / 4.07
+p2-pr8    wide haze_right 0.65 from 0.40                             PASS / 3.86               FAIL x0 0.553 / 4.07
+p2-pr9    wide far ridges hazier, near crest 0.85, ramp from 0.35    PASS / 3.86               PASS / 4.07
+p2-pr10   wide 0.58/0.62 stops brighter                              -                         PASS / 4.07
+
+4K:
+p2 (a)    first 4K both                                              PASS                      FAIL x0 0.569 y1 0.900 (s2-p2a.txt)
+          strays: one near-ridge peak at x 0.570 y 0.898 (120,137,157), darker than the
+          left-column median of its row; island blob alone x 0.583-0.936 y 0.287-0.863
+p2 (b)    wide nearest crest 0.85 -> 0.90 (base of this directory)   PASS                      PASS

@@ -1,6 +1,10 @@
 """One Blender still (tall + wide) matching the hero's frame 0 — the whole
-composition in one scene: hero island + in-scene sky ramp + displaced terrain
-+ bounded valley-mist volume + depth-keyed haze + two cameras.
+composition in one scene: hero island + in-scene sky ramp + layered mountain
+ridges with valley fog and aerial haze (camera-only, shader-side) + two cameras.
+
+Pass 2 (#223) replaced pass 1's single terrain grid, valley-mist volume box and
+second "haze" view layer with per-framing ridge strips whose haze and fog live
+in their own material: layered, noise-free, and one view layer per render.
 
     blender -b --factory-startup --python-exit-code 1 \
       -P scripts/hero/still.py -- render <outdir> [--shot tall|wide|both] \
@@ -22,37 +26,44 @@ import os
 import sys
 
 import bpy
-from mathutils import Vector
+from mathutils import Vector, noise
 
 # ─── Constants ───────────────────────────────────────────────────────────────
 RENDER_RES = {"tall": (2160, 3840), "wide": (3840, 2160)}   # report §2a
 WARMUP_RES = (380, 675)
-CLIP_END = 20000.0            # terrain lives at 0.7-4.5 km; sky depth-gate below
+CLIP_END = 60000.0            # ridge strips reach ~20 km
 
-# Sky ramp stops, report §2b: (screen row, linear RGB), row measured from the
-# top of the frame.  Positions inside the ramp window are recomputed per
-# framing from `sky_top_row`/`sky_bot_row`; rows are the anchors of the §2b
-# table (0.02…0.68 H tall, 0.02…0.58 H wide, the wide last stop clamped as the
-# look spec requires).  The world sits on TexCoord.Window (verified: Window.y
-# == 1-row bit-exact on 5.2.1), because Generated.Z there is NOT the ray z.
-SKY_STOPS = {
-    "tall": [
-        (0.02, (0.01764, 0.03955, 0.06848)),   # #24384A
-        (0.10, (0.05613, 0.13014, 0.21586)),   # #436580
-        (0.25, (0.09759, 0.19120, 0.31399)),   # #587998
-        (0.40, (0.18782, 0.30499, 0.43415)),   # #7896B0
-        (0.55, (0.28744, 0.40198, 0.52712)),   # #92AAC0
-        (0.68, (0.55201, 0.60383, 0.66539)),   # #C4CCD5
-    ],
-    "wide": [
-        (0.02, (0.02519, 0.04817, 0.07819)),   # #2C3E4F
-        (0.10, (0.08022, 0.15593, 0.25016)),   # #506E89
-        (0.25, (0.13287, 0.22697, 0.33716)),   # #66839D
-        (0.40, (0.25415, 0.35640, 0.47932)),   # #8AA1B8
-        (0.55, (0.48515, 0.55834, 0.65141)),   # #B9C5D3
-        (0.58, (0.48515, 0.55834, 0.65141)),   # clamp
-    ],
+
+def srgb(hexstr):
+    """'#RRGGBB' -> linear RGB (so a Standard-view emission lands on the hex)."""
+    c = [int(hexstr[i:i + 2], 16) / 255.0 for i in (1, 3, 5)]
+    return tuple(v / 12.92 if v <= 0.04045 else ((v + 0.055) / 1.055) ** 2.4 for v in c)
+
+
+# One screen-space ramp per framing, row 0.02 (top) -> 1.0 (bottom), sRGB hex.
+# It is the sky (world, camera rays) AND the aerial-haze colour the ridges fade
+# into at that row, so far mountains converge on the sky exactly like haze.
+# Rows <= 0.68 tall / 0.58 wide are the look spec's s0 anchors (hero-look-
+# spec.md §4a).  Pass 2: the 0.02 anchor is measure.py's 5-px "same" moving
+# average of the first row, i.e. 3/5 of the true colour, so the stop carries
+# anchor/0.6 (pass 1 used the anchor itself and rendered a dark cap: 4a
+# anchor 0.02 #16222D vs hero #24384A).  Same for wide's clamped 0.58 row
+# (#767C82 / 0.6).  Rows below are the hazed-mountain colours read off the
+# hero frame-0 panels (row means over x 0.02-0.40 tall / 0.02-0.55 wide).
+# The world sits on TexCoord.Window (Window.y == 1-row, verified on 5.2.1).
+STOPS = {
+    "tall": [(0.02, "#3C5D7B"), (0.10, "#436580"), (0.25, "#587998"),
+             (0.40, "#7896B0"), (0.55, "#92AAC0"), (0.68, "#C4CCD5"),
+             (0.72, "#C4CCD6"), (0.80, "#B2C0D0"), (0.90, "#96A8BC"),
+             (1.00, "#879BB2")],
+    "wide": [(0.02, "#496784"), (0.10, "#506E89"), (0.25, "#66839D"),
+             (0.40, "#8AA1B8"), (0.55, "#B9C5D3"), (0.58, "#CBD4DE"),
+             (0.62, "#C3CCD7"), (0.70, "#AFBECE"), (0.80, "#A0B2C4"),
+             (0.90, "#879BB0"), (1.00, "#788EA5")],
 }
+FOG = "#E4EAF0"               # valley cloud-sea colour before aerial haze
+RIDGE_ROCK = (0.004, 0.012, 0.030)   # forested far slopes, linear albedo
+RIDGE_ROCK2 = (0.012, 0.024, 0.048)
 
 # LAYERS per ADR-223-09: pebble bands dark chromatic olive so the labeler's
 # max-chroma non-green band picks a real stratum; soil and weathered rock carry
@@ -71,44 +82,55 @@ LAYERS = [  # top to bottom
 
 # K2: the composition knobs, all overridable with --k2 (dotted keys address a
 # framing, e.g. --k2 tall.fstop=2.4).  Camera starts per report §2a.
+#
+# ridges: (distance m, crest row, relief in rows, aerial haze 0-1, fog top)
+# per framing, far to near.  A strip's crest peaks land on `crest row` and its
+# relief reaches `relief` rows below it; `haze` is how far the strip is mixed
+# toward the STOPS colour of its row; `fog top` is the valley-fog line in the
+# strip's own relief units (0 = relief bottom, 1 = crest).
 K2 = {
     "tall": dict(
-        lens=50.0, dist=23.5, elev=8.0, shift_x=-0.12, shift_y=0.09,
-        fstop=2.0, focus_dist=23.5, exposure=0.0, sensor_fit="AUTO",
-        sky_top_row=0.02, sky_bot_row=0.68,
-        haze_gain=0.90, haze_depth_max=6000.0,
-        haze_colour=(0.55201, 0.60383, 0.66539),   # #C4CCD5
+        lens=50.0, dist=20.56, elev=8.0, shift_x=-0.221, shift_y=0.162,
+        fstop=2.0, focus_dist=20.56, exposure=0.0, sensor_fit="AUTO",
+        ridges=[(20000.0, 0.640, 0.050, 0.93, 0.15),
+                (11000.0, 0.700, 0.110, 0.80, 0.15),
+                (6000.0, 0.770, 0.110, 0.62, 0.15),
+                (3200.0, 0.830, 0.140, 0.45, 0.15),
+                (1800.0, 0.880, 0.200, 0.32, 0.10)],
+        haze_right=0.5,      # extra haze toward the frame's right (S2 mask)
+        haze_right_from=0.45,
     ),
     "wide": dict(
-        # wide camera is the one pass 1 fits (report §2a "tune" / Q2); starts
-        # at tall's geometry until the bbox wrapper moves it.
-        lens=50.0, dist=23.5, elev=8.0, shift_x=-0.12, shift_y=0.09,
-        fstop=2.8, focus_dist=23.5, exposure=0.0, sensor_fit="HORIZONTAL",
-        sky_top_row=0.02, sky_bot_row=0.58,
-        haze_gain=0.90, haze_depth_max=6000.0,
-        haze_colour=(0.48515, 0.55834, 0.65141),   # #B9C5D3
+        lens=50.0, dist=28.0, elev=8.0, shift_x=-0.26, shift_y=0.039,
+        fstop=2.8, focus_dist=28.0, exposure=0.0, sensor_fit="HORIZONTAL",
+        ridges=[(20000.0, 0.430, 0.060, 0.97, 0.15),
+                (11000.0, 0.500, 0.120, 0.93, 0.35),
+                (6000.0, 0.600, 0.130, 0.66, 0.15),
+                (3200.0, 0.710, 0.150, 0.48, 0.15),
+                (1800.0, 0.900, 0.220, 0.34, 0.10)],
+        haze_right=0.65,
+        haze_right_from=0.35,
     ),
-    "under": 1.9,            # ADR-223-02: 2.7 -> 1.9; never patch strata alone
+    "ridge_freq": 2.0,       # crest noise frequency per strip distance
+    "ridge_gain": 0.45,      # octave gain: lower = smoother peaks
+    "ridge_width": 0.12,     # crest cross-section, strip-distance units
+    "fog_scale": 30.0,       # wisp noise scale (local units)
+    "fog_noise": 1.6,        # wisp amplitude, relief units
+    "fog_soft": 0.4,         # fog edge width, relief units
+    "fog_max": 0.6,         # fog opacity cap
+    # island knobs patched into hero.K before build().  Pass 2: the hero's
+    # underside is ~0.14 H tall / 0.24 H wide against ~0.11 / 0.20 in pass 1,
+    # and its firs are ~15 % shorter relative to the island.
+    "under": 2.4,            # ADR-223-02 set 1.9 (from 2.7); pass 2 2.4
+    "tree_scale": 0.30,      # hero.py 0.36
     "az": 0.0,               # island azimuth, degrees (#222 az000 mapping)
     "tint_turf": (1.0, 1.0, 1.0),     # ADR-223-09 per-material multiply scales
     "tint_strata": (1.0, 1.0, 1.0),
-    "tint_basalt": (1.0, 1.0, 1.0),
-    "vol_density": 3e-4,     # valley mist, ADR-223-07
-    "vol_top": -450.0,       # below terrain ridge tops (~ -300 m)
-    "vol_height": 250.0,     # ladder: 250 -> 150
-    "vol_footprint": 7000.0, # ladder: 7 -> 4 km
-    "vol_step_rate": 1.0,    # ladder: 1 -> 2 -> 4
-    "vol_max_steps": 1024,
-    # terrain, report §2c re-sized so the silhouette lands in the tall
-    # MountainBand 0.72-0.95 H / HorizonHaze 0.62-0.72 H (see M1.md: the
-    # 16 km grid of the report would sit at rows 0.42-0.45).
-    "terrain_size": 4000.0,
-    "terrain_y": 400.0,      # grid spans y -1.6..+2.4 km, i.e. rows ~0.58-1.0
-    "terrain_base_z": -900.0,
-    "terrain_relief": 600.0, # ridge tops -> ~ -300 m
-    "terrain_detail": 80.0,
-    "mist_start": 300.0,     # Mist pass (ADR-223-05): saturates on the far band
-    "mist_depth": 2500.0,
+    # pass 2: pass 1's 4d lift was the basalt's glossy sky reflection (hero.py
+    # Specular IOR Level 0.65, roughness 0.14-0.44), not its albedo.
+    "tint_basalt": (0.10, 0.12, 0.18),
+    "basalt_spec": 0.15,
+    "basalt_rough": 0.80,
 }
 
 
@@ -226,22 +248,24 @@ def wrap_world(world):
     return nt
 
 
-def set_sky(nt, framing, spec):
-    """Point the ramp window at this framing's row anchors and lay its stops
-    (Window.y = 1 - row, so positions = (top - row) / (top - bot), §2b)."""
+def set_sky(nt, framing):
+    """Lay this framing's STOPS on a SkyMapRange -> SkyRamp pair (world or
+    ridge material).  Window.y = 1 - row; the ramp spans rows top..1.0."""
+    stops = STOPS[framing]
+    top = stops[0][0]
     mr = nt.nodes["SkyMapRange"]
-    top, bot = spec["sky_top_row"], spec["sky_bot_row"]
     mr.inputs[1].default_value = 1.0 - top
-    mr.inputs[2].default_value = 1.0 - bot
+    mr.inputs[2].default_value = 0.0
     elements = nt.nodes["SkyRamp"].color_ramp.elements
     while len(elements) > 1:
         elements.remove(elements[-1])
-    for i, (row, colour) in enumerate(SKY_STOPS[framing]):
-        p = min(max((top - row) / (top - bot), 0.0), 1.0)
+    for i, (row, hexstr) in enumerate(stops):
+        p = (row - top) / (1.0 - top)
+        colour = (*srgb(hexstr), 1.0)
         if i == 0:
-            elements[0].position, elements[0].color = p, (*colour, 1.0)
+            elements[0].position, elements[0].color = p, colour
         else:
-            elements.new(p).color = (*colour, 1.0)
+            elements.new(p).color = colour
 
 
 def tint_material(mat, scale):
@@ -264,133 +288,172 @@ def tint_material(mat, scale):
     nt.links.new(mix.outputs[2], bsdf.inputs["Base Color"])
 
 
-def build_terrain(k2):
-    """ADR-223-06: 256x256 displaced grid, two CLOUDS textures, two-tone rock."""
-    bpy.ops.mesh.primitive_grid_add(x_subdivisions=256, y_subdivisions=256,
-                                    size=k2["terrain_size"])
-    ob = bpy.context.active_object
-    ob.name = "Terrain"
-    ob.location = (0.0, k2["terrain_y"], k2["terrain_base_z"])
-    for name, size, strength in (("ridges", 900.0, k2["terrain_relief"]),
-                                 ("detail", 260.0, k2["terrain_detail"])):
-        tex = bpy.data.textures.new(f"terrain_{name}", "CLOUDS")
-        tex.noise_scale = size
-        tex.noise_depth = 3
-        mod = ob.modifiers.new(f"terrain_{name}", "DISPLACE")
-        mod.texture = tex
-        mod.strength = strength
-        mod.mid_level = 0.0
-    mat = bpy.data.materials.new("terrain")
+def fix_basalt(k2):
+    """Pass 2: matte the underside rock.  hero.py:336-338 makes it wet and
+    glossy (roughness 0.14-0.44, Specular IOR Level 0.65); under Standard view
+    that reflection of the bright sky was pass 1's lifted floor (4d p1 12.8/16.6
+    with the albedo already at 8 %)."""
+    nt = bpy.data.materials["basalt"].node_tree
+    bsdf = next(n for n in nt.nodes if n.type == "BSDF_PRINCIPLED")
+    bsdf.inputs["Specular IOR Level"].default_value = k2["basalt_spec"]
+    for link in list(bsdf.inputs["Roughness"].links):
+        nt.links.remove(link)
+    bsdf.inputs["Roughness"].default_value = k2["basalt_rough"]
+
+
+def ridge_relief(u, v, seed, k2):
+    """Relief of a ridge strip at local (u across, v in depth), both in units
+    of the strip's distance; ~1 at the peaks, ~0 at the relief bottom and
+    well below it off the crest (the valleys, under the fog)."""
+    crest, amp, freq, norm = 0.0, 1.0, k2["ridge_freq"], 0.0
+    for octave in range(4):
+        n = noise.noise(Vector((u * freq + seed * 17.3, seed * 5.1, octave * 3.7)))
+        crest += amp * (1.0 - abs(n)) ** 3          # ridged: sharp peaks
+        norm += amp
+        amp, freq = amp * k2["ridge_gain"], freq * 2.07
+    # massif envelope: a few high summits, low saddles between them
+    massif = 0.5 + 0.5 * noise.noise(Vector((u * k2["ridge_freq"] * 0.45 + seed * 3.1, seed * 1.7, 5.5)))
+    crest = crest / norm * (0.35 + 0.65 * massif) / 0.8
+    vc = v - 0.03 * noise.noise(Vector((u * 4.0, seed * 2.3, 9.1)))   # wavy crest line
+    fall = math.exp(-(vc / k2["ridge_width"]) ** 2)
+    detail = 0.10 * noise.fractal(Vector((u * 40.0, v * 40.0, seed)), 1.0, 2.0, 4)
+    return crest * fall - 2.5 * (1.0 - fall) + detail
+
+
+def ridge_material(k2):
+    """Ridge shading, camera rays only: lit rock -> valley fog (by local height
+    + noise, plus a right-hand fog ramp) -> aerial haze toward the STOPS colour
+    of the pixel's row by the strip's own `haze` fraction."""
+    mat = bpy.data.materials.new("ridges")
     mat.use_nodes = True
     nt = mat.node_tree
     nt.nodes.clear()
-    out = nt.nodes.new("ShaderNodeOutputMaterial")
-    bsdf = nt.nodes.new("ShaderNodeBsdfPrincipled")
+    N, L = nt.nodes.new, nt.links.new
+    out = N("ShaderNodeOutputMaterial")
+    tc = N("ShaderNodeTexCoord")
+    loc = N("ShaderNodeSeparateXYZ")
+    L(tc.outputs["Object"], loc.inputs["Vector"])
+    win = N("ShaderNodeSeparateXYZ")
+    L(tc.outputs["Window"], win.inputs["Vector"])
+
+    def attr(name):
+        a = N("ShaderNodeAttribute")
+        a.attribute_type, a.attribute_name = "OBJECT", name
+        return a.outputs["Fac"]
+
+    def math_node(op, a, b):
+        m = N("ShaderNodeMath")
+        m.operation = op
+        for sock, x in zip(m.inputs, (a, b)):
+            if isinstance(x, float):
+                sock.default_value = x
+            else:
+                L(x, sock)
+        return m.outputs[0]
+
+    # lit rock: two dark forest tones
+    tone = N("ShaderNodeTexNoise")
+    tone.inputs["Scale"].default_value = 60.0
+    L(tc.outputs["Object"], tone.inputs["Vector"])
+    rock = N("ShaderNodeMix")
+    rock.data_type = "RGBA"
+    rock.inputs[6].default_value = (*RIDGE_ROCK, 1.0)
+    rock.inputs[7].default_value = (*RIDGE_ROCK2, 1.0)
+    L(tone.outputs["Fac"], rock.inputs[0])
+    bsdf = N("ShaderNodeBsdfPrincipled")
     bsdf.inputs["Roughness"].default_value = 1.0
-    noise = nt.nodes.new("ShaderNodeTexNoise")
-    noise.inputs["Scale"].default_value = 0.4
-    mix = nt.nodes.new("ShaderNodeMix")
-    mix.data_type = "RGBA"
-    mix.inputs[6].default_value = (0.020, 0.030, 0.020, 1.0)   # dark forest rock
-    mix.inputs[7].default_value = (0.060, 0.062, 0.055, 1.0)   # scree
-    nt.links.new(noise.outputs["Fac"], mix.inputs[0])
-    nt.links.new(mix.outputs[2], bsdf.inputs["Base Color"])
-    nt.links.new(bsdf.outputs["BSDF"], out.inputs["Surface"])
-    ob.data.materials.append(mat)
-    return ob
+    L(rock.outputs[2], bsdf.inputs["Base Color"])
+
+    # valley fog: full below fog_top - soft, none above fog_top + soft/2,
+    # the line broken up by noise into wisps; capped at fog_max opacity
+    squash = N("ShaderNodeMapping")        # relief units span ~3.5, u/v ~0.3:
+    squash.inputs["Scale"].default_value = (1.0, 1.0, 0.08)   # keep wisps off iso-height stripes
+    L(tc.outputs["Object"], squash.inputs["Vector"])
+    wisp = N("ShaderNodeTexNoise")
+    wisp.inputs["Scale"].default_value = k2["fog_scale"]
+    wisp.inputs["Detail"].default_value = 4.0
+    L(squash.outputs["Vector"], wisp.inputs["Vector"])
+    h = math_node("ADD", loc.outputs["Z"],
+                  math_node("MULTIPLY", math_node("SUBTRACT", wisp.outputs["Fac"], 0.5), k2["fog_noise"]))
+    top = attr("fog_top")
+    fog = N("ShaderNodeMapRange")
+    L(h, fog.inputs[0])
+    L(math_node("ADD", top, k2["fog_soft"] / 2), fog.inputs[1])
+    L(math_node("SUBTRACT", top, k2["fog_soft"]), fog.inputs[2])
+    fog.inputs[4].default_value = k2["fog_max"]
+    fog_em = N("ShaderNodeEmission")
+    fog_em.inputs["Color"].default_value = (*srgb(FOG), 1.0)
+    mix1 = N("ShaderNodeMixShader")
+    L(fog.outputs[0], mix1.inputs[0])
+    L(bsdf.outputs["BSDF"], mix1.inputs[1])
+    L(fog_em.outputs[0], mix1.inputs[2])
+
+    # aerial haze toward the row's ramp colour (same STOPS as the sky)
+    mr = N("ShaderNodeMapRange")
+    mr.name = "SkyMapRange"
+    ramp = N("ShaderNodeValToRGB")
+    ramp.name = "SkyRamp"
+    ramp.color_ramp.interpolation = "LINEAR"
+    L(win.outputs["Y"], mr.inputs[0])
+    L(mr.outputs[0], ramp.inputs["Fac"])
+    haze_em = N("ShaderNodeEmission")
+    L(ramp.outputs["Color"], haze_em.inputs["Color"])
+    # extra haze toward the frame's right, where the hero has cloud sea under
+    # the island (and where measure.py's S2 mask reads dark ridges as island)
+    right = N("ShaderNodeMapRange")
+    right.name = "HazeRight"
+    L(win.outputs["X"], right.inputs[0])
+    haze = attr("haze")
+    mix2 = N("ShaderNodeMixShader")
+    L(math_node("ADD", haze, math_node("MULTIPLY", math_node("SUBTRACT", 1.0, haze), right.outputs[0])),
+      mix2.inputs[0])
+    L(mix1.outputs[0], mix2.inputs[1])
+    L(haze_em.outputs[0], mix2.inputs[2])
+    L(mix2.outputs[0], out.inputs["Surface"])
+    return mat
 
 
-def build_volume(k2):
-    """ADR-223-07: one bounded static box, noise x vertical falloff density."""
-    bpy.ops.mesh.primitive_cube_add(size=1.0)
-    ob = bpy.context.active_object
-    ob.name = "ValleyMist"
-    ob.scale = (k2["vol_footprint"], k2["vol_footprint"], k2["vol_height"])
-    ob.location = (0.0, 0.0, k2["vol_top"] - k2["vol_height"] / 2.0)
-    mat = bpy.data.materials.new("valley_mist")
-    mat.use_nodes = True
-    nt = mat.node_tree
-    nt.nodes.clear()
-    out = nt.nodes.new("ShaderNodeOutputMaterial")
-    vol = nt.nodes.new("ShaderNodeVolumeScatter")
-    vol.inputs["Color"].default_value = (0.62, 0.68, 0.75, 1.0)  # haze-tinted
-    tc = nt.nodes.new("ShaderNodeTexCoord")
-    noise = nt.nodes.new("ShaderNodeTexNoise")
-    noise.inputs["Scale"].default_value = 23.0    # ~300 m features on a 7 km box
-    noise.inputs["Detail"].default_value = 2.0
-    sep = nt.nodes.new("ShaderNodeSeparateXYZ")
-    fall = nt.nodes.new("ShaderNodeMapRange")     # dense at the bottom, 0 on top
-    fall.inputs[1].default_value, fall.inputs[2].default_value = -0.5, 0.5
-    fall.inputs[3].default_value, fall.inputs[4].default_value = 1.0, 0.0
-    mul1 = nt.nodes.new("ShaderNodeMath")
-    mul1.operation = "MULTIPLY"
-    mul2 = nt.nodes.new("ShaderNodeMath")
-    mul2.operation = "MULTIPLY"
-    mul2.inputs[1].default_value = k2["vol_density"]
-    nt.links.new(tc.outputs["Object"], noise.inputs["Vector"])
-    nt.links.new(tc.outputs["Object"], sep.inputs["Vector"])
-    nt.links.new(sep.outputs["Z"], fall.inputs[0])
-    nt.links.new(noise.outputs["Fac"], mul1.inputs[0])
-    nt.links.new(fall.outputs[0], mul1.inputs[1])
-    nt.links.new(mul1.outputs[0], mul2.inputs[0])
-    nt.links.new(mul2.outputs[0], vol.inputs["Density"])
-    nt.links.new(vol.outputs[0], out.inputs["Volume"])
-    ob.data.materials.append(mat)
-    return ob
+def row_z(spec, cam, d, row):
+    """World z at horizontal distance d ahead of `cam` that projects to screen
+    `row` (0 top, 1 bottom) on the frame's centre column.  Sensor fit: tall AUTO
+    puts 36 mm on the long (vertical) side; wide HORIZONTAL on the width."""
+    sensor_h = 36.0 if spec["sensor_fit"] == "AUTO" else 36.0 * 2160 / 3840
+    t = ((0.5 - row) * sensor_h + spec["shift_y"] * 36.0) / spec["lens"]
+    e = math.atan(t) - math.radians(spec["elev"])
+    return cam.location.z + d * math.tan(e)
 
 
-def build_compositor(sc):
-    """ADR-223-05: Mist -> gain, Depth gates the sky out, mix toward haze."""
-    view_layer = sc.view_layers[0]
-    view_layer.use_pass_mist = True
-    view_layer.use_pass_z = True          # the compositor's "Depth" output
-    sc.render.use_compositing = True
-    nt = bpy.data.node_groups.new("still_comp", "CompositorNodeTree")
-    nt.interface.new_socket("Image", in_out="OUTPUT", socket_type="NodeSocketColor")
-    out = nt.nodes.new("NodeGroupOutput")
-    rl = nt.nodes.new("CompositorNodeRLayers")
-    # M3: haze passes come from a second view layer without the mist volume, so
-    # Mist/Depth are surface distances (deterministic) instead of volume-event
-    # noise; the volume still renders in the main layer's Combined.
-    hv = sc.view_layers.new("haze")
-    hv.use_pass_mist = True
-    hv.use_pass_z = True
-    vol_coll = bpy.data.collections.new("haze_src")
-    sc.collection.children.link(vol_coll)
-    vol_ob = bpy.data.objects["ValleyMist"]
-    for c in list(vol_ob.users_collection):
-        c.objects.unlink(vol_ob)
-    vol_coll.objects.link(vol_ob)
-    hv.layer_collection.children["haze_src"].exclude = True
-    rl_haze = nt.nodes.new("CompositorNodeRLayers")
-    rl_haze.layer = "haze"
-    gain = nt.nodes.new("ShaderNodeMapRange")
-    gain.name = "HazeGain"
-    gain.inputs[1].default_value, gain.inputs[2].default_value = 0.0, 1.0
-    near = nt.nodes.new("ShaderNodeMath")
-    near.name = "HazeNear"
-    near.operation = "LESS_THAN"
-    fac = nt.nodes.new("ShaderNodeMath")
-    fac.operation = "MULTIPLY"
-    mix = nt.nodes.new("ShaderNodeMix")
-    mix.name = "HazeMix"
-    mix.data_type = "RGBA"
-    mix.blend_type = "MIX"
-    nt.links.new(rl_haze.outputs["Mist"], gain.inputs[0])
-    nt.links.new(rl_haze.outputs["Depth"], near.inputs[0])
-    nt.links.new(gain.outputs[0], fac.inputs[0])
-    nt.links.new(near.outputs[0], fac.inputs[1])
-    nt.links.new(fac.outputs[0], mix.inputs[0])
-    nt.links.new(rl.outputs["Image"], mix.inputs[6])
-    nt.links.new(mix.outputs[2], out.inputs[0])
-    sc.compositing_node_group = nt
-    return nt
-
-
-def set_haze(nt, spec):
-    nt.nodes["HazeGain"].inputs[4].default_value = spec["haze_gain"]
-    nt.nodes["HazeNear"].inputs[1].default_value = spec["haze_depth_max"]
-    nt.nodes["HazeMix"].inputs[7].default_value = (*spec["haze_colour"], 1.0)
+def build_ridges(framing, spec, cam, mat, nx=720, ny=48):
+    """One strip per `ridges` entry, meshed in local units (u, v in distance
+    units, relief in relief units) and scaled into place, so fog/noise scales
+    read the same on screen at every distance."""
+    obs = []
+    for i, (d, crest, relief, haze, fog_top) in enumerate(spec["ridges"]):
+        z0 = row_z(spec, cam, d, crest + relief)
+        amp = row_z(spec, cam, d, crest) - z0
+        verts, faces = [], []
+        for j in range(ny + 1):
+            v = -0.15 + 0.30 * j / ny
+            for k in range(nx + 1):
+                u = -0.9 + 1.8 * k / nx
+                verts.append((u, v, ridge_relief(u, v, i + (7 if framing == "wide" else 0), K2)))
+        for j in range(ny):
+            for k in range(nx):
+                a = j * (nx + 1) + k
+                faces.append((a, a + 1, a + nx + 2, a + nx + 1))
+        me = bpy.data.meshes.new(f"Ridge_{framing}_{i}")
+        me.from_pydata(verts, [], faces)
+        me.polygons.foreach_set("use_smooth", [True] * len(faces))
+        me.materials.append(mat)
+        ob = bpy.data.objects.new(me.name, me)
+        bpy.context.scene.collection.objects.link(ob)
+        ob.location = (cam.location.x, cam.location.y + d, z0)
+        ob.scale = (d, d, amp)
+        ob["haze"], ob["fog_top"] = haze, fog_top
+        for vis in ("diffuse", "glossy", "transmission", "volume_scatter", "shadow"):
+            setattr(ob, f"visible_{vis}", False)          # the island never sees it
+        obs.append(ob)
+    return obs
 
 
 def setup_camera(cam, spec):
@@ -412,13 +475,20 @@ def setup_camera(cam, spec):
     dof.aperture_fstop = spec["fstop"]
 
 
-def render_shot(sc, framing, outdir, res, camera, world_nt, comp_nt, spec):
-    set_sky(world_nt, framing, spec)
-    set_haze(comp_nt, spec)
+def render_shot(sc, framing, path, res, camera, sky_nts, ridges, spec):
+    for nt in sky_nts:
+        set_sky(nt, framing)
+    for name, obs in ridges.items():
+        for ob in obs:
+            ob.hide_render = name != framing
+    hr = bpy.data.materials["ridges"].node_tree.nodes["HazeRight"]
+    hr.inputs[1].default_value = spec["haze_right_from"]
+    hr.inputs[2].default_value = spec["haze_right_from"] + 0.4
+    hr.inputs[4].default_value = spec["haze_right"]
     sc.camera = camera
     sc.render.resolution_x, sc.render.resolution_y = res
     sc.view_settings.exposure = spec["exposure"]
-    sc.render.filepath = os.path.join(outdir, f"{framing}-s0-f0.png")
+    sc.render.filepath = path
     bpy.ops.render.render(write_still=True)
     print(f"still: wrote {sc.render.filepath} {res[0]}x{res[1]}", flush=True)
 
@@ -440,6 +510,7 @@ def main():
     bpy.ops.wm.read_homefile(use_empty=True)
 
     hero.K["under"] = K2["under"]
+    hero.K["tree_scale"] = K2["tree_scale"]
     hero.K2 = K2
     patch_layers(hero, LAYERS)
     root = hero.build()
@@ -458,20 +529,11 @@ def main():
     sc.view_settings.look = "None"
     sc.view_settings.exposure = 0.0
     sc.display_settings.display_device = "sRGB"
-    sc.cycles.volume_bounces = 1                # ADR-223-07 start
-    sc.cycles.volume_step_rate = K2["vol_step_rate"]
-    sc.cycles.volume_max_steps = int(K2["vol_max_steps"])
-    if sc.world.mist_settings:
-        sc.world.mist_settings.start = K2["mist_start"]
-        sc.world.mist_settings.depth = K2["mist_depth"]
-        sc.world.mist_settings.falloff = "LINEAR"
     world_nt = wrap_world(sc.world)
-    build_terrain(K2)
-    build_volume(K2)
     for name, key in (("turf", "tint_turf"), ("strata", "tint_strata"),
                       ("basalt", "tint_basalt")):
         tint_material(bpy.data.materials.get(name), K2[key])
-    comp_nt = build_compositor(sc)
+    fix_basalt(K2)
 
     cam_tall = bpy.data.objects["Cam"]
     cam_wide = bpy.data.objects.new("CamWide", bpy.data.cameras.new("CamWide"))
@@ -479,6 +541,9 @@ def main():
     setup_camera(cam_tall, K2["tall"])
     setup_camera(cam_wide, K2["wide"])
     cameras = {"tall": cam_tall, "wide": cam_wide}
+    mat = ridge_material(K2)
+    ridges = {f: build_ridges(f, K2[f], cameras[f], mat) for f in ("tall", "wide")}
+    sky_nts = (world_nt, mat.node_tree)
 
     image = sc.render.image_settings
     image.file_format = "PNG"
@@ -488,18 +553,12 @@ def main():
           f"res={args.res or 'native'}", flush=True)
 
     if args.warmup:
-        set_sky(world_nt, shots[0], K2[shots[0]])
-        set_haze(comp_nt, K2[shots[0]])
-        sc.camera = cameras[shots[0]]
-        sc.render.resolution_x, sc.render.resolution_y = WARMUP_RES
-        sc.view_settings.exposure = K2[shots[0]]["exposure"]
-        sc.render.filepath = os.path.join(outdir, "warmup.png")
-        bpy.ops.render.render(write_still=True)
-        print(f"still: wrote {sc.render.filepath} (warm-up)", flush=True)
-
+        render_shot(sc, shots[0], os.path.join(outdir, "warmup.png"), WARMUP_RES,
+                    cameras[shots[0]], sky_nts, ridges, K2[shots[0]])
     for framing in shots:
-        render_shot(sc, framing, outdir, args.res or RENDER_RES[framing],
-                    cameras[framing], world_nt, comp_nt, K2[framing])
+        render_shot(sc, framing, os.path.join(outdir, f"{framing}-s0-f0.png"),
+                    args.res or RENDER_RES[framing], cameras[framing], sky_nts,
+                    ridges, K2[framing])
 
 
 if __name__ == "__main__":

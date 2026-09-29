@@ -29,6 +29,7 @@ from PIL import Image, ImageDraw, ImageFont
 
 MEASURE_SHA_PIN = "26f93fce4bb101c7ff07a1f446636d8bddf51cc36c0fed88b1766c661a495fe7"
 HERO_SHA_PREFIX = {"tall": "0c9d67f2", "wide": "de1c1f08"}
+MASTER_SIZE = {"tall": (2160, 3840), "wide": (3840, 2160)}
 S_IDX = [0, 486, 972, 1458, 1944, 2430, 2916, 3402]  # D-223-05/D2; must match measure.py S_IDX
 ATTRS = ["4a", "4b", "4c", "4d", "4e", "4f", "4g", "4h"]
 MEASURED_ATTRS = ["4a", "4b", "4d", "4e", "4g", "4h"]
@@ -114,6 +115,29 @@ def hero_mean_table(measure_path):
     return means, csv_path
 
 
+def hero_s0_from_csv(csv_path, framing, master_sha):
+    """Hero s0 values from the look spec's measurements.csv (frame_s == "0"), shaped
+    like measure.py's single-frame JSON: {attr: {metric: {"value": v}}}. Used when the
+    hero masters are not readable (#223 passes 2-5: ~/hero3d/web4k is off limits); the
+    CSV is the pinned measure.py's own output for the pinned frames."""
+    out = {}
+    with open(csv_path, newline="") as fh:
+        for row in csv.DictReader(fh):
+            if row["framing"] != framing or row["frame_s"] != "0":
+                continue
+            if row["master_sha256"] != master_sha:
+                die("%s s0 row %s from master %s, pin %s" % (csv_path, row["metric"],
+                                                              row["master_sha256"], master_sha))
+            try:
+                v = float(row["value"])
+            except ValueError:
+                v = row["value"]
+            out.setdefault(row["attribute"], {})[row["metric"]] = {"value": v}
+    if not out:
+        die("no %s s0 rows in %s" % (framing, csv_path))
+    return out
+
+
 def s2_gate(module, still_path, framing):
     img = np.asarray(Image.open(still_path).convert("RGB"), dtype=np.uint8)
     mask = module.island_mask(img, framing)
@@ -139,8 +163,9 @@ def ascii_safe(s):
 
 
 def compose_sheet(hero_path, still_path, out_path, framing, label, az, hero_sha,
-                  still_sha, s2_line):
+                  still_sha, s2_line, hero_size=None):
     hero, hero_sz = load_panel(hero_path)
+    hero_sz = hero_size or hero_sz   # a 960-px panel still names the master's size
     still, still_sz = load_panel(still_path)
     margin, gap, head, foot = 16, 16, 96, 84
     panel_h = max(hero.height, still.height)
@@ -256,6 +281,9 @@ def write_scorecard(path, s):
     L.append("generated %s | azimuth %s | renders `%s` | measure.py sha256 `%s`"
              % (s["generated"], s["azimuth"], s["renders"], s["measure_sha256"]))
     L.append("")
+    if s.get("hero_s0_source"):
+        L.append("hero s0 values: %s" % s["hero_s0_source"])
+        L.append("")
     L.append("**Phase caveat:** %s" % s["phase_caveat"])
     L.append("")
     sections = s["sections"]
@@ -319,6 +347,9 @@ def main(argv):
     ap.add_argument("--out", required=True)
     ap.add_argument("--label", default="still")
     ap.add_argument("--python", default=sys.executable)
+    ap.add_argument("--hero-s0-csv", dest="hero_s0_csv",
+                    help="take hero s0 values from the look spec's measurements.csv; "
+                         "--hero-frames then holds the 960-px hero panels (sha not pinned)")
     args = ap.parse_args(argv)
 
     if not os.path.isfile(args.measure):
@@ -360,7 +391,9 @@ def main(argv):
         if not os.path.isfile(hero):
             die("hero frame missing: %s" % hero)
         hero_sha = sha256(hero)
-        if not hero_sha.startswith(HERO_SHA_PREFIX[framing]):
+        if args.hero_s0_csv:
+            hero_sha = HERO_SHA_PREFIX[framing]   # the values' frame; the panel is its 960-px copy
+        elif not hero_sha.startswith(HERO_SHA_PREFIX[framing]):
             die("hero frame %s sha256 %s does not start with pin %s"
                 % (hero, hero_sha, HERO_SHA_PREFIX[framing]))
         still_meta[framing] = {"still": still, "still_sha256": still_sha,
@@ -370,11 +403,14 @@ def main(argv):
 
         # ---- 4a..4h single-frame (still) and hero s0 -------------------------
         still_js, hero_js = {}, {}
+        csv_js = (hero_s0_from_csv(args.hero_s0_csv, framing, module.MASTER_SHA[framing])
+                  if args.hero_s0_csv else None)
         for attr in ATTRS:
             still_js[attr] = run_measure(args.python, args.measure,
                                          os.path.dirname(still), framing, attr)
-            hero_js[attr] = run_measure(args.python, args.measure,
-                                        args.hero_frames, framing, attr)
+            hero_js[attr] = (csv_js.get(attr, {}) if csv_js is not None else
+                             run_measure(args.python, args.measure,
+                                         args.hero_frames, framing, attr))
             with open(os.path.join(args.out, "measure-%s-%s.json" % (framing, attr)), "w") as fh:
                 json.dump(still_js[attr], fh, indent=2, sort_keys=True)
         print("still_review: %s 8 single-frame sets (4a-4h) + hero s0 done" % framing)
@@ -455,7 +491,8 @@ def main(argv):
         # ---- sheet ----------------------------------------------------------
         sheet = os.path.join(args.out, "sheet-%s.png" % framing)
         W, H = compose_sheet(hero, still, sheet, framing, args.label, az,
-                             hero_sha, still_sha, line)
+                             hero_sha, still_sha, line,
+                             MASTER_SIZE[framing] if args.hero_s0_csv else None)
         sheet_info[framing] = {"path": sheet, "size": [W, H], "panel_width": PANEL_W}
         print("still_review: wrote %s (%dx%d, panels %d px)" % (sheet, W, H, PANEL_W))
 
@@ -474,6 +511,10 @@ def main(argv):
         "measure_sha256": got,
         "hero_frames": still_meta,
         "phase_caveat": PHASE_CAVEAT,
+        "hero_s0_source": (("frame_s == 0 rows of %s (sha256 %s, the pinned measure.py's own run "
+                            "on the pinned masters); sheet panels are the 960-px hero panels"
+                            % (os.path.basename(args.hero_s0_csv), sha256(args.hero_s0_csv)[:16]))
+                           if args.hero_s0_csv else "measure.py run on the hero frames"),
         "sections": [
             {"name": "measured, single-frame",
              "note": ("still s0 vs hero s0 (fair comparator) vs hero mean (spec target); "

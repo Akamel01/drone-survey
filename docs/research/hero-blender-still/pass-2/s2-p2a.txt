@@ -1,0 +1,3 @@
+S2 island-bbox gate, s0 island mask, measure.py BBOX_REF/BBOX_TOL
+tall S2 PASS bbox x 0.480-1.000 y 0.448-0.886 ref x 0.50-1.00 y 0.45-0.88 tol x 0.03 y 0.01 (s0 island mask; union gate needs 8 frames)
+wide S2 FAIL bbox x 0.569-0.935 y 0.288-0.900 ref x 0.59-0.93 y 0.29-0.86 tol x 0.03 y 0.01 (s0 island mask; union gate needs 8 frames)
