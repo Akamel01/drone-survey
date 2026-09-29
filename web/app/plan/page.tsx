@@ -5,6 +5,7 @@ import { DEFAULT_SPEC, type CircleShape, type MissionSpec } from "@/lib/spec";
 import { preview, areaHectares } from "@/lib/mission";
 import type { MissionRow } from "@/lib/missionRecords";
 import { copyOf, localDate, sitesFrom, type MissionListRead, type SiteChoice } from "@/lib/missionView";
+import { firstRunDestination, type FirstRunStep } from "@/lib/firstRun";
 import MapPane, { type DrawMode } from "@/components/MapPane";
 import HeroScene from "@/components/HeroScene";
 import MissionList from "@/components/MissionList";
@@ -150,6 +151,12 @@ export default function PlanPage() {
   // The control a fold is about to create, focused once it is on screen. Null
   // on first mount: the page must not steal focus on load.
   const foldFocus = useRef<FoldFocus | null>(null);
+  // The first-run step whose anchor focus the page still owes, and a counter
+  // that reruns the focus effect even when the destination changed nothing
+  // else (a wide screen with Settings already open). Null on first mount: the
+  // page must not steal focus on load.
+  const firstRunFocus = useRef<FirstRunStep | null>(null);
+  const [focusNonce, setFocusNonce] = useState(0);
 
   useEffect(() => {
     // Today's date belongs to the client, never to the build: see DEFAULT_SPEC.
@@ -215,6 +222,37 @@ export default function PlanPage() {
     el[target]?.focus({ preventScroll: true });
   }, [missionsOpen, settingsOpen]);
 
+  // Focus follows a first-run step once its destination is on screen: the map
+  // canvas for the draw step (the surface drawing input lands on), the Site
+  // select and the Mission Name input in Settings. preventScroll for the same
+  // reason as a fold: while the view switch is still sliding, letting the
+  // browser scroll the anchor into view would drag the clipping column with
+  // it instead of letting it settle.
+  useEffect(() => {
+    if (focusNonce === 0) return;
+    const step = firstRunFocus.current;
+    firstRunFocus.current = null;
+    if (!step) return;
+    const root = pageRef.current;
+    if (!root) return;
+    const anchor =
+      step === "draw"
+        ? root.querySelector<HTMLElement>("#map-draw-surface canvas")
+        : root.querySelector<HTMLElement>(step === "site" ? "#site-select" : "#mission-name");
+    anchor?.focus({ preventScroll: true });
+    // A focused anchor can sit below its panel's own fold (Settings is tall).
+    // Bring it into view within that scrollport directly: the native
+    // scrollIntoView also scrolls the clipping column, dragging a wide
+    // screen's unfold with it (measured: .top scrollLeft 0 -> 323 mid-slide).
+    const scroller = anchor?.closest<HTMLElement>("[data-panel-scroll]");
+    if (anchor && scroller) {
+      const box = anchor.getBoundingClientRect();
+      const port = scroller.getBoundingClientRect();
+      if (box.bottom > port.bottom) scroller.scrollTop += box.bottom - port.bottom + 8;
+      else if (box.top < port.top) scroller.scrollTop -= port.top - box.top + 8;
+    }
+  }, [focusNonce]);
+
   const handleBasemapError = useCallback(() => setMapFailed(true), []);
   const handleBasemapLoaded = useCallback(() => setMapFailed(false), []);
 
@@ -226,6 +264,19 @@ export default function PlanPage() {
   const foldSettings = (open: boolean) => {
     foldFocus.current = open ? "settings-collapse" : "settings-tab";
     setSettingsOpen(open);
+  };
+
+  // A first-run step: switch the narrow view or unfold the wide panel, then
+  // hand focus to the step's anchor once it is on screen (spec §10). The list
+  // reports which step; firstRunDestination holds where it lands.
+  const navigateFirstRun = (step: FirstRunStep) => {
+    const dest = firstRunDestination(step, !wide);
+    if (dest.view) setView(dest.view);
+    // Unfolded directly, not through foldSettings: that path hands focus to
+    // the collapse button, and the step's anchor is where focus belongs.
+    if (wide && step !== "draw") setSettingsOpen(true);
+    firstRunFocus.current = dest.focus;
+    setFocusNonce((n) => n + 1);
   };
 
   const setSpec = (updater: (s: MissionSpec) => MissionSpec) => setSpecState(updater);
@@ -310,7 +361,7 @@ export default function PlanPage() {
               ‹
             </button>
           </div>
-          <MissionList onEdit={editMission} onCopy={copyMission} editingId={editing.id} onRead={onListRead} onNotice={showNotice} />
+          <MissionList onEdit={editMission} onCopy={copyMission} editingId={editing.id} onRead={onListRead} onNotice={showNotice} onFirstRunNavigate={navigateFirstRun} />
         </section>
         <section className={styles.map} aria-label="Map" inert={!wide && view !== "map"}>
           <MapPane

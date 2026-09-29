@@ -5,9 +5,13 @@ import {
   ENTER_MS,
   EXIT_MS,
   arrivingIds,
+  canConsumeFlown,
   flipDeltas,
+  flownHoldMs,
   holdMs,
+  isStaleForMoment,
   leavingIds,
+  settleFlown,
   visibleMissions,
 } from "./missionListMotion.ts";
 
@@ -93,4 +97,44 @@ test("flipDeltas skips sub-half-pixel movement and ids missing from either read"
     ["new", 10], // no previous offset: it arrived, it did not move
   ]);
   assert.deepEqual([...flipDeltas(previous, next)], [["b", -0.5]]);
+});
+
+// --- settle: the operator's own Mark Flown, and nothing else --------------------
+
+test("settleFlown stays quiet without a marker or without a departure", () => {
+  assert.equal(settleFlown(null, ["a"]), false);
+  assert.equal(settleFlown({ id: "a", seq: 1 }, ["b"]), false);
+  assert.equal(settleFlown({ id: "a", seq: 1 }, []), false);
+});
+
+test("settleFlown matches the operator's Mark Flown id among the leaving ids", () => {
+  assert.equal(settleFlown({ id: "b", seq: 1 }, ["b", "c"]), true);
+});
+
+test("settleFlown matches only the operator's id; `seq` is not its business", () => {
+  assert.equal(settleFlown({ id: "b", seq: 2 }, ["b"]), true);
+});
+
+// --- the generation guard: only reads issued after the mark act on it -----------
+
+test("a read issued at or before the mark can never consume the marker", () => {
+  const marker = { id: "b", seq: 4 };
+  assert.equal(canConsumeFlown(marker, 4), false, "the newest read issued before arming");
+  assert.equal(canConsumeFlown(marker, 3), false, "a still-in-flight read from before it");
+  assert.equal(canConsumeFlown(marker, 5), true, "the read issued after arming consumes it");
+  assert.equal(canConsumeFlown(null, 5), false, "no arming, nothing to consume");
+});
+
+test("a read older than the active moment can neither consume nor clear it", () => {
+  assert.equal(isStaleForMoment(4, 5), true, "issued before the moment's own read");
+  assert.equal(isStaleForMoment(5, 5), false, "the moment's own read");
+  assert.equal(isStaleForMoment(6, 5), false, "issued after it");
+  assert.equal(isStaleForMoment(1, null), false, "no moment is active");
+});
+
+// --- flown hold: settle 150ms + 900ms reading + existing dissolve ---------------
+
+test("flownHoldMs totals settle, reading hold and dissolve from existing tokens", () => {
+  assert.equal(flownHoldMs(false), 1300); // 150 settle + 900 reading + 250 dissolve
+  assert.equal(flownHoldMs(true), 1050); // reading at once + 900 hold + 150 exit
 });

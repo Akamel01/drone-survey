@@ -51,10 +51,13 @@ test("a success reports what the store did, in the glossary's words", () => {
   // Nothing is ever deleted, so the message must not say it was.
   assert.match(describeResult("Remove", { ok: true, body: { archived: "mission-a" } }), /archived, not deleted/);
   // Mark Flown also answers with `cards`; it must not announce a Dispatch (#164).
-  assert.match(
+  // A Mission can span several Cards, so both Flown sentences say Cards —
+  // matching the row detail (missionView.ts) and the ticket's wording (#294).
+  assert.equal(
     describeResult("Mark Flown", { ok: true, body: { cards: [{ card: "way finder 1" }] } }),
-    /^Marked Flown/,
+    "Marked Flown. Its Cards are free for the next Mission.",
   );
+  assert.equal(describeResult("Unmark Flown", { ok: true, body: {} }), "Unmarked. It holds its Cards again.");
 });
 
 test("storage blocked outright reads as no storage, not a crash (#152)", () => {

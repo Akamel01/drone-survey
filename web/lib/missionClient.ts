@@ -7,7 +7,7 @@
 // block site data must not take the module down (#152).
 
 import { readPassphrase, subscribePassphrase } from "./passphrase.ts";
-import { describeResult, noteMissionsChanged } from "./actions.ts";
+import { describeResult, noteMissionSaved, noteMissionsChanged } from "./actions.ts";
 import { describeSave } from "./missionView.ts";
 import type { ActionResult } from "./actions.ts";
 import type { MissionRecord } from "./missionRecords.ts";
@@ -171,7 +171,9 @@ export async function save(draft: MissionDraft): Promise<SaveResult> {
   );
 
   if (reply.ok && reply.body.mission) {
-    noteMissionsChanged();
+    // Unlike a row action, a save is followed by no read of its own: the
+    // window that saved must read back at once, not at its next poll (#294).
+    noteMissionSaved();
     return {
       ok: true,
       mission: reply.body.mission as MissionRecord,
