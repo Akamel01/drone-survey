@@ -105,7 +105,7 @@ theme.
 | `--canopy-700` | `#161C1B` | |
 | `--canopy-500` | `#27312D` | |
 | `--haze` | `#788B92` | Muted, atmospheric neutral |
-| `--glass-smoke` | `rgb(40 44 46 / 0.55)` + blur | Tiles, banners, panels on the photograph |
+| `--glass-smoke` | `rgb(40 44 46 / 0.68)` + blur, `0.75` at 1000 px and wider (reference: 0.55) | Tiles, banners, panels on the photograph |
 | `--glass-clear` | `rgb(255 255 255 / 0.14)` + blur | Inactive pills, icon buttons, on sky |
 | `--glass-clear-strong` | `rgb(255 255 255 / 0.22)` | Buttons inside glass, tooltip |
 | `--glass-edge` | `rgb(255 255 255 / 0.14)` | 1 px inner highlight on every glass shape |
@@ -118,8 +118,8 @@ theme.
 | `--ink-2` | `#666C6C` | Secondary text on light surfaces |
 | `--on-glass` | `#FFFFFF` | Text on glass and photo |
 | `--on-glass-2` | `rgb(255 255 255 / 0.85)` | Labels ("Excellent") |
-| `--on-glass-3` | `rgb(255 255 255 / 0.60)` | Overlines, day names |
-| `--on-glass-4` | `rgb(255 255 255 / 0.45)` | Axis numbers |
+| `--on-glass-3` | `rgb(255 255 255 / 0.80)` (reference: 0.60) | Overlines, day names |
+| `--on-glass-4` | `rgb(255 255 255 / 0.80)` (reference: 0.45) | Axis numbers |
 | `--black` | `#000000` | Notice, primary button on a light panel |
 | `--badge-blue` | `#1C618A` | The one UI hue in the reference (icon badge) |
 | `--warn` | `#E0A94F` (kept) | Operational warnings |
@@ -470,6 +470,8 @@ the reel's editing.
   Android. Not part of the spec.
 
 ## 12. Accessibility and fallbacks
+
+**Built differently from the reference (operator, 2026-09-29, #188, Option A):** the reference's glass (smoke 0.55, dim text 0.60 and 0.45) cannot hold 4.5:1 over snow-bright satellite tiles or the brightest hero mist; 190 of 416 measured text runs fell short. The planner raises smoke glass to 0.68 (0.75 over the map at 1000 px and wider), both dim text tokens to 0.80, and puts a soft dark gradient behind the home page title and buttons. That leaves 4 short runs, small labels sitting straight on the sky.
 
 - **Sunlight.** The operator reads this on a phone at the aircraft, outdoors.
   Glass over bright satellite imagery is the weakest point of this theme. Text

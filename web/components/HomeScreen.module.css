@@ -30,6 +30,20 @@
   margin: auto auto 0;
   padding: 0 0 calc(32px + env(safe-area-inset-bottom));
 }
+/* A soft dark gradient behind the title and buttons, so they hold contrast
+   over the brightest hero mist (Option A, operator 2026-09-29, #188). */
+.content::before {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  left: -50vw;
+  right: -50vw;
+  top: -140px;
+  bottom: 0;
+  background: linear-gradient(to top, rgb(8 12 16 / 0.72), rgb(8 12 16 / 0.45) 55%, transparent);
+  pointer-events: none;
+}
+
 
 .title {
   margin: 0;
