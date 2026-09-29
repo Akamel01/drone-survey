@@ -1,0 +1,373 @@
+remote-check: host: Linux 6.8.0-134-generic x86_64 / bash 5.2.21(1)-release / user akamel
+remote-check: root: /home/akamel/drone/webcheck
+remote-check: disk: 29176400 KB free on / (floor 5242880 KB)
+remote-check: node: v24.21.0 at /home/akamel/drone/webcheck/node
+remote-check: chromium: stamp 1.63.0
+remote-check: web/node_modules: present
+remote-check: install-state: npm ci would be skipped (lockfile unchanged)
+remote-check: preflight ok
+remote-check: disk: 29176400 KB free on / (floor 5242880 KB)
+remote-check: node: v24.21.0 present at /home/akamel/drone/webcheck/node
+remote-check: npm ci skipped (lockfile unchanged)
+remote-check: chromium: present in /home/akamel/drone/webcheck/ms-playwright (playwright-core 1.63.0)
+remote-check: chromium libraries ok (1 binaries checked with ldd)
+remote-check: disk: 29176396 KB free on / (floor 5242880 KB)
+remote-check: bootstrap complete
+remote-check: npm ci skipped; installed tree reused
+remote-check: folder=/home/akamel/drone/webcheck/oc-295
+remote-check: port=42871
+remote-check: cleaned docs/ui-theme/screenshots/ui-12
+remote-check: npm ci skipped (lockfile unchanged)
+remote-check: disk: 29180532 KB free on / (floor 5242880 KB)
+remote-check: next build (B2/DISPATCH placeholders, no DATABASE_URL)
+
+> web@0.1.0 build
+> node scripts/migrate.mjs && next build
+
+DATABASE_URL not set; skipping migrations
+▲ Next.js 16.3.5 (Turbopack)
+✓ Running next.config.ts took 12ms
+
+  Creating an optimized production build ...
+✓ Compiled successfully in 2.9s
+  Running TypeScript ...
+  Finished TypeScript in 2.4s ...
+  Collecting page data using 15 workers ...
+⚠ The "preferredRegion" route segment config is deprecated. Learn more: https://nextjs.org/docs/messages/preferred-region-deprecated
+  Generating static pages using 15 workers (0/9) ...
+  Generating static pages using 15 workers (2/9) 
+  Generating static pages using 15 workers (4/9) 
+  Generating static pages using 15 workers (6/9) 
+✓ Generating static pages using 15 workers (9/9) in 349ms
+  Finalizing page optimization ...
+
+Route (app)
+┌ ƒ /
+├ ○ /_not-found
+├ ƒ /api/accounts
+├ ƒ /api/auth/[...all]
+├ ƒ /api/missions
+├ ƒ /api/missions/dispatch
+├ ƒ /api/missions/flown
+├ ƒ /api/missions/withdraw
+├ ƒ /api/specs
+├ ƒ /d/[...path]
+├ ○ /plan
+├ ○ /plan/mission_status
+└ ƒ /reset-password
+
+
+○  (Static)   prerendered as static content
+ƒ  (Dynamic)  server-rendered on demand
+
+remote-check: gpu probe: node scripts/lib/gpu-probe.mjs (CHECK_CHROMIUM_JSON={"channel":"chromium","args":["--use-angle=gl-egl","--ignore-gpu-blocklist","--enable-gpu"]})
+gpu renderer: ANGLE (NVIDIA Corporation, NVIDIA GeForce RTX 4070 SUPER/PCIe/SSE2, OpenGL ES 3.2)
+remote-check: server ready on http://127.0.0.1:42871
+remote-check: running: npm run check:look -- http://127.0.0.1:42871
+
+> web@0.1.0 check:look
+> node --import ./scripts/test-hooks.mjs scripts/look-check.mjs http://127.0.0.1:42871
+
+(node:3368170) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///home/akamel/drone/webcheck/oc-295/worktree/web/lib/actions.ts is not specified and it doesn't parse as CommonJS.
+Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+To eliminate this warning, add "type": "module" to /home/akamel/drone/webcheck/oc-295/worktree/web/package.json.
+(Use `node --trace-warnings ...` to show where the warning was created)
+FAIL contrast/every text pairing reaches its bar (406 measured) — 375 missions span.MissionList-module__PLY-ya_ "checked just now" 4.43:1 on pixels rgb(68,104,137) (need 4.5); 375 missions button. "Refresh" 1.54:1 on mist (need 4.5); 375 missions span.mono "Planned" 3.88:1 on mist (need 4.5); 375 settings h2.plan-module__8s4QVG_ "Settings" 3.09:1 on pixels rgb(106,133,154) (need 4.5)
+PASS hero-contrast/1440 "Mission Control" — 5.95:1 against the brightest pixel rgb(91,101,110) (large text, 3:1)
+PASS hero-contrast/1440 "Sign-in is not set up on this " — 11.65:1 against the brightest pixel rgb(51,57,65)
+PASS hero-contrast/1440 "Go to the planner" — 4.58:1 against the brightest pixel rgb(114,118,122)
+PASS hero-contrast/375 "Mission Control" — 4.96:1 against the brightest pixel rgb(104,113,122) (large text, 3:1)
+PASS hero-contrast/375 "Sign-in is not set up on this " — 10.71:1 against the brightest pixel rgb(54,63,72)
+FAIL hero-contrast/375 "Go to the planner" — 4.44:1 against the brightest pixel rgb(116,120,125)
+PASS collision/1280 compact notice clears the map controls — {"notice":{"l":399.1172,"r":651.648425,"t":12,"b":61.5},"controls":[{"l":698.765625,"r":776.765625,"t":12,"b":56},{"l":782.765625,"r":896,"t":12,"b":56}]}
+PASS collision/1280 expanded notice clears the map controls — {"notice":{"l":364,"r":686.765625,"t":12,"b":94},"controls":[{"l":698.765625,"r":776.765625,"t":12,"b":56},{"l":782.765625,"r":896,"t":12,"b":56}]}
+PASS collision/1440 compact notice clears the map controls — {"notice":{"l":479.1094,"r":731.6406,"t":12,"b":61.5},"controls":[{"l":858.765625,"r":936.765625,"t":12,"b":56},{"l":942.765625,"r":1056,"t":12,"b":56}]}
+PASS collision/1440 expanded notice clears the map controls — {"notice":{"l":427.875,"r":782.875,"t":12,"b":94},"controls":[{"l":858.765625,"r":936.765625,"t":12,"b":56},{"l":942.765625,"r":1056,"t":12,"b":56}]}
+PASS collision/1920 compact notice clears the map controls — {"notice":{"l":719.1094,"r":971.6406,"t":12,"b":61.5},"controls":[{"l":1338.765625,"r":1416.765625,"t":12,"b":56},{"l":1422.765625,"r":1536,"t":12,"b":56}]}
+PASS collision/1920 expanded notice clears the map controls — {"notice":{"l":667.875,"r":1022.875,"t":12,"b":94},"controls":[{"l":1338.765625,"r":1416.765625,"t":12,"b":56},{"l":1422.765625,"r":1536,"t":12,"b":56}]}
+PASS fallbacks/reduced transparency: smoke glass is opaque, no blur — {"bg":"rgb(43, 48, 51)","filter":"none","border":"rgb(255, 255, 255)"}
+PASS fallbacks/increased contrast: smoke glass is opaque with a white edge — {"bg":"rgb(43, 48, 51)","filter":"blur(20px) saturate(1.2)","border":"rgb(255, 255, 255)"}
+PASS fallbacks/reduced motion 1440: poster, no playing video, no birds — {"playing":false,"birds":0,"poster":true}
+PASS fallbacks/reduced motion 375: poster, no playing video, no birds — {"playing":false,"birds":0,"poster":true}
+PASS keyboard/every Tab stop shows a visible focus ring (47 stops)
+PASS keyboard/reaches "refresh"
+PASS keyboard/reaches "dispatch"
+PASS keyboard/reaches "overlays"
+PASS keyboard/reaches "grid"
+PASS keyboard/reaches "orbit"
+PASS keyboard/reaches "download mission spec"
+PASS first-run/375: payload(0) renders the quiet empty store, no rows — {"rows":0,"articles":0,"quiet":true}
+PASS first-run/375: all three steps render — 3 steps
+PASS first-run/375: every step is at least 44x44 — Draw the a: 163x44 | Choose the: 239x44 | Name the M: 308x44
+PASS first-run/375 step 1: lands on map (view map) — {"view":"map","settingsInert":true,"missionsInert":true}
+PASS first-run/375 step 1: focus moves to map anchor — {"tag":"CANVAS","id":"","label":"Map","inMap":true,"view":"map","settingsInert":true,"missionsInert":true,"visible":true}
+PASS first-run/375 step 2: lands on settings (view settings) — {"view":"settings","settingsInert":false,"missionsInert":true}
+PASS first-run/375 step 2: focus moves to site anchor — {"tag":"SELECT","id":"site-select","label":"","inMap":false,"view":"settings","settingsInert":false,"missionsInert":true,"visible":true}
+PASS first-run/375 step 3: lands on settings (view settings) — {"view":"settings","settingsInert":false,"missionsInert":true}
+PASS first-run/375 step 3: focus moves to name anchor — {"tag":"INPUT","id":"mission-name","label":"","inMap":false,"view":"settings","settingsInert":false,"missionsInert":true,"visible":true}
+PASS first-run/1440: payload(0) renders the quiet empty store, no rows — {"rows":0,"articles":0,"quiet":true}
+PASS first-run/1440: all three steps render — 3 steps
+PASS first-run/1440: every step is at least 44x44 — Draw the a: 163x44 | Choose the: 239x44 | Name the M: 308x44
+PASS first-run/1440 step 1: lands on Missions (view missions) — {"view":"missions","settingsInert":false,"missionsInert":false}
+PASS first-run/1440 step 1: focus moves to map anchor — {"tag":"CANVAS","id":"","label":"Map","inMap":true,"view":"missions","settingsInert":false,"missionsInert":false,"visible":true}
+PASS first-run/1440 step 2: lands on Missions (view missions) — {"view":"missions","settingsInert":false,"missionsInert":false}
+PASS first-run/1440 step 2: focus moves to site anchor — {"tag":"SELECT","id":"site-select","label":"","inMap":false,"view":"missions","settingsInert":false,"missionsInert":false,"visible":true}
+PASS first-run/1440 step 3: lands on Missions (view missions) — {"view":"missions","settingsInert":false,"missionsInert":false}
+PASS first-run/1440 step 3: focus moves to name anchor — {"tag":"INPUT","id":"mission-name","label":"","inMap":false,"view":"missions","settingsInert":false,"missionsInert":false,"visible":true}
+PASS mission-rows/375: four rows seeded (three Planned, one held) — Block 4E2E Site · 2026-09-26 | Block 3E2E Site · 2026-09-26 | Block 2E2E Site · 2026-09-26 | North halfE2E Site · 2026-09-26
+PASS mission-rows/375: no Planned row repeats its detail on the row
+PASS mission-rows/375: the held row keeps its stop-tone headline — Block 4E2E Site · 2026-09-26
+PASS mission-rows/375: Details opens with its heading announced — "North half"
+PASS mission-rows/375: Details shows "Nothing has left the planner yet"
+PASS mission-rows/375: Details shows "E2E Site · 2026-09-26"
+PASS mission-rows/375: Details shows "ha"
+PASS mission-rows/375: Details shows "photos"
+PASS mission-rows/375: Details shows "Saved"
+PASS mission-rows/375: Escape returns focus to that row's Details button — {"button":"Details","row":"North halfE2E Site · 2026-09-26"}
+PASS mission-rows/1440: four rows seeded (three Planned, one held) — Block 4E2E Site · 2026-09-26 | Block 3E2E Site · 2026-09-26 | Block 2E2E Site · 2026-09-26 | North halfE2E Site · 2026-09-26
+PASS mission-rows/1440: no Planned row repeats its detail on the row
+PASS mission-rows/1440: the held row keeps its stop-tone headline — Block 4E2E Site · 2026-09-26
+PASS mission-rows/1440: Details opens with its heading announced — "North half"
+PASS mission-rows/1440: Details shows "Nothing has left the planner yet"
+PASS mission-rows/1440: Details shows "E2E Site · 2026-09-26"
+PASS mission-rows/1440: Details shows "ha"
+PASS mission-rows/1440: Details shows "photos"
+PASS mission-rows/1440: Details shows "Saved"
+PASS mission-rows/1440: Escape returns focus to that row's Details button — {"button":"Details","row":"North halfE2E Site · 2026-09-26"}
+PASS enlarged/1000x800 default text: the wide Summary shows everything unscrolled — {"height":677,"content":677,"client":677}
+PASS enlarged/zoom200-1440x900 home: no text clipped or overlapped (3 lines)
+PASS enlarged/zoom200-1440x900 home: every control reachable and clear (1 controls)
+PASS enlarged/zoom200-1440x900 home: neither the page nor a panel scrolls sideways
+FAIL enlarged/zoom200-1440x900 home-tall-form: no text clipped or overlapped (18 lines) — h1.F46_cq "Mission Control" line 1: off-screen at (350, -155) with no way to scroll to it; span "New password (at least 10 charac" line 1: off-screen at (269, -105) with no way to scroll to it; span "New password (at least 10 charac" line 1: off-screen at (346, -105) with no way to scroll to it; span "New password (at least 10 charac" line 1: off-screen at (388, -105) with no way to scroll to it; span "New password (at least 10 charac" line 1: off-screen at (269, -24) with no way to scroll to it; span "New password (at least 10 charac" line 1: off-screen at (346, -24) with no way to scroll to it; span "New password (at least 10 charac" line 1: off-screen at (388, -24) with no way to scroll to it
+FAIL enlarged/zoom200-1440x900 home-tall-form: every control reachable and clear (7 controls) — input: off-screen at (360, -67) with no way to scroll to it; input: off-screen at (360, -1) with no way to scroll to it
+PASS enlarged/zoom200-1440x900 home-tall-form: neither the page nor a panel scrolls sideways
+PASS enlarged/zoom200-1440x900 first-run: no text clipped or overlapped (10 lines)
+PASS enlarged/zoom200-1440x900 first-run: every control reachable and clear (7 controls)
+PASS enlarged/zoom200-1440x900 first-run: neither the page nor a panel scrolls sideways
+PASS enlarged/zoom200-1440x900 missions: no text clipped or overlapped (53 lines)
+PASS enlarged/zoom200-1440x900 missions: every control reachable and clear (23 controls)
+PASS enlarged/zoom200-1440x900 missions: neither the page nor a panel scrolls sideways
+PASS enlarged/zoom200-1440x900 map: no text clipped or overlapped (33 lines)
+PASS enlarged/zoom200-1440x900 map: every control reachable and clear (11 controls)
+PASS enlarged/zoom200-1440x900 map: neither the page nor a panel scrolls sideways
+NOTE enlarged/zoom200-1440x900 map: map surface — {"freeShare":0.8333333333333334,"visibleHeight":98,"viewportHeight":450,"summary":{"height":288,"content":288}}
+PASS enlarged/zoom200-1440x900 settings: no text clipped or overlapped (117 lines)
+PASS enlarged/zoom200-1440x900 settings: every control reachable and clear (38 controls)
+PASS enlarged/zoom200-1440x900 settings: neither the page nor a panel scrolls sideways
+PASS enlarged/zoom200-1440x900 basemap-menu: no text clipped or overlapped (0 lines)
+FAIL enlarged/zoom200-1440x900 basemap-menu: every control reachable and clear (4 controls) — button.e4_6MG "Satellite imagery": covered by div.maplibregl-ctrl-attrib-inner "Imagery © Esri | MapLibre" at (602, 78); button.e4_6MG "Street map (OpenStreetMap)": covered by div.E9Opba "0.0min" at (602, 139)
+PASS enlarged/zoom200-1440x900 basemap-menu: neither the page nor a panel scrolls sideways
+FAIL enlarged/zoom200-1440x900 overlays-menu: no text clipped or overlapped (2 lines) — button.e4_6MG "Numbers" line 1: clipped or covered by div.maplibregl-ctrl-bottom-right "Imagery © Esri | MapLibre" at (649, 93); button.e4_6MG "Footprint" line 1: clipped or covered by div.E9Opba "0.0min" at (648, 139)
+FAIL enlarged/zoom200-1440x900 overlays-menu: every control reachable and clear (4 controls) — button.e4_6MG "Numbers": covered by a "MapLibre" at (636, 78); button.e4_6MG "Footprint": covered by div.E9Opba "0.0min" at (636, 139)
+PASS enlarged/zoom200-1440x900 overlays-menu: neither the page nor a panel scrolls sideways
+PASS enlarged/zoom200-1440x900 notice: no text clipped or overlapped (2 lines)
+PASS enlarged/zoom200-1440x900 notice: every control reachable and clear (0 controls)
+PASS enlarged/zoom200-1440x900 notice: neither the page nor a panel scrolls sideways
+PASS enlarged/zoom200-1440x900 notice-expanded: no text clipped or overlapped (6 lines)
+PASS enlarged/zoom200-1440x900 notice-expanded: every control reachable and clear (1 controls)
+PASS enlarged/zoom200-1440x900 notice-expanded: neither the page nor a panel scrolls sideways
+PASS enlarged/zoom200-1440x900 details-sheet: no text clipped or overlapped (23 lines)
+PASS enlarged/zoom200-1440x900 details-sheet: every control reachable and clear (1 controls)
+PASS enlarged/zoom200-1440x900 details-sheet: neither the page nor a panel scrolls sideways
+PASS enlarged/zoom200-1440x900 remove-sheet: no text clipped or overlapped (6 lines)
+PASS enlarged/zoom200-1440x900 remove-sheet: every control reachable and clear (3 controls)
+PASS enlarged/zoom200-1440x900 remove-sheet: neither the page nor a panel scrolls sideways
+PASS enlarged/zoom200-2560x1440 home: no text clipped or overlapped (3 lines)
+PASS enlarged/zoom200-2560x1440 home: every control reachable and clear (1 controls)
+PASS enlarged/zoom200-2560x1440 home: neither the page nor a panel scrolls sideways
+PASS enlarged/zoom200-2560x1440 home-tall-form: no text clipped or overlapped (18 lines)
+PASS enlarged/zoom200-2560x1440 home-tall-form: every control reachable and clear (7 controls)
+PASS enlarged/zoom200-2560x1440 home-tall-form: neither the page nor a panel scrolls sideways
+PASS enlarged/zoom200-2560x1440 first-run: no text clipped or overlapped (134 lines)
+PASS enlarged/zoom200-2560x1440 first-run: every control reachable and clear (45 controls)
+PASS enlarged/zoom200-2560x1440 first-run: neither the page nor a panel scrolls sideways
+NOTE enlarged/zoom200-2560x1440 first-run: map surface — {"freeShare":0.2847222222222222,"visibleHeight":720,"viewportHeight":720,"summary":{"height":414,"content":414}}
+PASS enlarged/zoom200-2560x1440 missions: no text clipped or overlapped (180 lines)
+PASS enlarged/zoom200-2560x1440 missions: every control reachable and clear (61 controls)
+PASS enlarged/zoom200-2560x1440 missions: neither the page nor a panel scrolls sideways
+NOTE enlarged/zoom200-2560x1440 missions: map surface — {"freeShare":0.2847222222222222,"visibleHeight":720,"viewportHeight":720,"summary":{"height":414,"content":414}}
+PASS enlarged/zoom200-2560x1440 basemap-menu: no text clipped or overlapped (1 lines)
+PASS enlarged/zoom200-2560x1440 basemap-menu: every control reachable and clear (4 controls)
+PASS enlarged/zoom200-2560x1440 basemap-menu: neither the page nor a panel scrolls sideways
+PASS enlarged/zoom200-2560x1440 overlays-menu: no text clipped or overlapped (3 lines)
+PASS enlarged/zoom200-2560x1440 overlays-menu: every control reachable and clear (4 controls)
+PASS enlarged/zoom200-2560x1440 overlays-menu: neither the page nor a panel scrolls sideways
+PASS enlarged/zoom200-2560x1440 notice: no text clipped or overlapped (3 lines)
+PASS enlarged/zoom200-2560x1440 notice: every control reachable and clear (2 controls)
+PASS enlarged/zoom200-2560x1440 notice: neither the page nor a panel scrolls sideways
+PASS enlarged/zoom200-2560x1440 notice-expanded: no text clipped or overlapped (8 lines)
+PASS enlarged/zoom200-2560x1440 notice-expanded: every control reachable and clear (3 controls)
+PASS enlarged/zoom200-2560x1440 notice-expanded: neither the page nor a panel scrolls sideways
+PASS enlarged/zoom200-2560x1440 details-sheet: no text clipped or overlapped (24 lines)
+PASS enlarged/zoom200-2560x1440 details-sheet: every control reachable and clear (1 controls)
+PASS enlarged/zoom200-2560x1440 details-sheet: neither the page nor a panel scrolls sideways
+PASS enlarged/zoom200-2560x1440 remove-sheet: no text clipped or overlapped (6 lines)
+PASS enlarged/zoom200-2560x1440 remove-sheet: every control reachable and clear (3 controls)
+PASS enlarged/zoom200-2560x1440 remove-sheet: neither the page nor a panel scrolls sideways
+PASS enlarged/text200-1440x900 home: the default font size is doubled — 32px
+PASS enlarged/text200-1440x900 home: no text clipped or overlapped (3 lines)
+PASS enlarged/text200-1440x900 home: every control reachable and clear (1 controls)
+PASS enlarged/text200-1440x900 home: neither the page nor a panel scrolls sideways
+FAIL enlarged/text200-1440x900 home: text grows with the browser's text size (3 runs) — "Mission Control" 40px; "Sign-in is not set up on" 14px; "Go to the planner" 14px
+PASS enlarged/text200-1440x900 home-tall-form: the default font size is doubled — 32px
+PASS enlarged/text200-1440x900 home-tall-form: no text clipped or overlapped (18 lines)
+PASS enlarged/text200-1440x900 home-tall-form: every control reachable and clear (7 controls)
+PASS enlarged/text200-1440x900 home-tall-form: neither the page nor a panel scrolls sideways
+FAIL enlarged/text200-1440x900 home-tall-form: text grows with the browser's text size (18 runs) — "Mission Control" 40px; "New password (at least" 13px; "10" 13px; "characters)" 13px; "New password (at least" 13px; "10" 13px; "characters)" 13px; "New password (at least" 13px
+PASS enlarged/text200-1440x900 first-run: the default font size is doubled — 32px
+PASS enlarged/text200-1440x900 first-run: no text clipped or overlapped (134 lines)
+PASS enlarged/text200-1440x900 first-run: every control reachable and clear (45 controls)
+PASS enlarged/text200-1440x900 first-run: neither the page nor a panel scrolls sideways
+NOTE enlarged/text200-1440x900 first-run: map surface — {"freeShare":0.2569444444444444,"visibleHeight":900,"viewportHeight":900,"summary":{"height":385,"content":385}}
+FAIL enlarged/text200-1440x900 first-run: text grows with the browser's text size (135 runs) — "Mission Control" 28px; "Missions" 34px; "‹" 16px; "checked just now" 12px; "Refresh" 12px; "No Missions in the store" 12px; "Draw the area to fly" 14px; "Choose the Site and its " 14px
+PASS enlarged/text200-1440x900 missions: the default font size is doubled — 32px
+PASS enlarged/text200-1440x900 missions: no text clipped or overlapped (180 lines)
+PASS enlarged/text200-1440x900 missions: every control reachable and clear (61 controls)
+PASS enlarged/text200-1440x900 missions: neither the page nor a panel scrolls sideways
+NOTE enlarged/text200-1440x900 missions: map surface — {"freeShare":0.2569444444444444,"visibleHeight":900,"viewportHeight":900,"summary":{"height":385,"content":385}}
+FAIL enlarged/text200-1440x900 missions: text grows with the browser's text size (178 runs) — "Mission Control" 28px; "Missions" 34px; "‹" 16px; "checked just now" 12px; "Refresh" 12px; "The host refused the las" 12px; "Block 4" 15px; "E2E Site" 12px
+PASS enlarged/text200-1440x900 basemap-menu: the default font size is doubled — 32px
+PASS enlarged/text200-1440x900 basemap-menu: no text clipped or overlapped (1 lines)
+PASS enlarged/text200-1440x900 basemap-menu: every control reachable and clear (4 controls)
+PASS enlarged/text200-1440x900 basemap-menu: neither the page nor a panel scrolls sideways
+FAIL enlarged/text200-1440x900 basemap-menu: text grows with the browser's text size (1 runs) — "Overlays" 14px
+PASS enlarged/text200-1440x900 overlays-menu: the default font size is doubled — 32px
+PASS enlarged/text200-1440x900 overlays-menu: no text clipped or overlapped (3 lines)
+PASS enlarged/text200-1440x900 overlays-menu: every control reachable and clear (4 controls)
+PASS enlarged/text200-1440x900 overlays-menu: neither the page nor a panel scrolls sideways
+FAIL enlarged/text200-1440x900 overlays-menu: text grows with the browser's text size (3 runs) — "Overlays" 14px; "Numbers" 14px; "Footprint" 14px
+PASS enlarged/text200-1440x900 notice: the default font size is doubled — 32px
+PASS enlarged/text200-1440x900 notice: no text clipped or overlapped (3 lines)
+PASS enlarged/text200-1440x900 notice: every control reachable and clear (2 controls)
+PASS enlarged/text200-1440x900 notice: neither the page nor a panel scrolls sideways
+FAIL enlarged/text200-1440x900 notice: text grows with the browser's text size (5 runs) — "Dispatch: done" 14px; "Block 3" 13px; "Dispatch: done" 17px; "Block 3" 12px; "Overlays" 14px
+PASS enlarged/text200-1440x900 notice-expanded: the default font size is doubled — 32px
+PASS enlarged/text200-1440x900 notice-expanded: no text clipped or overlapped (7 lines)
+PASS enlarged/text200-1440x900 notice-expanded: every control reachable and clear (3 controls)
+PASS enlarged/text200-1440x900 notice-expanded: neither the page nor a panel scrolls sideways
+FAIL enlarged/text200-1440x900 notice-expanded: text grows with the browser's text size (6 runs) — "Dispatch failed: The Con" 14px; "Block 3" 13px; "Dispatch failed: The Con" 17px; "Block 3" 12px; "Reserve a Card, then Dis" 13px; "Overlays" 14px
+PASS enlarged/text200-1440x900 details-sheet: the default font size is doubled — 32px
+PASS enlarged/text200-1440x900 details-sheet: no text clipped or overlapped (24 lines)
+PASS enlarged/text200-1440x900 details-sheet: every control reachable and clear (1 controls)
+PASS enlarged/text200-1440x900 details-sheet: neither the page nor a panel scrolls sideways
+FAIL enlarged/text200-1440x900 details-sheet: text grows with the browser's text size (22 runs) — "Planned" 13px; "North half" 20px; "E2E Site" 13px; "·" 13px; "2026-09-26" 13px; "Nothing has left the pla" 13px; "3873 points, 43.84 km — " 13px; "Area" 13px
+PASS enlarged/text200-1440x900 remove-sheet: the default font size is doubled — 32px
+PASS enlarged/text200-1440x900 remove-sheet: no text clipped or overlapped (6 lines)
+PASS enlarged/text200-1440x900 remove-sheet: every control reachable and clear (3 controls)
+PASS enlarged/text200-1440x900 remove-sheet: neither the page nor a panel scrolls sideways
+FAIL enlarged/text200-1440x900 remove-sheet: text grows with the browser's text size (6 runs) — "Remove “" 18px; "North half" 18px; "”?" 18px; "It is archived, not dele" 14px; "Cancel" 14px; "Remove" 14px
+PASS enlarged/text200-375x812 home: the default font size is doubled — 32px
+PASS enlarged/text200-375x812 home: no text clipped or overlapped (3 lines)
+PASS enlarged/text200-375x812 home: every control reachable and clear (1 controls)
+PASS enlarged/text200-375x812 home: neither the page nor a panel scrolls sideways
+FAIL enlarged/text200-375x812 home: text grows with the browser's text size (3 runs) — "Mission Control" 33.75px; "Sign-in is not set up on" 14px; "Go to the planner" 14px
+PASS enlarged/text200-375x812 home-tall-form: the default font size is doubled — 32px
+PASS enlarged/text200-375x812 home-tall-form: no text clipped or overlapped (18 lines)
+PASS enlarged/text200-375x812 home-tall-form: every control reachable and clear (7 controls)
+PASS enlarged/text200-375x812 home-tall-form: neither the page nor a panel scrolls sideways
+FAIL enlarged/text200-375x812 home-tall-form: text grows with the browser's text size (18 runs) — "Mission Control" 33.75px; "New password (at least" 13px; "10" 13px; "characters)" 13px; "New password (at least" 13px; "10" 13px; "characters)" 13px; "New password (at least" 13px
+PASS enlarged/text200-375x812 first-run: the default font size is doubled — 32px
+PASS enlarged/text200-375x812 first-run: no text clipped or overlapped (11 lines)
+PASS enlarged/text200-375x812 first-run: every control reachable and clear (7 controls)
+PASS enlarged/text200-375x812 first-run: neither the page nor a panel scrolls sideways
+FAIL enlarged/text200-375x812 first-run: text grows with the browser's text size (135 runs) — "Mission Control" 28px; "Missions" 34px; "‹" 14px; "checked just now" 12px; "Refresh" 12px; "No Missions in the store" 12px; "Draw the area to fly" 14px; "Choose the Site and its " 14px
+PASS enlarged/text200-375x812 missions: the default font size is doubled — 32px
+PASS enlarged/text200-375x812 missions: no text clipped or overlapped (57 lines)
+PASS enlarged/text200-375x812 missions: every control reachable and clear (23 controls)
+PASS enlarged/text200-375x812 missions: neither the page nor a panel scrolls sideways
+FAIL enlarged/text200-375x812 missions: text grows with the browser's text size (178 runs) — "Mission Control" 28px; "Missions" 34px; "‹" 14px; "checked just now" 12px; "Refresh" 12px; "The host refused the las" 12px; "Block 4" 15px; "E2E Site" 12px
+PASS enlarged/text200-375x812 map: the default font size is doubled — 32px
+PASS enlarged/text200-375x812 map: no text clipped or overlapped (33 lines)
+PASS enlarged/text200-375x812 map: every control reachable and clear (11 controls)
+PASS enlarged/text200-375x812 map: neither the page nor a panel scrolls sideways
+NOTE enlarged/text200-375x812 map: map surface — {"freeShare":0.875,"visibleHeight":272,"viewportHeight":812,"summary":{"height":476,"content":476}}
+FAIL enlarged/text200-375x812 map: text grows with the browser's text size (178 runs) — "Mission Control" 28px; "Missions" 34px; "‹" 14px; "checked just now" 12px; "Refresh" 12px; "The host refused the las" 12px; "Block 4" 15px; "E2E Site" 12px
+PASS enlarged/text200-375x812 settings: the default font size is doubled — 32px
+PASS enlarged/text200-375x812 settings: no text clipped or overlapped (121 lines)
+PASS enlarged/text200-375x812 settings: every control reachable and clear (38 controls)
+PASS enlarged/text200-375x812 settings: neither the page nor a panel scrolls sideways
+FAIL enlarged/text200-375x812 settings: text grows with the browser's text size (178 runs) — "Mission Control" 28px; "Missions" 34px; "‹" 14px; "checked just now" 12px; "Refresh" 12px; "The host refused the las" 12px; "Block 4" 15px; "E2E Site" 12px
+PASS enlarged/text200-375x812 basemap-menu: the default font size is doubled — 32px
+PASS enlarged/text200-375x812 basemap-menu: no text clipped or overlapped (0 lines)
+PASS enlarged/text200-375x812 basemap-menu: every control reachable and clear (4 controls)
+PASS enlarged/text200-375x812 basemap-menu: neither the page nor a panel scrolls sideways
+FAIL enlarged/text200-375x812 basemap-menu: text grows with the browser's text size (1 runs) — "Overlays" 14px
+PASS enlarged/text200-375x812 overlays-menu: the default font size is doubled — 32px
+PASS enlarged/text200-375x812 overlays-menu: no text clipped or overlapped (2 lines)
+PASS enlarged/text200-375x812 overlays-menu: every control reachable and clear (4 controls)
+PASS enlarged/text200-375x812 overlays-menu: neither the page nor a panel scrolls sideways
+FAIL enlarged/text200-375x812 overlays-menu: text grows with the browser's text size (3 runs) — "Overlays" 14px; "Numbers" 14px; "Footprint" 14px
+PASS enlarged/text200-375x812 notice: the default font size is doubled — 32px
+PASS enlarged/text200-375x812 notice: no text clipped or overlapped (2 lines)
+PASS enlarged/text200-375x812 notice: every control reachable and clear (0 controls)
+PASS enlarged/text200-375x812 notice: neither the page nor a panel scrolls sideways
+FAIL enlarged/text200-375x812 notice: text grows with the browser's text size (4 runs) — "Dispatch: done" 14px; "Block 3" 13px; "Dispatch: done" 17px; "Block 3" 12px
+PASS enlarged/text200-375x812 notice-expanded: the default font size is doubled — 32px
+PASS enlarged/text200-375x812 notice-expanded: no text clipped or overlapped (7 lines)
+PASS enlarged/text200-375x812 notice-expanded: every control reachable and clear (1 controls)
+PASS enlarged/text200-375x812 notice-expanded: neither the page nor a panel scrolls sideways
+FAIL enlarged/text200-375x812 notice-expanded: text grows with the browser's text size (5 runs) — "Dispatch failed: The Con" 14px; "Block 3" 13px; "Dispatch failed: The Con" 17px; "Block 3" 12px; "Reserve a Card, then Dis" 13px
+PASS enlarged/text200-375x812 details-sheet: the default font size is doubled — 32px
+PASS enlarged/text200-375x812 details-sheet: no text clipped or overlapped (26 lines)
+PASS enlarged/text200-375x812 details-sheet: every control reachable and clear (1 controls)
+PASS enlarged/text200-375x812 details-sheet: neither the page nor a panel scrolls sideways
+FAIL enlarged/text200-375x812 details-sheet: text grows with the browser's text size (22 runs) — "Planned" 13px; "North half" 20px; "E2E Site" 13px; "·" 13px; "2026-09-26" 13px; "Nothing has left the pla" 13px; "3873 points, 43.84 km — " 13px; "Area" 13px
+PASS enlarged/text200-375x812 remove-sheet: the default font size is doubled — 32px
+PASS enlarged/text200-375x812 remove-sheet: no text clipped or overlapped (6 lines)
+PASS enlarged/text200-375x812 remove-sheet: every control reachable and clear (3 controls)
+PASS enlarged/text200-375x812 remove-sheet: neither the page nor a panel scrolls sideways
+FAIL enlarged/text200-375x812 remove-sheet: text grows with the browser's text size (6 runs) — "Remove “" 18px; "North half" 18px; "”?" 18px; "It is archived, not dele" 14px; "Cancel" 14px; "Remove" 14px
+NOTE frame-rate/375 phone, 4x CPU throttle — 61 fps with glass, 60 fps with blur off
+NOTE frame-rate/1440 desktop — 60 fps with glass, 60 fps with blur off
+NOTE operator/375 Map tab: map visible above the Summary — 272 px of 812
+PASS operator/375 long Missions list: the hero covers the screen down to the tab bar while scrolled — {"top":0,"bottom":748,"tabBarTop":748,"height":812}
+look check: FAILED
+remote-check: fetching artifacts (tar stream, not logged)
+remote-check: fetched docs/ui-theme/screenshots/ui-12
+remote-check: fetched .autoforge/evidence/295/zoom200-2560x1440-missions.png
+remote-check: fetched .autoforge/evidence/295/text200-1440x900-notice.png
+remote-check: fetched .autoforge/evidence/295/zoom200-2560x1440-details-sheet.png
+remote-check: fetched .autoforge/evidence/295/zoom200-1440x900-map.png
+remote-check: fetched .autoforge/evidence/295/text200-375x812-home.png
+remote-check: fetched .autoforge/evidence/295/text200-375x812-details-sheet.png
+remote-check: fetched .autoforge/evidence/295/zoom200-2560x1440-home.png
+remote-check: fetched .autoforge/evidence/295/text200-375x812-first-run.png
+remote-check: fetched .autoforge/evidence/295/zoom200-1440x900-overlays-menu.png
+remote-check: fetched .autoforge/evidence/295/text200-375x812-map.png
+remote-check: fetched .autoforge/evidence/295/zoom200-2560x1440-overlays-menu.png
+remote-check: fetched .autoforge/evidence/295/text200-1440x900-home.png
+remote-check: fetched .autoforge/evidence/295/zoom200-2560x1440-notice.png
+remote-check: fetched .autoforge/evidence/295/text200-1440x900-notice-expanded.png
+remote-check: fetched .autoforge/evidence/295/zoom200-1440x900-remove-sheet.png
+remote-check: fetched .autoforge/evidence/295/zoom200-2560x1440-notice-expanded.png
+remote-check: fetched .autoforge/evidence/295/zoom200-2560x1440-remove-sheet.png
+remote-check: fetched .autoforge/evidence/295/text200-375x812-home-tall-form.png
+remote-check: fetched .autoforge/evidence/295/text200-375x812-missions.png
+remote-check: fetched .autoforge/evidence/295/zoom200-1440x900-first-run.png
+remote-check: fetched .autoforge/evidence/295/zoom200-2560x1440-basemap-menu.png
+remote-check: fetched .autoforge/evidence/295/text200-1440x900-details-sheet.png
+remote-check: fetched .autoforge/evidence/295/text200-1440x900-home-tall-form.png
+remote-check: fetched .autoforge/evidence/295/zoom200-2560x1440-first-run.png
+remote-check: fetched .autoforge/evidence/295/text200-1440x900-first-run.png
+remote-check: fetched .autoforge/evidence/295/zoom200-1440x900-settings.png
+remote-check: fetched .autoforge/evidence/295/zoom200-2560x1440-home-tall-form.png
+remote-check: fetched .autoforge/evidence/295/zoom200-1440x900-home.png
+remote-check: fetched .autoforge/evidence/295/text200-375x812-basemap-menu.png
+remote-check: fetched .autoforge/evidence/295/text200-1440x900-overlays-menu.png
+remote-check: fetched .autoforge/evidence/295/zoom200-1440x900-details-sheet.png
+remote-check: fetched .autoforge/evidence/295/zoom200-1440x900-home-tall-form.png
+remote-check: fetched .autoforge/evidence/295/zoom200-1440x900-notice-expanded.png
+remote-check: fetched .autoforge/evidence/295/zoom200-1440x900-missions.png
+remote-check: fetched .autoforge/evidence/295/zoom200-1440x900-basemap-menu.png
+remote-check: fetched .autoforge/evidence/295/text200-375x812-notice-expanded.png
+remote-check: fetched .autoforge/evidence/295/zoom200-1440x900-notice.png
+remote-check: fetched .autoforge/evidence/295/text200-375x812-overlays-menu.png
+remote-check: fetched .autoforge/evidence/295/text200-375x812-settings.png
+remote-check: fetched .autoforge/evidence/295/text200-1440x900-basemap-menu.png
+remote-check: fetched .autoforge/evidence/295/text200-1440x900-missions.png
+remote-check: fetched .autoforge/evidence/295/text200-375x812-remove-sheet.png
+remote-check: fetched .autoforge/evidence/295/text200-1440x900-remove-sheet.png
+remote-check: fetched .autoforge/evidence/295/text200-375x812-notice.png
+remote-check: fetched docs/ui-theme/screenshots/ui-12
+remote-check: evidence is untracked; remove with git clean -fd docs/ui-theme/screenshots before committing
+remote-check: relayed remote exit 1
