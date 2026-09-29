@@ -711,7 +711,9 @@ function Row({
       {/* The answer first: this screen exists to say whether the Mission will
           fly correctly and which Card to open. */}
       <p className={styles.headline}>{view.headline.text}</p>
-      <p className={styles.detail}>{view.headline.detail}</p>
+      {(view.headline.tone === "stop" || view.state === "loaded") && (
+        <p className={styles.detail}>{view.headline.detail}</p>
+      )}
 
       {view.blockers.slice(1).map((why) => (
         <p key={why} className={styles.stop}>
@@ -742,7 +744,7 @@ function Row({
           ))}
         </ul>
       )}
-      {view.reason && <p className={styles.reason}>{view.reason}</p>}
+      {/* view.reason lives in Details (M2); the row leads with the answer. */}
 
       <div className={styles.actions}>
         {view.actions.map((name) => (
