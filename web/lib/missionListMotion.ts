@@ -51,3 +51,26 @@ export function flipDeltas(
 export function holdMs(reduced: boolean): number {
   return reduced ? ENTER_MS : EXIT_MS;
 }
+
+/** The operator's own Mark Flown cause. Set only in `act()` on
+ *  `label === "Mark Flown"` + `outcome.ok`; the ref lives in the component,
+ *  the decision lives here. `seq` replays Unmark→re-Mark. */
+export type FlownMarker = { id: string; seq: number } | null;
+
+/** Settle crossfade reuses the 150ms blur-in; the Flown reading hold is
+ *  `--dur-count` (globals.css). */
+export const SETTLE_MS = ENTER_MS;
+export const FLOWN_COUNT_MS = 900;
+
+/** Matches iff the marker names an id among the leaving ids: a poll with no
+ *  leaving id can never match. */
+export function settleFlown(marker: FlownMarker, leaving: Iterable<string>): boolean {
+  if (marker === null) return false;
+  return new Set(leaving).has(marker.id);
+}
+
+/** The whole Flown moment: settle + reading hold + existing dissolve.
+ *  Reduced motion shows the reading at once, keeps the hold, same exit. */
+export function flownHoldMs(reduced: boolean): number {
+  return reduced ? FLOWN_COUNT_MS + ENTER_MS : SETTLE_MS + FLOWN_COUNT_MS + EXIT_MS;
+}

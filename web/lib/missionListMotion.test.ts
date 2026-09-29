@@ -6,8 +6,10 @@ import {
   EXIT_MS,
   arrivingIds,
   flipDeltas,
+  flownHoldMs,
   holdMs,
   leavingIds,
+  settleFlown,
   visibleMissions,
 } from "./missionListMotion.ts";
 
@@ -93,4 +95,27 @@ test("flipDeltas skips sub-half-pixel movement and ids missing from either read"
     ["new", 10], // no previous offset: it arrived, it did not move
   ]);
   assert.deepEqual([...flipDeltas(previous, next)], [["b", -0.5]]);
+});
+
+// --- settle: the operator's own Mark Flown, and nothing else --------------------
+
+test("settleFlown stays quiet without a marker or without a departure", () => {
+  assert.equal(settleFlown(null, ["a"]), false);
+  assert.equal(settleFlown({ id: "a", seq: 1 }, ["b"]), false);
+  assert.equal(settleFlown({ id: "a", seq: 1 }, []), false);
+});
+
+test("settleFlown matches the operator's Mark Flown id among the leaving ids", () => {
+  assert.equal(settleFlown({ id: "b", seq: 1 }, ["b", "c"]), true);
+});
+
+test("settleFlown replays when the same id is marked again with a bumped seq", () => {
+  assert.equal(settleFlown({ id: "b", seq: 2 }, ["b"]), true);
+});
+
+// --- flown hold: settle 150ms + 900ms reading + existing dissolve ---------------
+
+test("flownHoldMs totals settle, reading hold and dissolve from existing tokens", () => {
+  assert.equal(flownHoldMs(false), 1300); // 150 settle + 900 reading + 250 dissolve
+  assert.equal(flownHoldMs(true), 1050); // reading at once + 900 hold + 150 exit
 });
