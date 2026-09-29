@@ -88,13 +88,13 @@
   flex-wrap: wrap;
   align-items: center;
   gap: 8px;
-  font-size: 12px;
+  font-size: 0.75rem;
   color: var(--on-glass-3);
 }
 
 .bar button {
   padding: 6px 12px;
-  font-size: 12px;
+  font-size: 0.75rem;
   min-height: 32px;
 }
 
@@ -115,7 +115,7 @@
 }
 
 .quiet {
-  font-size: 12px;
+  font-size: 0.75rem;
   color: var(--on-glass-3);
 }
 
@@ -131,7 +131,7 @@
 
 .gateText {
   margin: 0;
-  font-size: 13px;
+  font-size: 0.8125rem;
   line-height: 1.5;
   color: var(--on-glass-3);
 }
@@ -140,7 +140,7 @@
   width: 100%;
   min-height: 44px;
   padding: 8px 12px;
-  font-size: 15px;
+  font-size: 0.9375rem;
 }
 
 .gate button {
@@ -187,7 +187,7 @@
 
 .title {
   margin: 0;
-  font-size: 15px;
+  font-size: 0.9375rem;
   font-weight: 600;
   letter-spacing: -0.02em;
   display: flex;
@@ -197,7 +197,7 @@
 }
 
 .site {
-  font-size: 12px;
+  font-size: 0.75rem;
   font-weight: 400;
   color: var(--on-glass-3);
   letter-spacing: 0;
@@ -210,7 +210,7 @@
   padding: 3px 10px;
   border-radius: 999px;
   background: var(--glass-clear);
-  font-size: 11px;
+  font-size: 0.6875rem;
   text-transform: uppercase;
   letter-spacing: 0.06em;
   color: var(--on-glass-2);
@@ -220,7 +220,7 @@
    of the screen, and it has to be legible without leaning in. */
 .headline {
   margin: 10px 0 2px;
-  font-size: 18px;
+  font-size: 1.125rem;
   font-weight: 600;
   letter-spacing: -0.02em;
   line-height: 1.25;
@@ -236,21 +236,21 @@
 
 .detail {
   margin: 0 0 8px;
-  font-size: 12px;
+  font-size: 0.75rem;
   color: var(--on-glass-3);
   line-height: 1.55;
 }
 
 .stop {
   margin: 0 0 8px;
-  font-size: 12px;
+  font-size: 0.75rem;
   color: var(--danger);
   line-height: 1.55;
 }
 
 .note {
   margin: 0 0 8px;
-  font-size: 12px;
+  font-size: 0.75rem;
   color: var(--warn);
   line-height: 1.55;
   overflow-wrap: anywhere;
@@ -261,7 +261,7 @@
   padding: 0;
   list-style: none;
   font-family: var(--mono);
-  font-size: 13px;
+  font-size: 0.8125rem;
   line-height: 1.7;
   color: var(--on-glass-3);
 }
@@ -272,7 +272,7 @@
 
 .reason {
   margin: 0 0 10px;
-  font-size: 12px;
+  font-size: 0.75rem;
   color: var(--on-glass-3);
 }
 
@@ -288,7 +288,7 @@
    reused as-is, only the sizing below is this row's own. */
 .actions button {
   padding: 8px 16px;
-  font-size: 13px;
+  font-size: 0.8125rem;
   min-height: 36px;
 }
 
@@ -299,7 +299,7 @@
 }
 
  .editingNote {
-   font-size: 11px;
+   font-size: 0.6875rem;
    color: var(--on-glass);
  }
 
@@ -312,7 +312,7 @@
   min-height: 44px;
   background: none;
   border: none;
-  font-size: 12px;
+  font-size: 0.75rem;
   color: var(--on-glass-3);
   cursor: pointer;
   text-align: left;
@@ -326,14 +326,14 @@
    panel, since there is no one object to put on one, only a decision. */
 .sheetTitle {
   margin: 0 0 8px;
-  font-size: 18px;
+  font-size: 1.125rem;
   font-weight: 600;
   letter-spacing: -0.01em;
 }
 
 .sheetText {
   margin: 0 0 20px;
-  font-size: 14px;
+  font-size: 0.875rem;
   line-height: 1.5;
   color: var(--on-glass-2);
 }
@@ -370,13 +370,13 @@
   padding: 4px 12px;
   border-radius: 999px;
   background: var(--chip);
-  font-size: 13px;
+  font-size: 0.8125rem;
   color: #272d2f;
 }
 
 .detailsTitle {
   margin: 0 0 4px;
-  font-size: 20px;
+  font-size: 1.25rem;
   font-weight: 500;
   letter-spacing: -0.01em;
   color: #000;
@@ -384,14 +384,14 @@
 
 .detailsSecondary {
   margin: 0 0 12px;
-  font-size: 13px;
+  font-size: 0.8125rem;
   line-height: 1.5;
   color: var(--ink-2);
 }
 
 .detailsLine {
   margin: 0 0 8px;
-  font-size: 13px;
+  font-size: 0.8125rem;
   line-height: 1.5;
 }
 
@@ -401,7 +401,7 @@
   justify-content: space-between;
   gap: 16px;
   margin: 0 0 8px;
-  font-size: 13px;
+  font-size: 0.8125rem;
   line-height: 1.5;
 }
 
@@ -418,7 +418,7 @@
 
 .specKey {
   margin: 4px 0 0;
-  font-size: 11px;
+  font-size: 0.6875rem;
   color: var(--ink-2);
   text-align: left;
 }
@@ -429,7 +429,7 @@
   .actions button {
     min-height: 44px;
     padding: 10px 18px;
-    font-size: 14px;
+    font-size: 0.875rem;
   }
 
   .bar button {

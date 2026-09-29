@@ -50,12 +50,15 @@
 html, body { height: 100%; }
 * { box-sizing: border-box; }
 
+/* Type is sized in rem: 1rem is the reader's default text size, 16 px
+   unless they changed it, so the spec's px sizes hold at the default and
+   grow when the browser's text size does (UI-26). Boxes stay in px. */
 body {
   margin: 0;
   background: var(--canopy-900);
   color: var(--on-glass-2);
   font-family: var(--sans);
-  font-size: 14px;
+  font-size: 0.875rem;
   line-height: 1.5;
 }
 

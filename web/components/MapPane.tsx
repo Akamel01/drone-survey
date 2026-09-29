@@ -266,7 +266,7 @@ function addLayers(map: MaplibreMap) {
 function labelMarker(text: string, background: string): HTMLElement {
   const el = document.createElement("div");
   el.textContent = text;
-  el.style.cssText = `background:${background};color:#06110f;font:600 11px/1 var(--mono, monospace);
+  el.style.cssText = `background:${background};color:#06110f;font:600 0.6875rem/1 var(--mono, monospace);
     letter-spacing:0.04em;padding:4px 10px;border-radius:999px;border:1px solid #06110f;white-space:nowrap;
     font-variant-numeric:tabular-nums;transform:translateY(-14px);pointer-events:none`;
   return el;
@@ -867,7 +867,7 @@ export default function MapPane({
     numberMarkersRef.current = preview.points.map((p, i) => {
       const el = document.createElement("div");
       el.textContent = String(i + 1);
-      el.style.cssText = `color:#f2f5f7;font:600 10px/1 var(--mono, monospace);
+      el.style.cssText = `color:#f2f5f7;font:600 0.625rem/1 var(--mono, monospace);
         text-shadow:0 0 3px #06110f,0 0 3px #06110f;pointer-events:none;transform:translate(6px,-6px)`;
       return new Marker({ element: el, anchor: "left" }).setLngLat(toLngLat(p)).addTo(map);
     });
