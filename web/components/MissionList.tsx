@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { preview } from "@/lib/mission";
+import { areaHectares, preview } from "@/lib/mission";
 import type { MissionRow } from "@/lib/missionRecords";
 import Sheet from "./Sheet";
 import type { NoticePayload } from "./Notice";
@@ -21,8 +21,11 @@ import {
   asOfStamp,
   cacheRead,
   cachedRead,
+  cardList,
   checkedAgo,
+  formatStamp,
   hostLines,
+  orbitAreaHectares,
   rowView,
   unreadableLine,
   type ActionName,
@@ -477,6 +480,16 @@ export default function MissionList({ onEdit, onCopy, editingId = null, onRead, 
     void act("Remove", row.id);
   }, [act, confirmRow]);
 
+  // Focus returns to the row that opened Details, whichever way the sheet
+  // closed: every dismissal funnels through `onClose` (Sheet), so one restore
+  // here covers Escape, the close control and drag. A row archived or
+  // filtered while open misses the query and simply keeps focus where it is.
+  const closeDetails = useCallback(() => {
+    const id = detailsRow?.id;
+    setDetailsOpen(false);
+    if (id) listRef.current?.querySelector<HTMLElement>(`[data-row-id="${id}"] .more`)?.focus();
+  }, [detailsRow]);
+
   const all = useMemo(() => read?.missions ?? [], [read]);
   // The planner's own figures, derived from each Mission's Spec. They are one
   // half of the mismatch check, so they must come from the Spec the row
@@ -492,6 +505,19 @@ export default function MissionList({ onEdit, onCopy, editingId = null, onRead, 
 
   const visible = visibleMissions(all, showArchived);
   const archivedCount = read?.archived_count ?? 0;
+  // Details reads the same view the row does, plus the full preview the
+  // narrowed Figures drops (flight time, part minutes): derived where read.
+  const detailsFigures = detailsRow ? (figures.get(detailsRow.id) ?? null) : null;
+  const detailsPreview = detailsRow ? preview(detailsRow.spec) : null;
+  const detailsView = detailsRow
+    ? rowView(detailsRow, detailsFigures, read?.stale_cards ?? [], read?.host?.notice ?? null)
+    : null;
+  const detailsOrbit = detailsRow?.spec.mission_type === "orbit";
+  const detailsAreaHa = detailsRow
+    ? detailsOrbit
+      ? orbitAreaHectares(detailsRow.spec.orbit.radius_m)
+      : areaHectares(detailsRow.spec.aoi)
+    : 0;
 
   if (passphrase === null) return <p className={styles.quiet}>Reading the Mission list…</p>;
   if (blocked) {
@@ -646,30 +672,118 @@ export default function MissionList({ onEdit, onCopy, editingId = null, onRead, 
         )}
       </Sheet>
 
-      <Sheet open={detailsOpen} onClose={() => setDetailsOpen(false)} labelledBy={detailsHeadingId}>
-        {detailsRow && (
-          <div className={`panel-light ${styles.detailsPanel}`}>
-            <h3 id={detailsHeadingId} className={styles.detailsTitle}>
-              {detailsRow.name}
-            </h3>
-            <div className={`${styles.detailsLine} mono`}>{detailsRow.spec_key ?? detailsRow.id}</div>
-            {detailsRow.collected_at && (
-              <div className={styles.detailsLine}>Collected {detailsRow.collected_at}</div>
-            )}
-            {detailsRow.loaded_at && <div className={styles.detailsLine}>Loaded {detailsRow.loaded_at}</div>}
-            {detailsRow.flown_evidence_at && (
-              <div className={styles.detailsLine}>Imagery arrived {detailsRow.flown_evidence_at}</div>
-            )}
-            {detailsRow.superseded_by && (
-              <div className={styles.detailsLine}>Superseded by the Mission saved after it.</div>
-            )}
-            {detailsRow.edit === "guarded" && (
-              <div className={styles.detailsLine}>
-                Editing is guarded: a file for this Mission is already on the Controller, and withdrawing
-                cannot reach it.
+      <Sheet open={detailsOpen} onClose={closeDetails} labelledBy={detailsHeadingId}>
+        {detailsRow && detailsView && detailsPreview && (
+          // Two light panels stacked with a 12 gap (spec §§ 7, 8): the state
+          // first — chip, Mission name, "Site · date", then the explanation —
+          // the facts second. Direct children of the sheet body, so the
+          // sheet's own --stagger entrance and reduced-motion stay as they
+          // are; no motion of their own is declared here.
+          <>
+            <div className={`panel-light ${styles.detailsPanel}`}>
+              <span className={styles.detailsChip}>{detailsView.stateLabel}</span>
+              <h3 id={detailsHeadingId} className={styles.detailsTitle}>
+                {detailsRow.name}
+              </h3>
+              <div className={styles.detailsSecondary}>
+                {detailsRow.site} · {detailsRow.date}
               </div>
-            )}
-          </div>
+              {/* The explanation for this state: a blocked row lists every
+                  blocker, the row having shown only the first — and a row both
+                  held and blocked keeps its refusal text above them, since
+                  headline.detail is the refusal there, not the first blocker. */}
+              {detailsView.blockers.length > 0 ? (
+                <>
+                  {detailsView.headline.detail !== detailsView.blockers[0] && (
+                    <p className={styles.detailsLine}>{detailsView.headline.detail}</p>
+                  )}
+                  {detailsView.blockers.map((why) => (
+                    <p key={why} className={styles.detailsLine}>
+                      {why}
+                    </p>
+                  ))}
+                </>
+              ) : (
+                <p className={styles.detailsLine}>{detailsView.headline.detail}</p>
+              )}
+              {detailsView.reason && <div className={styles.detailsLine}>{detailsView.reason}</div>}
+              {detailsView.disagreement && (
+                <div className={styles.detailsLine}>
+                  {detailsView.disagreement} Both answers are kept; yours is the one that decides.
+                </div>
+              )}
+              {detailsRow.superseded_by && (
+                <div className={styles.detailsLine}>Superseded by the Mission saved after it.</div>
+              )}
+              {detailsRow.edit === "guarded" && (
+                <div className={styles.detailsLine}>
+                  Editing is guarded: a file for this Mission is already on the Controller, and withdrawing
+                  cannot reach it.
+                </div>
+              )}
+            </div>
+            <div className={`panel-light-alt ${styles.detailsPanel}`}>
+              <div className={styles.fact}>
+                <span className={styles.factLabel}>Area</span>
+                <span className={styles.factValue}>
+                  {detailsOrbit ? `Orbit area ${detailsAreaHa.toFixed(2)} ha` : `${detailsAreaHa.toFixed(2)} ha`}
+                </span>
+              </div>
+              <div className={styles.fact}>
+                <span className={styles.factLabel}>Flight time</span>
+                <span className={styles.factValue}>
+                  {detailsPreview.flight_time_min.toFixed(1)} min
+                </span>
+              </div>
+              <div className={styles.fact}>
+                <span className={styles.factLabel}>Flights</span>
+                <span className={styles.factValue}>
+                  {detailsPreview.parts} flight{detailsPreview.parts === 1 ? "" : "s"}
+                </span>
+              </div>
+              <div className={styles.fact}>
+                <span className={styles.factLabel}>Photos</span>
+                <span className={styles.factValue}>{detailsPreview.photo_count} photos</span>
+              </div>
+              {detailsView.flights.length > 0 && (
+                <div className={styles.fact}>
+                  <span className={styles.factLabel}>Cards</span>
+                  <span className={styles.factValue}>{cardList(detailsRow.cards)}</span>
+                </div>
+              )}
+              <div className={styles.fact}>
+                <span className={styles.factLabel}>Saved</span>
+                <span className={styles.factValue}>{formatStamp(detailsRow.created_at)}</span>
+              </div>
+              {detailsRow.collected_at && (
+                <div className={styles.fact}>
+                  <span className={styles.factLabel}>Collected</span>
+                  <span className={styles.factValue}>{formatStamp(detailsRow.collected_at)}</span>
+                </div>
+              )}
+              {detailsRow.loaded_at && (
+                <div className={styles.fact}>
+                  <span className={styles.factLabel}>Loaded</span>
+                  <span className={styles.factValue}>{formatStamp(detailsRow.loaded_at)}</span>
+                </div>
+              )}
+              {detailsRow.flown_marked ? (
+                <div className={styles.fact}>
+                  <span className={styles.factLabel}>Flown</span>
+                  <span className={styles.factValue}>You marked this Flown.</span>
+                </div>
+              ) : null}
+              {detailsRow.flown_evidence_at && (
+                <div className={styles.fact}>
+                  <span className={styles.factLabel}>Imagery arrived</span>
+                  <span className={styles.factValue}>{formatStamp(detailsRow.flown_evidence_at)}</span>
+                </div>
+              )}
+              <div className={`${styles.factValue} ${styles.specKey} mono`}>
+                {detailsRow.spec_key ?? detailsRow.id}
+              </div>
+            </div>
+          </>
         )}
       </Sheet>
     </div>
@@ -711,7 +825,9 @@ function Row({
       {/* The answer first: this screen exists to say whether the Mission will
           fly correctly and which Card to open. */}
       <p className={styles.headline}>{view.headline.text}</p>
-      <p className={styles.detail}>{view.headline.detail}</p>
+      {(view.headline.tone === "stop" || view.state === "loaded") && (
+        <p className={styles.detail}>{view.headline.detail}</p>
+      )}
 
       {view.blockers.slice(1).map((why) => (
         <p key={why} className={styles.stop}>
@@ -742,7 +858,7 @@ function Row({
           ))}
         </ul>
       )}
-      {view.reason && <p className={styles.reason}>{view.reason}</p>}
+      {/* view.reason lives in Details (M2); the row leads with the answer. */}
 
       <div className={styles.actions}>
         {view.actions.map((name) => (

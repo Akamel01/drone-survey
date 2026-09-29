@@ -12,9 +12,11 @@ import {
   flightReason,
   flightTimeDelta,
   flights,
+  formatStamp,
   hostLines,
   localDate,
   metres,
+  orbitAreaHectares,
   rowView,
   saveProblem,
   sitesFrom,
@@ -445,4 +447,81 @@ test("one battery states its own minutes rather than repeating a plural", () => 
 
 test("no drawn area yet has nothing to add up, and still reads as a sentence", () => {
   assert.equal(flightTimeDelta(0, []), "0 flights · 0.0 min");
+});
+
+// --- the orbit's area in Details (#292) --------------------------------------
+
+test("an orbit's area is πr² in hectares, read from its radius", () => {
+  // areaHectares returns 0 for an orbit (its aoi is empty by design), so
+  // Details reads the radius instead. Worked examples, never the formula.
+  assert.equal(orbitAreaHectares(40).toFixed(4), "0.5027");
+  assert.equal(orbitAreaHectares(25).toFixed(4), "0.1963");
+  assert.equal(orbitAreaHectares(0), 0);
+});
+
+// --- the row leads with the answer; Details carries the reason (#292) --------
+
+test("only a stop-tone or Loaded row shows its detail; the rest keep it for Details", () => {
+  // The component gates headline.detail on tone === "stop" or state ===
+  // "loaded" (the Row in MissionList); this pins the data side of that
+  // contract. A Planned detail exists in the view but is wait-tone, so the
+  // row hides it and Details shows it.
+  const planned = rowView(row(), FIGS);
+  assert.equal(planned.headline.tone, "wait");
+  assert.ok(planned.headline.detail.length > 0, "the reason exists — it is just not the row's to say");
+
+  const waiting = rowView(
+    row({ state: "dispatched", spec_key: KEY, cards: [holding({ card: "way finder 1" })] }),
+    FIGS,
+  );
+  assert.equal(waiting.headline.tone, "wait", "waiting rows keep the row short");
+
+  const held = rowView(
+    row({ state: "collected", spec_key: KEY, cards: [holding({ card: "way finder 1" })] }),
+    FIGS,
+    [],
+    NOTICE,
+  );
+  assert.equal(held.headline.tone, "stop", "a refused Load is said on the row");
+
+  const loaded = rowView(
+    row({
+      state: "loaded",
+      spec_key: KEY,
+      cards: [holding({ card: "way finder 2", written_at: "t" })],
+      loaded_cards: [{ card: "way finder 2", name: "north half", waypoints: 202, path_length_m: 2370 }],
+    }),
+    FIGS,
+  );
+  assert.equal(loaded.state, "loaded");
+  assert.ok(loaded.headline.detail.length > 0, "the points check stays on a Loaded row");
+});
+
+test("a held row that is also blocked keeps its refusal apart from its blockers", () => {
+  // Details renders headline.detail above the blockers list exactly when the
+  // two differ; this pins the data side of that branch. A mismatch blocker
+  // (100 written of 202 planned) plus the host refusal is the conjunction.
+  const both = row({
+    state: "collected",
+    spec_key: KEY,
+    cards: [holding({ card: "way finder 1" })],
+    loaded_cards: [{ card: "way finder 1", name: "north half", waypoints: 100, path_length_m: 2370 }],
+  });
+  const heldBlocked = rowView(both, FIGS, [], NOTICE);
+  assert.equal(heldBlocked.blockers.length, 1);
+  assert.match(heldBlocked.headline.detail, /refused the Load/);
+  assert.notEqual(heldBlocked.headline.detail, heldBlocked.blockers[0]);
+
+  // Blocked alone: the headline just is the first blocker, so Details showing
+  // the list alone drops nothing.
+  const blocked = rowView(both, FIGS, [], null);
+  assert.equal(blocked.headline.detail, blocked.blockers[0]);
+});
+
+test("formatStamp reads as a date, never raw ISO", () => {
+  const out = formatStamp("2026-09-26T14:05:00.000Z");
+  assert.match(out, /^\d{2} \S+ \d{4}, \d{2}:\d{2}$/);
+  assert.ok(!out.includes("T"), "no ISO separator reaches Details");
+  assert.equal(formatStamp(null), "");
+  assert.equal(formatStamp("not-a-stamp"), "not-a-stamp");
 });

@@ -50,6 +50,12 @@ export function count(n: number): string {
   return WORDS[n] ?? String(n);
 }
 
+/** An orbit's area in hectares from its radius: `areaHectares` returns 0 for
+ *  an orbit (its `aoi` is empty by design), so Details reads the radius. */
+export function orbitAreaHectares(radiusM: number): number {
+  return (Math.PI * radiusM * radiusM) / 10000;
+}
+
 /** The planner's own figures for a Mission, as `preview()` computes them. The
  *  row carries its Spec, so these are derived where they are read rather than
  *  trusted from a summary file the host also writes into. */
@@ -463,6 +469,26 @@ export function saveProblem(
   if (badName) return badName;
   if (!spec.date?.trim()) return "Give this Mission a date.";
   return null;
+}
+
+/** A stored stamp in the operator's locale, e.g. "26 Sep 2026, 14:05". Raw
+ *  ISO never reaches Details. The shape is fixed (day Mon year, HH:MM) while
+ *  the month name and timezone are the operator's own. Unparseable input
+ *  passes through; nullish input reads as absent. */
+export function formatStamp(iso: string | null | undefined): string {
+  if (iso == null) return "";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso;
+  const parts = new Intl.DateTimeFormat(undefined, {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).formatToParts(d);
+  const get = (t: string) => parts.find((p) => p.type === t)?.value ?? "";
+  return `${get("day")} ${get("month")} ${get("year")}, ${get("hour")}:${get("minute")}`;
 }
 
 /** A date as the operator's own calendar has it, YYYY-MM-DD. `toISOString`

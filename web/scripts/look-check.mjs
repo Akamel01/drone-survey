@@ -6,7 +6,10 @@
 // Sections: text contrast on glass against the brightest and darkest
 // backdrops it can sit on; text over the hero; the notice against the map
 // controls at 1280, 1440 and 1920 wide; reduced transparency, increased
-// contrast and reduced motion; a keyboard walk of the planner; the frame rate
+// contrast and reduced motion; a keyboard walk of the planner; the Mission
+// rows (three Planned rows lead with the answer, one held row keeps its
+// stop tone) and the Details open/announce/focus-return walk at phone and
+// desktop widths; the frame rate
 // of panning the map under glass on a throttled phone; and two screenshots the
 // operator decides on (the phone Map tab, a long Missions list over the hero).
 // Like motion-check, a fetch wrapper answers /api/missions from memory and a
@@ -42,6 +45,10 @@ function record(i) {
     ],
     home: [37.8, -122.4],
   };
+  // UI-23 (#292): the fourth seed is Dispatched and held up by the host, so
+  // one row carries the stop tone while the rest stay Planned. Counts below
+  // four seed Planned rows only, as before.
+  const held = i === 4;
   return {
     id: `m-e2e-${String(i).padStart(4, "0")}`,
     site_id: spec.site_id,
@@ -51,17 +58,47 @@ function record(i) {
     created_at: "2026-09-26T00:00:00.000Z",
     updated_at: "2026-09-26T00:00:00.000Z",
     spec,
-    dispatched_key: null,
+    dispatched_key: held ? HELD_KEY : null,
   };
 }
 
+const HELD_KEY = "specs/e2e-site-abc123/2026-09-26/20260926T000000Z.json";
+
 function payload(count) {
   const records = Array.from({ length: count }, (_, i) => record(i + 1));
+  const held = records.some((r) => r.dispatched_key);
   return {
-    missions: deriveMissions(records, {}, {}),
+    missions: deriveMissions(
+      records,
+      {},
+      held
+        ? {
+            pool: [],
+            holdings: {
+              "way finder 1": {
+                spec_key: HELD_KEY,
+                card: "way finder 1",
+                flight: 1,
+                flights: 1,
+                reserved_at: "2026-09-26T00:00:00.000Z",
+              },
+            },
+          }
+        : { pool: [], holdings: {} },
+    ),
     archived_count: 0,
     stale_cards: [],
-    host: { notice: null, drift: null },
+    host: held
+      ? {
+          notice: {
+            type: "card-ledger",
+            at: "2026-09-26T07:20:00Z",
+            waiting: [HELD_KEY],
+            reason: "no Card is reserved for specs/e2e-old.json; nothing was touched.",
+          },
+          drift: null,
+        }
+      : { notice: null, drift: null },
     unreadable: [],
     now: Date.now(),
   };
@@ -559,6 +596,102 @@ async function keyboardSection(browser) {
 }
 
 // ---------------------------------------------------------------------------
+// Mission rows: the row leads with the answer, Details carries the reason
+// (UI-23, #292)
+// ---------------------------------------------------------------------------
+
+async function missionRowsSection(browser) {
+  const section = "mission-rows";
+  for (const vp of [
+    { width: 375, height: 812, mobile: true },
+    { width: 1440, height: 900 },
+  ]) {
+    const { context, page } = await pageFor(browser, { ...vp, missions: 4 });
+    try {
+      await openPlanner(page);
+      // Three Planned rows share no identical detail paragraph; the held row
+      // keeps its stop-tone headline. Before the fix every Planned row
+      // repeated its detail sentence on the row itself.
+      const rows = await page.evaluate(() =>
+        [...document.querySelectorAll("article")].map((a) => ({
+          name: a.querySelector("h3")?.textContent ?? "",
+          text: a.textContent ?? "",
+        })),
+      );
+      check(section, `${vp.width}: four rows seeded (three Planned, one held)`, rows.length === 4,
+        rows.map((r) => r.name).join(" | "));
+      const plannedDetail = "Nothing has left the planner yet";
+      const repeating = rows.filter((r) => r.text.includes(plannedDetail));
+      check(section, `${vp.width}: no Planned row repeats its detail on the row`, repeating.length === 0,
+        repeating.map((r) => r.name).join(", "));
+      const held = rows.filter((r) => r.text.includes("Not being Loaded"));
+      check(section, `${vp.width}: the held row keeps its stop-tone headline`, held.length === 1,
+        held[0]?.name ?? "none");
+      // Details carries what the row no longer says: open one Planned row's.
+      const target = page.locator("article", { hasText: "North half" });
+      await target.getByRole("button", { name: "Details", exact: true }).click();
+      await page.locator("dialog[open]").waitFor({ timeout: 10000 });
+      const sheet = await page.evaluate(() => {
+        const d = document.querySelector("dialog[open]");
+        const id = d?.getAttribute("aria-labelledby");
+        const h = id ? document.getElementById(id) : null;
+        return { heading: h?.textContent ?? null, text: d?.textContent ?? "" };
+      });
+      check(section, `${vp.width}: Details opens with its heading announced`, sheet.heading === "North half",
+        JSON.stringify(sheet.heading));
+      for (const fact of [plannedDetail, "E2E Site · 2026-09-26", "ha", "photos", "Saved"]) {
+        check(section, `${vp.width}: Details shows "${fact}"`, sheet.text.includes(fact));
+      }
+      // Escape returns focus to the row that opened it (M3's listRef seam).
+      await page.keyboard.press("Escape");
+      await page.waitForFunction(() => !document.querySelector("dialog[open]"), null, { timeout: 10000 });
+      const focus = await page.evaluate(() => {
+        const el = document.activeElement;
+        return {
+          button: el?.textContent?.trim().slice(0, 8) ?? null,
+          row: el?.closest("article")?.querySelector("h3")?.textContent ?? null,
+        };
+      });
+      check(section, `${vp.width}: Escape returns focus to that row's Details button`,
+        focus.button === "Details" && (focus.row ?? "").includes("North half"), JSON.stringify(focus));
+    } finally {
+      await context.close();
+    }
+  }
+}
+
+// ---------------------------------------------------------------------------
+// UI-23 (#292) evidence shots: Details open and the Planned row list, at 375
+// and 1440. Gated behind ONLY=details-shots so a normal check:look run
+// writes nothing; the PNGs are committed on the oc/292-shots assets branch,
+// never on the feature branch.
+// ---------------------------------------------------------------------------
+
+async function detailsShotsSection(browser) {
+  const section = "details-shots";
+  const OUT23 = path.resolve(HERE, "../../docs/ui-theme/screenshots/ui-23");
+  fs.mkdirSync(OUT23, { recursive: true });
+  for (const vp of [
+    { width: 375, height: 812, mobile: true },
+    { width: 1440, height: 900 },
+  ]) {
+    const { context, page } = await pageFor(browser, { ...vp, missions: 4 });
+    try {
+      await openPlanner(page);
+      await page.screenshot({ path: path.join(OUT23, `list-${vp.width}.png`) });
+      note(section, `${vp.width}: Planned row list`, `list-${vp.width}.png`);
+      await page.locator("article", { hasText: "North half" }).getByRole("button", { name: "Details", exact: true }).click();
+      await page.locator("dialog[open]").waitFor({ timeout: 10000 });
+      await page.waitForTimeout(900);
+      await page.screenshot({ path: path.join(OUT23, `details-${vp.width}.png`) });
+      note(section, `${vp.width}: Details open`, `details-${vp.width}.png`);
+    } finally {
+      await context.close();
+    }
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Frame rate: panning the map under glass on a throttled phone
 // ---------------------------------------------------------------------------
 
@@ -670,8 +803,12 @@ try {
   if (want("collision")) await collisionSection(browser);
   if (want("fallbacks")) await fallbackSection(browser);
   if (want("keyboard")) await keyboardSection(browser);
+  if (want("mission-rows")) await missionRowsSection(browser);
   if (want("fps")) await fpsSection(browser);
   if (want("operator")) await operatorShots(browser);
+  // Gated on an explicit ONLY: a bare run must not write evidence PNGs into
+  // the tree.
+  if ((process.env.ONLY ?? "").split(",").includes("details-shots")) await detailsShotsSection(browser);
 } finally {
   await browser.close();
 }
