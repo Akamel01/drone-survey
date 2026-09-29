@@ -517,42 +517,166 @@ test("the operator approves and removes Accounts in Settings; nobody else can", 
   await shown(row(IDENTITIES[2].email));
   await shown(row(IDENTITIES[6].email).getByText("Waiting for approval"));
 
-  // E2E_SHOTS=<dir>: the Accounts section at both sizes, for the pull request.
+  // The badge's number comes from the same list the section renders: pending
+  // and not the operator (lib/accountAdmin.ts `pendingCount`).
+  const apiPending = async () => {
+    const response = await ownerContext.request.get(`${base}/api/accounts`);
+    assert.equal(response.status(), 200);
+    const { accounts: rows } = await response.json();
+    return rows.filter((r) => !r.approved && !r.admin).length;
+  };
+  const waitingName = (n) => (n === 1 ? "1 Account waiting" : `${n} Accounts waiting`);
+  const displayOf = (n) => (n > 9 ? "9+" : String(n));
+  const before = await apiPending();
+  assert.ok(before > 0, "Accounts are waiting, so the admin sees a badge");
+
+  // Admin, desktop, panel open: the heading carries the visual pill.
+  await shown(page.locator("#settings-panel h2").getByText(displayOf(before), { exact: true }));
+
+  // Nobody else sees it: the pending Account loads /plan and finds no badge
+  // element, no waiting-named control, and no Accounts region at all.
+  await doomedPage.goto(`${base}/plan`, { waitUntil: "domcontentloaded" });
+  assert.equal(await doomedPage.locator('[class*="pendingBadge"]').count(), 0, "no badge element for a pending Account");
+  assert.equal(await doomedPage.getByRole("button", { name: /waiting/ }).count(), 0, "no waiting-named control for a pending Account");
+  assert.equal(await doomedPage.getByRole("region", { name: "Accounts" }).count(), 0, "no Accounts region for a pending Account");
+
+  // Admin, phone: the Settings tab names the wait and carries the pill; the
+  // phone label survives beside it.
+  const phone = await browser.newContext({ viewport: { width: 375, height: 812 }, isMobile: true, hasTouch: true });
+  await phone.addCookies(await ownerContext.cookies());
+  const phonePage = await phone.newPage();
+  await phonePage.goto(`${base}/plan`, { waitUntil: "domcontentloaded" });
+  const phoneTab = phonePage
+    .getByRole("navigation", { name: "Show" })
+    .getByRole("button", { name: `Settings, ${waitingName(before)}`, exact: true });
+  await shown(phoneTab);
+  await shown(phoneTab.getByText(displayOf(before), { exact: true }));
+  await shown(phoneTab.getByText("Settings", { exact: true }));
+
+  // Admin, desktop, folded: the edge tab names the wait and carries the pill.
+  await page.getByRole("button", { name: "Collapse Settings", exact: true }).click();
+  const edge = page.getByRole("button", { name: `Expand Settings, ${waitingName(before)}`, exact: true });
+  await shown(edge);
+  await shown(edge.getByText(displayOf(before), { exact: true }));
+
+  // E2E_SHOTS=<dir>: the folded edge tab at desktop size, for the pull
+  // request. The panel stays folded for the shot; it unfolds right after.
   if (process.env.E2E_SHOTS) {
     mkdirSync(process.env.E2E_SHOTS, { recursive: true });
-    await accounts.scrollIntoViewIfNeeded();
-    await accounts.screenshot({ path: path.join(process.env.E2E_SHOTS, "accounts-1440.png") });
-    const phone = await browser.newContext({ viewport: { width: 375, height: 812 }, isMobile: true, hasTouch: true });
-    await phone.addCookies(await ownerContext.cookies());
-    const phonePage = await phone.newPage();
-    await phonePage.goto(`${base}/plan`, { waitUntil: "domcontentloaded" });
-    await phonePage.getByRole("navigation", { name: "Show" }).getByRole("button", { name: "Settings" }).click();
-    const phoneAccounts = phonePage.getByRole("region", { name: "Accounts" });
-    await shown(phoneAccounts.getByText("Waiting for approval").first());
-    await phoneAccounts.scrollIntoViewIfNeeded();
-    await phonePage.waitForTimeout(600);
-    await phonePage.screenshot({ path: path.join(process.env.E2E_SHOTS, "accounts-375.png") });
-    await phone.close();
+    await page.waitForTimeout(600);
+    await page.screenshot({ path: path.join(process.env.E2E_SHOTS, "badge-edge-1440.png") });
   }
+
+  // Unfold for the approve/remove flow.
+  await edge.click();
+  await shown(row(IDENTITIES[2].email));
+
+  // E2E_SHOTS=<dir>: the badge on the phone tab and the Accounts section at
+  // both sizes, for the pull request. Both panels are open here, so the
+  // regions are visible.
+  if (process.env.E2E_SHOTS) {
+    await phoneTab.click();
+    await shown(phonePage.getByRole("region", { name: "Accounts" }).getByText("Waiting for approval").first());
+    await phonePage.waitForTimeout(600);
+    await phonePage.screenshot({ path: path.join(process.env.E2E_SHOTS, "badge-phone-375.png") });
+    const phoneAccounts = phonePage.getByRole("region", { name: "Accounts" });
+    await phoneAccounts.scrollIntoViewIfNeeded();
+    await phonePage.screenshot({ path: path.join(process.env.E2E_SHOTS, "accounts-375.png") });
+    await accounts.scrollIntoViewIfNeeded();
+    await page.screenshot({ path: path.join(process.env.E2E_SHOTS, "accounts-1440.png") });
+  }
+  await phone.close();
 
   // Approve the GitHub Account (T2).
   await row(IDENTITIES[2].email).getByRole("button", { name: "Approve", exact: true }).click();
   await shown(row(IDENTITIES[2].email).getByText("Approved", { exact: true }));
   assert.equal(await row(IDENTITIES[2].email).getByRole("button", { name: "Approve" }).count(), 0);
 
+  // An approved ordinary Account sees no badge either: the same planner, no
+  // pill, no waiting name, no Accounts region. Its live session cookie is
+  // reused, so no new sign-in and the identity queue is untouched.
+  const eq = captured.githubCookie.indexOf("=");
+  const member = await browser.newContext();
+  await member.addCookies([
+    {
+      name: captured.githubCookie.slice(0, eq),
+      value: captured.githubCookie.slice(eq + 1),
+      domain: "localhost",
+      path: "/",
+      secure: true,
+    },
+  ]);
+  const memberSession = await getSession(member);
+  assert.equal(memberSession.user.approved, true, "the GitHub Account is approved now");
+  assert.equal(memberSession.user.role, "user", "and still an ordinary Account");
+  const memberPage = await member.newPage();
+  await memberPage.goto(`${base}/plan`, { waitUntil: "domcontentloaded" });
+  assert.equal(await memberPage.locator('[class*="pendingBadge"]').count(), 0, "no badge element for an approved ordinary Account");
+  assert.equal(await memberPage.getByRole("button", { name: /waiting/ }).count(), 0, "no waiting-named control for an approved ordinary Account");
+  assert.equal(await memberPage.getByRole("region", { name: "Accounts" }).count(), 0, "no Accounts region for an approved ordinary Account");
+  await member.close();
+
   // Remove the throwaway Account, through the confirmation sheet.
   await row(IDENTITIES[6].email).getByRole("button", { name: "Remove", exact: true }).click();
   const sheet = page.getByRole("dialog");
   await shown(sheet.getByText(/^Remove /));
+  // The badge stays up while the sheet is open: the count only moves when the
+  // list answer arrives, never on open/cancel.
+  const mid = await apiPending();
+  assert.equal(mid, before - 1, "approving one drops the wait by one");
+  await shown(page.locator("#settings-panel h2").getByText(displayOf(mid), { exact: true }));
   await sheet.getByRole("button", { name: "Remove", exact: true }).click();
   await row(IDENTITIES[6].email).waitFor({ state: "detached", timeout: 15_000 });
   assert.equal(await getSession(doomed), null, "the removed Account is signed out everywhere");
+
+  // Live update, no reload: approve + remove moved the lifted count, so the
+  // folded edge tab names the smaller wait and no zero-pill exists anywhere.
+  const after = await apiPending();
+  assert.equal(after, before - 2, "approving one and removing one drops the wait by two");
+  await page.getByRole("button", { name: "Collapse Settings", exact: true }).click();
+  await shown(page.getByRole("button", { name: `Expand Settings, ${waitingName(after)}`, exact: true }));
+  assert.equal(await page.getByRole("button", { name: /0 Accounts? waiting/ }).count(), 0, "the badge unmounts at zero, it never reads 0");
+  await page.getByRole("button", { name: `Expand Settings, ${waitingName(after)}`, exact: true }).click();
+  await shown(row(IDENTITIES[2].email));
+
+  // Approve-to-zero (AC2): the two remaining pendings (Google T1 + other T3),
+  // in this same admin session with no reload. Approve, not remove: removal
+  // would break T6's row-existence asserts, while approval only flips a
+  // boolean (T5's expiry lifecycle moves to the email Account, still pending).
+  await row(IDENTITIES[0].email).getByRole("button", { name: "Approve", exact: true }).click();
+  await shown(row(IDENTITIES[0].email).getByText("Approved", { exact: true }));
+  await row(IDENTITIES[4].email).getByRole("button", { name: "Approve", exact: true }).click();
+  await shown(row(IDENTITIES[4].email).getByText("Approved", { exact: true }));
+  assert.equal(await apiPending(), 0, "approving the last pendings clears the wait");
+  assert.equal(await page.locator('[class*="pendingBadge"]').count(), 0, "the badge unmounts at zero");
+  assert.equal(await page.getByRole("button", { name: /waiting/ }).count(), 0, "no waiting-named control at zero");
+  // Folded edge tab falls back to its plain name, pill gone with it.
+  await page.getByRole("button", { name: "Collapse Settings", exact: true }).click();
+  await shown(page.getByRole("button", { name: "Expand Settings", exact: true }));
+  assert.equal(await page.locator('[class*="pendingBadge"]').count(), 0, "no pill on the folded edge tab at zero");
+  await page.getByRole("button", { name: "Expand Settings", exact: true }).click();
+  await shown(row(IDENTITIES[0].email));
+
+  // Phone at zero: a fresh phone view on the same admin session names the tab
+  // plain Settings, with no pill and no waiting name.
+  const zeroPhone = await browser.newContext({ viewport: { width: 375, height: 812 }, isMobile: true, hasTouch: true });
+  await zeroPhone.addCookies(await ownerContext.cookies());
+  const zeroPhonePage = await zeroPhone.newPage();
+  await zeroPhonePage.goto(`${base}/plan`, { waitUntil: "domcontentloaded" });
+  await shown(
+    zeroPhonePage.getByRole("navigation", { name: "Show" }).getByText("Settings", { exact: true }),
+  );
+  assert.equal(await zeroPhonePage.locator('[class*="pendingBadge"]').count(), 0, "no badge element on the phone tab at zero");
+  assert.equal(await zeroPhonePage.getByRole("button", { name: /waiting/ }).count(), 0, "no waiting-named control on the phone tab at zero");
+  await zeroPhone.close();
 
   // The API agrees.
   const list = await ownerContext.request.get(`${base}/api/accounts`);
   assert.equal(list.status(), 200);
   const { accounts: rows } = await list.json();
   assert.equal(rows.find((r) => r.email === IDENTITIES[2].email)?.approved, true);
+  assert.equal(rows.find((r) => r.email === IDENTITIES[0].email)?.approved, true, "the Google Account was approved in the approve-to-zero");
+  assert.equal(rows.find((r) => r.email === IDENTITIES[4].email)?.approved, true, "the other Account was approved in the approve-to-zero");
   assert.equal(rows.some((r) => r.email === IDENTITIES[6].email), false);
 
   await page.close();
@@ -677,6 +801,9 @@ test("email and password: sign up, confirm by mail, sign in, a wrong password, a
   await shown(status.filter({ hasText: "do not match" }));
   await signIn(second);
   await waitForPending(page, EMAIL_USER);
+  // T5's pending-403 + expiry lifecycle runs against this still-pending email
+  // Account (T4.5 approved the Google + other pendings to reach badge zero).
+  captured.emailCookie = await sessionCookieHeader(context);
 
   await context.close();
 });
@@ -703,7 +830,10 @@ test("the account gate: 401 without a session, 403 for a pending Account; a tamp
     error: "Sign in to continue: this request carried no session.",
   });
 
-  const pending = await gate(captured.pendingCookie);
+  // The email Account is still pending (T4.5 approved the Google + other
+  // pendings to reach badge zero), so the 403 + expiry lifecycle runs
+  // against it.
+  const pending = await gate(captured.emailCookie);
   assert.equal(pending.ok, false);
   assert.equal(pending.response.status, 403);
   assert.deepEqual(await pending.response.json(), {
@@ -724,31 +854,31 @@ test("the account gate: 401 without a session, 403 for a pending Account; a tamp
   // expired row it reads (dist/api/routes/session.mjs:155-163).
   const liveBefore = await pool.query(
     'SELECT count(*)::int AS n FROM "session" WHERE "userId" = $1 AND "expiresAt" > now()',
-    [captured.pendingUserId],
+    [captured.emailUserId],
   );
-  assert.equal(liveBefore.rows[0].n, 1, "the pending Account's session is live before the expiry");
+  assert.equal(liveBefore.rows[0].n, 1, "the email Account's session is live before the expiry");
   await pool.query('UPDATE "session" SET "expiresAt" = now() - interval \'1 minute\' WHERE "userId" = $1', [
-    captured.pendingUserId,
+    captured.emailUserId,
   ]);
   const liveAfter = await pool.query(
     'SELECT count(*)::int AS n FROM "session" WHERE "userId" = $1 AND "expiresAt" > now()',
-    [captured.pendingUserId],
+    [captured.emailUserId],
   );
   assert.equal(liveAfter.rows[0].n, 0, "the session is expired in the store");
 
-  const expired = await gate(captured.pendingCookie);
+  const expired = await gate(captured.emailCookie);
   assert.equal(expired.ok, false);
   assert.equal(expired.response.status, 401);
 
   const auth = await getAuth();
   const sessionResponse = await auth.handler(
-    new Request(`${base}/api/auth/get-session`, { headers: { cookie: captured.pendingCookie } }),
+    new Request(`${base}/api/auth/get-session`, { headers: { cookie: captured.emailCookie } }),
   );
   assert.equal(sessionResponse.status, 200);
   assert.equal(await sessionResponse.json(), null);
 
   const remaining = await pool.query('SELECT count(*)::int AS n FROM "session" WHERE "userId" = $1', [
-    captured.pendingUserId,
+    captured.emailUserId,
   ]);
   assert.equal(remaining.rows[0].n, 0, "the expired row was cleaned up by the get-session that refused it");
 });
@@ -767,7 +897,7 @@ test("the database rows match every flow", async (t) => {
     assert.equal(users.rows.length, 1, "exactly one user for the Google email");
     assert.equal(users.rows[0].id, captured.googleUserId);
     assert.equal(users.rows[0].role, "user");
-    assert.equal(users.rows[0].approved, false);
+    assert.equal(users.rows[0].approved, true, "the operator approved it in T4.5's approve-to-zero");
 
     const accounts = await pool.query('SELECT "providerId", "accountId" FROM "account" WHERE "userId" = $1', [
       captured.googleUserId,
@@ -851,14 +981,14 @@ test("the database rows match every flow", async (t) => {
     assert.equal(t35.rows[0].n, 0, "T3.5's sign-out deleted its session row");
   });
 
-  await t.test("the pending Account: user, approved=false, its u-<id> Workspace", async () => {
+  await t.test("the other Account: user, approved=true in the approve-to-zero, its u-<id> Workspace", async () => {
     const users = await pool.query('SELECT id, role, approved FROM "user" WHERE lower(email) = $1', [
       IDENTITIES[4].email,
     ]);
     assert.equal(users.rows.length, 1, "exactly one user for the pending email");
     assert.equal(users.rows[0].id, captured.pendingUserId);
     assert.equal(users.rows[0].role, "user");
-    assert.equal(users.rows[0].approved, false);
+    assert.equal(users.rows[0].approved, true, "the operator approved it in T4.5's approve-to-zero");
 
     const accounts = await pool.query('SELECT "providerId", "accountId" FROM "account" WHERE "userId" = $1', [
       captured.pendingUserId,
@@ -867,10 +997,11 @@ test("the database rows match every flow", async (t) => {
     assert.equal(accounts.rows[0].providerId, "google");
     assert.equal(accounts.rows[0].accountId, "e2e-other");
 
-    // The expired session was refused and deleted in T5; nothing active is
-    // left for this Account (the row lifecycle is asserted there).
+    // T5's expiry lifecycle moved to the email Account (still pending), so
+    // this Account's session is untouched: signed in once in T3, never out.
     const sessions = await pool.query('SELECT id FROM "session" WHERE "userId" = $1', [captured.pendingUserId]);
-    assert.equal(sessions.rows.length, 0, "the expiry refusal cleaned the pending session up");
+    assert.equal(sessions.rows.length, 1, "the approved other Account is still signed in");
+    assert.ok(sessions.rows[0].id, "its session row survives approval");
 
     const orgs = await pool.query('SELECT id FROM "organization" WHERE slug = $1', [`u-${captured.pendingUserId}`]);
     assert.equal(orgs.rows.length, 1, "the pending Account's Workspace is u-<id>");
@@ -896,6 +1027,10 @@ test("the database rows match every flow", async (t) => {
     assert.equal(accounts.rows.length, 1);
     assert.equal(accounts.rows[0].providerId, "credential");
     assert.ok(accounts.rows[0].password && !accounts.rows[0].password.includes("battery-staple-2"), "the password is stored hashed");
+    // The expired session was refused and deleted in T5; nothing active is
+    // left for this Account (the row lifecycle is asserted there).
+    const sessions = await pool.query('SELECT id FROM "session" WHERE "userId" = $1', [captured.emailUserId]);
+    assert.equal(sessions.rows.length, 0, "the expiry refusal cleaned the email session up");
     const orgs = await pool.query('SELECT id FROM "organization" WHERE slug = $1', [`u-${captured.emailUserId}`]);
     assert.equal(orgs.rows.length, 1, "the email Account's Workspace is u-<id>");
   });

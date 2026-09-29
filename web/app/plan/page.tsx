@@ -80,6 +80,23 @@ function ViewIcon({ view }: { view: View }) {
   );
 }
 
+/** Accounts waiting for Approval, as a visual pill. Meaning lives on the host
+ *  control's accessible name; the pill itself is decoration (MapPane precedent).
+ *  Display caps at 9+; the name keeps the true number. Unmounted at zero. */
+function PendingBadge({ count, className }: { count: number; className?: string }) {
+  return (
+    <span
+      className={className ? `${styles.pendingBadge} ${className}` : styles.pendingBadge}
+      aria-hidden="true"
+    >
+      {count > 9 ? "9+" : count}
+    </span>
+  );
+}
+
+/** "1 Account waiting" vs "N Accounts waiting" (CONTEXT.md language). */
+const waitingName = (n: number) => (n === 1 ? "1 Account waiting" : `${n} Accounts waiting`);
+
 export default function PlanPage() {
   const [view, setView] = useState<View>("missions");
   // Wide screens: both floating panels start open, and folding one away is the
@@ -120,6 +137,9 @@ export default function PlanPage() {
     setNotice({ ...p, key: noticeKey.current });
   }, []);
   const dismissNotice = useCallback(() => setNotice(null), []);
+  // Accounts waiting for Approval (admin-only: only the admin-gated
+  // AccountsSection ever reports a nonzero count). Badge unmounts at 0.
+  const [pendingCount, setPendingCount] = useState(0);
 
   const collapseMissions = useRef<HTMLButtonElement>(null);
   const collapseSettings = useRef<HTMLButtonElement>(null);
@@ -327,7 +347,10 @@ export default function PlanPage() {
         </section>
         <section id="settings-panel" className={`${styles.settings} glass-smoke`} aria-label="Settings" inert={wide ? !settingsOpen : view !== "settings"}>
           <div className={styles.panelHead}>
-            <h2 className={styles.heading}>Settings</h2>
+            <h2 className={styles.heading}>
+              Settings
+              {pendingCount > 0 && <PendingBadge count={pendingCount} />}
+            </h2>
             <button
               ref={collapseSettings}
               type="button"
@@ -351,6 +374,7 @@ export default function PlanPage() {
           editing={editing}
           onNameChange={(name) => setEditing((e) => ({ ...e, name }))}
           onNotice={showNotice}
+          onPendingCount={setPendingCount}
           />
         </section>
       </div>
@@ -387,11 +411,12 @@ export default function PlanPage() {
         className={`glass-smoke ${styles.edgeTab} ${styles.edgeTabRight}`}
         aria-expanded={false}
         aria-controls="settings-panel"
-        aria-label="Expand Settings"
+        aria-label={pendingCount > 0 ? `Expand Settings, ${waitingName(pendingCount)}` : "Expand Settings"}
         onClick={() => foldSettings(true)}
         inert={settingsOpen}
       >
         ‹
+        {pendingCount > 0 && <PendingBadge count={pendingCount} className={styles.edgeBadge} />}
       </button>
       <nav className={styles.views} aria-label="Show">
         {VIEWS.map((v) => (
@@ -400,10 +425,16 @@ export default function PlanPage() {
             type="button"
             className={view === v.id ? "active" : undefined}
             aria-pressed={view === v.id}
+            aria-label={
+              v.id === "settings" && pendingCount > 0 ? `Settings, ${waitingName(pendingCount)}` : undefined
+            }
             onClick={() => setView(v.id)}
           >
             <ViewIcon view={v.id} />
             <span>{v.label}</span>
+            {v.id === "settings" && pendingCount > 0 && (
+              <PendingBadge count={pendingCount} className={styles.tabBadge} />
+            )}
           </button>
         ))}
       </nav>

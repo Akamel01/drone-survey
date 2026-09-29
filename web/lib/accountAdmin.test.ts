@@ -11,8 +11,46 @@
 import { after, before, test } from "node:test";
 import assert from "node:assert/strict";
 import type { Pool } from "pg";
+import { pendingCount } from "./accountAdmin.ts";
+import type { AccountRow } from "./accountAdmin.ts";
 
 const databaseUrl = process.env.DATABASE_URL;
+
+/** One AccountRow with only the fields pendingCount reads varied. */
+function row(overrides: Partial<AccountRow> & { id: string }): AccountRow {
+  return {
+    name: overrides.id.toUpperCase(),
+    email: `${overrides.id}@example.test`,
+    providers: ["google"],
+    createdAt: new Date("2026-09-28T12:00:00Z").toISOString(),
+    approved: false,
+    admin: false,
+    ...overrides,
+  };
+}
+
+test("pendingCount is zero when no Accounts are waiting", () => {
+  assert.equal(pendingCount([]), 0);
+  assert.equal(
+    pendingCount([row({ id: "a1", approved: true }), row({ id: "a2", approved: true, admin: true })]),
+    0,
+  );
+});
+
+test("pendingCount counts pending Accounts but never the operator", () => {
+  assert.equal(
+    pendingCount([
+      row({ id: "p1", approved: false }),
+      row({ id: "p2", approved: false }),
+      row({ id: "ok", approved: true }),
+      // Legacy NULL approved normalizes to approved:false in listAccounts, so it waits.
+      row({ id: "legacy", approved: false }),
+      // The operator's Account is never waiting, even when unapproved.
+      row({ id: "op", approved: false, admin: true }),
+    ]),
+    3,
+  );
+});
 
 if (!databaseUrl) {
   test(

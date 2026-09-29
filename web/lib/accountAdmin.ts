@@ -49,6 +49,11 @@ export async function listAccounts(pool: Pool): Promise<AccountRow[]> {
   }));
 }
 
+/** How many Accounts are waiting for Approval: pending and not the operator. */
+export function pendingCount(rows: AccountRow[]): number {
+  return rows.filter((a) => !a.approved && !a.admin).length;
+}
+
 /** What an admin action changed, or why it was refused. */
 export type AdminOutcome = { ok: true } | { ok: false; status: 404 | 409; error: string };
 
