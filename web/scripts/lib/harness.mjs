@@ -41,11 +41,27 @@ export async function run(command, args, env) {
   });
 }
 
+/** Extra Chromium launch options from CHECK_CHROMIUM_JSON, a Playwright
+ *  launch-options object; `args` come env-first and `extra` otherwise wins.
+ *  Unset or empty leaves launches exactly as they were. A malformed value
+ *  throws, naming the raw string. */
+export function chromiumLaunchOptions(extra = {}) {
+  const raw = process.env.CHECK_CHROMIUM_JSON;
+  if (!raw) return {};
+  let parsed;
+  try {
+    parsed = JSON.parse(raw);
+  } catch (error) {
+    throw new Error(`CHECK_CHROMIUM_JSON is not valid JSON: ${raw} (${error.message})`);
+  }
+  return { ...parsed, ...extra, args: [...(parsed.args ?? []), ...(extra.args ?? [])] };
+}
+
 /** playwright-core resolves its own cache; on this machine that is fine, but a
  *  mismatch must not send anyone downloading browsers. */
 export async function launchBrowser() {
   try {
-    return await chromium.launch();
+    return await chromium.launch(chromiumLaunchOptions());
   } catch (error) {
     const cache = path.join(os.homedir(), "Library/Caches/ms-playwright");
     if (!existsSync(cache)) throw error;

@@ -22,6 +22,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { chromium } from "playwright-core";
+import { chromiumLaunchOptions } from "./lib/harness.mjs";
 import { DEFAULT_SPEC } from "../lib/spec.ts";
 import { deriveMissions } from "../lib/missionRecords.ts";
 
@@ -1168,7 +1169,7 @@ async function guard(group, fn) {
 
 async function main() {
   console.log(`fold check: ${BASE} -> evidence dir ${OUT}`);
-  const browser = await chromium.launch();
+  const browser = await chromium.launch(chromiumLaunchOptions());
   try {
     // Pass 1: fold/unfold assertions with consumer stability (both panels).
     await guard("pass 1", async () => {
