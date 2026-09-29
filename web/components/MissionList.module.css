@@ -38,9 +38,29 @@
   }
 }
 
+/* The Flown settle (E1, spec § 9.1): the operator's own Mark Flown replaces
+   the row's reading in one commit, so the chip and the headline crossfade in
+   over the settle. The tone rail needs nothing here -- the settling reading
+   is already quiet and this file never transitions border-color, so the rail
+   cuts instantly under the crossfade. One keyframe, opacity only: no
+   transform, no blur stacked on a second layer, no overshoot. `both` holds
+   the final frame, so the class dropping off the row is invisible rather
+   than a jump. */
+.settling .chip,
+.settling .headline {
+  animation: settleFade var(--dur-fast) var(--ease-out) both;
+}
+
+@keyframes settleFade {
+  from {
+    opacity: 0;
+  }
+}
+
 /* `globals.css` kills every transition and animation under reduced motion; a
    class-scoped `!important` outranks it (plan.module.css precedent), so the
-   two state changes are still crossfades -- just without movement or blur. */
+   state changes are still crossfades -- just without movement or blur, and
+   the settle keeps its 150 ms opacity-only fade (spec § 12). */
 @media (prefers-reduced-motion: reduce) {
   .leaving {
     filter: none;
@@ -49,6 +69,11 @@
 
   .arriving {
     animation: rowArriveSoft var(--dur-fast) var(--ease-out) both !important;
+  }
+
+  .settling .chip,
+  .settling .headline {
+    animation: settleFade var(--dur-fast) var(--ease-out) both !important;
   }
 }
 
