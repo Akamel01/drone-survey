@@ -1,0 +1,93 @@
+{
+  "contrast_rms_D1": {
+    "attr": "4b",
+    "note": "",
+    "region": "x0.70-0.98:y0.55-0.80",
+    "unit": "levels",
+    "value": 15.088633676101832
+  },
+  "contrast_rms_D2": {
+    "attr": "4b",
+    "note": "",
+    "region": "x0.02-0.35:y0.72-0.85",
+    "unit": "levels",
+    "value": 0.8370205173365658
+  },
+  "contrast_rms_D3": {
+    "attr": "4b",
+    "note": "",
+    "region": "x0.02-0.35:y0.62-0.72",
+    "unit": "levels",
+    "value": 0.43030485917970507
+  },
+  "falloff_rms_D2_D1": {
+    "attr": "4b",
+    "note": "",
+    "region": "x0.02-0.35:y0.72-0.85",
+    "unit": "ratio",
+    "value": 0.05547357933821952
+  },
+  "falloff_rms_D3_D1": {
+    "attr": "4b",
+    "note": "",
+    "region": "x0.02-0.35:y0.62-0.72",
+    "unit": "ratio",
+    "value": 0.0285184774457905
+  },
+  "falloff_sat_D2_D1": {
+    "attr": "4b",
+    "note": "",
+    "region": "x0.02-0.35:y0.72-0.85",
+    "unit": "ratio",
+    "value": 0.3482870782395041
+  },
+  "falloff_sat_D3_D1": {
+    "attr": "4b",
+    "note": "",
+    "region": "x0.02-0.35:y0.62-0.72",
+    "unit": "ratio",
+    "value": 0.26033033017008744
+  },
+  "sat_S_D1": {
+    "attr": "4b",
+    "note": "",
+    "region": "x0.70-0.98:y0.55-0.80",
+    "unit": "S",
+    "value": 0.3776603296814264
+  },
+  "sat_S_D2": {
+    "attr": "4b",
+    "note": "",
+    "region": "x0.02-0.35:y0.72-0.85",
+    "unit": "S",
+    "value": 0.13153421279171187
+  },
+  "sat_S_D3": {
+    "attr": "4b",
+    "note": "",
+    "region": "x0.02-0.35:y0.62-0.72",
+    "unit": "S",
+    "value": 0.0983164383181098
+  },
+  "value_V_D1": {
+    "attr": "4b",
+    "note": "",
+    "region": "x0.70-0.98:y0.55-0.80",
+    "unit": "levels",
+    "value": 57.4717923553719
+  },
+  "value_V_D2": {
+    "attr": "4b",
+    "note": "",
+    "region": "x0.02-0.35:y0.72-0.85",
+    "unit": "levels",
+    "value": 198.8898919859354
+  },
+  "value_V_D3": {
+    "attr": "4b",
+    "note": "",
+    "region": "x0.02-0.35:y0.62-0.72",
+    "unit": "levels",
+    "value": 209.03302507012623
+  }
+}

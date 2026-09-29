@@ -70,12 +70,15 @@ RIDGE_ROCK2 = (0.012, 0.024, 0.048)
 # the linear targets directly.  Thicknesses keep the strata sum at 1.09 and
 # every pebble band >= 0.08.
 LAYERS = [  # top to bottom
-    (0.18, (0.07, 0.05, 0.035), -0.08, 0),          # humus under the turf
-    (0.08, (0.015, 0.015, 0.006), -0.02, 1),        # pebble band
+    # pass 4: the humus is neutral-dark and the pebble courses stand out
+    # (+prot) so measure.py's max-chroma row lands on a pebble course, not on
+    # the shadowed humus under the turf lip (pass 3's grey "pebble" median)
+    (0.18, (0.030, 0.028, 0.025), -0.08, 0),        # humus under the turf
+    (0.08, (0.015, 0.015, 0.006), 0.015, 1),        # pebble band
     (0.15, (0.0110, 0.0130, 0.0176), 0.02, 0),      # soil -> #1B1E24
-    (0.08, (0.015, 0.015, 0.006), -0.01, 1),        # pebble band
+    (0.08, (0.015, 0.015, 0.006), 0.015, 1),        # pebble band
     (0.17, (0.0110, 0.0130, 0.0176), 0.03, 0),      # sediment -> soil target
-    (0.09, (0.015, 0.015, 0.006), -0.02, 1),        # pebble band
+    (0.09, (0.015, 0.015, 0.006), 0.015, 1),        # pebble band
     (0.14, (0.0110, 0.0130, 0.0176), 0.01, 0),      # dark soil
     (0.20, (0.0027, 0.0037, 0.0056), 0.05, 0),      # weathered rock -> #090C11
 ]
@@ -95,21 +98,25 @@ K2 = {
         ridges=[(20000.0, 0.640, 0.050, 0.93, 0.15),
                 (11000.0, 0.700, 0.110, 0.80, 0.15),
                 (6000.0, 0.770, 0.110, 0.62, 0.15),
-                (3200.0, 0.830, 0.140, 0.45, 0.15),
-                (1800.0, 0.880, 0.200, 0.32, 0.10)],
+                (3200.0, 0.820, 0.140, 0.34, 0.35),
+                (1800.0, 0.960, 0.200, 0.55, -0.20)],
         haze_right=0.5,      # extra haze toward the frame's right (S2 mask)
         haze_right_from=0.45,
+        grass_value=0.24,    # hero turf s0 #242E11 tall, #1B250A wide
+        fir_fill=False,      # extra crown copies (4h: tall has room, wide not)
     ),
     "wide": dict(
-        lens=50.0, dist=29.67, elev=8.0, shift_x=-0.26, shift_y=0.031,
+        lens=50.0, dist=29.67, elev=8.0, shift_x=-0.27, shift_y=0.031,
         fstop=2.8, focus_dist=29.67, exposure=0.0, sensor_fit="HORIZONTAL",
         ridges=[(20000.0, 0.430, 0.060, 0.97, 0.15),
                 (11000.0, 0.500, 0.120, 0.93, 0.35),
-                (6000.0, 0.600, 0.130, 0.66, 0.15),
-                (3200.0, 0.710, 0.150, 0.48, 0.15),
+                (6000.0, 0.600, 0.130, 0.84, 0.25),
+                (3200.0, 0.770, 0.150, 0.45, 0.15),
                 (1800.0, 0.900, 0.220, 0.34, 0.10)],
         haze_right=0.65,
         haze_right_from=0.35,
+        grass_value=0.16,
+        fir_fill=True,
     ),
     "ridge_freq": 2.0,       # crest noise frequency per strip distance
     "ridge_gain": 0.45,      # octave gain: lower = smoother peaks
@@ -140,13 +147,16 @@ K2 = {
     "basalt_rough": 0.80,
     # pass 3 palette: Poly Haven asset shader-group inputs.  Their sheen of
     # sky specular read frosty under Standard view (turf #3A4528 vs #283017).
-    "grass": dict(Specular=0.15, Saturation=1.5, Value=0.40),
-    "moss": dict(Saturation=1.3, Value=1.0),
-    "tint_firs": (0.55, 0.65, 0.50),   # the hero's spruces are darker
+    "grass": dict(Specular=0.15, Saturation=1.5, Value=0.40),   # Value per framing: grass_value
+    "moss": dict(Saturation=1.3, Value=1.0),    # Value = the rim's
+    "moss_top_value": 0.40,  # moss Value on the island top
+    "moss_y": (-2.2, 0.3),   # world y ramp: front (low in frame) -> back
+    "tint_firs": (0.25, 0.32, 0.18),
+    "fir_turns": (1.57,),       # extra crown copies per fir (radians)   # the hero's spruces are darker
     # pebble courses are the gravel texture (hero.py mat_strata, HSV s 0.7
     # v 0.8): the hero's are dark olive (#212111), ours read grey (#262626)
-    "pebble_hsv": (1.3, 0.28),
-    "pebble_tint": (0.95, 0.90, 0.45),
+    "pebble_hsv": (1.3, 0.35),
+    "pebble_tint": (0.80, 0.80, 0.30),
     "ledge_scale": 2.0,      # LAYERS protrusions x this: rugged strata
     "strata_disp": 0.12,     # hero.py mat_strata displacement 0.05
 }
@@ -328,6 +338,20 @@ def island_palette(k2):
         group = next(n for n in nt.nodes if n.type == "GROUP")
         for name, value in k2[key].items():
             group.inputs[name].default_value = value
+    # pass 4: moss darker at the back than at the front.  measure.py splits
+    # the island's green at its median row: the hero's upper half is dark
+    # (#283017), its lower half bright moss (#384117); one moss_01 covers both.
+    nt = bpy.data.materials["moss_01"].node_tree
+    group = next(n for n in nt.nodes if n.type == "GROUP")
+    geo = nt.nodes.new("ShaderNodeNewGeometry")
+    sep = nt.nodes.new("ShaderNodeSeparateXYZ")
+    by_z = nt.nodes.new("ShaderNodeMapRange")
+    by_z.inputs[1].default_value, by_z.inputs[2].default_value = k2["moss_y"]
+    by_z.inputs[3].default_value = k2["moss"]["Value"]
+    by_z.inputs[4].default_value = k2["moss_top_value"]
+    nt.links.new(geo.outputs["Position"], sep.inputs["Vector"])
+    nt.links.new(sep.outputs["Y"], by_z.inputs[0])
+    nt.links.new(by_z.outputs[0], group.inputs["Value"])
     nt = bpy.data.materials["strata"].node_tree
     hsv = next(n for n in nt.nodes if n.type == "HUE_SAT"
                and abs(n.inputs["Saturation"].default_value - 0.7) < 1e-6)   # the gravel
@@ -343,6 +367,23 @@ def island_palette(k2):
     next(n for n in nt.nodes if n.type == "DISPLACEMENT").inputs["Scale"].default_value = k2["strata_disp"]
     for name in ("fir_sapling_medium_branches", "fir_sapling_medium_twigs"):
         tint_material(bpy.data.materials.get(name), k2["tint_firs"])
+
+
+def fill_firs(k2):
+    """Pass 4: the hero's spruces are dense dark crowns; hero.py stacks three
+    turned copies of a sapling per tree (hero.py:496-503).  Add more turns so
+    the crowns close up (this is what darkens measure.py's turf median, whose
+    upper-half green pixels are mostly tree).  The copies are "FirFill*";
+    render_shot shows them only where the framing's `fir_fill` is set."""
+    firs = [ob for ob in bpy.data.objects if ob.name.startswith("fir_sapling_medium")
+            and ob.parent is not None]
+    for ob in firs:
+        for turn in k2["fir_turns"]:
+            extra = ob.copy()
+            extra.name = "FirFill_" + ob.name
+            bpy.context.scene.collection.objects.link(extra)
+            extra.rotation_euler.z += turn
+            extra.scale = ob.scale * 0.85
 
 
 def bulk_underside(k2):
@@ -536,6 +577,12 @@ def render_shot(sc, framing, path, res, camera, sky_nts, ridges, spec):
     for name, obs in ridges.items():
         for ob in obs:
             ob.hide_render = name != framing
+    for ob in bpy.data.objects:
+        if ob.name.startswith("FirFill"):
+            ob.hide_render = not spec["fir_fill"]
+    for mat_name in ("grass_medium_01", "grass_medium_01.001"):
+        group = next(n for n in bpy.data.materials[mat_name].node_tree.nodes if n.type == "GROUP")
+        group.inputs["Value"].default_value = spec["grass_value"]
     hr = bpy.data.materials["ridges"].node_tree.nodes["HazeRight"]
     hr.inputs[1].default_value = spec["haze_right_from"]
     hr.inputs[2].default_value = spec["haze_right_from"] + 0.4
@@ -593,6 +640,7 @@ def main():
     fix_basalt(K2)
     island_palette(K2)
     bulk_underside(K2)
+    fill_firs(K2)
 
     cam_tall = bpy.data.objects["Cam"]
     cam_wide = bpy.data.objects.new("CamWide", bpy.data.cameras.new("CamWide"))
