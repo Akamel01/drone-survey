@@ -147,8 +147,14 @@ proved itself it moves to a repository of its own.
   green, in the order the tickets' "Blocked by" implies (operator's decision,
   2026-09-25). A ticket whose result is a matter of taste is shown to the
   operator before it merges.
-- **Checks**: `npm test`, `npm run lint` and `npm run build` in `web/`; the
-  `--selftest` of every script a change touches; whatever the ticket adds.
+- **Checks**: `npm test`, `npm run lint` and `npm run build` in `web/` stay
+  local; the `--selftest` of every script a change touches; whatever the ticket
+  adds. Browser checks (`check:look`, `check:motion` and `test:e2e`) run
+  through `web/scripts/remote-check.sh <npm script>`
+  against the Linux host over Tailscale: the command prints the WebGL renderer
+  and fails before the check if it is not the NVIDIA GPU. The toolchain (Node
+  24, Playwright Chromium) lives under `~/drone/webcheck/` on the host; fetched
+  screenshots land in the worktree untracked, so clean them before committing.
 - **Parallel runs**: only tickets whose "What to build" names different files.
 - **Tickets opencode does not take**: those labelled `ready-for-human`, and
   research tickets marked deferred (#195).

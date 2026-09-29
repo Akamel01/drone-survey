@@ -44,6 +44,7 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { chromium } from "playwright-core";
+import { chromiumLaunchOptions } from "./lib/harness.mjs";
 
 const BASE = process.argv[2] ?? "http://127.0.0.1:3101";
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -656,7 +657,7 @@ async function touchFlow(browser) {
 }
 
 // ---------------------------------------------------------------------------
-const browser = await chromium.launch();
+const browser = await chromium.launch(chromiumLaunchOptions());
 try {
   // One context per recording; a flow that throws is a FAIL line, and the
   // other flow still runs so both .webm files are attempted (R15).
