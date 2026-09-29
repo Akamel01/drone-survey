@@ -188,10 +188,19 @@ export default function SummaryBar({ spec, preview, editing, onSaved, sites = []
             className="primary"
             onClick={runSave}
             disabled={!!problem || save.kind === "saving"}
-            title={problem ?? undefined}
+            // UI-22 hint: the save hint below describes the disabled Save;
+            // no title (dead on disabled buttons, hover-only channel).
+            aria-describedby={problem ? "save-hint" : undefined}
           >
             {save.kind === "saving" ? "Saving…" : editing.id ? "Save Mission" : "Save new Mission"}
           </button>
+          {/* UI-22 hint: saveProblem wording verbatim, no "Save:" prefix.
+              Plain <p>, conditional so no dangling describedby. */}
+          {problem && (
+            <p id="save-hint" className={styles.saveHint}>
+              {problem}
+            </p>
+          )}
           <button className="glass-clear" onClick={copy}>
             {copied ? "Copied" : "Copy spec"}
           </button>
@@ -200,7 +209,6 @@ export default function SummaryBar({ spec, preview, editing, onSaved, sites = []
           </button>
         </div>
       </div>
-      {problem && <div className={styles.dispatchError}>Save: {problem}</div>}
       {hasProblems && (
         <ul className={styles.problems}>
           {preview.problems.map((p, i) => (
