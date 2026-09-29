@@ -154,10 +154,13 @@ async function pageFor(browser, { width, height, mobile = false, missions = 1, m
 // options for the operator).
 const PREVIEW_CSS = process.env.PREVIEW_CSS ? fs.readFileSync(process.env.PREVIEW_CSS, "utf8") : "";
 
-async function openPlanner(page) {
+async function openPlanner(page, { empty = false } = {}) {
   await page.goto(`${BASE}/plan`, { waitUntil: "domcontentloaded" });
   if (PREVIEW_CSS) await page.addStyleTag({ content: PREVIEW_CSS });
-  await page.getByRole("button", { name: "Edit", exact: true }).first().waitFor({ timeout: 60000 });
+  // A store with zero rows renders no "Edit" button, so the first-run view
+  // waits on its own quiet readiness signal instead (#294, Q4).
+  if (empty) await page.getByText("No Missions in the store yet", { exact: false }).waitFor({ timeout: 60000 });
+  else await page.getByRole("button", { name: "Edit", exact: true }).first().waitFor({ timeout: 60000 });
   await page.evaluate(() => document.fonts.ready);
   await page.waitForTimeout(1200);
 }
@@ -661,6 +664,108 @@ async function missionRowsSection(browser) {
 }
 
 // ---------------------------------------------------------------------------
+// First run: the empty store's three steps, activated by keyboard, at both
+// widths (UI-25, #294). Each step must land on its destination AND move focus
+// to that destination's anchor — a step that switches views without focus
+// strands keyboard and screen-reader operators (spec §10).
+// ---------------------------------------------------------------------------
+
+const FIRST_RUN_STEPS = [
+  { label: "Draw the area to fly", kind: "map", focusSel: "#map-draw-surface canvas", narrowView: "map" },
+  { label: "Choose the Site and its settings", kind: "site", focusSel: "#site-select", narrowView: "settings" },
+  { label: "Name the Mission, then save at the bottom", kind: "name", focusSel: "#mission-name", narrowView: "settings" },
+];
+
+async function firstRunSection(browser) {
+  const section = "first-run";
+  for (const vp of [
+    { width: 375, height: 812, mobile: true },
+    { width: 1440, height: 900 },
+  ]) {
+    const { context, page } = await pageFor(browser, { ...vp, missions: 0 });
+    try {
+      await openPlanner(page, { empty: true });
+      const empty = await page.evaluate(() => ({
+        rows: document.querySelectorAll("[data-row-id]").length,
+        articles: document.querySelectorAll("#missions-panel article").length,
+        quiet: /No Missions in the store yet/.test(document.querySelector("#missions-panel")?.textContent ?? ""),
+      }));
+      check(
+        section,
+        `${vp.width}: payload(0) renders the quiet empty store, no rows`,
+        empty.rows === 0 && empty.articles === 0 && empty.quiet,
+        JSON.stringify(empty),
+      );
+
+      const steps = await page.evaluate(
+        (labels) =>
+          labels.map((label) => {
+            const b = [...document.querySelectorAll("#missions-panel button")].find((x) => x.textContent.trim() === label);
+            if (!b) return { label, found: false };
+            const r = b.getBoundingClientRect();
+            return { label, found: true, w: r.width, h: r.height };
+          }),
+        FIRST_RUN_STEPS.map((s) => s.label),
+      );
+      check(section, `${vp.width}: all three steps render`, steps.every((s) => s.found), steps.filter((s) => !s.found).map((s) => s.label).join(" | ") || "3 steps");
+      check(
+        section,
+        `${vp.width}: every step is at least 44x44`,
+        steps.every((s) => s.found && s.w >= 44 && s.h >= 44),
+        steps.map((s) => `${s.label.slice(0, 10)}: ${Math.round(s.w)}x${Math.round(s.h)}`).join(" | "),
+      );
+
+      for (const [index, step] of FIRST_RUN_STEPS.entries()) {
+        if (vp.width < 1000 && index > 0) {
+          // The previous step switched the whole view, so the Missions panel
+          // holding the next step is inert; return to it as the tab bar does.
+          await page.getByRole("navigation", { name: "Show" }).getByRole("button", { name: "Missions" }).click();
+          await page.waitForTimeout(500);
+        }
+        const btn = page.getByRole("button", { name: step.label, exact: true });
+        await btn.focus();
+        await page.keyboard.press("Enter");
+        // Readiness, not a sleep: the focus effect runs in the commit that
+        // applies the view switch/unfold.
+        await page.waitForFunction((sel) => document.activeElement === document.querySelector(sel), step.focusSel, { timeout: 10000 }).catch(() => {});
+        const got = await page.evaluate(() => {
+          const el = document.activeElement;
+          const r = el?.getBoundingClientRect();
+          return {
+            tag: el?.tagName ?? null,
+            id: el?.id ?? "",
+            label: el?.getAttribute("aria-label") ?? "",
+            inMap: !!(el && el.closest("#map-draw-surface")),
+            view: document.querySelector("main[data-view]")?.getAttribute("data-view") ?? null,
+            settingsInert: document.querySelector("#settings-panel")?.inert === true,
+            missionsInert: document.querySelector("#missions-panel")?.inert === true,
+            visible: !!r && r.width > 0 && r.height > 0 && r.top >= 0 && r.bottom <= innerHeight,
+          };
+        });
+        const anchorOk =
+          step.kind === "map" ? got.tag === "CANVAS" && got.inMap && got.label === "Map" : step.kind === "site" ? got.id === "site-select" : got.id === "mission-name";
+        const viewOk = vp.width < 1000 ? got.view === step.narrowView : got.view === "missions";
+        const panelsOk = vp.width < 1000 ? (step.kind === "map" ? got.settingsInert : got.settingsInert === false && got.missionsInert) : got.missionsInert === false && got.settingsInert === false;
+        check(
+          section,
+          `${vp.width} step ${index + 1}: lands on ${vp.width < 1000 ? step.narrowView : "Missions"} (view ${got.view})`,
+          viewOk && panelsOk,
+          JSON.stringify({ view: got.view, settingsInert: got.settingsInert, missionsInert: got.missionsInert }),
+        );
+        check(
+          section,
+          `${vp.width} step ${index + 1}: focus moves to ${step.kind} anchor`,
+          anchorOk && got.visible,
+          JSON.stringify(got),
+        );
+      }
+    } finally {
+      await context.close();
+    }
+  }
+}
+
+// ---------------------------------------------------------------------------
 // UI-23 (#292) evidence shots: Details open and the Planned row list, at 375
 // and 1440. Gated behind ONLY=details-shots so a normal check:look run
 // writes nothing; the PNGs are committed on the oc/292-shots assets branch,
@@ -803,6 +908,7 @@ try {
   if (want("collision")) await collisionSection(browser);
   if (want("fallbacks")) await fallbackSection(browser);
   if (want("keyboard")) await keyboardSection(browser);
+  if (want("first-run")) await firstRunSection(browser);
   if (want("mission-rows")) await missionRowsSection(browser);
   if (want("fps")) await fpsSection(browser);
   if (want("operator")) await operatorShots(browser);

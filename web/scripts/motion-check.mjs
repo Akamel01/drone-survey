@@ -92,6 +92,47 @@ const ALT_60 = { ...SPEC, flight: { ...SPEC.flight, altitude_m: 60 } };
 const FINAL_60 = preview(ALT_60).flight_time_min;
 
 // ---------------------------------------------------------------------------
+// UI-25 (#294) — the Flown moment's seed: one Loaded row, so Mark Flown is
+// offered (`missionRecords.actionProblem`). The mock answers a POST /flown by
+// switching to the store's post-mark read, the way the route's own
+// deriveMissions would.
+// ---------------------------------------------------------------------------
+
+const SETTLE_ID = "m-e2e-settle";
+const SETTLE_KEY = "specs/e2e-site-abc123/2026-09-26/settle.json";
+const SETTLE_MANIFEST = {
+  [SETTLE_KEY]: {
+    collected_at: "2026-09-26T01:30:00.000Z",
+    loaded_at: "2026-09-26T01:35:00.000Z",
+    parts: 1,
+    cards: [{ card: "way finder 1", name: "way finder 1", waypoints: preview(SPEC).photo_count, path_length_m: preview(SPEC).path_length_m }],
+  },
+};
+const SETTLE_RECORD = {
+  ...RECORD,
+  id: SETTLE_ID,
+  name: "Settle",
+  created_at: "2026-09-26T01:00:00.000Z",
+  updated_at: "2026-09-26T01:00:00.000Z",
+  dispatched_key: SETTLE_KEY,
+};
+const withPayload = (missions) => ({
+  missions,
+  archived_count: missions.filter((r) => r.archived).length,
+  stale_cards: [],
+  host: { notice: null, drift: null },
+  unreadable: [],
+  now: Date.now(),
+});
+const SETTLE_LOADED_PAYLOAD = withPayload(deriveMissions([SETTLE_RECORD], SETTLE_MANIFEST, { pool: [], holdings: {} }));
+const SETTLE_FLOWN_PAYLOAD = withPayload(
+  deriveMissions([{ ...SETTLE_RECORD, flown_mark: { flown: true, at: "2026-09-26T02:00:00.000Z" } }], SETTLE_MANIFEST, {
+    pool: [],
+    holdings: {},
+  }),
+);
+
+// ---------------------------------------------------------------------------
 // Assertion log
 // ---------------------------------------------------------------------------
 
@@ -1764,6 +1805,258 @@ async function noticeMotion(browser) {
   await noticeReduced(browser);
 }
 
+// ---------------------------------------------------------------------------
+// UI-25 (#294) — the Flown moment: crossfade timing, the §9.3 subset, the
+// 900 ms hold, and the reduced-motion path (reading at once, same hold,
+// reduced exit).
+// ---------------------------------------------------------------------------
+
+/** A context whose store answers with a Loaded row, then with the Flown row
+ *  once the Mark Flown POST lands. */
+async function settlePage(browser, { width, height, reduced = false, video = null }) {
+  const contextOptions = {
+    viewport: { width, height },
+    reducedMotion: reduced ? "reduce" : "no-preference",
+  };
+  if (video) contextOptions.recordVideo = { dir: VIDEO_DIR, size: { width, height } };
+  const context = await browser.newContext(contextOptions);
+  await context.addInitScript(
+    ({ loaded, flown, key }) => {
+      localStorage.setItem(key, "evidence");
+      let marked = false;
+      const answer = (body) =>
+        Promise.resolve(new Response(JSON.stringify(body), { status: 200, headers: { "Content-Type": "application/json" } }));
+      const orig = window.fetch.bind(window);
+      window.fetch = (input, init) => {
+        const url = typeof input === "string" ? input : input && input.url ? input.url : String(input);
+        if (url.includes("/api/missions/flown")) {
+          marked = JSON.parse(init.body).flown !== false;
+          return answer({ cards: ["way finder 1"] });
+        }
+        if (url.includes("/api/missions")) return answer(marked ? flown : loaded);
+        return orig(input, init);
+      };
+    },
+    { loaded: SETTLE_LOADED_PAYLOAD, flown: SETTLE_FLOWN_PAYLOAD, key: PASSPHRASE_KEY },
+  );
+  const page = await context.newPage();
+  await page.goto(`${BASE}/plan`, { waitUntil: "domcontentloaded" });
+  await page.locator(`[data-row-id="${SETTLE_ID}"] button`, { hasText: "Mark Flown" }).first().waitFor({ timeout: 60000 });
+  await page.waitForTimeout(1000);
+  await page.evaluate(() => document.fonts.ready);
+  return { context, page };
+}
+
+/** A transition list passes when every declared property is in the §9.3 set
+ *  (or nothing is transitioning at all). */
+function settleTransitionOk(props, durs) {
+  const list = (s) => String(s ?? "").split(",").map((v) => v.trim()).filter(Boolean);
+  if (list(durs).every((d) => d === "0s" || d === "none")) return true;
+  return list(props).every((p) => NOTICE_TRANSITIONS.has(p));
+}
+
+async function flownSettleMotion(browser) {
+  const measured = {};
+  for (const mode of [
+    { reduced: false, motion: "flown" },
+    { reduced: true, motion: "flown-reduced" },
+  ]) {
+    const { context, page } = await settlePage(browser, { width: 1440, height: 900, reduced: mode.reduced, video: true });
+    const video = page.video();
+    try {
+      const run = await page.evaluate(async ({ id }) => {
+        const frame = () =>
+          new Promise((resolve) => {
+            const t = setTimeout(resolve, 50); // never stall if rAF is throttled
+            requestAnimationFrame(() => {
+              clearTimeout(t);
+              resolve();
+            });
+          });
+        const slot = () => document.querySelector(`[data-row-id="${id}"]`);
+        const of = (node) => {
+          const cs = getComputedStyle(node);
+          return {
+            props: cs.transitionProperty,
+            durs: cs.transitionDuration,
+            opacity: cs.opacity,
+            transform: cs.transform,
+            inline: node.style.transform,
+            filter: cs.filter,
+            animName: cs.animationName,
+            animDur: cs.animationDuration,
+            animEase: cs.animationTimingFunction,
+          };
+        };
+        const snap = () => {
+          const el = slot();
+          if (!el) return { present: false, t: performance.now() };
+          const chip = el.querySelector('[class*="chip"]');
+          const headline = el.querySelector('[class*="headline"]');
+          return {
+            present: true,
+            t: performance.now(),
+            settling: el.className.includes("settling"),
+            leaving: el.className.includes("leaving"),
+            inert: el.inert === true,
+            ariaHidden: el.getAttribute("aria-hidden") === "true",
+            slot: of(el),
+            chip: chip ? of(chip) : null,
+            chipText: chip ? chip.textContent.trim() : null,
+            headline: headline ? of(headline) : null,
+          };
+        };
+        const settleInfo = () => {
+          const el = slot();
+          const chip = el?.querySelector('[class*="chip"]');
+          if (!chip) return null;
+          const a = chip.getAnimations().find((x) => (x.animationName ?? "").endsWith("settleFade"));
+          if (!a || !a.effect) return null;
+          const keys = a.effect.getKeyframes().map((k) => {
+            const o = {};
+            for (const key of Object.keys(k)) {
+              if (!["offset", "easing", "composite", "computedOffset"].includes(key)) o[key] = k[key];
+            }
+            return o;
+          });
+          const timing = a.effect.getTiming();
+          const kfEase = a.effect.getKeyframes().map((k) => k.easing).find((e) => typeof e === "string" && e !== "linear");
+          return { name: a.animationName, duration: timing.duration, easing: timing.easing && timing.easing !== "linear" ? timing.easing : (kfEase ?? timing.easing), keys };
+        };
+        const btn = [...slot().querySelectorAll("button")].find((b) => b.textContent.trim() === "Mark Flown");
+        if (!btn) return { error: "Mark Flown button not found" };
+        const before = snap();
+        btn.click();
+        const samples = [];
+        let info = null;
+        const start = performance.now();
+        while (performance.now() - start < 1900) {
+          const s = snap();
+          samples.push(s);
+          if (!info && s.present && s.settling) info = settleInfo();
+          await frame();
+        }
+        return { before, samples, info };
+      }, { id: SETTLE_ID });
+
+      if (run.error) {
+        check(mode.motion, "Mark Flown is offered on the Loaded row", false, run.error);
+        continue;
+      }
+      const { before, samples, info } = run;
+      const mounted = samples.filter((s) => s.present);
+      const settleFrames = mounted.filter((s) => s.settling);
+      const tSettle = settleFrames[0]?.t ?? null;
+      const tLeaving = mounted.find((s) => s.leaving)?.t ?? null;
+      const detachIndex = samples.findIndex((s, i) => !s.present && i > 0 && samples[i - 1].present);
+      const tDetach = detachIndex >= 0 ? samples[detachIndex].t : null;
+
+      check(mode.motion, "the row was Loaded before the mark", before.chipText === "Loaded", String(before.chipText));
+      check(
+        mode.motion,
+        "settle → hold → dissolve, in that order",
+        tSettle !== null && tLeaving !== null && tDetach !== null && tSettle < tLeaving && tLeaving < tDetach,
+        `settle→leaving ${tSettle !== null && tLeaving !== null ? (tLeaving - tSettle).toFixed(0) : "?"}ms, leaving→commit ${tLeaving !== null && tDetach !== null ? (tDetach - tLeaving).toFixed(0) : "?"}ms`,
+      );
+      if (tSettle !== null && tLeaving !== null) measured[mode.reduced ? "reduced" : "full"] = tLeaving - tSettle;
+
+      // The crossfade: the settleFade keyframe, 150 ms, opacity-only, ease-out.
+      check(mode.motion, "the settle crossfade uses settleFade", /settleFade$/.test(info?.name ?? ""), info?.name ?? "never seen");
+      check(mode.motion, "the settle crossfade is 0.15s", info?.duration === 150, String(info?.duration));
+      const settleKeys = [...new Set((info?.keys ?? []).flatMap((k) => Object.keys(k)))];
+      check(
+        mode.motion,
+        "settleFade keyframes stay in the §9.3 subset",
+        settleKeys.length > 0 && settleKeys.every((k) => NOTICE_KEYFRAMES.has(k)),
+        settleKeys.join(","),
+      );
+      check(mode.motion, "the settle crossfade is opacity-only", settleKeys.every((k) => k === "opacity"), settleKeys.join(","));
+      check(
+        mode.motion,
+        "the settle crossfade eases out",
+        info !== null && easeCss(info.easing) === EASE_OUT,
+        info ? easeCss(info.easing) : "no animation",
+      );
+
+      // No banned transition property meets the settling row or its crossfade.
+      const badTransition = settleFrames.find(
+        (s) =>
+          !settleTransitionOk(s.slot.props, s.slot.durs) ||
+          (s.chip && !settleTransitionOk(s.chip.props, s.chip.durs)) ||
+          (s.headline && !settleTransitionOk(s.headline.props, s.headline.durs)),
+      );
+      check(
+        mode.motion,
+        "settling transitions stay in the §9.3 subset",
+        settleFrames.length > 0 && badTransition === undefined,
+        badTransition ? `${badTransition.chip?.props ?? badTransition.slot.props} / ${badTransition.chip?.durs ?? badTransition.slot.durs}` : `${settleFrames.length} settling samples`,
+      );
+      const chipTransitions = settleFrames.filter((s) => s.chip && !/^(0s|none)$/.test(s.chip.durs.trim()));
+      check(
+        mode.motion,
+        "the chip crossfades as an animation, not a transition",
+        settleFrames.length > 0 && chipTransitions.length === 0,
+        chipTransitions[0]?.chip.durs ?? "0s",
+      );
+
+      // Monotonic rise, no overshoot, no jump.
+      const opacities = settleFrames.map((s) => Number(s.chip?.opacity)).filter((v) => Number.isFinite(v));
+      const rising = opacities.every((v, i) => i === 0 || v >= opacities[i - 1] - 0.03);
+      check(
+        mode.motion,
+        "the crossfade rises monotonically and never overshoots",
+        opacities.length > 0 && opacities.every((v) => v >= 0 && v <= 1) && rising,
+        opacities.map((v) => v.toFixed(2)).slice(0, 6).join(","),
+      );
+      check(mode.motion, "the settling row reads Flown", settleFrames.length > 0 && settleFrames.every((s) => s.chipText === "Flown"), settleFrames[0]?.chipText ?? "none");
+      const preCommit = mounted.filter((s) => tDetach === null || s.t < tDetach);
+      check(
+        mode.motion,
+        "no transform jump on the departing row",
+        preCommit.every((s) => isRest(s.slot.transform) && s.slot.inline === ""),
+        preCommit.find((s) => !isRest(s.slot.transform))?.slot.transform ?? "identity throughout",
+      );
+      const loud = mounted.filter((s) => s.settling || s.leaving);
+      check(
+        mode.motion,
+        "inert and aria-hidden from settle through commit",
+        loud.length > 0 && loud.every((s) => s.inert && s.ariaHidden),
+        `${loud.length} settling/leaving samples`,
+      );
+
+      // The 900 ms hold, then the existing exit.
+      check(
+        mode.motion,
+        "the 900 ms hold follows the settle",
+        tSettle !== null && tLeaving !== null && tLeaving - tSettle >= (mode.reduced ? 800 : 950) && tLeaving - tSettle <= (mode.reduced ? 1150 : 1500),
+        tSettle !== null && tLeaving !== null ? `${(tLeaving - tSettle).toFixed(0)}ms from settle to leaving` : "phase missing",
+      );
+      check(
+        mode.motion,
+        "the dissolve follows the hold",
+        tLeaving !== null && tDetach !== null && tDetach - tLeaving >= 100 && tDetach - tLeaving <= 700,
+        tLeaving !== null && tDetach !== null ? `${(tDetach - tLeaving).toFixed(0)}ms from leaving to commit` : "phase missing",
+      );
+
+      if (mode.reduced) {
+        const exit = mounted.find((s) => s.leaving);
+        check(
+          mode.motion,
+          "reduced exit is a 0.15s opacity fade with no blur",
+          !!exit && /^opacity$/.test(exit.slot.props.trim()) && exit.slot.durs.trim() === "0.15s" && mounted.every((s) => s.slot.filter === "none" || s.slot.filter === null),
+          exit ? `${exit.slot.props} / ${exit.slot.durs} / ${exit.slot.filter}` : "never leaving",
+        );
+      }
+    } finally {
+      await context.close();
+      await saveVideo(video, mode.reduced ? "flown-settle-reduced" : "flown-settle");
+    }
+  }
+  if (measured.full !== undefined && measured.reduced !== undefined) {
+    note("flown", "hold measured", `full ${measured.full.toFixed(0)}ms, reduced ${measured.reduced.toFixed(0)}ms`);
+  }
+}
+
 async function reducedMotionRecording(browser) {
   const { context, page } = await pageFor(browser, { width: 375, height: 812, mobile: true, reduced: true, video: true });
   const video = page.video();
@@ -2250,6 +2543,7 @@ try {
   if (want("reduced-legacy")) await reducedMotionRecording(browser);
   if (want("stills")) await stills(browser);
   if (want("notice")) await noticeMotion(browser);
+  if (want("flown")) await flownSettleMotion(browser);
   if (want("sheet")) await sheetGesture(browser);
   if (want("sheet")) await sheetDesktopMotion(browser);
   if (want("sheet")) await sheetReducedMotion(browser);

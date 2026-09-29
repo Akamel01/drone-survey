@@ -77,6 +77,37 @@ const BELOW_REMOVE = "m-e2e-0002"; // the survivor the Remove target sits above
 const SECOND_WITHDRAW = "m-e2e-0002"; // the A9 second leaver
 
 // ---------------------------------------------------------------------------
+// UI-25 (#294) — the Flown moment's seed: Loaded rows, so Mark Flown is offered
+// ---------------------------------------------------------------------------
+
+// Mark Flown is only offered on a Loaded Mission (`missionRecords.actionProblem`),
+// and Loaded needs a manifest entry with `loaded_at` — the mock below reads the
+// same shape the real `deriveMissions` does. Its own seed, so the sections above
+// keep the exact rows they were written against.
+const SETTLE_A = "m-settle-a";
+const SETTLE_B = "m-settle-b";
+const SETTLE_C = "m-settle-c";
+function settleEntry(id) {
+  return {
+    [id]: {
+      collected_at: "2026-09-26T07:30:00.000Z",
+      loaded_at: "2026-09-26T07:35:00.000Z",
+      cards: [{ card: "way finder 1", name: "way finder 1", waypoints: 12, path_length_m: 900 }],
+    },
+  };
+}
+const SETTLE_MANIFEST = {
+  ...settleEntry(`spec-${SETTLE_A}`),
+  ...settleEntry(`spec-${SETTLE_B}`),
+  ...settleEntry(`spec-${SETTLE_C}`),
+};
+const SETTLE_SEED = [
+  record(SETTLE_A, "Settle A", "2026-09-26T08:00:00.000Z", true),
+  record(SETTLE_B, "Settle B", "2026-09-26T08:10:00.000Z", true),
+  record(SETTLE_C, "Settle C", "2026-09-26T08:20:00.000Z", true),
+];
+
+// ---------------------------------------------------------------------------
 // Assertion log
 // ---------------------------------------------------------------------------
 
@@ -114,20 +145,28 @@ function transitionSubset(t) {
 // In-page store mock: RAW records, re-derived on every GET
 // ---------------------------------------------------------------------------
 
-function mockInit({ seed, passphraseKey }) {
+function mockInit({ seed, passphraseKey, manifest = {} }) {
   localStorage.setItem(passphraseKey, "evidence");
   const records = JSON.parse(JSON.stringify(seed));
   const ARCHIVED = ["flown", "withdrawn", "superseded"];
 
-  // deriveMissions(records, {}, {}) for the fields the client reads; no
-  // manifest and no ledger exist in this mock.
+  // deriveMissions(records, manifest, {}) for the fields the client reads; no
+  // ledger exists in this mock. `manifest` stands in for the host's entries:
+  // `loaded_at` is what makes a row Loaded, and `imagery_at` is the evidence
+  // the system infers Flown from when the operator has not marked it (#294).
   function derive() {
     const byAge = [...records].sort((a, b) =>
       a.created_at === b.created_at ? (a.id < b.id ? -1 : 1) : a.created_at < b.created_at ? -1 : 1,
     );
     const rows = byAge.map((r) => {
+      const entry = r.dispatched_key ? manifest[r.dispatched_key] : undefined;
       const marked = r.flown_mark ? r.flown_mark.flown : null;
-      const state = r.withdrawn_at ? "withdrawn" : marked === true ? "flown" : r.dispatched_key ? "dispatched" : "planned";
+      // A record-level `imagery_at` lets a test stage inferred Flown without
+      // reaching into the manifest shape; the real store puts it on the entry.
+      const evidence = r.imagery_at ?? entry?.imagery_at ?? null;
+      const flown = marked === null ? evidence !== null : marked;
+      const loaded = entry?.loaded_at ?? null;
+      const state = r.withdrawn_at ? "withdrawn" : flown ? "flown" : loaded ? "loaded" : r.dispatched_key ? "dispatched" : "planned";
       const edit = state === "planned" ? "in-place" : state === "loaded" ? "guarded" : "supersede";
       return {
         id: r.id,
@@ -140,14 +179,18 @@ function mockInit({ seed, passphraseKey }) {
         spec_key: r.dispatched_key ?? null,
         spec: r.spec,
         cards: [],
-        loaded_cards: [],
+        loaded_cards: entry?.cards ?? [],
         superseded_by: null,
         flown_marked: marked,
-        flown_evidence_at: null,
+        flown_evidence_at: evidence,
         flown_disagreement:
-          marked === true ? "Marked Flown, but no imagery has arrived for this Site and date yet." : null,
-        collected_at: null,
-        loaded_at: null,
+          marked === true && evidence === null
+            ? "Marked Flown, but no imagery has arrived for this Site and date yet."
+            : marked === false && evidence !== null
+              ? `Marked not Flown, but imagery arrived at ${evidence}.`
+              : null,
+        collected_at: entry?.collected_at ?? null,
+        loaded_at: loaded,
         created_at: r.created_at,
         updated_at: r.updated_at,
         edit,
@@ -231,6 +274,29 @@ function mockInit({ seed, passphraseKey }) {
         arriving: el.className.includes("arriving"),
         inert: el.inert === true,
         ariaHidden: el.getAttribute("aria-hidden") === "true",
+      };
+    },
+    // UI-25 (#294): the Flown moment's row, with the settle class, the parked
+    // reading's chip and the inert flag in one snapshot.
+    settleSnap: (el) => {
+      const cs = getComputedStyle(el);
+      const chip = el.querySelector('[class*="chip"]');
+      const ccs = chip ? getComputedStyle(chip) : null;
+      const r = el.getBoundingClientRect();
+      return {
+        id: el.dataset.rowId,
+        t: performance.now(),
+        present: true,
+        top: r.top,
+        transform: cs.transform,
+        inline: el.style.transform,
+        settling: el.className.includes("settling"),
+        leaving: el.className.includes("leaving"),
+        inert: el.inert === true,
+        ariaHidden: el.getAttribute("aria-hidden") === "true",
+        chipText: chip ? chip.textContent.trim() : null,
+        chipOpacity: ccs ? ccs.opacity : null,
+        chipAnim: ccs ? ccs.animationName : null,
       };
     },
   };
@@ -322,7 +388,7 @@ function slowTimerInit() {
 // Page setup
 // ---------------------------------------------------------------------------
 
-async function contextFor(browser, { width, height, mobile = false, reduced = false, video = false, throttle = 0, slowTimers = false }) {
+async function contextFor(browser, { width, height, mobile = false, reduced = false, video = false, throttle = 0, slowTimers = false, seed = SEED, manifest = {}, rowReady = false }) {
   const options = {
     viewport: { width, height },
     hasTouch: mobile,
@@ -331,7 +397,7 @@ async function contextFor(browser, { width, height, mobile = false, reduced = fa
   };
   if (video) options.recordVideo = { dir: VIDEO_DIR, size: { width, height } };
   const context = await browser.newContext(options);
-  await context.addInitScript(mockInit, { seed: SEED, passphraseKey: PASSPHRASE_KEY });
+  await context.addInitScript(mockInit, { seed, passphraseKey: PASSPHRASE_KEY, manifest });
   if (slowTimers) await context.addInitScript(slowTimerInit);
   const page = await context.newPage();
   if (throttle > 0) {
@@ -339,7 +405,10 @@ async function contextFor(browser, { width, height, mobile = false, reduced = fa
     await cdp.send("Emulation.setCPUThrottlingRate", { rate: throttle });
   }
   await page.goto(`${BASE}/plan`, { waitUntil: "domcontentloaded" });
-  await page.getByRole("button", { name: "Edit", exact: true }).first().waitFor({ timeout: 15000 });
+  // A Loaded row offers no Edit (its file is on the Controller), so the settle
+  // context waits on the row itself instead.
+  if (rowReady) await page.locator("[data-row-id]").first().waitFor({ timeout: 15000 });
+  else await page.getByRole("button", { name: "Edit", exact: true }).first().waitFor({ timeout: 15000 });
   // Software-rendered WebGL (the map and the looping hero scene) starves the
   // frame clock under headless Chromium: rAF cadence falls to ~200 ms, and a
   // 150-250 ms transition can pass between two samples. Those surfaces are not
@@ -907,6 +976,283 @@ async function holdRule(browser) {
 }
 
 // ---------------------------------------------------------------------------
+// UI-25 (#294) — the Flown moment: settle → hold → dissolve, once, on the
+// operator's own Mark Flown; every other cause (refresh, storage reload,
+// inferred imagery) takes the existing dissolve with no moment.
+// ---------------------------------------------------------------------------
+
+/** Archived-filter toggle, then a beat for the commit. */
+async function toggleArchived(page) {
+  await page.evaluate(() => {
+    const btn = [...document.querySelectorAll("#missions-panel button")].find((b) => /archived/.test(b.textContent));
+    if (!btn) throw new Error("archived toggle not found");
+    btn.click();
+  });
+  await page.waitForTimeout(450);
+}
+
+/** Click Mark Flown on `id` inside one page task and sample that row (plus any
+ *  survivor tops) until it detaches. */
+async function settleRun(page, id, survivorIds = []) {
+  return page.evaluate(
+    async ({ id, survivorIds, deadline }) => {
+      const { byId, frame, settleSnap } = window.__h;
+      const frames = [];
+      const snap = () => {
+        const el = byId(id);
+        const survivors = {};
+        for (const sid of survivorIds) {
+          const s = byId(sid);
+          survivors[sid] = s ? s.getBoundingClientRect().top : null;
+        }
+        return el ? { ...settleSnap(el), survivors } : { id, present: false, t: performance.now(), survivors };
+      };
+      for (let i = 0; i < 3; i++) {
+        frames.push(snap());
+        await frame();
+      }
+      const btn = [...byId(id).querySelectorAll("button")].find((b) => b.textContent.trim() === "Mark Flown");
+      if (!btn) throw new Error(`Mark Flown button not found in ${id}`);
+      btn.click();
+      const start = performance.now();
+      while (performance.now() - start < deadline) {
+        frames.push(snap());
+        await frame();
+      }
+      return frames;
+    },
+    { id, survivorIds, deadline: 2200 },
+  );
+}
+
+/** The moment's phase contract, asserted on one sampled run. */
+function analyzeFlownRun(prefix, frames, survivorId = null) {
+  const mounted = frames.filter((f) => f.present);
+  const settleFrames = mounted.filter((f) => f.settling);
+  const tSettle = settleFrames[0]?.t ?? null;
+  const tLeaving = mounted.find((f) => f.leaving)?.t ?? null;
+  const detachIndex = frames.findIndex((f, i) => !f.present && i > 0 && frames[i - 1].present);
+  const tDetach = detachIndex >= 0 ? frames[detachIndex].t : null;
+  const settleIdx = frames.map((f, i) => (f.present && f.settling ? i : -1)).filter((i) => i >= 0);
+  const contiguous = settleIdx.length > 0 && settleIdx[settleIdx.length - 1] - settleIdx[0] + 1 === settleIdx.length;
+  const tail = detachIndex >= 0 ? frames.slice(detachIndex) : [];
+  const ms = (a, b) => (a !== null && b !== null ? `${(b - a).toFixed(0)}ms` : "phase missing");
+
+  check(prefix, "the row was Loaded before the mark", frames[0]?.chipText === "Loaded", String(frames[0]?.chipText));
+  check(
+    prefix,
+    "settle → hold → dissolve, in that order",
+    tSettle !== null && tLeaving !== null && tDetach !== null && tSettle < tLeaving && tLeaving < tDetach,
+    `settle→leaving ${ms(tSettle, tLeaving)}, leaving→commit ${ms(tLeaving, tDetach)}`,
+  );
+  check(prefix, ".leaving never joins the settling row", !mounted.some((f) => f.settling && f.leaving));
+  check(
+    prefix,
+    "plays once: one settling run, none after the commit",
+    contiguous && !tail.some((f) => f.present && f.settling),
+    `${settleIdx.length} settling samples`,
+  );
+  check(
+    prefix,
+    "the 900 ms hold follows the settle",
+    tSettle !== null && tLeaving !== null && tLeaving - tSettle >= 900 && tLeaving - tSettle <= 1500,
+    ms(tSettle, tLeaving),
+  );
+  check(
+    prefix,
+    "the existing dissolve follows the hold",
+    tLeaving !== null && tDetach !== null && tDetach - tLeaving >= 150 && tDetach - tLeaving <= 700,
+    ms(tLeaving, tDetach),
+  );
+  const loud = mounted.filter((f) => f.settling || f.leaving);
+  check(
+    prefix,
+    "inert and aria-hidden from settle through commit",
+    loud.length > 0 && loud.every((f) => f.inert && f.ariaHidden) && mounted.filter((f) => !f.settling && !f.leaving).every((f) => !f.inert),
+    `${loud.length} settling/leaving samples`,
+  );
+  check(
+    prefix,
+    "the settling row reads Flown",
+    settleFrames.length > 0 && settleFrames.every((f) => f.chipText === "Flown"),
+    settleFrames[0]?.chipText ?? "none",
+  );
+  const preCommit = mounted.filter((f) => tDetach === null || f.t < tDetach);
+  check(
+    prefix,
+    "no transform jump on the departing row",
+    preCommit.every((f) => isIdentity(f.transform) && f.inline === ""),
+    preCommit.find((f) => !isIdentity(f.transform))?.transform ?? "identity throughout",
+  );
+  if (survivorId) {
+    const beforeDetach = frames
+      .filter((f) => tDetach === null || f.t < tDetach)
+      .map((f) => f.survivors?.[survivorId])
+      .filter((t) => typeof t === "number");
+    check(
+      prefix,
+      "the survivor holds its top until the commit",
+      beforeDetach.length > 1 && beforeDetach.every((t) => Math.abs(t - beforeDetach[0]) <= 1),
+      `${beforeDetach.length} samples`,
+    );
+  }
+}
+
+async function flownSettle(browser) {
+  const { context, page } = await contextFor(browser, {
+    width: 1440,
+    height: 900,
+    seed: SETTLE_SEED,
+    manifest: SETTLE_MANIFEST,
+    rowReady: true,
+  });
+  try {
+    // 1. Reads that are not the operator's mark never play the moment.
+    const quiet = await page.evaluate(
+      async ({ ids, key }) => {
+        const { byId, frame } = window.__h;
+        const lit = (id) => {
+          const el = byId(id);
+          return !!el && (el.className.includes("settling") || el.className.includes("leaving"));
+        };
+        const watch = async (ms, run) => {
+          run();
+          let seen = false;
+          const start = performance.now();
+          while (performance.now() - start < ms) {
+            seen = seen || ids.some(lit);
+            await frame();
+          }
+          return seen;
+        };
+        const refresh = [...document.querySelectorAll("#missions-panel button")].find((b) => b.textContent.trim() === "Refresh");
+        if (!refresh) throw new Error("Refresh button not found");
+        const onRefresh = await watch(450, () => refresh.click());
+        const onStorage = await watch(450, () => window.dispatchEvent(new StorageEvent("storage", { key })));
+        return { onRefresh, onStorage };
+      },
+      { ids: [SETTLE_A, SETTLE_B, SETTLE_C], key: MISSIONS_CHANGED_KEY },
+    );
+    check("settle", "Refresh never plays the moment", !quiet.onRefresh);
+    check("settle", "a storage reload never plays the moment", !quiet.onStorage);
+
+    // 2. The operator's own Mark Flown: settle → 900 ms hold → dissolve, once.
+    const first = await settleRun(page, SETTLE_A, [SETTLE_B]);
+    analyzeFlownRun("settle/first", first, SETTLE_B);
+
+    // 3. Imagery-inferred Flown (no mark) arrives through a store read; it
+    //    dissolves without the moment.
+    const inferred = await page.evaluate(
+      async ({ id, key, deadline }) => {
+        const { byId, frame, settleSnap } = window.__h;
+        window.__records.find((r) => r.id === id).imagery_at = "2026-09-27T00:00:00.000Z";
+        window.dispatchEvent(new StorageEvent("storage", { key }));
+        const out = [];
+        const start = performance.now();
+        while (performance.now() - start < deadline) {
+          const el = byId(id);
+          out.push(el ? settleSnap(el) : { id, present: false, t: performance.now() });
+          await frame();
+        }
+        return out;
+      },
+      { id: SETTLE_C, key: MISSIONS_CHANGED_KEY, deadline: 900 },
+    );
+    check(
+      "settle",
+      "inferred Flown dissolves without settling",
+      inferred.some((f) => f.leaving) && inferred.every((f) => !f.settling) && inferred.some((f) => !f.present),
+      `${inferred.filter((f) => f.leaving).length} leaving samples`,
+    );
+
+    // 4. Filter on: the marked row stays; a one-shot crossfade, no hold, never
+    //    inert (the row is still visible, so there is no departure to settle).
+    await toggleArchived(page);
+    const flash = await page.evaluate(
+      async ({ id }) => {
+        const { byId, frame, settleSnap } = window.__h;
+        const btn = [...byId(id).querySelectorAll("button")].find((b) => b.textContent.trim() === "Mark Flown");
+        if (!btn) throw new Error("Mark Flown button not found");
+        btn.click();
+        const out = [];
+        const start = performance.now();
+        while (performance.now() - start < 600) {
+          const el = byId(id);
+          out.push(el ? settleSnap(el) : { id, present: false, t: performance.now() });
+          await frame();
+        }
+        return out;
+      },
+      { id: SETTLE_B },
+    );
+    const flashed = flash.filter((f) => f.present && f.settling);
+    check(
+      "settle",
+      "filter on: a one-shot crossfade, never a hold",
+      flashed.length > 0 && flash.every((f) => !f.present || (!f.inert && !f.leaving)),
+      `${flashed.length} settling samples`,
+    );
+    check("settle", "filter on: the row stays mounted", flash[flash.length - 1]?.present === true);
+    check(
+      "settle",
+      "filter on: the crossfade clears by ~150ms",
+      flashed.length > 0 && flashed[flashed.length - 1].t - flashed[0].t <= 400,
+      flashed.length ? `${(flashed[flashed.length - 1].t - flashed[0].t).toFixed(0)}ms` : "never settling",
+    );
+
+    // 5. Unmark: the operator acting again, but never the moment.
+    const unmark = await page.evaluate(
+      async ({ id }) => {
+        const { byId, frame } = window.__h;
+        const btn = [...byId(id).querySelectorAll("button")].find((b) => b.textContent.trim() === "Unmark Flown");
+        if (!btn) throw new Error("Unmark button not found");
+        btn.click();
+        let settling = false;
+        let state = null;
+        const start = performance.now();
+        while (performance.now() - start < 600) {
+          const el = byId(id);
+          if (el) {
+            if (el.className.includes("settling")) settling = true;
+            state = el.querySelector('[class*="chip"]')?.textContent.trim() ?? state;
+          }
+          await frame();
+        }
+        return { settling, state };
+      },
+      { id: SETTLE_B },
+    );
+    check("settle", "Unmark never plays the moment", !unmark.settling, `chip ${unmark.state}`);
+
+    // 6. Filter off, then re-Mark: a new operator cause replays the moment.
+    await toggleArchived(page);
+    const replay = await settleRun(page, SETTLE_B);
+    analyzeFlownRun("settle/replay", replay);
+
+    // 7. A reload after the moment re-renders without replaying it.
+    await page.reload({ waitUntil: "domcontentloaded" });
+    await page.waitForFunction(() => !!document.querySelector("[data-row-id]"), null, { timeout: 30000 });
+    const afterReload = await page.evaluate(async () => {
+      const { frame } = window.__h;
+      let lit = false;
+      const start = performance.now();
+      while (performance.now() - start < 600) {
+        lit =
+          lit ||
+          [...document.querySelectorAll("[data-row-id]")].some(
+            (el) => el.className.includes("settling") || el.className.includes("leaving"),
+          );
+        await frame();
+      }
+      return lit;
+    });
+    check("settle", "a reload never replays the moment", !afterReload);
+  } finally {
+    await context.close();
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Reduced motion — 150ms opacity crossfades, no FLIP, soft arrival
 // ---------------------------------------------------------------------------
 
@@ -1279,6 +1625,7 @@ try {
   await arrival(browser);
   await archivedToggle(browser);
   await holdRule(browser);
+  await flownSettle(browser);
   await reducedMotion(browser);
   await mobileRemove(browser);
   await desktopVideo(browser);
