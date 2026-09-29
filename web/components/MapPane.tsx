@@ -940,7 +940,10 @@ export default function MapPane({
 
   return (
     <div ref={wrapRef} className={styles.wrap}>
-      <div ref={containerRef} className={styles.map} />
+      {/* The draw step's focus anchor: MapLibre's canvas inside this host is
+          the map's own focusable control surface (tabindex 0, role region,
+          "Map" label), and where every draw gesture lands. */}
+      <div ref={containerRef} className={styles.map} id="map-draw-surface" />
       <div ref={toggleRef} className={styles.basemapToggle} role="group" aria-label="Map display">
         {/* Near what it affects: display options for the map live on the map. */}
         <div className={styles.menuWrap}>

@@ -218,7 +218,7 @@ export default function Sidebar({
     setOrbit("altitudes_m", rings.map((a, j) => (j === i ? v : a)));
 
   return (
-    <aside className={styles.sidebar}>
+    <aside className={styles.sidebar} data-panel-scroll>
       <Section title="Mission">
         <Segmented<MissionType>
           value={spec.mission_type}
@@ -686,6 +686,7 @@ export default function Sidebar({
         />
         <Field label="Mission Name" value={editing.name.trim() || "—"}>
           <input
+            id="mission-name"
             type="text"
             value={editing.name}
             maxLength={MISSION_NAME_MAX}
@@ -756,6 +757,7 @@ function SiteField({
   return (
     <Field label="Site" value={site.trim() || "—"}>
       <select
+        id="site-select"
         value={known ? (site_id as string) : "new"}
         onChange={(e) => {
           if (e.target.value === "new") {
