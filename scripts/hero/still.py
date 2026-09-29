@@ -90,8 +90,8 @@ LAYERS = [  # top to bottom
 # strip's own relief units (0 = relief bottom, 1 = crest).
 K2 = {
     "tall": dict(
-        lens=50.0, dist=20.56, elev=8.0, shift_x=-0.221, shift_y=0.162,
-        fstop=2.0, focus_dist=20.56, exposure=0.0, sensor_fit="AUTO",
+        lens=50.0, dist=22.23, elev=8.0, shift_x=-0.204, shift_y=0.146,
+        fstop=2.0, focus_dist=22.23, exposure=0.0, sensor_fit="AUTO",
         ridges=[(20000.0, 0.640, 0.050, 0.93, 0.15),
                 (11000.0, 0.700, 0.110, 0.80, 0.15),
                 (6000.0, 0.770, 0.110, 0.62, 0.15),
@@ -101,8 +101,8 @@ K2 = {
         haze_right_from=0.45,
     ),
     "wide": dict(
-        lens=50.0, dist=28.0, elev=8.0, shift_x=-0.26, shift_y=0.039,
-        fstop=2.8, focus_dist=28.0, exposure=0.0, sensor_fit="HORIZONTAL",
+        lens=50.0, dist=29.67, elev=8.0, shift_x=-0.26, shift_y=0.031,
+        fstop=2.8, focus_dist=29.67, exposure=0.0, sensor_fit="HORIZONTAL",
         ridges=[(20000.0, 0.430, 0.060, 0.97, 0.15),
                 (11000.0, 0.500, 0.120, 0.93, 0.35),
                 (6000.0, 0.600, 0.130, 0.66, 0.15),
@@ -121,16 +121,34 @@ K2 = {
     # island knobs patched into hero.K before build().  Pass 2: the hero's
     # underside is ~0.14 H tall / 0.24 H wide against ~0.11 / 0.20 in pass 1,
     # and its firs are ~15 % shorter relative to the island.
-    "under": 2.4,            # ADR-223-02 set 1.9 (from 2.7); pass 2 2.4
+    # Pass 3: the hero's strata are about twice as thick, and its underside is
+    # a mass of big boulders rather than a smooth cone.
+    "under": 2.1,            # ADR-223-02 set 1.9 (from 2.7); pass 2 2.4; pass 3 2.1
+    "layers_scale": 1.5,     # LAYERS thicknesses x this (strata 1.09 -> 1.64)
+    "lumps": 0.55,           # hero.py 0.34
+    "under_boulders": 50,    # hero.py 20
+    "boulder_scale": 1.5,    # underside boulders, x hero.py's size
+    "boulder_push": 1.08,    # and pushed out from the axis, so they bulge
     "tree_scale": 0.30,      # hero.py 0.36
     "az": 0.0,               # island azimuth, degrees (#222 az000 mapping)
-    "tint_turf": (1.0, 1.0, 1.0),     # ADR-223-09 per-material multiply scales
+    "tint_turf": (0.55, 0.62, 0.30),  # ADR-223-09 per-material multiply scales
     "tint_strata": (1.0, 1.0, 1.0),
     # pass 2: pass 1's 4d lift was the basalt's glossy sky reflection (hero.py
     # Specular IOR Level 0.65, roughness 0.14-0.44), not its albedo.
-    "tint_basalt": (0.10, 0.12, 0.18),
+    "tint_basalt": (0.06, 0.10, 0.22),
     "basalt_spec": 0.15,
     "basalt_rough": 0.80,
+    # pass 3 palette: Poly Haven asset shader-group inputs.  Their sheen of
+    # sky specular read frosty under Standard view (turf #3A4528 vs #283017).
+    "grass": dict(Specular=0.15, Saturation=1.5, Value=0.40),
+    "moss": dict(Saturation=1.3, Value=1.0),
+    "tint_firs": (0.55, 0.65, 0.50),   # the hero's spruces are darker
+    # pebble courses are the gravel texture (hero.py mat_strata, HSV s 0.7
+    # v 0.8): the hero's are dark olive (#212111), ours read grey (#262626)
+    "pebble_hsv": (1.3, 0.28),
+    "pebble_tint": (0.95, 0.90, 0.45),
+    "ledge_scale": 2.0,      # LAYERS protrusions x this: rugged strata
+    "strata_disp": 0.12,     # hero.py mat_strata displacement 0.05
 }
 
 
@@ -299,6 +317,43 @@ def fix_basalt(k2):
     for link in list(bsdf.inputs["Roughness"].links):
         nt.links.remove(link)
     bsdf.inputs["Roughness"].default_value = k2["basalt_rough"]
+
+
+def island_palette(k2):
+    """Pass 3: darker, more chromatic grass and moss (the asset shader groups'
+    own Hue/Saturation/Value/Specular inputs) and olive pebble courses."""
+    for mat_name, key in (("grass_medium_01", "grass"), ("grass_medium_01.001", "grass"),
+                          ("moss_01", "moss")):
+        nt = bpy.data.materials[mat_name].node_tree
+        group = next(n for n in nt.nodes if n.type == "GROUP")
+        for name, value in k2[key].items():
+            group.inputs[name].default_value = value
+    nt = bpy.data.materials["strata"].node_tree
+    hsv = next(n for n in nt.nodes if n.type == "HUE_SAT"
+               and abs(n.inputs["Saturation"].default_value - 0.7) < 1e-6)   # the gravel
+    hsv.inputs["Saturation"].default_value, hsv.inputs["Value"].default_value = k2["pebble_hsv"]
+    mix = nt.nodes.new("ShaderNodeMix")
+    mix.data_type, mix.blend_type = "RGBA", "MULTIPLY"
+    mix.inputs[0].default_value = 1.0
+    mix.inputs[7].default_value = (*k2["pebble_tint"], 1.0)
+    targets = [link.to_socket for link in hsv.outputs["Color"].links]
+    for sock in targets:
+        nt.links.new(mix.outputs[2], sock)       # replaces the input's old link
+    nt.links.new(hsv.outputs["Color"], mix.inputs[6])
+    next(n for n in nt.nodes if n.type == "DISPLACEMENT").inputs["Scale"].default_value = k2["strata_disp"]
+    for name in ("fir_sapling_medium_branches", "fir_sapling_medium_twigs"):
+        tint_material(bpy.data.materials.get(name), k2["tint_firs"])
+
+
+def bulk_underside(k2):
+    """Pass 3: hero.py's underside boulders (copies carrying the basalt
+    material, hero.py:480-490) scaled up and pushed out so they bulge."""
+    basalt = bpy.data.materials["basalt"]
+    for ob in bpy.data.objects:
+        if ob.name != "Island" and ob.type == "MESH" and basalt.name in ob.data.materials:
+            ob.scale = ob.scale * k2["boulder_scale"]
+            ob.location.x *= k2["boulder_push"]
+            ob.location.y *= k2["boulder_push"]
 
 
 def ridge_relief(u, v, seed, k2):
@@ -510,9 +565,11 @@ def main():
     bpy.ops.wm.read_homefile(use_empty=True)
 
     hero.K["under"] = K2["under"]
-    hero.K["tree_scale"] = K2["tree_scale"]
+    for key in ("tree_scale", "lumps", "under_boulders"):
+        hero.K[key] = K2[key]
     hero.K2 = K2
-    patch_layers(hero, LAYERS)
+    patch_layers(hero, [(t * K2["layers_scale"], tint, prot * K2["ledge_scale"], grav)
+                        for t, tint, prot, grav in LAYERS])
     root = hero.build()
     if bpy.data.objects.get("Island") is None:
         print(f"still: ERROR no 'Island' after hero.build() — is HERO_PY "
@@ -534,6 +591,8 @@ def main():
                       ("basalt", "tint_basalt")):
         tint_material(bpy.data.materials.get(name), K2[key])
     fix_basalt(K2)
+    island_palette(K2)
+    bulk_underside(K2)
 
     cam_tall = bpy.data.objects["Cam"]
     cam_wide = bpy.data.objects.new("CamWide", bpy.data.cameras.new("CamWide"))

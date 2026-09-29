@@ -1,0 +1,1631 @@
+00:00.547  cycles           | WARNING HIPEW initialization failed: Error opening HIP dynamic library
+/home/akamel/hero3d/still223/still.py:383: DeprecationWarning: 'Material.use_nodes' is expected to be removed in Blender 6.0
+  mat.use_nodes = True
+still: shots=['tall', 'wide'] outdir=/home/akamel/hero3d/out/still-223/p3 az=0.0 res=native
+00:04.062  render           | Rendering frame 1
+00:04.063  render           | Start rendering: Scene, ViewLayer
+00:04.063  render           | Engine: Cycles
+00:07.476  render           | Fra: 1 | Mem: 1M | Synchronizing object | Island
+Blender 5.2.2 LTS (hash d13f752e3b9c built 2026-09-15 01:34:58)
+00:07.483  render           | Fra: 1 | Mem: 1M | Synchronizing object | moss_01_d_LOD0
+00:07.484  render           | Fra: 1 | Mem: 1M | Synchronizing object | TopMoss
+00:07.484  render           | Fra: 1 | Mem: 1M | Synchronizing object | moss_01_h_LOD0
+00:07.484  render           | Fra: 1 | Mem: 1M | Synchronizing object | moss_01_i_LOD0
+00:07.484  render           | Fra: 1 | Mem: 1M | Synchronizing object | moss_01_e_LOD0
+00:07.484  render           | Fra: 1 | Mem: 1M | Synchronizing object | moss_01_tall_a_LOD0
+00:07.484  render           | Fra: 1 | Mem: 1M | Synchronizing object | moss_01_a_LOD0
+00:07.484  render           | Fra: 1 | Mem: 1M | Synchronizing object | moss_01_f_LOD0
+00:07.484  render           | Fra: 1 | Mem: 1M | Synchronizing object | moss_01_tall_b_LOD0
+00:07.484  render           | Fra: 1 | Mem: 1M | Synchronizing object | moss_01_b_LOD0
+00:07.484  render           | Fra: 1 | Mem: 1M | Synchronizing object | moss_01_g_LOD0
+00:07.484  render           | Fra: 1 | Mem: 1M | Synchronizing object | moss_01_c_LOD0
+00:07.484  render           | Fra: 1 | Mem: 1M | Synchronizing object | moss_01_j_LOD0
+00:07.572  render           | Fra: 1 | Mem: 1M | Synchronizing object | grass_medium_01_tiny_e_LOD0
+00:07.572  render           | Fra: 1 | Mem: 1M | Synchronizing object | TopGrass
+00:07.572  render           | Fra: 1 | Mem: 1M | Synchronizing object | grass_medium_01_tiny_f_LOD0
+00:07.572  render           | Fra: 1 | Mem: 1M | Synchronizing object | grass_medium_01_small_a_LOD0
+00:07.572  render           | Fra: 1 | Mem: 1M | Synchronizing object | grass_medium_01_mid_c_LOD0
+00:07.572  render           | Fra: 1 | Mem: 1M | Synchronizing object | grass_medium_01_mid_b_LOD0
+00:07.572  render           | Fra: 1 | Mem: 1M | Synchronizing object | grass_medium_01_tiny_d_LOD0
+00:07.572  render           | Fra: 1 | Mem: 1M | Synchronizing object | grass_medium_01_tiny_a_LOD0
+00:07.572  render           | Fra: 1 | Mem: 1M | Synchronizing object | grass_medium_01_small_b_LOD0
+00:07.572  render           | Fra: 1 | Mem: 1M | Synchronizing object | grass_medium_01_tiny_c_LOD0
+00:07.572  render           | Fra: 1 | Mem: 1M | Synchronizing object | grass_medium_01_tiny_b_LOD0
+00:07.574  render           | Fra: 1 | Mem: 1M | Synchronizing object | grass_medium_01_tall_a_LOD0
+00:07.574  render           | Fra: 1 | Mem: 1M | Synchronizing object | grass_medium_01_tall_b_LOD0
+00:07.574  render           | Fra: 1 | Mem: 1M | Synchronizing object | TopGrassTall
+00:07.574  render           | Fra: 1 | Mem: 1M | Synchronizing object | grass_medium_01_tall_c_LOD0
+00:07.581  render           | Fra: 1 | Mem: 1M | Synchronizing object | LipMoss
+00:07.706  render           | Fra: 1 | Mem: 1M | Synchronizing object | flower_heliophila_medium_LOD0
+00:07.706  render           | Fra: 1 | Mem: 1M | Synchronizing object | Flowers
+00:07.708  render           | Fra: 1 | Mem: 1M | Synchronizing object | flower_heliophila_small_LOD0
+00:07.709  render           | Fra: 1 | Mem: 1M | Synchronizing object | rock_moss_set_01_rock06.001
+00:07.709  render           | Fra: 1 | Mem: 1M | Synchronizing object | rock_moss_set_01_rock05.001
+00:07.709  render           | Fra: 1 | Mem: 1M | Synchronizing object | rock_moss_set_01_rock04.001
+00:07.709  render           | Fra: 1 | Mem: 1M | Synchronizing object | rock_moss_set_01_rock04.002
+00:07.709  render           | Fra: 1 | Mem: 1M | Synchronizing object | rock_moss_set_01_rock06.004
+00:07.709  render           | Fra: 1 | Mem: 1M | Synchronizing object | rock_moss_set_01_rock06.007
+00:07.709  render           | Fra: 1 | Mem: 1M | Synchronizing object | rock_moss_set_01_rock04.007
+00:07.709  render           | Fra: 1 | Mem: 1M | Synchronizing object | rock_moss_set_01_rock06.009
+00:07.709  render           | Fra: 1 | Mem: 1M | Synchronizing object | rock_moss_set_01_rock05.009
+00:07.709  render           | Fra: 1 | Mem: 1M | Synchronizing object | rock_moss_set_01_rock06.010
+00:07.709  render           | Fra: 1 | Mem: 1M | Synchronizing object | rock_moss_set_01_rock05.010
+00:07.709  render           | Fra: 1 | Mem: 1M | Synchronizing object | Ridge_tall_4
+00:07.709  render           | Fra: 1 | Mem: 1M | Synchronizing object | rock_moss_set_01_rock04.009
+00:07.711  render           | Fra: 1 | Mem: 1M | Synchronizing object | rock_moss_set_01_rock06.011
+00:07.711  render           | Fra: 1 | Mem: 1M | Synchronizing object | rock_moss_set_01_rock05.011
+00:07.711  render           | Fra: 1 | Mem: 1M | Synchronizing object | rock_moss_set_01_rock04.010
+00:07.711  render           | Fra: 1 | Mem: 1M | Synchronizing object | rock_moss_set_01_rock06.012
+00:07.711  render           | Fra: 1 | Mem: 1M | Synchronizing object | rock_moss_set_01_rock05.012
+00:07.711  render           | Fra: 1 | Mem: 1M | Synchronizing object | rock_moss_set_01_rock04.011
+00:07.711  render           | Fra: 1 | Mem: 1M | Synchronizing object | rock_moss_set_01_rock05.013
+00:07.711  render           | Fra: 1 | Mem: 1M | Synchronizing object | rock_moss_set_01_rock04.012
+00:07.712  render           | Fra: 1 | Mem: 1M | Synchronizing object | rock_moss_set_01_rock06.014
+00:07.712  render           | Fra: 1 | Mem: 1M | Synchronizing object | rock_moss_set_01_rock05.014
+00:07.712  render           | Fra: 1 | Mem: 1M | Synchronizing object | rock_moss_set_01_rock04.013
+00:07.712  render           | Fra: 1 | Mem: 1M | Synchronizing object | rock_moss_set_01_rock06.015
+00:07.712  render           | Fra: 1 | Mem: 1M | Synchronizing object | rock_moss_set_01_rock05.015
+00:07.712  render           | Fra: 1 | Mem: 1M | Synchronizing object | rock_moss_set_01_rock04.014
+00:07.712  render           | Fra: 1 | Mem: 1M | Synchronizing object | rock_moss_set_01_rock06.016
+00:07.712  render           | Fra: 1 | Mem: 1M | Synchronizing object | rock_moss_set_01_rock04.015
+00:07.712  render           | Fra: 1 | Mem: 1M | Synchronizing object | rock_moss_set_01_rock06.017
+00:07.712  render           | Fra: 1 | Mem: 1M | Synchronizing object | rock_moss_set_01_rock05.017
+00:07.712  render           | Fra: 1 | Mem: 1M | Synchronizing object | rock_moss_set_01_rock04.016
+00:07.712  render           | Fra: 1 | Mem: 1M | Synchronizing object | rock_moss_set_01_rock06.018
+00:07.712  render           | Fra: 1 | Mem: 1M | Synchronizing object | rock_moss_set_01_rock05.018
+00:07.712  render           | Fra: 1 | Mem: 1M | Synchronizing object | rock_moss_set_01_rock04.017
+00:07.712  render           | Fra: 1 | Mem: 1M | Synchronizing object | rock_moss_set_01_rock06.019
+00:07.712  render           | Fra: 1 | Mem: 1M | Synchronizing object | rock_moss_set_01_rock05.019
+00:07.712  render           | Fra: 1 | Mem: 1M | Synchronizing object | fir_sapling_medium_a_LOD0.001
+00:07.713  render           | Fra: 1 | Mem: 1M | Synchronizing object | fir_sapling_medium_b_LOD0.001
+00:07.713  render           | Fra: 1 | Mem: 1M | Synchronizing object | Sun
+00:07.713  render           | Fra: 1 | Mem: 1M | Synchronizing object | Ridge_tall_0
+00:07.713  render           | Fra: 1 | Mem: 1M | Synchronizing object | Ridge_tall_1
+00:07.713  render           | Fra: 1 | Mem: 1M | Synchronizing object | Ridge_tall_2
+00:07.713  render           | Fra: 1 | Mem: 1M | Synchronizing object | Ridge_tall_3
+00:07.736  render           | Fra: 1 | Mem: 1M | Initializing
+00:07.803  render           | Fra: 1 | Mem: 1M | Waiting for render to start
+00:07.803  render           | Fra: 1 | Mem: 1M | Updating Scene
+00:07.803  render           | Fra: 1 | Mem: 1M | Updating Shaders
+00:07.810  render           | Fra: 1 | Mem: 1M | Loading render kernels (may take a few minutes the first time)
+00:07.861  render           | Fra: 1 | Mem: 1M | Updating Procedurals
+Update statistics:
+Scene:
+    Total time: 0.055671s
+        device_update                            0.055671s
+Geometry:
+    Total time: 0.000000s
+Light:
+    Total time: 0.000000s
+Object:
+    Total time: 0.000000s
+Image:
+    Total time: 0.000000s
+Background:
+    Total time: 0.000000s
+Bake:
+    Total time: 0.000000s
+Camera:
+    Total time: 0.000000s
+Film:
+    Total time: 0.000000s
+Integrator:
+    Total time: 0.000000s
+OSL:
+    Total time: 0.000000s
+Particles:
+    Total time: 0.000000s
+SVM:
+    Total time: 0.000000s
+Tables:
+    Total time: 0.000000s
+Procedurals:
+    Total time: 0.000000s
+
+00:07.861  render           | Fra: 1 | Mem: 1M | Updating Background
+00:07.861  render           | Fra: 1 | Mem: 1M | Updating Scene Attribute
+00:07.861  render           | Fra: 1 | Mem: 1M | Updating Camera
+00:07.861  render           | Fra: 1 | Mem: 1M | Updating Meshes Flags
+00:07.861  render           | Fra: 1 | Mem: 1M | Updating Objects
+00:07.862  render           | Fra: 1 | Mem: 1M | Updating Objects | Copying Transformations to device
+00:07.868  render           | Fra: 1 | Mem: 37M | Updating Particle Systems
+00:07.868  render           | Fra: 1 | Mem: 37M | Updating Particle Systems | Copying Particles to device
+00:07.868  render           | Fra: 1 | Mem: 37M | Updating Meshes
+00:07.994  render           | Fra: 1 | Mem: 37M | Updating Displacement Images
+00:07.994  render           | Fra: 1 | Mem: 37M | Updating Images | Loading cliff_side_Diffuse_2k.jpg
+00:07.994  render           | Fra: 1 | Mem: 37M | Updating Images | Loading lichen_rock_Diffuse_2k.jpg
+00:07.994  render           | Fra: 1 | Mem: 37M | Updating Images | Loading aerial_rocks_02_Diffuse_2k.jpg
+00:07.994  render           | Fra: 1 | Mem: 37M | Updating Images | Loading lichen_rock_nor_gl_2k.jpg
+00:07.994  render           | Fra: 1 | Mem: 37M | Updating Images | Loading lichen_rock_Displacement_2k.jpg
+00:07.995  render           | Fra: 1 | Mem: 37M | Updating Images | Loading forest_ground_04_nor_gl_2k.jpg
+00:07.995  render           | Fra: 1 | Mem: 37M | Updating Images | Loading cliff_side_nor_gl_2k.jpg
+00:08.057  render           | Fra: 1 | Mem: 170M | Updating Mesh | Computing normals
+00:08.076  render           | Fra: 1 | Mem: 170M | Updating Mesh | Copying Mesh to device
+00:08.080  render           | Fra: 1 | Mem: 241M | Updating Objects | Applying Static Transformations
+00:08.089  render           | Fra: 1 | Mem: 241M | Updating Mesh | Computing attributes
+00:08.145  render           | Fra: 1 | Mem: 241M | Updating Mesh | Copying Attributes to device
+00:08.169  render           | Fra: 1 | Mem: 433M | Updating Mesh | Computing Displacement Island
+00:08.551  render           | Fra: 1 | Mem: 433M | Updating Mesh | Computing Displacement mesh1-geometry.001
+00:08.556  render           | Fra: 1 | Mem: 433M | Updating Mesh | Computing Displacement modelShape.001
+00:08.561  render           | Fra: 1 | Mem: 433M | Updating Mesh | Computing Displacement medium.002
+00:08.564  render           | Fra: 1 | Mem: 433M | Updating Mesh | Computing Displacement mesh1-geometry.002
+00:08.569  render           | Fra: 1 | Mem: 433M | Updating Mesh | Computing Displacement modelShape.002
+00:08.573  render           | Fra: 1 | Mem: 433M | Updating Mesh | Computing Displacement medium.003
+00:08.576  render           | Fra: 1 | Mem: 433M | Updating Mesh | Computing Displacement mesh1-geometry.004
+00:08.580  render           | Fra: 1 | Mem: 433M | Updating Mesh | Computing Displacement modelShape.004
+00:08.584  render           | Fra: 1 | Mem: 433M | Updating Mesh | Computing Displacement medium.004
+00:08.588  render           | Fra: 1 | Mem: 433M | Updating Mesh | Computing Displacement mesh1-geometry.005
+00:08.592  render           | Fra: 1 | Mem: 433M | Updating Mesh | Computing Displacement modelShape.005
+00:08.596  render           | Fra: 1 | Mem: 433M | Updating Mesh | Computing Displacement medium.005
+00:08.600  render           | Fra: 1 | Mem: 433M | Updating Mesh | Computing Displacement mesh1-geometry.006
+00:08.604  render           | Fra: 1 | Mem: 433M | Updating Mesh | Computing Displacement modelShape.006
+00:08.608  render           | Fra: 1 | Mem: 433M | Updating Mesh | Computing Displacement medium.006
+00:08.611  render           | Fra: 1 | Mem: 433M | Updating Mesh | Computing Displacement mesh1-geometry.007
+00:08.615  render           | Fra: 1 | Mem: 433M | Updating Mesh | Computing Displacement modelShape.007
+00:08.619  render           | Fra: 1 | Mem: 433M | Updating Mesh | Computing Displacement medium.007
+00:08.623  render           | Fra: 1 | Mem: 433M | Updating Mesh | Computing Displacement mesh1-geometry.008
+00:08.627  render           | Fra: 1 | Mem: 433M | Updating Mesh | Computing Displacement modelShape.008
+00:08.631  render           | Fra: 1 | Mem: 433M | Updating Mesh | Computing Displacement medium.008
+00:08.634  render           | Fra: 1 | Mem: 433M | Updating Mesh | Computing Displacement mesh1-geometry.009
+00:08.639  render           | Fra: 1 | Mem: 433M | Updating Mesh | Computing Displacement modelShape.009
+00:08.643  render           | Fra: 1 | Mem: 433M | Updating Mesh | Computing Displacement medium.009
+00:08.646  render           | Fra: 1 | Mem: 433M | Updating Mesh | Computing Displacement mesh1-geometry.010
+00:08.650  render           | Fra: 1 | Mem: 433M | Updating Mesh | Computing Displacement modelShape.010
+00:08.654  render           | Fra: 1 | Mem: 433M | Updating Mesh | Computing Displacement medium.010
+00:08.658  render           | Fra: 1 | Mem: 433M | Updating Mesh | Computing Displacement mesh1-geometry.011
+00:08.662  render           | Fra: 1 | Mem: 433M | Updating Mesh | Computing Displacement modelShape.011
+00:08.666  render           | Fra: 1 | Mem: 433M | Updating Mesh | Computing Displacement medium.011
+00:08.670  render           | Fra: 1 | Mem: 433M | Updating Mesh | Computing Displacement mesh1-geometry.012
+00:08.674  render           | Fra: 1 | Mem: 433M | Updating Mesh | Computing Displacement modelShape.012
+00:08.678  render           | Fra: 1 | Mem: 433M | Updating Mesh | Computing Displacement medium.012
+00:08.682  render           | Fra: 1 | Mem: 433M | Updating Mesh | Computing Displacement mesh1-geometry.013
+00:08.686  render           | Fra: 1 | Mem: 433M | Updating Mesh | Computing Displacement modelShape.013
+00:08.690  render           | Fra: 1 | Mem: 433M | Updating Mesh | Computing Displacement medium.013
+00:08.693  render           | Fra: 1 | Mem: 433M | Updating Mesh | Computing Displacement mesh1-geometry.014
+00:08.697  render           | Fra: 1 | Mem: 433M | Updating Mesh | Computing Displacement modelShape.014
+00:08.701  render           | Fra: 1 | Mem: 433M | Updating Mesh | Computing Displacement medium.014
+00:08.705  render           | Fra: 1 | Mem: 433M | Updating Mesh | Computing Displacement mesh1-geometry.015
+00:08.709  render           | Fra: 1 | Mem: 433M | Updating Mesh | Computing Displacement modelShape.015
+00:08.713  render           | Fra: 1 | Mem: 433M | Updating Mesh | Computing Displacement medium.015
+00:08.717  render           | Fra: 1 | Mem: 433M | Updating Mesh | Computing Displacement mesh1-geometry.016
+00:08.721  render           | Fra: 1 | Mem: 433M | Updating Mesh | Computing Displacement modelShape.016
+00:08.725  render           | Fra: 1 | Mem: 433M | Updating Mesh | Computing Displacement medium.016
+00:08.729  render           | Fra: 1 | Mem: 433M | Updating Mesh | Computing Displacement mesh1-geometry.017
+00:08.733  render           | Fra: 1 | Mem: 433M | Updating Mesh | Computing Displacement modelShape.017
+00:08.737  render           | Fra: 1 | Mem: 433M | Updating Mesh | Computing Displacement medium.017
+00:08.741  render           | Fra: 1 | Mem: 433M | Updating Mesh | Computing Displacement mesh1-geometry.018
+00:08.746  render           | Fra: 1 | Mem: 433M | Updating Mesh | Computing Displacement modelShape.018
+00:08.758  render           | Fra: 1 | Mem: 170M | Updating Geometry BVH backgroundlight 96/95 | Building BVH
+00:08.758  render           | Fra: 1 | Mem: 170M | Updating Geometry BVH backgroundlight 96/95 | Building OptiX acceleration structure
+00:08.758  render           | Fra: 1 | Mem: 170M | Updating Geometry BVH Ridge_tall_4 95/95 | Building BVH
+00:08.758  render           | Fra: 1 | Mem: 170M | Updating Geometry BVH Ridge_tall_4 95/95 | Building OptiX acceleration structure
+00:08.758  render           | Fra: 1 | Mem: 170M | Updating Geometry BVH TopMoss 3/95 | Building BVH
+00:08.758  render           | Fra: 1 | Mem: 170M | Updating Geometry BVH TopMoss 3/95 | Building OptiX acceleration structure
+00:08.758  render           | Fra: 1 | Mem: 170M | Updating Geometry BVH Plane.004 4/95 | Building BVH
+00:08.758  render           | Fra: 1 | Mem: 170M | Updating Geometry BVH Plane.004 4/95 | Building OptiX acceleration structure
+00:08.758  render           | Fra: 1 | Mem: 170M | Updating Geometry BVH Plane.010 5/95 | Building BVH
+00:08.758  render           | Fra: 1 | Mem: 170M | Updating Geometry BVH Plane.035 8/95 | Building OptiX acceleration structure
+00:08.758  render           | Fra: 1 | Mem: 170M | Updating Geometry BVH Plane.040 11/95 | Building BVH
+00:08.758  render           | Fra: 1 | Mem: 170M | Updating Geometry BVH Plane.007 12/95 | Building OptiX acceleration structure
+00:08.758  render           | Fra: 1 | Mem: 170M | Updating Geometry BVH Plane.032 15/95 | Building BVH
+00:08.758  render           | Fra: 1 | Mem: 170M | Updating Geometry BVH TopGrass 16/95 | Building OptiX acceleration structure
+00:08.758  render           | Fra: 1 | Mem: 170M | Updating Geometry BVH Plane.037 19/95 | Building BVH
+00:08.758  render           | Fra: 1 | Mem: 170M | Updating Geometry BVH Plane.037 19/95 | Building OptiX acceleration structure
+00:08.758  render           | Fra: 1 | Mem: 170M | Updating Geometry BVH Plane.048 20/95 | Building BVH
+00:08.758  render           | Fra: 1 | Mem: 170M | Updating Geometry BVH Plane.048 20/95 | Building OptiX acceleration structure
+00:08.758  render           | Fra: 1 | Mem: 170M | Updating Geometry BVH Plane.039 21/95 | Building BVH
+00:08.758  render           | Fra: 1 | Mem: 170M | Updating Geometry BVH Plane.039 21/95 | Building OptiX acceleration structure
+00:08.758  render           | Fra: 1 | Mem: 170M | Updating Geometry BVH Plane.057 22/95 | Building BVH
+00:08.758  render           | Fra: 1 | Mem: 170M | Updating Geometry BVH TopGrassTall 27/95 | Building BVH
+00:08.758  render           | Fra: 1 | Mem: 170M | Updating Geometry BVH Plane.042 29/95 | Building OptiX acceleration structure
+00:08.758  render           | Fra: 1 | Mem: 170M | Updating Geometry BVH Plane.045 30/95 | Building BVH
+00:08.758  render           | Fra: 1 | Mem: 170M | Updating Geometry BVH Plane.045 30/95 | Building OptiX acceleration structure
+00:08.758  render           | Fra: 1 | Mem: 170M | Updating Geometry BVH LipMoss 31/95 | Building BVH
+00:08.758  render           | Fra: 1 | Mem: 170M | Updating Geometry BVH LipMoss 31/95 | Building OptiX acceleration structure
+00:08.759  render           | Fra: 1 | Mem: 170M | Updating Geometry BVH Flowers 32/95 | Building BVH
+00:08.759  render           | Fra: 1 | Mem: 170M | Updating Geometry BVH Flowers 32/95 | Building OptiX acceleration structure
+00:08.759  render           | Fra: 1 | Mem: 171M | Updating Geometry BVH Plane.5143 33/95 | Building BVH
+00:08.759  render           | Fra: 1 | Mem: 171M | Updating Geometry BVH Plane.5143 33/95 | Building OptiX acceleration structure
+00:08.759  render           | Fra: 1 | Mem: 171M | Updating Geometry BVH Plane.2197 34/95 | Building BVH
+00:08.759  render           | Fra: 1 | Mem: 171M | Updating Geometry BVH Plane.2197 34/95 | Building OptiX acceleration structure
+00:08.760  render           | Fra: 1 | Mem: 172M | Updating Geometry BVH Island 2/95 | Building BVH
+00:08.760  render           | Fra: 1 | Mem: 172M | Updating Geometry BVH Island 2/95 | Building OptiX acceleration structure
+00:08.760  render           | Fra: 1 | Mem: 172M | Updating Geometry BVH mesh1-geometry.003 35/95 | Building BVH
+00:08.760  render           | Fra: 1 | Mem: 172M | Updating Geometry BVH mesh1-geometry.003 35/95 | Building OptiX acceleration structure
+00:08.761  render           | Fra: 1 | Mem: 172M | Updating Geometry BVH modelShape.003 36/95 | Building BVH
+00:08.761  render           | Fra: 1 | Mem: 172M | Updating Geometry BVH modelShape.003 36/95 | Building OptiX acceleration structure
+00:08.761  render           | Fra: 1 | Mem: 173M | Updating Geometry BVH medium.001 37/95 | Building BVH
+00:08.761  render           | Fra: 1 | Mem: 173M | Updating Geometry BVH medium.001 37/95 | Building OptiX acceleration structure
+00:08.761  render           | Fra: 1 | Mem: 173M | Updating Geometry BVH mesh1-geometry.001 38/95 | Building BVH
+00:08.761  render           | Fra: 1 | Mem: 173M | Updating Geometry BVH mesh1-geometry.001 38/95 | Building OptiX acceleration structure
+00:08.762  render           | Fra: 1 | Mem: 173M | Updating Geometry BVH modelShape.001 39/95 | Building BVH
+00:08.762  render           | Fra: 1 | Mem: 173M | Updating Geometry BVH modelShape.001 39/95 | Building OptiX acceleration structure
+00:08.762  render           | Fra: 1 | Mem: 173M | Updating Geometry BVH medium.002 40/95 | Building BVH
+00:08.762  render           | Fra: 1 | Mem: 173M | Updating Geometry BVH medium.002 40/95 | Building OptiX acceleration structure
+00:08.762  render           | Fra: 1 | Mem: 173M | Updating Geometry BVH mesh1-geometry.002 41/95 | Building BVH
+00:08.762  render           | Fra: 1 | Mem: 173M | Updating Geometry BVH mesh1-geometry.002 41/95 | Building OptiX acceleration structure
+00:08.763  render           | Fra: 1 | Mem: 174M | Updating Geometry BVH modelShape.002 42/95 | Building BVH
+00:08.763  render           | Fra: 1 | Mem: 174M | Updating Geometry BVH modelShape.002 42/95 | Building OptiX acceleration structure
+00:08.763  render           | Fra: 1 | Mem: 174M | Updating Geometry BVH medium.003 43/95 | Building BVH
+00:08.763  render           | Fra: 1 | Mem: 174M | Updating Geometry BVH medium.003 43/95 | Building OptiX acceleration structure
+00:08.763  render           | Fra: 1 | Mem: 174M | Updating Geometry BVH mesh1-geometry.004 44/95 | Building BVH
+00:08.763  render           | Fra: 1 | Mem: 174M | Updating Geometry BVH mesh1-geometry.004 44/95 | Building OptiX acceleration structure
+00:08.764  render           | Fra: 1 | Mem: 174M | Updating Geometry BVH modelShape.004 45/95 | Building BVH
+00:08.764  render           | Fra: 1 | Mem: 174M | Updating Geometry BVH modelShape.004 45/95 | Building OptiX acceleration structure
+00:08.764  render           | Fra: 1 | Mem: 175M | Updating Geometry BVH medium.004 46/95 | Building BVH
+00:08.764  render           | Fra: 1 | Mem: 175M | Updating Geometry BVH medium.004 46/95 | Building OptiX acceleration structure
+00:08.764  render           | Fra: 1 | Mem: 175M | Updating Geometry BVH mesh1-geometry.005 47/95 | Building BVH
+00:08.764  render           | Fra: 1 | Mem: 175M | Updating Geometry BVH mesh1-geometry.005 47/95 | Building OptiX acceleration structure
+00:08.764  render           | Fra: 1 | Mem: 175M | Updating Geometry BVH modelShape.005 48/95 | Building BVH
+00:08.764  render           | Fra: 1 | Mem: 175M | Updating Geometry BVH modelShape.005 48/95 | Building OptiX acceleration structure
+00:08.765  render           | Fra: 1 | Mem: 175M | Updating Geometry BVH Ridge_tall_3 94/95 | Building BVH
+00:08.765  render           | Fra: 1 | Mem: 175M | Updating Geometry BVH Ridge_tall_3 94/95 | Building OptiX acceleration structure
+00:08.765  render           | Fra: 1 | Mem: 177M | Updating Geometry BVH medium.005 49/95 | Building BVH
+00:08.765  render           | Fra: 1 | Mem: 177M | Updating Geometry BVH medium.005 49/95 | Building OptiX acceleration structure
+00:08.766  render           | Fra: 1 | Mem: 177M | Updating Geometry BVH mesh1-geometry.006 50/95 | Building BVH
+00:08.766  render           | Fra: 1 | Mem: 177M | Updating Geometry BVH mesh1-geometry.006 50/95 | Building OptiX acceleration structure
+00:08.766  render           | Fra: 1 | Mem: 179M | Updating Geometry BVH modelShape.006 51/95 | Building BVH
+00:08.766  render           | Fra: 1 | Mem: 179M | Updating Geometry BVH modelShape.006 51/95 | Building OptiX acceleration structure
+00:08.767  render           | Fra: 1 | Mem: 177M | Updating Geometry BVH medium.006 52/95 | Building BVH
+00:08.767  render           | Fra: 1 | Mem: 177M | Updating Geometry BVH medium.006 52/95 | Building OptiX acceleration structure
+00:08.767  render           | Fra: 1 | Mem: 178M | Updating Geometry BVH mesh1-geometry.007 53/95 | Building BVH
+00:08.767  render           | Fra: 1 | Mem: 178M | Updating Geometry BVH mesh1-geometry.007 53/95 | Building OptiX acceleration structure
+00:08.767  render           | Fra: 1 | Mem: 178M | Updating Geometry BVH modelShape.007 54/95 | Building BVH
+00:08.767  render           | Fra: 1 | Mem: 178M | Updating Geometry BVH modelShape.007 54/95 | Building OptiX acceleration structure
+00:08.767  render           | Fra: 1 | Mem: 178M | Updating Geometry BVH medium.007 55/95 | Building BVH
+00:08.767  render           | Fra: 1 | Mem: 178M | Updating Geometry BVH medium.007 55/95 | Building OptiX acceleration structure
+00:08.768  render           | Fra: 1 | Mem: 178M | Updating Geometry BVH mesh1-geometry.008 56/95 | Building BVH
+00:08.768  render           | Fra: 1 | Mem: 178M | Updating Geometry BVH mesh1-geometry.008 56/95 | Building OptiX acceleration structure
+00:08.768  render           | Fra: 1 | Mem: 178M | Updating Geometry BVH modelShape.008 57/95 | Building BVH
+00:08.768  render           | Fra: 1 | Mem: 178M | Updating Geometry BVH modelShape.008 57/95 | Building OptiX acceleration structure
+00:08.768  render           | Fra: 1 | Mem: 179M | Updating Geometry BVH medium.008 58/95 | Building BVH
+00:08.768  render           | Fra: 1 | Mem: 179M | Updating Geometry BVH medium.008 58/95 | Building OptiX acceleration structure
+00:08.769  render           | Fra: 1 | Mem: 179M | Updating Geometry BVH mesh1-geometry.009 59/95 | Building BVH
+00:08.769  render           | Fra: 1 | Mem: 179M | Updating Geometry BVH mesh1-geometry.009 59/95 | Building OptiX acceleration structure
+00:08.769  render           | Fra: 1 | Mem: 180M | Updating Geometry BVH modelShape.009 60/95 | Building BVH
+00:08.769  render           | Fra: 1 | Mem: 180M | Updating Geometry BVH modelShape.009 60/95 | Building OptiX acceleration structure
+00:08.769  render           | Fra: 1 | Mem: 179M | Updating Geometry BVH medium.009 61/95 | Building BVH
+00:08.769  render           | Fra: 1 | Mem: 179M | Updating Geometry BVH medium.009 61/95 | Building OptiX acceleration structure
+00:08.770  render           | Fra: 1 | Mem: 181M | Updating Geometry BVH mesh1-geometry.010 62/95 | Building BVH
+00:08.770  render           | Fra: 1 | Mem: 181M | Updating Geometry BVH mesh1-geometry.010 62/95 | Building OptiX acceleration structure
+00:08.770  render           | Fra: 1 | Mem: 180M | Updating Geometry BVH modelShape.010 63/95 | Building BVH
+00:08.770  render           | Fra: 1 | Mem: 180M | Updating Geometry BVH modelShape.010 63/95 | Building OptiX acceleration structure
+00:08.771  render           | Fra: 1 | Mem: 180M | Updating Geometry BVH medium.010 64/95 | Building BVH
+00:08.771  render           | Fra: 1 | Mem: 180M | Updating Geometry BVH medium.010 64/95 | Building OptiX acceleration structure
+00:08.771  render           | Fra: 1 | Mem: 181M | Updating Geometry BVH mesh1-geometry.011 65/95 | Building BVH
+00:08.771  render           | Fra: 1 | Mem: 181M | Updating Geometry BVH mesh1-geometry.011 65/95 | Building OptiX acceleration structure
+00:08.772  render           | Fra: 1 | Mem: 182M | Updating Geometry BVH modelShape.011 66/95 | Building BVH
+00:08.772  render           | Fra: 1 | Mem: 182M | Updating Geometry BVH modelShape.011 66/95 | Building OptiX acceleration structure
+00:08.772  render           | Fra: 1 | Mem: 182M | Updating Geometry BVH medium.011 67/95 | Building BVH
+00:08.772  render           | Fra: 1 | Mem: 182M | Updating Geometry BVH medium.011 67/95 | Building OptiX acceleration structure
+00:08.773  render           | Fra: 1 | Mem: 181M | Updating Geometry BVH mesh1-geometry.012 68/95 | Building BVH
+00:08.773  render           | Fra: 1 | Mem: 181M | Updating Geometry BVH mesh1-geometry.012 68/95 | Building OptiX acceleration structure
+00:08.773  render           | Fra: 1 | Mem: 183M | Updating Geometry BVH modelShape.012 69/95 | Building BVH
+00:08.773  render           | Fra: 1 | Mem: 183M | Updating Geometry BVH modelShape.012 69/95 | Building OptiX acceleration structure
+00:08.774  render           | Fra: 1 | Mem: 183M | Updating Geometry BVH medium.012 70/95 | Building BVH
+00:08.774  render           | Fra: 1 | Mem: 183M | Updating Geometry BVH medium.012 70/95 | Building OptiX acceleration structure
+00:08.774  render           | Fra: 1 | Mem: 182M | Updating Geometry BVH mesh1-geometry.013 71/95 | Building BVH
+00:08.774  render           | Fra: 1 | Mem: 182M | Updating Geometry BVH mesh1-geometry.013 71/95 | Building OptiX acceleration structure
+00:08.775  render           | Fra: 1 | Mem: 184M | Updating Geometry BVH modelShape.013 72/95 | Building BVH
+00:08.775  render           | Fra: 1 | Mem: 184M | Updating Geometry BVH modelShape.013 72/95 | Building OptiX acceleration structure
+00:08.775  render           | Fra: 1 | Mem: 183M | Updating Geometry BVH medium.013 73/95 | Building BVH
+00:08.775  render           | Fra: 1 | Mem: 183M | Updating Geometry BVH medium.013 73/95 | Building OptiX acceleration structure
+00:08.776  render           | Fra: 1 | Mem: 183M | Updating Geometry BVH mesh1-geometry.014 74/95 | Building BVH
+00:08.776  render           | Fra: 1 | Mem: 183M | Updating Geometry BVH mesh1-geometry.014 74/95 | Building OptiX acceleration structure
+00:08.779  render           | Fra: 1 | Mem: 228M | Updating Geometry BVH Ridge_tall_2 93/95 | Building BVH
+00:08.779  render           | Fra: 1 | Mem: 228M | Updating Geometry BVH Ridge_tall_2 93/95 | Building OptiX acceleration structure
+00:08.779  render           | Fra: 1 | Mem: 228M | Updating Geometry BVH modelShape.014 75/95 | Building BVH
+00:08.779  render           | Fra: 1 | Mem: 228M | Updating Geometry BVH modelShape.014 75/95 | Building OptiX acceleration structure
+00:08.780  render           | Fra: 1 | Mem: 229M | Updating Geometry BVH medium.014 76/95 | Building BVH
+00:08.780  render           | Fra: 1 | Mem: 229M | Updating Geometry BVH medium.014 76/95 | Building OptiX acceleration structure
+00:08.780  render           | Fra: 1 | Mem: 229M | Updating Geometry BVH mesh1-geometry.015 77/95 | Building BVH
+00:08.780  render           | Fra: 1 | Mem: 229M | Updating Geometry BVH mesh1-geometry.015 77/95 | Building OptiX acceleration structure
+00:08.781  render           | Fra: 1 | Mem: 229M | Updating Geometry BVH modelShape.015 78/95 | Building BVH
+00:08.781  render           | Fra: 1 | Mem: 229M | Updating Geometry BVH modelShape.015 78/95 | Building OptiX acceleration structure
+00:08.781  render           | Fra: 1 | Mem: 230M | Updating Geometry BVH medium.015 79/95 | Building BVH
+00:08.781  render           | Fra: 1 | Mem: 230M | Updating Geometry BVH medium.015 79/95 | Building OptiX acceleration structure
+00:08.782  render           | Fra: 1 | Mem: 230M | Updating Geometry BVH mesh1-geometry.016 80/95 | Building BVH
+00:08.782  render           | Fra: 1 | Mem: 231M | Updating Geometry BVH mesh1-geometry.016 80/95 | Building OptiX acceleration structure
+00:08.782  render           | Fra: 1 | Mem: 231M | Updating Geometry BVH modelShape.016 81/95 | Building BVH
+00:08.782  render           | Fra: 1 | Mem: 231M | Updating Geometry BVH modelShape.016 81/95 | Building OptiX acceleration structure
+00:08.783  render           | Fra: 1 | Mem: 231M | Updating Geometry BVH medium.016 82/95 | Building BVH
+00:08.783  render           | Fra: 1 | Mem: 231M | Updating Geometry BVH medium.016 82/95 | Building OptiX acceleration structure
+00:08.783  render           | Fra: 1 | Mem: 231M | Updating Geometry BVH mesh1-geometry.017 83/95 | Building BVH
+00:08.783  render           | Fra: 1 | Mem: 231M | Updating Geometry BVH mesh1-geometry.017 83/95 | Building OptiX acceleration structure
+00:08.784  render           | Fra: 1 | Mem: 231M | Updating Geometry BVH modelShape.017 84/95 | Building BVH
+00:08.784  render           | Fra: 1 | Mem: 231M | Updating Geometry BVH modelShape.017 84/95 | Building OptiX acceleration structure
+00:08.784  render           | Fra: 1 | Mem: 232M | Updating Geometry BVH medium.017 85/95 | Building BVH
+00:08.784  render           | Fra: 1 | Mem: 232M | Updating Geometry BVH medium.017 85/95 | Building OptiX acceleration structure
+00:08.785  render           | Fra: 1 | Mem: 232M | Updating Geometry BVH mesh1-geometry.018 86/95 | Building BVH
+00:08.785  render           | Fra: 1 | Mem: 232M | Updating Geometry BVH mesh1-geometry.018 86/95 | Building OptiX acceleration structure
+00:08.785  render           | Fra: 1 | Mem: 232M | Updating Geometry BVH modelShape.018 87/95 | Building BVH
+00:08.785  render           | Fra: 1 | Mem: 232M | Updating Geometry BVH modelShape.018 87/95 | Building OptiX acceleration structure
+00:08.787  render           | Fra: 1 | Mem: 233M | Updating Geometry BVH Sun 90/95 | Building BVH
+00:08.787  render           | Fra: 1 | Mem: 233M | Updating Geometry BVH Sun 90/95 | Building OptiX acceleration structure
+00:08.787  render           | Fra: 1 | Mem: 233M | Updating Geometry BVH Ridge_tall_0 91/95 | Building BVH
+00:08.787  render           | Fra: 1 | Mem: 233M | Updating Geometry BVH Ridge_tall_0 91/95 | Building OptiX acceleration structure
+00:08.787  render           | Fra: 1 | Mem: 233M | Updating Geometry BVH NurbsPath.005 89/95 | Building BVH
+00:08.787  render           | Fra: 1 | Mem: 233M | Updating Geometry BVH NurbsPath.005 89/95 | Building OptiX acceleration structure
+00:08.787  render           | Fra: 1 | Mem: 234M | Updating Geometry BVH NurbsPath.007 88/95 | Building BVH
+00:08.787  render           | Fra: 1 | Mem: 234M | Updating Geometry BVH NurbsPath.007 88/95 | Building OptiX acceleration structure
+00:08.787  render           | Fra: 1 | Mem: 234M | Updating Geometry BVH Ridge_tall_1 92/95 | Building BVH
+00:08.787  render           | Fra: 1 | Mem: 234M | Updating Geometry BVH Ridge_tall_1 92/95 | Building OptiX acceleration structure
+00:08.828  render           | Fra: 1 | Mem: 280M | Updating Scene BVH | Building
+00:08.829  render           | Fra: 1 | Mem: 280M | Updating Scene BVH | Building OptiX acceleration structure
+00:08.841  render           | Fra: 1 | Mem: 303M | Updating Scene BVH | Copying BVH to device
+00:08.841  render           | Fra: 1 | Mem: 303M | Updating Mesh | Computing attributes
+00:08.937  render           | Fra: 1 | Mem: 303M | Updating Mesh | Copying Attributes to device
+00:08.966  render           | Fra: 1 | Mem: 664M | Updating Mesh | Computing normals
+00:08.985  render           | Fra: 1 | Mem: 664M | Updating Mesh | Copying Mesh to device
+00:08.990  render           | Fra: 1 | Mem: 735M | Updating Objects Flags
+00:08.993  render           | Fra: 1 | Mem: 735M | Updating Primitive Offsets
+00:08.994  render           | Fra: 1 | Mem: 735M | Updating Images
+00:08.994  render           | Fra: 1 | Mem: 735M | Updating Images | Loading moss_01_rough_2k.exr
+00:08.994  render           | Fra: 1 | Mem: 735M | Updating Images | Loading kloofendal_overcast_puresky_4k.hdr
+00:08.994  render           | Fra: 1 | Mem: 735M | Updating Images | Loading fir_sapling_medium_branches_disp_2k.png
+00:08.994  render           | Fra: 1 | Mem: 735M | Updating Images | Loading moss_01_nor_gl_2k.exr
+00:08.994  render           | Fra: 1 | Mem: 735M | Updating Images | Loading grass_medium_01_nor_gl_2k.exr
+00:08.994  render           | Fra: 1 | Mem: 735M | Updating Images | Loading flower_heliophila_nor_gl_2k.exr
+00:08.994  render           | Fra: 1 | Mem: 735M | Updating Images | Loading fir_sapling_medium_branches_nor_gl_2k.png
+00:08.994  render           | Fra: 1 | Mem: 735M | Updating Images | Loading fir_sapling_medium_branches_rough_2k.png
+00:08.994  render           | Fra: 1 | Mem: 735M | Updating Images | Loading grass_medium_01_diff_2k.jpg
+00:08.994  render           | Fra: 1 | Mem: 735M | Updating Images | Loading flower_heliophila_rough_2k.exr
+00:08.994  render           | Fra: 1 | Mem: 735M | Updating Images | Loading rock_moss_set_01_diff_2k.jpg
+00:08.994  render           | Fra: 1 | Mem: 735M | Updating Images | Loading moss_01_diff_2k.jpg
+00:08.994  render           | Fra: 1 | Mem: 735M | Updating Images | Loading flower_heliophila_translucency_2k.png
+00:08.994  render           | Fra: 1 | Mem: 735M | Updating Images | Loading fir_sapling_medium_twigs_mask_2k.png
+00:08.994  render           | Fra: 1 | Mem: 735M | Updating Images | Loading fir_sapling_medium_twigs_rough_2k.png
+00:08.994  render           | Fra: 1 | Mem: 735M | Updating Images | Loading moss_01_alpha_2k.png
+00:09.288  render           | Fra: 1 | Mem: 1343M | Updating Volume
+00:09.289  render           | Fra: 1 | Mem: 1343M | Updating Camera Volume
+00:09.289  render           | Fra: 1 | Mem: 1343M | Updating Lookup Tables
+00:09.289  render           | Fra: 1 | Mem: 1344M | Updating Lights
+00:09.292  render           | Fra: 1 | Mem: 1344M | Updating Lights | Importance map
+00:09.420  render           | Fra: 1 | Mem: 1408M | Updating Lights | Computing tree
+00:09.423  render           | Fra: 1 | Mem: 1409M | Updating Integrator
+00:09.423  render           | Fra: 1 | Mem: 1409M | Updating Film
+00:09.423  render           | Fra: 1 | Mem: 1409M | Updating Lookup Tables
+00:09.423  render           | Fra: 1 | Mem: 1409M | Updating Baking
+00:09.424  render           | Fra: 1 | Mem: 1409M | Updating Device | Writing constant memory
+00:09.425  render           | Fra: 1 | Mem: 1409M | Loading denoising kernels (may take a few minutes the first time)
+00:09.427  render           | Fra: 1 | Mem: 1886M | Sample 0/128
+00:09.435  render           | Fra: 1 | Remaining: 00:00.93 | Mem: 1905M | Sample 1/128
+00:09.574  render           | Fra: 1 | Remaining: 00:00.08 | Mem: 1905M | Sample 80/128
+00:09.593  render           | Fra: 1 | Remaining: 00:00.05 | Mem: 1905M | Sample 96/128
+00:09.612  render           | Fra: 1 | Remaining: 00:00.02 | Mem: 1905M | Sample 112/128
+00:10.044  render           | Fra: 1 | Mem: 1905M | Sample 128/128
+00:10.044  render           | Fra: 1 | Mem: 1905M | Finished
+Render statistics:
+Mesh statistics:
+  Geometry:
+    Total memory: 75.82M (79,504,724)
+        Island                           41.01M (42,997,861)
+        NurbsPath.007                    11.11M (11,645,883)
+        NurbsPath.005                    6.82M (7,154,075)
+        Ridge_tall_0                     1.12M (1,175,125)
+        Ridge_tall_1                     1.12M (1,175,125)
+        Ridge_tall_2                     1.12M (1,175,125)
+        Ridge_tall_3                     1.12M (1,175,125)
+        Ridge_tall_4                     1.12M (1,175,125)
+        Plane.5143                       539.82K (552,772)
+        Plane.2197                       292.15K (299,166)
+        modelShape.007                   274.81K (281,401)
+        modelShape.003                   274.81K (281,401)
+        modelShape.001                   274.81K (281,401)
+        modelShape.002                   274.81K (281,401)
+        modelShape.004                   274.81K (281,401)
+        modelShape.005                   274.81K (281,401)
+        modelShape.006                   274.81K (281,401)
+        modelShape.018                   274.81K (281,401)
+        modelShape.008                   274.81K (281,401)
+        modelShape.009                   274.81K (281,401)
+        modelShape.010                   274.81K (281,401)
+        modelShape.011                   274.81K (281,401)
+        modelShape.012                   274.81K (281,401)
+        modelShape.013                   274.81K (281,401)
+        modelShape.014                   274.81K (281,401)
+        modelShape.015                   274.81K (281,401)
+        modelShape.017                   274.81K (281,401)
+        modelShape.016                   274.81K (281,401)
+        medium.005                       175.88K (180,098)
+        medium.012                       175.88K (180,098)
+        medium.011                       175.88K (180,098)
+        medium.010                       175.88K (180,098)
+        medium.016                       175.88K (180,098)
+        medium.009                       175.88K (180,098)
+        medium.008                       175.88K (180,098)
+        medium.017                       175.88K (180,098)
+        medium.007                       175.88K (180,098)
+        medium.006                       175.88K (180,098)
+        medium.004                       175.88K (180,098)
+        medium.013                       175.88K (180,098)
+        medium.003                       175.88K (180,098)
+        medium.002                       175.88K (180,098)
+        medium.015                       175.88K (180,098)
+        medium.014                       175.88K (180,098)
+        medium.001                       175.88K (180,098)
+        mesh1-geometry.015               149.40K (152,983)
+        mesh1-geometry.014               149.40K (152,983)
+        mesh1-geometry.012               149.40K (152,983)
+        mesh1-geometry.016               149.40K (152,983)
+        mesh1-geometry.017               149.40K (152,983)
+        mesh1-geometry.011               149.40K (152,983)
+        mesh1-geometry.010               149.40K (152,983)
+        mesh1-geometry.003               149.40K (152,983)
+        mesh1-geometry.013               149.40K (152,983)
+        mesh1-geometry.009               149.40K (152,983)
+        mesh1-geometry.018               149.40K (152,983)
+        mesh1-geometry.008               149.40K (152,983)
+        mesh1-geometry.001               149.40K (152,983)
+        mesh1-geometry.007               149.40K (152,983)
+        mesh1-geometry.006               149.40K (152,983)
+        mesh1-geometry.005               149.40K (152,983)
+        mesh1-geometry.002               149.40K (152,983)
+        mesh1-geometry.004               149.40K (152,983)
+        Plane.048                        24.42K (25,007)
+        Plane.039                        20.95K (21,454)
+        Plane.037                        13.91K (14,246)
+        Plane.047                        10.92K (11,186)
+        Plane.045                        5.73K (5,865)
+        Plane.042                        5.23K (5,355)
+        Plane.043                        4.90K (5,015)
+        Plane.055                        1.39K (1,428)
+        Plane.058                        1.11K (1,139)
+        Plane.059                        1.08K (1,105)
+        Plane.054                        765B (765)
+        Plane.057                        629B (629)
+        Plane.056                        561B (561)
+        Plane.040                        493B (493)
+        Plane.035                        493B (493)
+        Plane.009                        493B (493)
+        Plane.003                        493B (493)
+        Plane.005                        425B (425)
+        Plane.006                        425B (425)
+        Plane.008                        357B (357)
+        Plane.007                        357B (357)
+        Plane.004                        357B (357)
+        Plane.032                        221B (221)
+        Plane.011                        187B (187)
+        Plane.010                        187B (187)
+        TopMoss                          85B (85)
+        Flowers                          85B (85)
+        LipMoss                          85B (85)
+        TopGrassTall                     85B (85)
+        TopGrass                         85B (85)
+        backgroundlight                  50B (50)
+        Sun                              46B (46)
+Image statistics:
+  Full Images:
+    kloofendal_overcast_puresky_4k.hdr 128.00M (134,217,728)
+    fir_sapling_medium_branches_diff_2k.png 32.00M (33,554,432)
+    fir_sapling_medium_twigs_diff_2k.png 32.00M (33,554,432)
+    fir_sapling_medium_twigs_mask_2k.png 32.00M (33,554,432)
+    fir_sapling_medium_branches_nor_gl_2k.png 32.00M (33,554,432)
+    fir_sapling_medium_twigs_nor_gl_2k.png 32.00M (33,554,432)
+    rock_moss_set_01_nor_gl_2k.exr   32.00M (33,554,432)
+    flower_heliophila_nor_gl_2k.exr  32.00M (33,554,432)
+    grass_medium_01_nor_gl_2k.exr    32.00M (33,554,432)
+    moss_01_nor_gl_2k.exr            32.00M (33,554,432)
+    fir_sapling_medium_twigs_alpha_2k.png 32.00M (33,554,432)
+    moss_01_diff_2k.jpg              16.00M (16,777,216)
+    rock_moss_set_01_diff_2k.jpg     16.00M (16,777,216)
+    flower_heliophila_diff_2k.jpg    16.00M (16,777,216)
+    lichen_rock_nor_gl_2k.jpg        16.00M (16,777,216)
+    cliff_side_nor_gl_2k.jpg         16.00M (16,777,216)
+    cliff_side_Diffuse_2k.jpg        16.00M (16,777,216)
+    aerial_rocks_02_Diffuse_2k.jpg   16.00M (16,777,216)
+    forest_ground_04_Diffuse_2k.jpg  16.00M (16,777,216)
+    grass_medium_01_diff_2k.jpg      16.00M (16,777,216)
+    rock_moss_set_01_rough_2k.jpg    16.00M (16,777,216)
+    lichen_rock_Displacement_2k.jpg  16.00M (16,777,216)
+    lichen_rock_Diffuse_2k.jpg       16.00M (16,777,216)
+    forest_ground_04_nor_gl_2k.jpg   16.00M (16,777,216)
+    fir_sapling_medium_twigs_rough_2k.png 8.00M (8,388,608)
+    moss_01_alpha_2k.png             8.00M (8,388,608)
+    flower_heliophila_translucency_2k.png 8.00M (8,388,608)
+    moss_01_rough_2k.exr             8.00M (8,388,608)
+    grass_medium_01_rough_2k.exr     8.00M (8,388,608)
+    grass_medium_01_alpha_2k.png     8.00M (8,388,608)
+    flower_heliophila_rough_2k.exr   8.00M (8,388,608)
+    flower_heliophila_alpha_2k.png   8.00M (8,388,608)
+    fir_sapling_medium_branches_rough_2k.png 8.00M (8,388,608)
+    fir_sapling_medium_branches_disp_2k.png 8.00M (8,388,608)
+    cliff_side_Displacement_2k.jpg   4.00M (4,194,304)
+  Full image memory: 740.00M (775,946,240)
+  Overhead image memory: 3.83K (3,920)
+  Total image memory: 740.00M (775,950,160)
+Profiling information not available (only works with CPU rendering)
+00:10.242  render           | Saved: '/home/akamel/hero3d/out/still-223/p3/warmup.png'
+00:10.242  render           | Time: 00:06.17 (Saving: 00:00.01)
+still: wrote /home/akamel/hero3d/out/still-223/p3/warmup.png 380x675
+00:10.270  render           | Rendering frame 1
+00:10.270  render           | Start rendering: Scene, ViewLayer
+00:10.270  render           | Engine: Cycles
+00:13.686  render           | Fra: 1 | Mem: 1M | Synchronizing object | Island
+00:13.690  render           | Fra: 1 | Mem: 1M | Synchronizing object | moss_01_d_LOD0
+00:13.690  render           | Fra: 1 | Mem: 1M | Synchronizing object | moss_01_h_LOD0
+00:13.691  render           | Fra: 1 | Mem: 1M | Synchronizing object | TopMoss
+00:13.691  render           | Fra: 1 | Mem: 1M | Synchronizing object | moss_01_i_LOD0
+00:13.691  render           | Fra: 1 | Mem: 1M | Synchronizing object | moss_01_e_LOD0
+00:13.691  render           | Fra: 1 | Mem: 1M | Synchronizing object | moss_01_tall_a_LOD0
+00:13.691  render           | Fra: 1 | Mem: 1M | Synchronizing object | moss_01_a_LOD0
+00:13.691  render           | Fra: 1 | Mem: 1M | Synchronizing object | moss_01_f_LOD0
+00:13.691  render           | Fra: 1 | Mem: 1M | Synchronizing object | moss_01_tall_b_LOD0
+00:13.691  render           | Fra: 1 | Mem: 1M | Synchronizing object | moss_01_b_LOD0
+00:13.691  render           | Fra: 1 | Mem: 1M | Synchronizing object | moss_01_g_LOD0
+00:13.691  render           | Fra: 1 | Mem: 1M | Synchronizing object | moss_01_c_LOD0
+00:13.691  render           | Fra: 1 | Mem: 1M | Synchronizing object | moss_01_j_LOD0
+00:13.777  render           | Fra: 1 | Mem: 1M | Synchronizing object | grass_medium_01_tiny_e_LOD0
+00:13.777  render           | Fra: 1 | Mem: 1M | Synchronizing object | grass_medium_01_tiny_f_LOD0
+00:13.777  render           | Fra: 1 | Mem: 1M | Synchronizing object | TopGrass
+00:13.777  render           | Fra: 1 | Mem: 1M | Synchronizing object | grass_medium_01_small_a_LOD0
+00:13.777  render           | Fra: 1 | Mem: 1M | Synchronizing object | grass_medium_01_mid_c_LOD0
+00:13.777  render           | Fra: 1 | Mem: 1M | Synchronizing object | grass_medium_01_mid_b_LOD0
+00:13.777  render           | Fra: 1 | Mem: 1M | Synchronizing object | grass_medium_01_tiny_d_LOD0
+00:13.777  render           | Fra: 1 | Mem: 1M | Synchronizing object | grass_medium_01_tiny_a_LOD0
+00:13.778  render           | Fra: 1 | Mem: 1M | Synchronizing object | grass_medium_01_small_b_LOD0
+00:13.778  render           | Fra: 1 | Mem: 1M | Synchronizing object | grass_medium_01_tiny_c_LOD0
+00:13.778  render           | Fra: 1 | Mem: 1M | Synchronizing object | grass_medium_01_tiny_b_LOD0
+00:13.779  render           | Fra: 1 | Mem: 1M | Synchronizing object | grass_medium_01_tall_a_LOD0
+00:13.779  render           | Fra: 1 | Mem: 1M | Synchronizing object | grass_medium_01_tall_b_LOD0
+00:13.779  render           | Fra: 1 | Mem: 1M | Synchronizing object | grass_medium_01_tall_c_LOD0
+00:13.779  render           | Fra: 1 | Mem: 1M | Synchronizing object | TopGrassTall
+00:13.785  render           | Fra: 1 | Mem: 1M | Synchronizing object | LipMoss
+00:13.912  render           | Fra: 1 | Mem: 1M | Synchronizing object | flower_heliophila_medium_LOD0
+00:13.912  render           | Fra: 1 | Mem: 1M | Synchronizing object | Flowers
+00:13.913  render           | Fra: 1 | Mem: 1M | Synchronizing object | flower_heliophila_small_LOD0
+00:13.913  render           | Fra: 1 | Mem: 1M | Synchronizing object | rock_moss_set_01_rock06.001
+00:13.913  render           | Fra: 1 | Mem: 1M | Synchronizing object | rock_moss_set_01_rock05.001
+00:13.913  render           | Fra: 1 | Mem: 1M | Synchronizing object | rock_moss_set_01_rock05.004
+00:13.913  render           | Fra: 1 | Mem: 1M | Synchronizing object | rock_moss_set_01_rock05.006
+00:13.913  render           | Fra: 1 | Mem: 1M | Synchronizing object | rock_moss_set_01_rock04.005
+00:13.913  render           | Fra: 1 | Mem: 1M | Synchronizing object | rock_moss_set_01_rock06.007
+00:13.913  render           | Fra: 1 | Mem: 1M | Synchronizing object | rock_moss_set_01_rock05.007
+00:13.913  render           | Fra: 1 | Mem: 1M | Synchronizing object | rock_moss_set_01_rock06.008
+00:13.913  render           | Fra: 1 | Mem: 1M | Synchronizing object | rock_moss_set_01_rock05.008
+00:13.913  render           | Fra: 1 | Mem: 1M | Synchronizing object | rock_moss_set_01_rock06.010
+00:13.913  render           | Fra: 1 | Mem: 1M | Synchronizing object | rock_moss_set_01_rock04.009
+00:13.913  render           | Fra: 1 | Mem: 1M | Synchronizing object | rock_moss_set_01_rock06.011
+00:13.913  render           | Fra: 1 | Mem: 1M | Synchronizing object | rock_moss_set_01_rock05.011
+00:13.913  render           | Fra: 1 | Mem: 1M | Synchronizing object | Ridge_tall_4
+00:13.913  render           | Fra: 1 | Mem: 1M | Synchronizing object | rock_moss_set_01_rock05.012
+00:13.913  render           | Fra: 1 | Mem: 1M | Synchronizing object | rock_moss_set_01_rock05.013
+00:13.913  render           | Fra: 1 | Mem: 1M | Synchronizing object | rock_moss_set_01_rock04.012
+00:13.913  render           | Fra: 1 | Mem: 1M | Synchronizing object | rock_moss_set_01_rock06.014
+00:13.914  render           | Fra: 1 | Mem: 1M | Synchronizing object | rock_moss_set_01_rock04.013
+00:13.914  render           | Fra: 1 | Mem: 1M | Synchronizing object | rock_moss_set_01_rock06.015
+00:13.914  render           | Fra: 1 | Mem: 1M | Synchronizing object | rock_moss_set_01_rock05.015
+00:13.914  render           | Fra: 1 | Mem: 1M | Synchronizing object | rock_moss_set_01_rock04.014
+00:13.914  render           | Fra: 1 | Mem: 1M | Synchronizing object | rock_moss_set_01_rock06.016
+00:13.914  render           | Fra: 1 | Mem: 1M | Synchronizing object | rock_moss_set_01_rock05.016
+00:13.914  render           | Fra: 1 | Mem: 1M | Synchronizing object | rock_moss_set_01_rock04.015
+00:13.914  render           | Fra: 1 | Mem: 1M | Synchronizing object | rock_moss_set_01_rock05.017
+00:13.914  render           | Fra: 1 | Mem: 1M | Synchronizing object | rock_moss_set_01_rock04.016
+00:13.914  render           | Fra: 1 | Mem: 1M | Synchronizing object | rock_moss_set_01_rock06.018
+00:13.914  render           | Fra: 1 | Mem: 1M | Synchronizing object | rock_moss_set_01_rock05.018
+00:13.914  render           | Fra: 1 | Mem: 1M | Synchronizing object | rock_moss_set_01_rock04.017
+00:13.914  render           | Fra: 1 | Mem: 1M | Synchronizing object | fir_sapling_medium_a_LOD0.001
+00:13.914  render           | Fra: 1 | Mem: 1M | Synchronizing object | fir_sapling_medium_b_LOD0.001
+00:13.914  render           | Fra: 1 | Mem: 1M | Synchronizing object | Sun
+00:13.914  render           | Fra: 1 | Mem: 1M | Synchronizing object | Ridge_tall_0
+00:13.914  render           | Fra: 1 | Mem: 1M | Synchronizing object | Ridge_tall_2
+00:13.914  render           | Fra: 1 | Mem: 1M | Synchronizing object | Ridge_tall_3
+00:13.932  render           | Fra: 1 | Mem: 1M | Initializing
+00:13.992  render           | Fra: 1 | Mem: 1M | Waiting for render to start
+00:13.992  render           | Fra: 1 | Mem: 1M | Updating Scene
+00:13.992  render           | Fra: 1 | Mem: 1M | Updating Shaders
+00:13.997  render           | Fra: 1 | Mem: 1M | Loading render kernels (may take a few minutes the first time)
+00:14.036  render           | Fra: 1 | Mem: 1M | Updating Procedurals
+Update statistics:
+Scene:
+    Total time: 0.042190s
+        device_update                            0.042190s
+Geometry:
+    Total time: 0.000000s
+Light:
+    Total time: 0.000000s
+Object:
+    Total time: 0.000000s
+Image:
+    Total time: 0.000000s
+Background:
+    Total time: 0.000000s
+Bake:
+    Total time: 0.000000s
+Camera:
+    Total time: 0.000000s
+Film:
+    Total time: 0.000000s
+Integrator:
+    Total time: 0.000000s
+OSL:
+    Total time: 0.000000s
+Particles:
+    Total time: 0.000000s
+SVM:
+    Total time: 0.000000s
+Tables:
+    Total time: 0.000000s
+Procedurals:
+    Total time: 0.000000s
+
+00:14.036  render           | Fra: 1 | Mem: 1M | Updating Background
+00:14.036  render           | Fra: 1 | Mem: 1M | Updating Scene Attribute
+00:14.036  render           | Fra: 1 | Mem: 1M | Updating Camera
+00:14.036  render           | Fra: 1 | Mem: 1M | Updating Meshes Flags
+00:14.036  render           | Fra: 1 | Mem: 1M | Updating Objects
+00:14.038  render           | Fra: 1 | Mem: 1M | Updating Objects | Copying Transformations to device
+00:14.043  render           | Fra: 1 | Mem: 37M | Updating Particle Systems
+00:14.043  render           | Fra: 1 | Mem: 37M | Updating Particle Systems | Copying Particles to device
+00:14.043  render           | Fra: 1 | Mem: 37M | Updating Meshes
+00:14.158  render           | Fra: 1 | Mem: 37M | Updating Displacement Images
+00:14.158  render           | Fra: 1 | Mem: 37M | Updating Images | Loading cliff_side_Diffuse_2k.jpg
+00:14.158  render           | Fra: 1 | Mem: 37M | Updating Images | Loading aerial_rocks_02_Diffuse_2k.jpg
+00:14.158  render           | Fra: 1 | Mem: 37M | Updating Images | Loading lichen_rock_nor_gl_2k.jpg
+00:14.158  render           | Fra: 1 | Mem: 37M | Updating Images | Loading lichen_rock_Diffuse_2k.jpg
+00:14.158  render           | Fra: 1 | Mem: 37M | Updating Images | Loading lichen_rock_Displacement_2k.jpg
+00:14.158  render           | Fra: 1 | Mem: 37M | Updating Images | Loading forest_ground_04_nor_gl_2k.jpg
+00:14.158  render           | Fra: 1 | Mem: 37M | Updating Images | Loading cliff_side_Displacement_2k.jpg
+00:14.159  render           | Fra: 1 | Mem: 37M | Updating Images | Loading cliff_side_nor_gl_2k.jpg
+00:14.219  render           | Fra: 1 | Mem: 170M | Updating Mesh | Computing normals
+00:14.237  render           | Fra: 1 | Mem: 170M | Updating Mesh | Copying Mesh to device
+00:14.242  render           | Fra: 1 | Mem: 241M | Updating Objects | Applying Static Transformations
+00:14.250  render           | Fra: 1 | Mem: 241M | Updating Mesh | Computing attributes
+00:14.305  render           | Fra: 1 | Mem: 241M | Updating Mesh | Copying Attributes to device
+00:14.328  render           | Fra: 1 | Mem: 433M | Updating Mesh | Computing Displacement Island
+00:14.676  render           | Fra: 1 | Mem: 433M | Updating Mesh | Computing Displacement mesh1-geometry.001
+00:14.681  render           | Fra: 1 | Mem: 433M | Updating Mesh | Computing Displacement modelShape.001
+00:14.685  render           | Fra: 1 | Mem: 433M | Updating Mesh | Computing Displacement medium.002
+00:14.689  render           | Fra: 1 | Mem: 433M | Updating Mesh | Computing Displacement mesh1-geometry.002
+00:14.693  render           | Fra: 1 | Mem: 433M | Updating Mesh | Computing Displacement modelShape.002
+00:14.697  render           | Fra: 1 | Mem: 433M | Updating Mesh | Computing Displacement medium.003
+00:14.700  render           | Fra: 1 | Mem: 433M | Updating Mesh | Computing Displacement mesh1-geometry.004
+00:14.705  render           | Fra: 1 | Mem: 433M | Updating Mesh | Computing Displacement modelShape.004
+00:14.708  render           | Fra: 1 | Mem: 433M | Updating Mesh | Computing Displacement medium.004
+00:14.712  render           | Fra: 1 | Mem: 433M | Updating Mesh | Computing Displacement mesh1-geometry.005
+00:14.716  render           | Fra: 1 | Mem: 433M | Updating Mesh | Computing Displacement modelShape.005
+00:14.720  render           | Fra: 1 | Mem: 433M | Updating Mesh | Computing Displacement medium.005
+00:14.723  render           | Fra: 1 | Mem: 433M | Updating Mesh | Computing Displacement mesh1-geometry.006
+00:14.728  render           | Fra: 1 | Mem: 433M | Updating Mesh | Computing Displacement modelShape.006
+00:14.732  render           | Fra: 1 | Mem: 433M | Updating Mesh | Computing Displacement medium.006
+00:14.735  render           | Fra: 1 | Mem: 433M | Updating Mesh | Computing Displacement mesh1-geometry.007
+00:14.739  render           | Fra: 1 | Mem: 433M | Updating Mesh | Computing Displacement modelShape.007
+00:14.743  render           | Fra: 1 | Mem: 433M | Updating Mesh | Computing Displacement medium.007
+00:14.746  render           | Fra: 1 | Mem: 433M | Updating Mesh | Computing Displacement mesh1-geometry.008
+00:14.750  render           | Fra: 1 | Mem: 433M | Updating Mesh | Computing Displacement modelShape.008
+00:14.754  render           | Fra: 1 | Mem: 433M | Updating Mesh | Computing Displacement medium.008
+00:14.758  render           | Fra: 1 | Mem: 433M | Updating Mesh | Computing Displacement mesh1-geometry.009
+00:14.762  render           | Fra: 1 | Mem: 433M | Updating Mesh | Computing Displacement modelShape.009
+00:14.766  render           | Fra: 1 | Mem: 433M | Updating Mesh | Computing Displacement medium.009
+00:14.769  render           | Fra: 1 | Mem: 433M | Updating Mesh | Computing Displacement mesh1-geometry.010
+00:14.773  render           | Fra: 1 | Mem: 433M | Updating Mesh | Computing Displacement modelShape.010
+00:14.777  render           | Fra: 1 | Mem: 433M | Updating Mesh | Computing Displacement medium.010
+00:14.780  render           | Fra: 1 | Mem: 433M | Updating Mesh | Computing Displacement mesh1-geometry.011
+00:14.785  render           | Fra: 1 | Mem: 433M | Updating Mesh | Computing Displacement modelShape.011
+00:14.788  render           | Fra: 1 | Mem: 433M | Updating Mesh | Computing Displacement medium.011
+00:14.792  render           | Fra: 1 | Mem: 433M | Updating Mesh | Computing Displacement mesh1-geometry.012
+00:14.796  render           | Fra: 1 | Mem: 433M | Updating Mesh | Computing Displacement modelShape.012
+00:14.800  render           | Fra: 1 | Mem: 433M | Updating Mesh | Computing Displacement medium.012
+00:14.804  render           | Fra: 1 | Mem: 433M | Updating Mesh | Computing Displacement mesh1-geometry.013
+00:14.808  render           | Fra: 1 | Mem: 433M | Updating Mesh | Computing Displacement modelShape.013
+00:14.812  render           | Fra: 1 | Mem: 433M | Updating Mesh | Computing Displacement medium.013
+00:14.816  render           | Fra: 1 | Mem: 433M | Updating Mesh | Computing Displacement mesh1-geometry.014
+00:14.820  render           | Fra: 1 | Mem: 433M | Updating Mesh | Computing Displacement modelShape.014
+00:14.824  render           | Fra: 1 | Mem: 433M | Updating Mesh | Computing Displacement medium.014
+00:14.827  render           | Fra: 1 | Mem: 433M | Updating Mesh | Computing Displacement mesh1-geometry.015
+00:14.831  render           | Fra: 1 | Mem: 433M | Updating Mesh | Computing Displacement modelShape.015
+00:14.835  render           | Fra: 1 | Mem: 433M | Updating Mesh | Computing Displacement medium.015
+00:14.839  render           | Fra: 1 | Mem: 433M | Updating Mesh | Computing Displacement mesh1-geometry.016
+00:14.843  render           | Fra: 1 | Mem: 433M | Updating Mesh | Computing Displacement modelShape.016
+00:14.847  render           | Fra: 1 | Mem: 433M | Updating Mesh | Computing Displacement medium.016
+00:14.850  render           | Fra: 1 | Mem: 433M | Updating Mesh | Computing Displacement mesh1-geometry.017
+00:14.854  render           | Fra: 1 | Mem: 433M | Updating Mesh | Computing Displacement modelShape.017
+00:14.858  render           | Fra: 1 | Mem: 433M | Updating Mesh | Computing Displacement medium.017
+00:14.862  render           | Fra: 1 | Mem: 433M | Updating Mesh | Computing Displacement mesh1-geometry.018
+00:14.866  render           | Fra: 1 | Mem: 433M | Updating Mesh | Computing Displacement modelShape.018
+00:14.878  render           | Fra: 1 | Mem: 170M | Updating Geometry BVH backgroundlight 96/95 | Building BVH
+00:14.878  render           | Fra: 1 | Mem: 170M | Updating Geometry BVH backgroundlight 96/95 | Building OptiX acceleration structure
+00:14.878  render           | Fra: 1 | Mem: 170M | Updating Geometry BVH Ridge_tall_4 95/95 | Building BVH
+00:14.878  render           | Fra: 1 | Mem: 170M | Updating Geometry BVH Ridge_tall_4 95/95 | Building OptiX acceleration structure
+00:14.879  render           | Fra: 1 | Mem: 170M | Updating Geometry BVH TopMoss 3/95 | Building BVH
+00:14.879  render           | Fra: 1 | Mem: 170M | Updating Geometry BVH Plane.010 5/95 | Building OptiX acceleration structure
+00:14.879  render           | Fra: 1 | Mem: 170M | Updating Geometry BVH Plane.035 8/95 | Building BVH
+00:14.879  render           | Fra: 1 | Mem: 170M | Updating Geometry BVH Plane.005 7/95 | Building OptiX acceleration structure
+00:14.879  render           | Fra: 1 | Mem: 171M | Updating Geometry BVH Plane.009 9/95 | Building BVH
+00:14.879  render           | Fra: 1 | Mem: 171M | Updating Geometry BVH Plane.040 11/95 | Building OptiX acceleration structure
+00:14.879  render           | Fra: 1 | Mem: 171M | Updating Geometry BVH TopGrass 16/95 | Building BVH
+00:14.879  render           | Fra: 1 | Mem: 171M | Updating Geometry BVH Plane.058 17/95 | Building OptiX acceleration structure
+00:14.879  render           | Fra: 1 | Mem: 171M | Updating Geometry BVH Plane.059 18/95 | Building OptiX acceleration structure
+00:14.879  render           | Fra: 1 | Mem: 171M | Updating Geometry BVH Plane.048 20/95 | Building OptiX acceleration structure
+00:14.879  render           | Fra: 1 | Mem: 171M | Updating Geometry BVH Plane.057 22/95 | Building BVH
+00:14.879  render           | Fra: 1 | Mem: 171M | Updating Geometry BVH Plane.047 24/95 | Building OptiX acceleration structure
+00:14.879  render           | Fra: 1 | Mem: 171M | Updating Geometry BVH Plane.056 26/95 | Building BVH
+00:14.879  render           | Fra: 1 | Mem: 171M | Updating Geometry BVH TopGrassTall 27/95 | Building OptiX acceleration structure
+00:14.879  render           | Fra: 1 | Mem: 171M | Updating Geometry BVH Plane.042 29/95 | Building BVH
+00:14.879  render           | Fra: 1 | Mem: 171M | Updating Geometry BVH Plane.042 29/95 | Building OptiX acceleration structure
+00:14.879  render           | Fra: 1 | Mem: 171M | Updating Geometry BVH Plane.045 30/95 | Building BVH
+00:14.879  render           | Fra: 1 | Mem: 171M | Updating Geometry BVH Plane.045 30/95 | Building OptiX acceleration structure
+00:14.879  render           | Fra: 1 | Mem: 174M | Updating Geometry BVH LipMoss 31/95 | Building BVH
+00:14.879  render           | Fra: 1 | Mem: 174M | Updating Geometry BVH LipMoss 31/95 | Building OptiX acceleration structure
+00:14.879  render           | Fra: 1 | Mem: 174M | Updating Geometry BVH Flowers 32/95 | Building BVH
+00:14.879  render           | Fra: 1 | Mem: 174M | Updating Geometry BVH Flowers 32/95 | Building OptiX acceleration structure
+00:14.879  render           | Fra: 1 | Mem: 174M | Updating Geometry BVH Plane.5143 33/95 | Building BVH
+00:14.879  render           | Fra: 1 | Mem: 174M | Updating Geometry BVH Plane.5143 33/95 | Building OptiX acceleration structure
+00:14.880  render           | Fra: 1 | Mem: 178M | Updating Geometry BVH Island 2/95 | Building BVH
+00:14.880  render           | Fra: 1 | Mem: 178M | Updating Geometry BVH Island 2/95 | Building OptiX acceleration structure
+00:14.881  render           | Fra: 1 | Mem: 172M | Updating Geometry BVH Ridge_tall_3 94/95 | Building BVH
+00:14.881  render           | Fra: 1 | Mem: 172M | Updating Geometry BVH Ridge_tall_3 94/95 | Building OptiX acceleration structure
+00:14.882  render           | Fra: 1 | Mem: 173M | Updating Geometry BVH Plane.2197 34/95 | Building BVH
+00:14.882  render           | Fra: 1 | Mem: 173M | Updating Geometry BVH Plane.2197 34/95 | Building OptiX acceleration structure
+00:14.882  render           | Fra: 1 | Mem: 174M | Updating Geometry BVH mesh1-geometry.003 35/95 | Building BVH
+00:14.882  render           | Fra: 1 | Mem: 174M | Updating Geometry BVH mesh1-geometry.003 35/95 | Building OptiX acceleration structure
+00:14.882  render           | Fra: 1 | Mem: 174M | Updating Geometry BVH modelShape.003 36/95 | Building BVH
+00:14.882  render           | Fra: 1 | Mem: 174M | Updating Geometry BVH modelShape.003 36/95 | Building OptiX acceleration structure
+00:14.882  render           | Fra: 1 | Mem: 174M | Updating Geometry BVH medium.001 37/95 | Building BVH
+00:14.882  render           | Fra: 1 | Mem: 174M | Updating Geometry BVH medium.001 37/95 | Building OptiX acceleration structure
+00:14.883  render           | Fra: 1 | Mem: 174M | Updating Geometry BVH mesh1-geometry.001 38/95 | Building BVH
+00:14.883  render           | Fra: 1 | Mem: 174M | Updating Geometry BVH mesh1-geometry.001 38/95 | Building OptiX acceleration structure
+00:14.883  render           | Fra: 1 | Mem: 174M | Updating Geometry BVH modelShape.001 39/95 | Building BVH
+00:14.883  render           | Fra: 1 | Mem: 174M | Updating Geometry BVH modelShape.001 39/95 | Building OptiX acceleration structure
+00:14.883  render           | Fra: 1 | Mem: 175M | Updating Geometry BVH medium.002 40/95 | Building BVH
+00:14.883  render           | Fra: 1 | Mem: 175M | Updating Geometry BVH medium.002 40/95 | Building OptiX acceleration structure
+00:14.883  render           | Fra: 1 | Mem: 175M | Updating Geometry BVH mesh1-geometry.002 41/95 | Building BVH
+00:14.883  render           | Fra: 1 | Mem: 175M | Updating Geometry BVH mesh1-geometry.002 41/95 | Building OptiX acceleration structure
+00:14.884  render           | Fra: 1 | Mem: 175M | Updating Geometry BVH modelShape.002 42/95 | Building BVH
+00:14.884  render           | Fra: 1 | Mem: 175M | Updating Geometry BVH modelShape.002 42/95 | Building OptiX acceleration structure
+00:14.884  render           | Fra: 1 | Mem: 175M | Updating Geometry BVH medium.003 43/95 | Building BVH
+00:14.884  render           | Fra: 1 | Mem: 175M | Updating Geometry BVH medium.003 43/95 | Building OptiX acceleration structure
+00:14.884  render           | Fra: 1 | Mem: 176M | Updating Geometry BVH mesh1-geometry.004 44/95 | Building BVH
+00:14.884  render           | Fra: 1 | Mem: 176M | Updating Geometry BVH mesh1-geometry.004 44/95 | Building OptiX acceleration structure
+00:14.885  render           | Fra: 1 | Mem: 176M | Updating Geometry BVH modelShape.004 45/95 | Building BVH
+00:14.885  render           | Fra: 1 | Mem: 176M | Updating Geometry BVH modelShape.004 45/95 | Building OptiX acceleration structure
+00:14.885  render           | Fra: 1 | Mem: 176M | Updating Geometry BVH medium.004 46/95 | Building BVH
+00:14.885  render           | Fra: 1 | Mem: 176M | Updating Geometry BVH medium.004 46/95 | Building OptiX acceleration structure
+00:14.885  render           | Fra: 1 | Mem: 176M | Updating Geometry BVH mesh1-geometry.005 47/95 | Building BVH
+00:14.885  render           | Fra: 1 | Mem: 176M | Updating Geometry BVH mesh1-geometry.005 47/95 | Building OptiX acceleration structure
+00:14.886  render           | Fra: 1 | Mem: 176M | Updating Geometry BVH modelShape.005 48/95 | Building BVH
+00:14.886  render           | Fra: 1 | Mem: 176M | Updating Geometry BVH modelShape.005 48/95 | Building OptiX acceleration structure
+00:14.886  render           | Fra: 1 | Mem: 177M | Updating Geometry BVH medium.005 49/95 | Building BVH
+00:14.886  render           | Fra: 1 | Mem: 177M | Updating Geometry BVH medium.005 49/95 | Building OptiX acceleration structure
+00:14.886  render           | Fra: 1 | Mem: 177M | Updating Geometry BVH mesh1-geometry.006 50/95 | Building BVH
+00:14.886  render           | Fra: 1 | Mem: 177M | Updating Geometry BVH mesh1-geometry.006 50/95 | Building OptiX acceleration structure
+00:14.887  render           | Fra: 1 | Mem: 177M | Updating Geometry BVH modelShape.006 51/95 | Building BVH
+00:14.887  render           | Fra: 1 | Mem: 177M | Updating Geometry BVH modelShape.006 51/95 | Building OptiX acceleration structure
+00:14.887  render           | Fra: 1 | Mem: 177M | Updating Geometry BVH medium.006 52/95 | Building BVH
+00:14.887  render           | Fra: 1 | Mem: 177M | Updating Geometry BVH medium.006 52/95 | Building OptiX acceleration structure
+00:14.887  render           | Fra: 1 | Mem: 178M | Updating Geometry BVH mesh1-geometry.007 53/95 | Building BVH
+00:14.887  render           | Fra: 1 | Mem: 178M | Updating Geometry BVH mesh1-geometry.007 53/95 | Building OptiX acceleration structure
+00:14.887  render           | Fra: 1 | Mem: 178M | Updating Geometry BVH modelShape.007 54/95 | Building BVH
+00:14.887  render           | Fra: 1 | Mem: 179M | Updating Geometry BVH modelShape.007 54/95 | Building OptiX acceleration structure
+00:14.888  render           | Fra: 1 | Mem: 178M | Updating Geometry BVH medium.007 55/95 | Building BVH
+00:14.888  render           | Fra: 1 | Mem: 178M | Updating Geometry BVH medium.007 55/95 | Building OptiX acceleration structure
+00:14.888  render           | Fra: 1 | Mem: 180M | Updating Geometry BVH mesh1-geometry.008 56/95 | Building BVH
+00:14.888  render           | Fra: 1 | Mem: 180M | Updating Geometry BVH mesh1-geometry.008 56/95 | Building OptiX acceleration structure
+00:14.889  render           | Fra: 1 | Mem: 179M | Updating Geometry BVH modelShape.008 57/95 | Building BVH
+00:14.889  render           | Fra: 1 | Mem: 179M | Updating Geometry BVH modelShape.008 57/95 | Building OptiX acceleration structure
+00:14.889  render           | Fra: 1 | Mem: 179M | Updating Geometry BVH medium.008 58/95 | Building BVH
+00:14.889  render           | Fra: 1 | Mem: 180M | Updating Geometry BVH medium.008 58/95 | Building OptiX acceleration structure
+00:14.889  render           | Fra: 1 | Mem: 179M | Updating Geometry BVH mesh1-geometry.009 59/95 | Building BVH
+00:14.889  render           | Fra: 1 | Mem: 179M | Updating Geometry BVH mesh1-geometry.009 59/95 | Building OptiX acceleration structure
+00:14.890  render           | Fra: 1 | Mem: 179M | Updating Geometry BVH modelShape.009 60/95 | Building BVH
+00:14.890  render           | Fra: 1 | Mem: 179M | Updating Geometry BVH modelShape.009 60/95 | Building OptiX acceleration structure
+00:14.890  render           | Fra: 1 | Mem: 180M | Updating Geometry BVH Ridge_tall_2 93/95 | Building BVH
+00:14.890  render           | Fra: 1 | Mem: 180M | Updating Geometry BVH Ridge_tall_2 93/95 | Building OptiX acceleration structure
+00:14.891  render           | Fra: 1 | Mem: 183M | Updating Geometry BVH medium.009 61/95 | Building BVH
+00:14.891  render           | Fra: 1 | Mem: 183M | Updating Geometry BVH medium.009 61/95 | Building OptiX acceleration structure
+00:14.891  render           | Fra: 1 | Mem: 181M | Updating Geometry BVH mesh1-geometry.010 62/95 | Building BVH
+00:14.891  render           | Fra: 1 | Mem: 181M | Updating Geometry BVH mesh1-geometry.010 62/95 | Building OptiX acceleration structure
+00:14.892  render           | Fra: 1 | Mem: 182M | Updating Geometry BVH modelShape.010 63/95 | Building BVH
+00:14.892  render           | Fra: 1 | Mem: 182M | Updating Geometry BVH modelShape.010 63/95 | Building OptiX acceleration structure
+00:14.892  render           | Fra: 1 | Mem: 183M | Updating Geometry BVH medium.010 64/95 | Building BVH
+00:14.892  render           | Fra: 1 | Mem: 183M | Updating Geometry BVH medium.010 64/95 | Building OptiX acceleration structure
+00:14.893  render           | Fra: 1 | Mem: 182M | Updating Geometry BVH mesh1-geometry.011 65/95 | Building BVH
+00:14.893  render           | Fra: 1 | Mem: 182M | Updating Geometry BVH mesh1-geometry.011 65/95 | Building OptiX acceleration structure
+00:14.893  render           | Fra: 1 | Mem: 182M | Updating Geometry BVH modelShape.011 66/95 | Building BVH
+00:14.893  render           | Fra: 1 | Mem: 182M | Updating Geometry BVH modelShape.011 66/95 | Building OptiX acceleration structure
+00:14.896  render           | Fra: 1 | Mem: 226M | Updating Geometry BVH medium.011 67/95 | Building BVH
+00:14.896  render           | Fra: 1 | Mem: 226M | Updating Geometry BVH medium.011 67/95 | Building OptiX acceleration structure
+00:14.897  render           | Fra: 1 | Mem: 227M | Updating Geometry BVH mesh1-geometry.012 68/95 | Building BVH
+00:14.897  render           | Fra: 1 | Mem: 227M | Updating Geometry BVH mesh1-geometry.012 68/95 | Building OptiX acceleration structure
+00:14.897  render           | Fra: 1 | Mem: 227M | Updating Geometry BVH modelShape.012 69/95 | Building BVH
+00:14.897  render           | Fra: 1 | Mem: 227M | Updating Geometry BVH modelShape.012 69/95 | Building OptiX acceleration structure
+00:14.898  render           | Fra: 1 | Mem: 228M | Updating Geometry BVH medium.012 70/95 | Building BVH
+00:14.898  render           | Fra: 1 | Mem: 228M | Updating Geometry BVH medium.012 70/95 | Building OptiX acceleration structure
+00:14.898  render           | Fra: 1 | Mem: 227M | Updating Geometry BVH mesh1-geometry.013 71/95 | Building BVH
+00:14.898  render           | Fra: 1 | Mem: 227M | Updating Geometry BVH mesh1-geometry.013 71/95 | Building OptiX acceleration structure
+00:14.899  render           | Fra: 1 | Mem: 228M | Updating Geometry BVH modelShape.013 72/95 | Building BVH
+00:14.899  render           | Fra: 1 | Mem: 228M | Updating Geometry BVH modelShape.013 72/95 | Building OptiX acceleration structure
+00:14.899  render           | Fra: 1 | Mem: 228M | Updating Geometry BVH medium.013 73/95 | Building BVH
+00:14.899  render           | Fra: 1 | Mem: 228M | Updating Geometry BVH medium.013 73/95 | Building OptiX acceleration structure
+00:14.899  render           | Fra: 1 | Mem: 228M | Updating Geometry BVH mesh1-geometry.014 74/95 | Building BVH
+00:14.899  render           | Fra: 1 | Mem: 228M | Updating Geometry BVH mesh1-geometry.014 74/95 | Building OptiX acceleration structure
+00:14.900  render           | Fra: 1 | Mem: 229M | Updating Geometry BVH modelShape.014 75/95 | Building BVH
+00:14.900  render           | Fra: 1 | Mem: 229M | Updating Geometry BVH modelShape.014 75/95 | Building OptiX acceleration structure
+00:14.900  render           | Fra: 1 | Mem: 230M | Updating Geometry BVH medium.014 76/95 | Building BVH
+00:14.900  render           | Fra: 1 | Mem: 230M | Updating Geometry BVH medium.014 76/95 | Building OptiX acceleration structure
+00:14.901  render           | Fra: 1 | Mem: 230M | Updating Geometry BVH mesh1-geometry.015 77/95 | Building BVH
+00:14.901  render           | Fra: 1 | Mem: 230M | Updating Geometry BVH mesh1-geometry.015 77/95 | Building OptiX acceleration structure
+00:14.901  render           | Fra: 1 | Mem: 230M | Updating Geometry BVH modelShape.015 78/95 | Building BVH
+00:14.901  render           | Fra: 1 | Mem: 230M | Updating Geometry BVH modelShape.015 78/95 | Building OptiX acceleration structure
+00:14.902  render           | Fra: 1 | Mem: 231M | Updating Geometry BVH medium.015 79/95 | Building BVH
+00:14.902  render           | Fra: 1 | Mem: 231M | Updating Geometry BVH medium.015 79/95 | Building OptiX acceleration structure
+00:14.902  render           | Fra: 1 | Mem: 230M | Updating Geometry BVH mesh1-geometry.016 80/95 | Building BVH
+00:14.902  render           | Fra: 1 | Mem: 230M | Updating Geometry BVH mesh1-geometry.016 80/95 | Building OptiX acceleration structure
+00:14.903  render           | Fra: 1 | Mem: 230M | Updating Geometry BVH modelShape.016 81/95 | Building BVH
+00:14.903  render           | Fra: 1 | Mem: 230M | Updating Geometry BVH modelShape.016 81/95 | Building OptiX acceleration structure
+00:14.903  render           | Fra: 1 | Mem: 231M | Updating Geometry BVH medium.016 82/95 | Building BVH
+00:14.903  render           | Fra: 1 | Mem: 231M | Updating Geometry BVH medium.016 82/95 | Building OptiX acceleration structure
+00:14.903  render           | Fra: 1 | Mem: 231M | Updating Geometry BVH mesh1-geometry.017 83/95 | Building BVH
+00:14.903  render           | Fra: 1 | Mem: 231M | Updating Geometry BVH mesh1-geometry.017 83/95 | Building OptiX acceleration structure
+00:14.904  render           | Fra: 1 | Mem: 232M | Updating Geometry BVH modelShape.017 84/95 | Building BVH
+00:14.904  render           | Fra: 1 | Mem: 232M | Updating Geometry BVH modelShape.017 84/95 | Building OptiX acceleration structure
+00:14.904  render           | Fra: 1 | Mem: 232M | Updating Geometry BVH medium.017 85/95 | Building BVH
+00:14.904  render           | Fra: 1 | Mem: 232M | Updating Geometry BVH medium.017 85/95 | Building OptiX acceleration structure
+00:14.905  render           | Fra: 1 | Mem: 232M | Updating Geometry BVH mesh1-geometry.018 86/95 | Building BVH
+00:14.905  render           | Fra: 1 | Mem: 232M | Updating Geometry BVH mesh1-geometry.018 86/95 | Building OptiX acceleration structure
+00:14.905  render           | Fra: 1 | Mem: 232M | Updating Geometry BVH Ridge_tall_1 92/95 | Building BVH
+00:14.905  render           | Fra: 1 | Mem: 232M | Updating Geometry BVH Ridge_tall_1 92/95 | Building OptiX acceleration structure
+00:14.906  render           | Fra: 1 | Mem: 235M | Updating Geometry BVH modelShape.018 87/95 | Building BVH
+00:14.906  render           | Fra: 1 | Mem: 235M | Updating Geometry BVH modelShape.018 87/95 | Building OptiX acceleration structure
+00:14.907  render           | Fra: 1 | Mem: 235M | Updating Geometry BVH NurbsPath.007 88/95 | Building BVH
+00:14.907  render           | Fra: 1 | Mem: 235M | Updating Geometry BVH NurbsPath.007 88/95 | Building OptiX acceleration structure
+00:14.907  render           | Fra: 1 | Mem: 235M | Updating Geometry BVH NurbsPath.005 89/95 | Building BVH
+00:14.907  render           | Fra: 1 | Mem: 235M | Updating Geometry BVH NurbsPath.005 89/95 | Building OptiX acceleration structure
+00:14.907  render           | Fra: 1 | Mem: 234M | Updating Geometry BVH Sun 90/95 | Building BVH
+00:14.907  render           | Fra: 1 | Mem: 234M | Updating Geometry BVH Sun 90/95 | Building OptiX acceleration structure
+00:14.908  render           | Fra: 1 | Mem: 234M | Updating Geometry BVH Ridge_tall_0 91/95 | Building BVH
+00:14.908  render           | Fra: 1 | Mem: 234M | Updating Geometry BVH Ridge_tall_0 91/95 | Building OptiX acceleration structure
+00:14.946  render           | Fra: 1 | Mem: 280M | Updating Scene BVH | Building
+00:14.947  render           | Fra: 1 | Mem: 280M | Updating Scene BVH | Building OptiX acceleration structure
+00:14.961  render           | Fra: 1 | Mem: 303M | Updating Scene BVH | Copying BVH to device
+00:14.961  render           | Fra: 1 | Mem: 303M | Updating Mesh | Computing attributes
+00:15.062  render           | Fra: 1 | Mem: 303M | Updating Mesh | Copying Attributes to device
+00:15.091  render           | Fra: 1 | Mem: 664M | Updating Mesh | Computing normals
+00:15.110  render           | Fra: 1 | Mem: 664M | Updating Mesh | Copying Mesh to device
+00:15.114  render           | Fra: 1 | Mem: 735M | Updating Objects Flags
+00:15.118  render           | Fra: 1 | Mem: 735M | Updating Primitive Offsets
+00:15.119  render           | Fra: 1 | Mem: 735M | Updating Images
+00:15.119  render           | Fra: 1 | Mem: 735M | Updating Images | Loading fir_sapling_medium_twigs_rough_2k.png
+00:15.119  render           | Fra: 1 | Mem: 735M | Updating Images | Loading fir_sapling_medium_branches_disp_2k.png
+00:15.119  render           | Fra: 1 | Mem: 735M | Updating Images | Loading kloofendal_overcast_puresky_4k.hdr
+00:15.119  render           | Fra: 1 | Mem: 735M | Updating Images | Loading moss_01_nor_gl_2k.exr
+00:15.119  render           | Fra: 1 | Mem: 735M | Updating Images | Loading rock_moss_set_01_nor_gl_2k.exr
+00:15.119  render           | Fra: 1 | Mem: 735M | Updating Images | Loading fir_sapling_medium_branches_nor_gl_2k.png
+00:15.119  render           | Fra: 1 | Mem: 735M | Updating Images | Loading grass_medium_01_diff_2k.jpg
+00:15.119  render           | Fra: 1 | Mem: 735M | Updating Images | Loading fir_sapling_medium_twigs_diff_2k.png
+00:15.119  render           | Fra: 1 | Mem: 735M | Updating Images | Loading rock_moss_set_01_rough_2k.jpg
+00:15.119  render           | Fra: 1 | Mem: 735M | Updating Images | Loading flower_heliophila_translucency_2k.png
+00:15.119  render           | Fra: 1 | Mem: 735M | Updating Images | Loading grass_medium_01_rough_2k.exr
+00:15.119  render           | Fra: 1 | Mem: 735M | Updating Images | Loading moss_01_alpha_2k.png
+00:15.119  render           | Fra: 1 | Mem: 735M | Updating Images | Loading fir_sapling_medium_twigs_alpha_2k.png
+00:15.119  render           | Fra: 1 | Mem: 735M | Updating Images | Loading rock_moss_set_01_diff_2k.jpg
+00:15.119  render           | Fra: 1 | Mem: 735M | Updating Images | Loading moss_01_rough_2k.exr
+00:15.382  render           | Fra: 1 | Mem: 1343M | Updating Volume
+00:15.383  render           | Fra: 1 | Mem: 1343M | Updating Camera Volume
+00:15.383  render           | Fra: 1 | Mem: 1343M | Updating Lookup Tables
+00:15.383  render           | Fra: 1 | Mem: 1344M | Updating Lights
+00:15.387  render           | Fra: 1 | Mem: 1344M | Updating Lights | Importance map
+00:15.517  render           | Fra: 1 | Mem: 1408M | Updating Lights | Computing tree
+00:15.520  render           | Fra: 1 | Mem: 1409M | Updating Integrator
+00:15.520  render           | Fra: 1 | Mem: 1409M | Updating Film
+00:15.520  render           | Fra: 1 | Mem: 1409M | Updating Lookup Tables
+00:15.520  render           | Fra: 1 | Mem: 1409M | Updating Baking
+00:15.521  render           | Fra: 1 | Mem: 1409M | Updating Device | Writing constant memory
+00:15.521  render           | Fra: 1 | Mem: 1409M | Loading denoising kernels (may take a few minutes the first time)
+00:15.524  render           | Fra: 1 | Mem: 1886M | Rendered 0/4 Tiles, Sample 0/128
+00:15.580  render           | Fra: 1 | Remaining: 00:14.18 | Mem: 2192M | Rendered 0/4 Tiles, Sample 1/128
+00:18.772  render           | Fra: 1 | Remaining: 00:07.03 | Mem: 2192M | Rendered 0/4 Tiles, Sample 80/128
+00:19.108  render           | Fra: 1 | Remaining: 00:05.86 | Mem: 2192M | Rendered 0/4 Tiles, Sample 96/128
+00:19.433  render           | Fra: 1 | Remaining: 00:04.92 | Mem: 2192M | Rendered 0/4 Tiles, Sample 112/128
+00:20.063  render           | Fra: 1 | Remaining: 00:04.43 | Mem: 2192M | Rendered 0/4 Tiles, Sample 128/128
+00:20.063  render           | Fra: 1 | Remaining: 00:04.43 | Mem: 2192M | Rendered 1/4 Tiles, Sample 128/128
+00:20.078  render           | Fra: 1 | Remaining: 00:04.44 | Mem: 1904M | Rendered 1/4 Tiles, Sample 1/128
+00:20.333  render           | Fra: 1 | Remaining: 00:04.38 | Mem: 1904M | Rendered 1/4 Tiles, Sample 80/128
+00:20.373  render           | Fra: 1 | Remaining: 00:04.36 | Mem: 1904M | Rendered 1/4 Tiles, Sample 96/128
+00:20.413  render           | Fra: 1 | Remaining: 00:04.33 | Mem: 1904M | Rendered 1/4 Tiles, Sample 112/128
+00:20.518  render           | Fra: 1 | Remaining: 00:04.36 | Mem: 1904M | Rendered 1/4 Tiles, Sample 128/128
+00:20.518  render           | Fra: 1 | Remaining: 00:04.36 | Mem: 1904M | Rendered 2/4 Tiles, Sample 128/128
+00:20.527  render           | Fra: 1 | Remaining: 00:04.31 | Mem: 2154M | Rendered 2/4 Tiles, Sample 1/128
+00:20.892  render           | Fra: 1 | Remaining: 00:01.26 | Mem: 2154M | Rendered 2/4 Tiles, Sample 80/128
+00:20.902  render           | Fra: 1 | Remaining: 00:00.83 | Mem: 2154M | Rendered 2/4 Tiles, Sample 96/128
+00:20.912  render           | Fra: 1 | Remaining: 00:00.46 | Mem: 2154M | Rendered 2/4 Tiles, Sample 112/128
+00:21.167  render           | Fra: 1 | Remaining: 00:00.13 | Mem: 2154M | Rendered 2/4 Tiles, Sample 128/128
+00:21.167  render           | Fra: 1 | Remaining: 00:00.13 | Mem: 2154M | Rendered 3/4 Tiles, Sample 128/128
+00:21.174  render           | Fra: 1 | Remaining: 00:00.13 | Mem: 1902M | Rendered 3/4 Tiles, Sample 1/128
+00:21.193  render           | Fra: 1 | Remaining: 00:00.05 | Mem: 1902M | Rendered 3/4 Tiles, Sample 80/128
+00:21.225  render           | Fra: 1 | Remaining: 00:00.05 | Mem: 1902M | Rendered 3/4 Tiles, Sample 0/128
+00:21.226  render           | Fra: 1 | Remaining: 00:00.05 | Mem: 1902M | Finished
+Render statistics:
+Mesh statistics:
+  Geometry:
+    Total memory: 75.82M (79,504,724)
+        Island                           41.01M (42,997,861)
+        NurbsPath.007                    11.11M (11,645,883)
+        NurbsPath.005                    6.82M (7,154,075)
+        Ridge_tall_0                     1.12M (1,175,125)
+        Ridge_tall_1                     1.12M (1,175,125)
+        Ridge_tall_2                     1.12M (1,175,125)
+        Ridge_tall_3                     1.12M (1,175,125)
+        Ridge_tall_4                     1.12M (1,175,125)
+        Plane.5143                       539.82K (552,772)
+        Plane.2197                       292.15K (299,166)
+        modelShape.007                   274.81K (281,401)
+        modelShape.003                   274.81K (281,401)
+        modelShape.001                   274.81K (281,401)
+        modelShape.002                   274.81K (281,401)
+        modelShape.004                   274.81K (281,401)
+        modelShape.005                   274.81K (281,401)
+        modelShape.006                   274.81K (281,401)
+        modelShape.018                   274.81K (281,401)
+        modelShape.008                   274.81K (281,401)
+        modelShape.009                   274.81K (281,401)
+        modelShape.010                   274.81K (281,401)
+        modelShape.011                   274.81K (281,401)
+        modelShape.012                   274.81K (281,401)
+        modelShape.013                   274.81K (281,401)
+        modelShape.014                   274.81K (281,401)
+        modelShape.015                   274.81K (281,401)
+        modelShape.017                   274.81K (281,401)
+        modelShape.016                   274.81K (281,401)
+        medium.005                       175.88K (180,098)
+        medium.012                       175.88K (180,098)
+        medium.011                       175.88K (180,098)
+        medium.010                       175.88K (180,098)
+        medium.016                       175.88K (180,098)
+        medium.009                       175.88K (180,098)
+        medium.008                       175.88K (180,098)
+        medium.017                       175.88K (180,098)
+        medium.007                       175.88K (180,098)
+        medium.006                       175.88K (180,098)
+        medium.004                       175.88K (180,098)
+        medium.013                       175.88K (180,098)
+        medium.003                       175.88K (180,098)
+        medium.002                       175.88K (180,098)
+        medium.015                       175.88K (180,098)
+        medium.014                       175.88K (180,098)
+        medium.001                       175.88K (180,098)
+        mesh1-geometry.015               149.40K (152,983)
+        mesh1-geometry.014               149.40K (152,983)
+        mesh1-geometry.012               149.40K (152,983)
+        mesh1-geometry.016               149.40K (152,983)
+        mesh1-geometry.017               149.40K (152,983)
+        mesh1-geometry.011               149.40K (152,983)
+        mesh1-geometry.010               149.40K (152,983)
+        mesh1-geometry.003               149.40K (152,983)
+        mesh1-geometry.013               149.40K (152,983)
+        mesh1-geometry.009               149.40K (152,983)
+        mesh1-geometry.018               149.40K (152,983)
+        mesh1-geometry.008               149.40K (152,983)
+        mesh1-geometry.001               149.40K (152,983)
+        mesh1-geometry.007               149.40K (152,983)
+        mesh1-geometry.006               149.40K (152,983)
+        mesh1-geometry.005               149.40K (152,983)
+        mesh1-geometry.002               149.40K (152,983)
+        mesh1-geometry.004               149.40K (152,983)
+        Plane.048                        24.42K (25,007)
+        Plane.039                        20.95K (21,454)
+        Plane.037                        13.91K (14,246)
+        Plane.047                        10.92K (11,186)
+        Plane.045                        5.73K (5,865)
+      00:21.297  render           | Fra: 1 | Remaining: 00:00.05 | Mem: 1351M | Reading full buffer from disk
+  Plane.042                        5.23K (5,355)
+        Plane.043                        4.90K (5,015)
+        Plane.055                        1.39K (1,428)
+        Plane.058                        1.11K (1,139)
+        Plane.059                        1.08K (1,105)
+        Plane.054                        765B (765)
+        Plane.057                        629B (629)
+        Plane.056                        561B (561)
+        Plane.040                        493B (493)
+        Plane.035                        493B (493)
+        Plane.009                        493B (493)
+        Plane.003                        493B (493)
+        Plane.005                        425B (425)
+        Plane.006                        425B (425)
+        Plane.008                        357B (357)
+        Plane.007                        357B (357)
+        Plane.004                        357B (357)
+        Plane.032                        221B (221)
+        Plane.011                        187B (187)
+        Plane.010                        187B (187)
+        TopMoss                          85B (85)
+        Flowers                          85B (85)
+        LipMoss                          85B (85)
+        TopGrassTall                     85B (85)
+        TopGrass                         85B (85)
+        backgroundlight                  50B (50)
+        Sun                              46B (46)
+Image statistics:
+  Full Images:
+    kloofendal_overcast_puresky_4k.hdr 128.00M (134,217,728)
+    fir_sapling_medium_twigs_diff_2k.png 32.00M (33,554,432)
+    fir_sapling_medium_branches_diff_2k.png 32.00M (33,554,432)
+    fir_sapling_medium_branches_nor_gl_2k.png 32.00M (33,554,432)
+    fir_sapling_medium_twigs_nor_gl_2k.png 32.00M (33,554,432)
+    rock_moss_set_01_nor_gl_2k.exr   32.00M (33,554,432)
+    flower_heliophila_nor_gl_2k.exr  32.00M (33,554,432)
+    grass_medium_01_nor_gl_2k.exr    32.00M (33,554,432)
+    moss_01_nor_gl_2k.exr            32.00M (33,554,432)
+    fir_sapling_medium_twigs_alpha_2k.png 32.00M (33,554,432)
+    fir_sapling_medium_twigs_mask_2k.png 32.00M (33,554,432)
+    cliff_side_Diffuse_2k.jpg        16.00M (16,777,216)
+    rock_moss_set_01_diff_2k.jpg     16.00M (16,777,216)
+    cliff_side_nor_gl_2k.jpg         16.00M (16,777,216)
+    lichen_rock_Diffuse_2k.jpg       16.00M (16,777,216)
+    aerial_rocks_02_Diffuse_2k.jpg   16.00M (16,777,216)
+    rock_moss_set_01_rough_2k.jpg    16.00M (16,777,216)
+    flower_heliophila_diff_2k.jpg    16.00M (16,777,216)
+    grass_medium_01_diff_2k.jpg      16.00M (16,777,216)
+    forest_ground_04_nor_gl_2k.jpg   16.00M (16,777,216)
+    lichen_rock_nor_gl_2k.jpg        16.00M (16,777,216)
+    lichen_rock_Displacement_2k.jpg  16.00M (16,777,216)
+    forest_ground_04_Diffuse_2k.jpg  16.00M (16,777,216)
+    moss_01_diff_2k.jpg              16.00M (16,777,216)
+    fir_sapling_medium_twigs_rough_2k.png 8.00M (8,388,608)
+    fir_sapling_medium_branches_disp_2k.png 8.00M (8,388,608)
+    moss_01_rough_2k.exr             8.00M (8,388,608)
+    moss_01_alpha_2k.png             8.00M (8,388,608)
+    grass_medium_01_rough_2k.exr     8.00M (8,388,608)
+    flower_heliophila_alpha_2k.png   8.00M (8,388,608)
+    flower_heliophila_translucency_2k.png 8.00M (8,388,608)
+    grass_medium_01_alpha_2k.png     8.00M (8,388,608)
+    flower_heliophila_rough_2k.exr   8.00M (8,388,608)
+    fir_sapling_medium_branches_rough_2k.png 8.00M (8,388,608)
+    cliff_side_Displacement_2k.jpg   4.00M (4,194,304)
+  Full image memory: 740.00M (775,946,240)
+  Overhead image memory: 3.83K (3,920)
+  Total image memory: 740.00M (775,950,160)
+Profiling information not available (only works with CPU rendering)
+00:21.637  render           | Fra: 1 | Remaining: 00:00.05 | Mem: 1351M | ViewLayer | Denoising
+00:33.743  render           | Fra: 1 | Remaining: 00:00.16 | Mem: 1952M | ViewLayer | Finishing
+00:34.543  render           | Saved: '/home/akamel/hero3d/out/still-223/p3/tall-s0-f0.png'
+00:34.547  render           | Time: 00:24.27 (Saving: 00:00.38)
+still: wrote /home/akamel/hero3d/out/still-223/p3/tall-s0-f0.png 2160x3840
+00:34.575  render           | Rendering frame 1
+00:34.582  render           | Start rendering: Scene, ViewLayer
+00:34.582  render           | Engine: Cycles
+00:37.981  render           | Fra: 1 | Mem: 1M | Synchronizing object | Island
+00:37.985  render           | Fra: 1 | Mem: 1M | Synchronizing object | moss_01_d_LOD0
+00:37.985  render           | Fra: 1 | Mem: 1M | Synchronizing object | TopMoss
+00:37.985  render           | Fra: 1 | Mem: 1M | Synchronizing object | moss_01_h_LOD0
+00:37.985  render           | Fra: 1 | Mem: 1M | Synchronizing object | moss_01_i_LOD0
+00:37.985  render           | Fra: 1 | Mem: 1M | Synchronizing object | moss_01_e_LOD0
+00:37.985  render           | Fra: 1 | Mem: 1M | Synchronizing object | moss_01_tall_a_LOD0
+00:37.985  render           | Fra: 1 | Mem: 1M | Synchronizing object | moss_01_a_LOD0
+00:37.985  render           | Fra: 1 | Mem: 1M | Synchronizing object | moss_01_f_LOD0
+00:37.985  render           | Fra: 1 | Mem: 1M | Synchronizing object | moss_01_tall_b_LOD0
+00:37.985  render           | Fra: 1 | Mem: 1M | Synchronizing object | moss_01_b_LOD0
+00:37.986  render           | Fra: 1 | Mem: 1M | Synchronizing object | moss_01_g_LOD0
+00:37.986  render           | Fra: 1 | Mem: 1M | Synchronizing object | moss_01_c_LOD0
+00:37.986  render           | Fra: 1 | Mem: 1M | Synchronizing object | moss_01_j_LOD0
+00:38.072  render           | Fra: 1 | Mem: 1M | Synchronizing object | grass_medium_01_tiny_e_LOD0
+00:38.072  render           | Fra: 1 | Mem: 1M | Synchronizing object | TopGrass
+00:38.072  render           | Fra: 1 | Mem: 1M | Synchronizing object | grass_medium_01_tiny_f_LOD0
+00:38.072  render           | Fra: 1 | Mem: 1M | Synchronizing object | grass_medium_01_small_a_LOD0
+00:38.072  render           | Fra: 1 | Mem: 1M | Synchronizing object | grass_medium_01_mid_c_LOD0
+00:38.072  render           | Fra: 1 | Mem: 1M | Synchronizing object | grass_medium_01_mid_b_LOD0
+00:38.072  render           | Fra: 1 | Mem: 1M | Synchronizing object | grass_medium_01_tiny_d_LOD0
+00:38.072  render           | Fra: 1 | Mem: 1M | Synchronizing object | grass_medium_01_tiny_a_LOD0
+00:38.072  render           | Fra: 1 | Mem: 1M | Synchronizing object | grass_medium_01_small_b_LOD0
+00:38.072  render           | Fra: 1 | Mem: 1M | Synchronizing object | grass_medium_01_tiny_c_LOD0
+00:38.072  render           | Fra: 1 | Mem: 1M | Synchronizing object | grass_medium_01_tiny_b_LOD0
+00:38.074  render           | Fra: 1 | Mem: 1M | Synchronizing object | grass_medium_01_tall_a_LOD0
+00:38.074  render           | Fra: 1 | Mem: 1M | Synchronizing object | grass_medium_01_tall_b_LOD0
+00:38.074  render           | Fra: 1 | Mem: 1M | Synchronizing object | grass_medium_01_tall_c_LOD0
+00:38.074  render           | Fra: 1 | Mem: 1M | Synchronizing object | TopGrassTall
+00:38.079  render           | Fra: 1 | Mem: 1M | Synchronizing object | LipMoss
+00:38.206  render           | Fra: 1 | Mem: 1M | Synchronizing object | flower_heliophila_medium_LOD0
+00:38.206  render           | Fra: 1 | Mem: 1M | Synchronizing object | Flowers
+00:38.207  render           | Fra: 1 | Mem: 1M | Synchronizing object | flower_heliophila_small_LOD0
+00:38.208  render           | Fra: 1 | Mem: 1M | Synchronizing object | rock_moss_set_01_rock06.001
+00:38.208  render           | Fra: 1 | Mem: 1M | Synchronizing object | rock_moss_set_01_rock05.001
+00:38.208  render           | Fra: 1 | Mem: 1M | Synchronizing object | rock_moss_set_01_rock04.001
+00:38.208  render           | Fra: 1 | Mem: 1M | Synchronizing object | rock_moss_set_01_rock05.003
+00:38.208  render           | Fra: 1 | Mem: 1M | Synchronizing object | rock_moss_set_01_rock04.002
+00:38.208  render           | Fra: 1 | Mem: 1M | Synchronizing object | rock_moss_set_01_rock06.004
+00:38.208  render           | Fra: 1 | Mem: 1M | Synchronizing object | rock_moss_set_01_rock04.004
+00:38.208  render           | Fra: 1 | Mem: 1M | Synchronizing object | rock_moss_set_01_rock05.007
+00:38.208  render           | Fra: 1 | Mem: 1M | Synchronizing object | rock_moss_set_01_rock04.006
+00:38.208  render           | Fra: 1 | Mem: 1M | Synchronizing object | rock_moss_set_01_rock06.008
+00:38.208  render           | Fra: 1 | Mem: 1M | Synchronizing object | rock_moss_set_01_rock06.009
+00:38.208  render           | Fra: 1 | Mem: 1M | Synchronizing object | rock_moss_set_01_rock06.010
+00:38.208  render           | Fra: 1 | Mem: 1M | Synchronizing object | rock_moss_set_01_rock04.009
+00:38.208  render           | Fra: 1 | Mem: 1M | Synchronizing object | rock_moss_set_01_rock06.011
+00:38.208  render           | Fra: 1 | Mem: 1M | Synchronizing object | Ridge_wide_4
+00:38.208  render           | Fra: 1 | Mem: 1M | Synchronizing object | rock_moss_set_01_rock04.010
+00:38.208  render           | Fra: 1 | Mem: 1M | Synchronizing object | rock_moss_set_01_rock06.012
+00:38.208  render           | Fra: 1 | Mem: 1M | Synchronizing object | rock_moss_set_01_rock05.012
+00:38.208  render           | Fra: 1 | Mem: 1M | Synchronizing object | rock_moss_set_01_rock04.011
+00:38.208  render           | Fra: 1 | Mem: 1M | Synchronizing object | rock_moss_set_01_rock06.013
+00:38.208  render           | Fra: 1 | Mem: 1M | Synchronizing object | rock_moss_set_01_rock05.013
+00:38.208  render           | Fra: 1 | Mem: 1M | Synchronizing object | rock_moss_set_01_rock04.012
+00:38.208  render           | Fra: 1 | Mem: 1M | Synchronizing object | rock_moss_set_01_rock06.014
+00:38.208  render           | Fra: 1 | Mem: 1M | Synchronizing object | rock_moss_set_01_rock05.014
+00:38.208  render           | Fra: 1 | Mem: 1M | Synchronizing object | rock_moss_set_01_rock04.013
+00:38.208  render           | Fra: 1 | Mem: 1M | Synchronizing object | rock_moss_set_01_rock06.015
+00:38.208  render           | Fra: 1 | Mem: 1M | Synchronizing object | rock_moss_set_01_rock05.015
+00:38.208  render           | Fra: 1 | Mem: 1M | Synchronizing object | rock_moss_set_01_rock04.014
+00:38.208  render           | Fra: 1 | Mem: 1M | Synchronizing object | rock_moss_set_01_rock06.016
+00:38.208  render           | Fra: 1 | Mem: 1M | Synchronizing object | rock_moss_set_01_rock05.016
+00:38.208  render           | Fra: 1 | Mem: 1M | Synchronizing object | rock_moss_set_01_rock04.015
+00:38.208  render           | Fra: 1 | Mem: 1M | Synchronizing object | rock_moss_set_01_rock06.017
+00:38.208  render           | Fra: 1 | Mem: 1M | Synchronizing object | rock_moss_set_01_rock05.017
+00:38.208  render           | Fra: 1 | Mem: 1M | Synchronizing object | rock_moss_set_01_rock06.018
+00:38.208  render           | Fra: 1 | Mem: 1M | Synchronizing object | rock_moss_set_01_rock05.018
+00:38.208  render           | Fra: 1 | Mem: 1M | Synchronizing object | rock_moss_set_01_rock04.017
+00:38.208  render           | Fra: 1 | Mem: 1M | Synchronizing object | rock_moss_set_01_rock05.019
+00:38.208  render           | Fra: 1 | Mem: 1M | Synchronizing object | fir_sapling_medium_a_LOD0.001
+00:38.208  render           | Fra: 1 | Mem: 1M | Synchronizing object | fir_sapling_medium_b_LOD0.001
+00:38.208  render           | Fra: 1 | Mem: 1M | Synchronizing object | Ridge_wide_0
+00:38.208  render           | Fra: 1 | Mem: 1M | Synchronizing object | Ridge_wide_1
+00:38.208  render           | Fra: 1 | Mem: 1M | Synchronizing object | Ridge_wide_2
+00:38.209  render           | Fra: 1 | Mem: 1M | Synchronizing object | Ridge_wide_3
+00:38.227  render           | Fra: 1 | Mem: 1M | Initializing
+00:38.291  render           | Fra: 1 | Mem: 1M | Waiting for render to start
+00:38.291  render           | Fra: 1 | Mem: 1M | Updating Scene
+00:38.291  render           | Fra: 1 | Mem: 1M | Updating Shaders
+00:38.297  render           | Fra: 1 | Mem: 1M | Loading render kernels (may take a few minutes the first time)
+00:38.345  render           | Fra: 1 | Mem: 1M | Updating Procedurals
+Update statistics:
+Scene:
+    Total time: 0.051292s
+        device_update                            0.051292s
+Geometry:
+    Total time: 0.000000s
+Light:
+    Total time: 0.000000s
+Object:
+    Total time: 0.000000s
+Image:
+    Total time: 0.000000s
+Background:
+    Total time: 0.000000s
+Bake:
+    Total time: 0.000000s
+Camera:
+    Total time: 0.000000s
+Film:
+    Total time: 0.000000s
+Integrator:
+    Total time: 0.000000s
+OSL:
+    Total time: 0.000000s
+Particles:
+    Total time: 0.000000s
+SVM:
+    Total time: 0.000000s
+Tables:
+    Total time: 0.000000s
+Procedurals:
+    Total time: 0.000000s
+
+00:38.345  render           | Fra: 1 | Mem: 1M | Updating Background
+00:38.345  render           | Fra: 1 | Mem: 1M | Updating Scene Attribute
+00:38.345  render           | Fra: 1 | Mem: 1M | Updating Camera
+00:38.345  render           | Fra: 1 | Mem: 1M | Updating Meshes Flags
+00:38.345  render           | Fra: 1 | Mem: 1M | Updating Objects
+00:38.347  render           | Fra: 1 | Mem: 1M | Updating Objects | Copying Transformations to device
+00:38.352  render           | Fra: 1 | Mem: 37M | Updating Particle Systems
+00:38.352  render           | Fra: 1 | Mem: 37M | Updating Particle Systems | Copying Particles to device
+00:38.352  render           | Fra: 1 | Mem: 37M | Updating Meshes
+00:38.469  render           | Fra: 1 | Mem: 37M | Updating Displacement Images
+00:38.469  render           | Fra: 1 | Mem: 37M | Updating Images | Loading aerial_rocks_02_Diffuse_2k.jpg
+00:38.469  render           | Fra: 1 | Mem: 37M | Updating Images | Loading forest_ground_04_Diffuse_2k.jpg
+00:38.469  render           | Fra: 1 | Mem: 37M | Updating Images | Loading forest_ground_04_nor_gl_2k.jpg
+00:38.469  render           | Fra: 1 | Mem: 37M | Updating Images | Loading cliff_side_Diffuse_2k.jpg
+00:38.469  render           | Fra: 1 | Mem: 37M | Updating Images | Loading cliff_side_nor_gl_2k.jpg
+00:38.469  render           | Fra: 1 | Mem: 37M | Updating Images | Loading lichen_rock_nor_gl_2k.jpg
+00:38.469  render           | Fra: 1 | Mem: 37M | Updating Images | Loading lichen_rock_Diffuse_2k.jpg
+00:38.531  render           | Fra: 1 | Mem: 170M | Updating Mesh | Computing normals
+00:38.550  render           | Fra: 1 | Mem: 170M | Updating Mesh | Copying Mesh to device
+00:38.555  render           | Fra: 1 | Mem: 241M | Updating Objects | Applying Static Transformations
+00:38.563  render           | Fra: 1 | Mem: 241M | Updating Mesh | Computing attributes
+00:38.618  render           | Fra: 1 | Mem: 241M | Updating Mesh | Copying Attributes to device
+00:38.639  render           | Fra: 1 | Mem: 433M | Updating Mesh | Computing Displacement Island
+00:38.990  render           | Fra: 1 | Mem: 433M | Updating Mesh | Computing Displacement mesh1-geometry.001
+00:38.995  render           | Fra: 1 | Mem: 433M | Updating Mesh | Computing Displacement modelShape.001
+00:38.999  render           | Fra: 1 | Mem: 433M | Updating Mesh | Computing Displacement medium.002
+00:39.003  render           | Fra: 1 | Mem: 433M | Updating Mesh | Computing Displacement mesh1-geometry.002
+00:39.007  render           | Fra: 1 | Mem: 433M | Updating Mesh | Computing Displacement modelShape.002
+00:39.011  render           | Fra: 1 | Mem: 433M | Updating Mesh | Computing Displacement medium.003
+00:39.015  render           | Fra: 1 | Mem: 433M | Updating Mesh | Computing Displacement mesh1-geometry.004
+00:39.019  render           | Fra: 1 | Mem: 433M | Updating Mesh | Computing Displacement modelShape.004
+00:39.023  render           | Fra: 1 | Mem: 433M | Updating Mesh | Computing Displacement medium.004
+00:39.027  render           | Fra: 1 | Mem: 433M | Updating Mesh | Computing Displacement mesh1-geometry.005
+00:39.031  render           | Fra: 1 | Mem: 433M | Updating Mesh | Computing Displacement modelShape.005
+00:39.035  render           | Fra: 1 | Mem: 433M | Updating Mesh | Computing Displacement medium.005
+00:39.039  render           | Fra: 1 | Mem: 433M | Updating Mesh | Computing Displacement mesh1-geometry.006
+00:39.043  render           | Fra: 1 | Mem: 433M | Updating Mesh | Computing Displacement modelShape.006
+00:39.047  render           | Fra: 1 | Mem: 433M | Updating Mesh | Computing Displacement medium.006
+00:39.050  render           | Fra: 1 | Mem: 433M | Updating Mesh | Computing Displacement mesh1-geometry.007
+00:39.055  render           | Fra: 1 | Mem: 433M | Updating Mesh | Computing Displacement modelShape.007
+00:39.059  render           | Fra: 1 | Mem: 433M | Updating Mesh | Computing Displacement medium.007
+00:39.062  render           | Fra: 1 | Mem: 433M | Updating Mesh | Computing Displacement mesh1-geometry.008
+00:39.066  render           | Fra: 1 | Mem: 433M | Updating Mesh | Computing Displacement modelShape.008
+00:39.070  render           | Fra: 1 | Mem: 433M | Updating Mesh | Computing Displacement medium.008
+00:39.073  render           | Fra: 1 | Mem: 433M | Updating Mesh | Computing Displacement mesh1-geometry.009
+00:39.078  render           | Fra: 1 | Mem: 433M | Updating Mesh | Computing Displacement modelShape.009
+00:39.082  render           | Fra: 1 | Mem: 433M | Updating Mesh | Computing Displacement medium.009
+00:39.085  render           | Fra: 1 | Mem: 433M | Updating Mesh | Computing Displacement mesh1-geometry.010
+00:39.089  render           | Fra: 1 | Mem: 433M | Updating Mesh | Computing Displacement modelShape.010
+00:39.093  render           | Fra: 1 | Mem: 433M | Updating Mesh | Computing Displacement medium.010
+00:39.097  render           | Fra: 1 | Mem: 433M | Updating Mesh | Computing Displacement mesh1-geometry.011
+00:39.101  render           | Fra: 1 | Mem: 433M | Updating Mesh | Computing Displacement modelShape.011
+00:39.105  render           | Fra: 1 | Mem: 433M | Updating Mesh | Computing Displacement medium.011
+00:39.108  render           | Fra: 1 | Mem: 433M | Updating Mesh | Computing Displacement mesh1-geometry.012
+00:39.112  render           | Fra: 1 | Mem: 433M | Updating Mesh | Computing Displacement modelShape.012
+00:39.116  render           | Fra: 1 | Mem: 433M | Updating Mesh | Computing Displacement medium.012
+00:39.119  render           | Fra: 1 | Mem: 433M | Updating Mesh | Computing Displacement mesh1-geometry.013
+00:39.124  render           | Fra: 1 | Mem: 433M | Updating Mesh | Computing Displacement modelShape.013
+00:39.128  render           | Fra: 1 | Mem: 433M | Updating Mesh | Computing Displacement medium.013
+00:39.131  render           | Fra: 1 | Mem: 433M | Updating Mesh | Computing Displacement mesh1-geometry.014
+00:39.135  render           | Fra: 1 | Mem: 433M | Updating Mesh | Computing Displacement modelShape.014
+00:39.139  render           | Fra: 1 | Mem: 433M | Updating Mesh | Computing Displacement medium.014
+00:39.142  render           | Fra: 1 | Mem: 433M | Updating Mesh | Computing Displacement mesh1-geometry.015
+00:39.147  render           | Fra: 1 | Mem: 433M | Updating Mesh | Computing Displacement modelShape.015
+00:39.150  render           | Fra: 1 | Mem: 433M | Updating Mesh | Computing Displacement medium.015
+00:39.154  render           | Fra: 1 | Mem: 433M | Updating Mesh | Computing Displacement mesh1-geometry.016
+00:39.158  render           | Fra: 1 | Mem: 433M | Updating Mesh | Computing Displacement modelShape.016
+00:39.162  render           | Fra: 1 | Mem: 433M | Updating Mesh | Computing Displacement medium.016
+00:39.166  render           | Fra: 1 | Mem: 433M | Updating Mesh | Computing Displacement mesh1-geometry.017
+00:39.170  render           | Fra: 1 | Mem: 433M | Updating Mesh | Computing Displacement modelShape.017
+00:39.174  render           | Fra: 1 | Mem: 433M | Updating Mesh | Computing Displacement medium.017
+00:39.178  render           | Fra: 1 | Mem: 433M | Updating Mesh | Computing Displacement mesh1-geometry.018
+00:39.182  render           | Fra: 1 | Mem: 433M | Updating Mesh | Computing Displacement modelShape.018
+00:39.195  render           | Fra: 1 | Mem: 170M | Updating Geometry BVH backgroundlight 96/95 | Building BVH
+00:39.195  render           | Fra: 1 | Mem: 170M | Updating Geometry BVH backgroundlight 96/95 | Building OptiX acceleration structure
+00:39.195  render           | Fra: 1 | Mem: 170M | Updating Geometry BVH Ridge_wide_4 95/95 | Building BVH
+00:39.195  render           | Fra: 1 | Mem: 170M | Updating Geometry BVH Ridge_wide_4 95/95 | Building OptiX acceleration structure
+00:39.195  render           | Fra: 1 | Mem: 170M | Updating Geometry BVH TopMoss 3/95 | Building BVH
+00:39.195  render           | Fra: 1 | Mem: 170M | Updating Geometry BVH TopMoss 3/95 | Building OptiX acceleration structure
+00:39.195  render           | Fra: 1 | Mem: 170M | Updating Geometry BVH Plane.004 4/95 | Building BVH
+00:39.195  render           | Fra: 1 | Mem: 170M | Updating Geometry BVH Plane.004 4/95 | Building OptiX acceleration structure
+00:39.195  render           | Fra: 1 | Mem: 170M | Updating Geometry BVH Plane.009 9/95 | Building BVH
+00:39.195  render           | Fra: 1 | Mem: 170M | Updating Geometry BVH Plane.005 7/95 | Building OptiX acceleration structure
+00:39.195  render           | Fra: 1 | Mem: 170M | Updating Geometry BVH Plane.006 10/95 | Building BVH
+00:39.195  render           | Fra: 1 | Mem: 170M | Updating Geometry BVH TopGrass 16/95 | Building BVH
+00:39.195  render           | Fra: 1 | Mem: 170M | Updating Geometry BVH Plane.048 20/95 | Building BVH
+00:39.195  render           | Fra: 1 | Mem: 170M | Updating Geometry BVH Plane.039 21/95 | Building OptiX acceleration structure
+00:39.195  render           | Fra: 1 | Mem: 170M | Updating Geometry BVH Plane.057 22/95 | Building BVH
+00:39.195  render           | Fra: 1 | Mem: 170M | Updating Geometry BVH Plane.057 22/95 | Building OptiX acceleration structure
+00:39.195  render           | Fra: 1 | Mem: 170M | Updating Geometry BVH Plane.055 23/95 | Building BVH
+00:39.195  render           | Fra: 1 | Mem: 170M | Updating Geometry BVH Plane.055 23/95 | Building OptiX acceleration structure
+00:39.195  render           | Fra: 1 | Mem: 170M | Updating Geometry BVH Plane.047 24/95 | Building BVH
+00:39.195  render           | Fra: 1 | Mem: 170M | Updating Geometry BVH TopGrassTall 27/95 | Building OptiX acceleration structure
+00:39.195  render           | Fra: 1 | Mem: 170M | Updating Geometry BVH Plane.042 29/95 | Building BVH
+00:39.195  render           | Fra: 1 | Mem: 170M | Updating Geometry BVH Plane.042 29/95 | Building OptiX acceleration structure
+00:39.196  render           | Fra: 1 | Mem: 171M | Updating Geometry BVH Plane.045 30/95 | Building BVH
+00:39.196  render           | Fra: 1 | Mem: 171M | Updating Geometry BVH Plane.045 30/95 | Building OptiX acceleration structure
+00:39.196  render           | Fra: 1 | Mem: 171M | Updating Geometry BVH LipMoss 31/95 | Building BVH
+00:39.196  render           | Fra: 1 | Mem: 171M | Updating Geometry BVH LipMoss 31/95 | Building OptiX acceleration structure
+00:39.196  render           | Fra: 1 | Mem: 171M | Updating Geometry BVH Flowers 32/95 | Building BVH
+00:39.196  render           | Fra: 1 | Mem: 171M | Updating Geometry BVH Flowers 32/95 | Building OptiX acceleration structure
+00:39.196  render           | Fra: 1 | Mem: 171M | Updating Geometry BVH Plane.5143 33/95 | Building BVH
+00:39.196  render           | Fra: 1 | Mem: 171M | Updating Geometry BVH Plane.5143 33/95 | Building OptiX acceleration structure
+00:39.197  render           | Fra: 1 | Mem: 171M | Updating Geometry BVH Island 2/95 | Building BVH
+00:39.197  render           | Fra: 1 | Mem: 171M | Updating Geometry BVH Island 2/95 | Building OptiX acceleration structure
+00:39.198  render           | Fra: 1 | Mem: 172M | Updating Geometry BVH Plane.2197 34/95 | Building BVH
+00:39.198  render           | Fra: 1 | Mem: 172M | Updating Geometry BVH Plane.2197 34/95 | Building OptiX acceleration structure
+00:39.199  render           | Fra: 1 | Mem: 172M | Updating Geometry BVH Ridge_wide_3 94/95 | Building BVH
+00:39.199  render           | Fra: 1 | Mem: 172M | Updating Geometry BVH Ridge_wide_3 94/95 | Building OptiX acceleration structure
+00:39.199  render           | Fra: 1 | Mem: 174M | Updating Geometry BVH mesh1-geometry.003 35/95 | Building BVH
+00:39.199  render           | Fra: 1 | Mem: 174M | Updating Geometry BVH mesh1-geometry.003 35/95 | Building OptiX acceleration structure
+00:39.199  render           | Fra: 1 | Mem: 174M | Updating Geometry BVH modelShape.003 36/95 | Building BVH
+00:39.199  render           | Fra: 1 | Mem: 174M | Updating Geometry BVH modelShape.003 36/95 | Building OptiX acceleration structure
+00:39.200  render           | Fra: 1 | Mem: 174M | Updating Geometry BVH medium.001 37/95 | Building BVH
+00:39.200  render           | Fra: 1 | Mem: 174M | Updating Geometry BVH medium.001 37/95 | Building OptiX acceleration structure
+00:39.200  render           | Fra: 1 | Mem: 174M | Updating Geometry BVH mesh1-geometry.001 38/95 | Building BVH
+00:39.200  render           | Fra: 1 | Mem: 174M | Updating Geometry BVH mesh1-geometry.001 38/95 | Building OptiX acceleration structure
+00:39.200  render           | Fra: 1 | Mem: 174M | Updating Geometry BVH modelShape.001 39/95 | Building BVH
+00:39.200  render           | Fra: 1 | Mem: 174M | Updating Geometry BVH modelShape.001 39/95 | Building OptiX acceleration structure
+00:39.200  render           | Fra: 1 | Mem: 175M | Updating Geometry BVH medium.002 40/95 | Building BVH
+00:39.200  render           | Fra: 1 | Mem: 175M | Updating Geometry BVH medium.002 40/95 | Building OptiX acceleration structure
+00:39.201  render           | Fra: 1 | Mem: 175M | Updating Geometry BVH mesh1-geometry.002 41/95 | Building BVH
+00:39.201  render           | Fra: 1 | Mem: 175M | Updating Geometry BVH mesh1-geometry.002 41/95 | Building OptiX acceleration structure
+00:39.201  render           | Fra: 1 | Mem: 175M | Updating Geometry BVH modelShape.002 42/95 | Building BVH
+00:39.201  render           | Fra: 1 | Mem: 175M | Updating Geometry BVH modelShape.002 42/95 | Building OptiX acceleration structure
+00:39.201  render           | Fra: 1 | Mem: 175M | Updating Geometry BVH medium.003 43/95 | Building BVH
+00:39.201  render           | Fra: 1 | Mem: 175M | Updating Geometry BVH medium.003 43/95 | Building OptiX acceleration structure
+00:39.202  render           | Fra: 1 | Mem: 176M | Updating Geometry BVH mesh1-geometry.004 44/95 | Building BVH
+00:39.202  render           | Fra: 1 | Mem: 176M | Updating Geometry BVH mesh1-geometry.004 44/95 | Building OptiX acceleration structure
+00:39.202  render           | Fra: 1 | Mem: 176M | Updating Geometry BVH modelShape.004 45/95 | Building BVH
+00:39.202  render           | Fra: 1 | Mem: 176M | Updating Geometry BVH modelShape.004 45/95 | Building OptiX acceleration structure
+00:39.203  render           | Fra: 1 | Mem: 176M | Updating Geometry BVH medium.004 46/95 | Building BVH
+00:39.203  render           | Fra: 1 | Mem: 176M | Updating Geometry BVH medium.004 46/95 | Building OptiX acceleration structure
+00:39.203  render           | Fra: 1 | Mem: 176M | Updating Geometry BVH mesh1-geometry.005 47/95 | Building BVH
+00:39.203  render           | Fra: 1 | Mem: 176M | Updating Geometry BVH mesh1-geometry.005 47/95 | Building OptiX acceleration structure
+00:39.203  render           | Fra: 1 | Mem: 177M | Updating Geometry BVH modelShape.005 48/95 | Building BVH
+00:39.203  render           | Fra: 1 | Mem: 177M | Updating Geometry BVH modelShape.005 48/95 | Building OptiX acceleration structure
+00:39.204  render           | Fra: 1 | Mem: 177M | Updating Geometry BVH medium.005 49/95 | Building BVH
+00:39.204  render           | Fra: 1 | Mem: 177M | Updating Geometry BVH medium.005 49/95 | Building OptiX acceleration structure
+00:39.204  render           | Fra: 1 | Mem: 177M | Updating Geometry BVH mesh1-geometry.006 50/95 | Building BVH
+00:39.204  render           | Fra: 1 | Mem: 177M | Updating Geometry BVH mesh1-geometry.006 50/95 | Building OptiX acceleration structure
+00:39.205  render           | Fra: 1 | Mem: 177M | Updating Geometry BVH modelShape.006 51/95 | Building BVH
+00:39.205  render           | Fra: 1 | Mem: 177M | Updating Geometry BVH modelShape.006 51/95 | Building OptiX acceleration structure
+00:39.205  render           | Fra: 1 | Mem: 177M | Updating Geometry BVH medium.006 52/95 | Building BVH
+00:39.205  render           | Fra: 1 | Mem: 177M | Updating Geometry BVH medium.006 52/95 | Building OptiX acceleration structure
+00:39.205  render           | Fra: 1 | Mem: 178M | Updating Geometry BVH mesh1-geometry.007 53/95 | Building BVH
+00:39.205  render           | Fra: 1 | Mem: 178M | Updating Geometry BVH mesh1-geometry.007 53/95 | Building OptiX acceleration structure
+00:39.205  render           | Fra: 1 | Mem: 178M | Updating Geometry BVH modelShape.007 54/95 | Building BVH
+00:39.205  render           | Fra: 1 | Mem: 178M | Updating Geometry BVH modelShape.007 54/95 | Building OptiX acceleration structure
+00:39.206  render           | Fra: 1 | Mem: 178M | Updating Geometry BVH medium.007 55/95 | Building BVH
+00:39.206  render           | Fra: 1 | Mem: 178M | Updating Geometry BVH medium.007 55/95 | Building OptiX acceleration structure
+00:39.206  render           | Fra: 1 | Mem: 178M | Updating Geometry BVH mesh1-geometry.008 56/95 | Building BVH
+00:39.206  render           | Fra: 1 | Mem: 178M | Updating Geometry BVH mesh1-geometry.008 56/95 | Building OptiX acceleration structure
+00:39.206  render           | Fra: 1 | Mem: 178M | Updating Geometry BVH modelShape.008 57/95 | Building BVH
+00:39.206  render           | Fra: 1 | Mem: 178M | Updating Geometry BVH modelShape.008 57/95 | Building OptiX acceleration structure
+00:39.210  render           | Fra: 1 | Mem: 222M | Updating Geometry BVH medium.008 58/95 | Building BVH
+00:39.210  render           | Fra: 1 | Mem: 222M | Updating Geometry BVH medium.008 58/95 | Building OptiX acceleration structure
+00:39.210  render           | Fra: 1 | Mem: 222M | Updating Geometry BVH mesh1-geometry.009 59/95 | Building BVH
+00:39.210  render           | Fra: 1 | Mem: 222M | Updating Geometry BVH mesh1-geometry.009 59/95 | Building OptiX acceleration structure
+00:39.210  render           | Fra: 1 | Mem: 223M | Updating Geometry BVH modelShape.009 60/95 | Building BVH
+00:39.211  render           | Fra: 1 | Mem: 223M | Updating Geometry BVH modelShape.009 60/95 | Building OptiX acceleration structure
+00:39.211  render           | Fra: 1 | Mem: 224M | Updating Geometry BVH Ridge_wide_2 93/95 | Building BVH
+00:39.211  render           | Fra: 1 | Mem: 224M | Updating Geometry BVH Ridge_wide_2 93/95 | Building OptiX acceleration structure
+00:39.212  render           | Fra: 1 | Mem: 225M | Updating Geometry BVH medium.009 61/95 | Building BVH
+00:39.212  render           | Fra: 1 | Mem: 225M | Updating Geometry BVH medium.009 61/95 | Building OptiX acceleration structure
+00:39.212  render           | Fra: 1 | Mem: 225M | Updating Geometry BVH mesh1-geometry.010 62/95 | Building BVH
+00:39.212  render           | Fra: 1 | Mem: 225M | Updating Geometry BVH mesh1-geometry.010 62/95 | Building OptiX acceleration structure
+00:39.212  render           | Fra: 1 | Mem: 225M | Updating Geometry BVH modelShape.010 63/95 | Building BVH
+00:39.212  render           | Fra: 1 | Mem: 225M | Updating Geometry BVH modelShape.010 63/95 | Building OptiX acceleration structure
+00:39.213  render           | Fra: 1 | Mem: 225M | Updating Geometry BVH medium.010 64/95 | Building BVH
+00:39.213  render           | Fra: 1 | Mem: 225M | Updating Geometry BVH medium.010 64/95 | Building OptiX acceleration structure
+00:39.213  render           | Fra: 1 | Mem: 226M | Updating Geometry BVH mesh1-geometry.011 65/95 | Building BVH
+00:39.213  render           | Fra: 1 | Mem: 226M | Updating Geometry BVH mesh1-geometry.011 65/95 | Building OptiX acceleration structure
+00:39.214  render           | Fra: 1 | Mem: 226M | Updating Geometry BVH modelShape.011 66/95 | Building BVH
+00:39.214  render           | Fra: 1 | Mem: 226M | Updating Geometry BVH modelShape.011 66/95 | Building OptiX acceleration structure
+00:39.214  render           | Fra: 1 | Mem: 228M | Updating Geometry BVH medium.011 67/95 | Building BVH
+00:39.214  render           | Fra: 1 | Mem: 228M | Updating Geometry BVH medium.011 67/95 | Building OptiX acceleration structure
+00:39.215  render           | Fra: 1 | Mem: 227M | Updating Geometry BVH mesh1-geometry.012 68/95 | Building BVH
+00:39.215  render           | Fra: 1 | Mem: 227M | Updating Geometry BVH mesh1-geometry.012 68/95 | Building OptiX acceleration structure
+00:39.215  render           | Fra: 1 | Mem: 228M | Updating Geometry BVH modelShape.012 69/95 | Building BVH
+00:39.215  render           | Fra: 1 | Mem: 228M | Updating Geometry BVH modelShape.012 69/95 | Building OptiX acceleration structure
+00:39.215  render           | Fra: 1 | Mem: 227M | Updating Geometry BVH medium.012 70/95 | Building BVH
+00:39.215  render           | Fra: 1 | Mem: 227M | Updating Geometry BVH medium.012 70/95 | Building OptiX acceleration structure
+00:39.216  render           | Fra: 1 | Mem: 228M | Updating Geometry BVH mesh1-geometry.013 71/95 | Building BVH
+00:39.216  render           | Fra: 1 | Mem: 228M | Updating Geometry BVH mesh1-geometry.013 71/95 | Building OptiX acceleration structure
+00:39.216  render           | Fra: 1 | Mem: 228M | Updating Geometry BVH modelShape.013 72/95 | Building BVH
+00:39.216  render           | Fra: 1 | Mem: 228M | Updating Geometry BVH modelShape.013 72/95 | Building OptiX acceleration structure
+00:39.217  render           | Fra: 1 | Mem: 228M | Updating Geometry BVH medium.013 73/95 | Building BVH
+00:39.217  render           | Fra: 1 | Mem: 228M | Updating Geometry BVH medium.013 73/95 | Building OptiX acceleration structure
+00:39.217  render           | Fra: 1 | Mem: 228M | Updating Geometry BVH mesh1-geometry.014 74/95 | Building BVH
+00:39.217  render           | Fra: 1 | Mem: 228M | Updating Geometry BVH mesh1-geometry.014 74/95 | Building OptiX acceleration structure
+00:39.217  render           | Fra: 1 | Mem: 228M | Updating Geometry BVH modelShape.014 75/95 | Building BVH
+00:39.217  render           | Fra: 1 | Mem: 228M | Updating Geometry BVH modelShape.014 75/95 | Building OptiX acceleration structure
+00:39.218  render           | Fra: 1 | Mem: 230M | Updating Geometry BVH medium.014 76/95 | Building BVH
+00:39.218  render           | Fra: 1 | Mem: 230M | Updating Geometry BVH medium.014 76/95 | Building OptiX acceleration structure
+00:39.218  render           | Fra: 1 | Mem: 230M | Updating Geometry BVH mesh1-geometry.015 77/95 | Building BVH
+00:39.218  render           | Fra: 1 | Mem: 230M | Updating Geometry BVH mesh1-geometry.015 77/95 | Building OptiX acceleration structure
+00:39.219  render           | Fra: 1 | Mem: 229M | Updating Geometry BVH modelShape.015 78/95 | Building BVH
+00:39.219  render           | Fra: 1 | Mem: 229M | Updating Geometry BVH modelShape.015 78/95 | Building OptiX acceleration structure
+00:39.219  render           | Fra: 1 | Mem: 230M | Updating Geometry BVH medium.015 79/95 | Building BVH
+00:39.219  render           | Fra: 1 | Mem: 230M | Updating Geometry BVH medium.015 79/95 | Building OptiX acceleration structure
+00:39.220  render           | Fra: 1 | Mem: 231M | Updating Geometry BVH mesh1-geometry.016 80/95 | Building BVH
+00:39.220  render           | Fra: 1 | Mem: 231M | Updating Geometry BVH mesh1-geometry.016 80/95 | Building OptiX acceleration structure
+00:39.220  render           | Fra: 1 | Mem: 230M | Updating Geometry BVH modelShape.016 81/95 | Building BVH
+00:39.220  render           | Fra: 1 | Mem: 230M | Updating Geometry BVH modelShape.016 81/95 | Building OptiX acceleration structure
+00:39.221  render           | Fra: 1 | Mem: 251M | Updating Geometry BVH medium.016 82/95 | Building BVH
+00:39.221  render           | Fra: 1 | Mem: 251M | Updating Geometry BVH medium.016 82/95 | Building OptiX acceleration structure
+00:39.230  render           | Fra: 1 | Mem: 242M | Updating Geometry BVH mesh1-geometry.017 83/95 | Building BVH
+00:39.230  render           | Fra: 1 | Mem: 242M | Updating Geometry BVH mesh1-geometry.017 83/95 | Building OptiX acceleration structure
+00:39.231  render           | Fra: 1 | Mem: 243M | Updating Geometry BVH modelShape.017 84/95 | Building BVH
+00:39.231  render           | Fra: 1 | Mem: 243M | Updating Geometry BVH modelShape.017 84/95 | Building OptiX acceleration structure
+00:39.232  render           | Fra: 1 | Mem: 243M | Updating Geometry BVH medium.017 85/95 | Building BVH
+00:39.232  render           | Fra: 1 | Mem: 243M | Updating Geometry BVH medium.017 85/95 | Building OptiX acceleration structure
+00:39.232  render           | Fra: 1 | Mem: 243M | Updating Geometry BVH mesh1-geometry.018 86/95 | Building BVH
+00:39.232  render           | Fra: 1 | Mem: 243M | Updating Geometry BVH mesh1-geometry.018 86/95 | Building OptiX acceleration structure
+00:39.233  render           | Fra: 1 | Mem: 243M | Updating Geometry BVH modelShape.018 87/95 | Building BVH
+00:39.233  render           | Fra: 1 | Mem: 243M | Updating Geometry BVH modelShape.018 87/95 | Building OptiX acceleration structure
+00:39.234  render           | Fra: 1 | Mem: 244M | Updating Geometry BVH Ridge_wide_1 92/95 | Building BVH
+00:39.234  render           | Fra: 1 | Mem: 244M | Updating Geometry BVH Ridge_wide_1 92/95 | Building OptiX acceleration structure
+00:39.235  render           | Fra: 1 | Mem: 246M | Updating Geometry BVH NurbsPath.007 88/95 | Building BVH
+00:39.235  render           | Fra: 1 | Mem: 246M | Updating Geometry BVH NurbsPath.007 88/95 | Building OptiX acceleration structure
+00:39.235  render           | Fra: 1 | Mem: 246M | Updating Geometry BVH Sun 90/95 | Building BVH
+00:39.235  render           | Fra: 1 | Mem: 246M | Updating Geometry BVH NurbsPath.005 89/95 | Building OptiX acceleration structure
+00:39.235  render           | Fra: 1 | Mem: 246M | Updating Geometry BVH Ridge_wide_0 91/95 | Building BVH
+00:39.235  render           | Fra: 1 | Mem: 246M | Updating Geometry BVH Ridge_wide_0 91/95 | Building OptiX acceleration structure
+00:39.262  render           | Fra: 1 | Mem: 280M | Updating Scene BVH | Building
+00:39.262  render           | Fra: 1 | Mem: 280M | Updating Scene BVH | Building OptiX acceleration structure
+00:39.274  render           | Fra: 1 | Mem: 303M | Updating Scene BVH | Copying BVH to device
+00:39.274  render           | Fra: 1 | Mem: 303M | Updating Mesh | Computing attributes
+00:39.372  render           | Fra: 1 | Mem: 303M | Updating Mesh | Copying Attributes to device
+00:39.401  render           | Fra: 1 | Mem: 664M | Updating Mesh | Computing normals
+00:39.420  render           | Fra: 1 | Mem: 664M | Updating Mesh | Copying Mesh to device
+00:39.425  render           | Fra: 1 | Mem: 735M | Updating Objects Flags
+00:39.428  render           | Fra: 1 | Mem: 735M | Updating Primitive Offsets
+00:39.429  render           | Fra: 1 | Mem: 735M | Updating Images
+00:39.429  render           | Fra: 1 | Mem: 735M | Updating Images | Loading rock_moss_set_01_diff_2k.jpg
+00:39.429  render           | Fra: 1 | Mem: 735M | Updating Images | Loading fir_sapling_medium_branches_disp_2k.png
+00:39.429  render           | Fra: 1 | Mem: 735M | Updating Images | Loading moss_01_nor_gl_2k.exr
+00:39.429  render           | Fra: 1 | Mem: 735M | Updating Images | Loading grass_medium_01_nor_gl_2k.exr
+00:39.430  render           | Fra: 1 | Mem: 735M | Updating Images | Loading rock_moss_set_01_nor_gl_2k.exr
+00:39.430  render           | Fra: 1 | Mem: 735M | Updating Images | Loading fir_sapling_medium_branches_nor_gl_2k.png
+00:39.430  render           | Fra: 1 | Mem: 735M | Updating Images | Loading fir_sapling_medium_twigs_nor_gl_2k.png
+00:39.430  render           | Fra: 1 | Mem: 735M | Updating Images | Loading fir_sapling_medium_branches_diff_2k.png
+00:39.430  render           | Fra: 1 | Mem: 735M | Updating Images | Loading flower_heliophila_rough_2k.exr
+00:39.430  render           | Fra: 1 | Mem: 735M | Updating Images | Loading moss_01_alpha_2k.png
+00:39.430  render           | Fra: 1 | Mem: 735M | Updating Images | Loading flower_heliophila_diff_2k.jpg
+00:39.430  render           | Fra: 1 | Mem: 735M | Updating Images | Loading fir_sapling_medium_twigs_rough_2k.png
+00:39.430  render           | Fra: 1 | Mem: 735M | Updating Images | Loading grass_medium_01_alpha_2k.png
+00:39.430  render           | Fra: 1 | Mem: 735M | Updating Images | Loading rock_moss_set_01_rough_2k.jpg
+00:39.700  render           | Fra: 1 | Mem: 1343M | Updating Volume
+00:39.701  render           | Fra: 1 | Mem: 1343M | Updating Camera Volume
+00:39.701  render           | Fra: 1 | Mem: 1343M | Updating Lookup Tables
+00:39.701  render           | Fra: 1 | Mem: 1344M | Updating Lights
+00:39.704  render           | Fra: 1 | Mem: 1344M | Updating Lights | Importance map
+00:39.837  render           | Fra: 1 | Mem: 1408M | Updating Lights | Computing tree
+00:39.840  render           | Fra: 1 | Mem: 1409M | Updating Integrator
+00:39.840  render           | Fra: 1 | Mem: 1409M | Updating Film
+00:39.840  render           | Fra: 1 | Mem: 1409M | Updating Lookup Tables
+00:39.840  render           | Fra: 1 | Mem: 1409M | Updating Baking
+00:39.841  render           | Fra: 1 | Mem: 1409M | Updating Device | Writing constant memory
+00:39.841  render           | Fra: 1 | Mem: 1409M | Loading denoising kernels (may take a few minutes the first time)
+00:39.844  render           | Fra: 1 | Mem: 1886M | Rendered 0/4 Tiles, Sample 0/128
+00:39.872  render           | Fra: 1 | Remaining: 00:07.10 | Mem: 2192M | Rendered 0/4 Tiles, Sample 1/128
+00:41.579  render           | Fra: 1 | Remaining: 00:03.75 | Mem: 2192M | Rendered 0/4 Tiles, Sample 80/128
+00:41.587  render           | Fra: 1 | Remaining: 00:02.85 | Mem: 2192M | Rendered 0/4 Tiles, Sample 96/128
+00:41.594  render           | Fra: 1 | Remaining: 00:02.20 | Mem: 2192M | Rendered 0/4 Tiles, Sample 112/128
+00:41.920  render           | Fra: 1 | Remaining: 00:02.02 | Mem: 2192M | Rendered 0/4 Tiles, Sample 128/128
+00:41.921  render           | Fra: 1 | Remaining: 00:02.02 | Mem: 2192M | Rendered 1/4 Tiles, Sample 128/128
+00:41.971  render           | Fra: 1 | Remaining: 00:02.05 | Mem: 2154M | Rendered 1/4 Tiles, Sample 1/128
+00:44.445  render           | Fra: 1 | Remaining: 00:01.28 | Mem: 2154M | Rendered 1/4 Tiles, Sample 80/128
+00:44.728  render           | Fra: 1 | Remaining: 00:00.94 | Mem: 2154M | Rendered 1/4 Tiles, Sample 96/128
+00:45.001  render           | Fra: 1 | Remaining: 00:00.61 | Mem: 2154M | Rendered 1/4 Tiles, Sample 112/128
+00:45.563  render           | Fra: 1 | Remaining: 00:00.31 | Mem: 2154M | Rendered 1/4 Tiles, Sample 128/128
+00:45.563  render           | Fra: 1 | Remaining: 00:00.31 | Mem: 2154M | Rendered 2/4 Tiles, Sample 128/128
+00:45.570  render           | Fra: 1 | Remaining: 00:00.31 | Mem: 1904M | Rendered 2/4 Tiles, Sample 1/128
+00:45.593  render           | Fra: 1 | Remaining: 00:00.20 | Mem: 1904M | Rendered 2/4 Tiles, Sample 80/128
+00:45.616  render           | Fra: 1 | Remaining: 00:00.20 | Mem: 1904M | Rendered 2/4 Tiles, Sample 0/128
+00:45.616  render           | Fra: 1 | Remaining: 00:00.20 | Mem: 1904M | Rendered 3/4 Tiles, Sample 0/128
+00:45.617  render           | Fra: 1 | Remaining: 00:00.20 | Mem: 1902M | Rendered 3/4 Tiles, Sample 1/128
+00:45.636  render           | Fra: 1 | Remaining: 00:00.11 | Mem: 1902M | Rendered 3/4 Tiles, Sample 80/128
+00:45.650  render           | Fra: 1 | Remaining: 00:00.11 | Mem: 1902M | Rendered 3/4 Tiles, Sample 0/128
+00:45.650  render           | Fra: 1 | Remaining: 00:00.11 | Mem: 1902M | Finished
+Render statistics:
+Mesh statistics:
+  Geometry:
+    Total memory: 75.82M (79,504,724)
+        Island                           41.01M (42,997,861)
+        NurbsPath.007                    11.11M (11,645,883)
+        NurbsPath.005                    6.82M (7,154,075)
+        Ridge_wide_0                     1.12M (1,175,125)
+        Ridge_wide_1                     1.12M (1,175,125)
+        Ridge_wide_2                     1.12M (1,175,125)
+        Ridge_wide_3                     1.12M (1,175,125)
+        Ridge_wide_4                     1.12M (1,175,125)
+        Plane.5143                       539.82K (552,772)
+        Plane.2197                       292.15K (299,166)
+        modelShape.007                   274.81K (281,401)
+        modelShape.003                   274.81K (281,401)
+        modelShape.001                   274.81K (281,401)
+        modelShape.002                   274.81K (281,401)
+        modelShape.004                   274.81K (281,401)
+        modelShape.005                   274.81K (281,401)
+        modelShape.006                   274.81K (281,401)
+        modelShape.018                   274.81K (281,401)
+        modelShape.008                   274.81K (281,401)
+        modelShape.009                   274.81K (281,401)
+        modelShape.010                   274.81K (281,401)
+        modelShape.011                   274.81K (281,401)
+        modelShape.012                   274.81K (281,401)
+        modelShape.013                   274.81K (281,401)
+        modelShape.014                   274.81K (281,401)
+        modelShape.015                   274.81K (281,401)
+        modelShape.017                   274.81K (281,401)
+        modelShape.016                   274.81K (281,401)
+        medium.005                       175.88K (180,098)
+        medium.012                       175.88K (180,098)
+        medium.011                       175.88K (180,098)
+        medium.010                       175.88K (180,098)
+        medium.016                       175.88K (180,098)
+        medium.009                       175.88K (180,098)
+        medium.008                       175.88K (180,098)
+        medium.017                       175.88K (180,098)
+        medium.007                       175.88K (180,098)
+        medium.006                       175.88K (180,098)
+        medium.004                       175.88K (180,098)
+        medium.013                       175.88K (180,098)
+        medium.003                       175.88K (180,098)
+        medium.002                       175.88K (180,098)
+        medium.015                       175.88K (180,098)
+        medium.014                       175.88K (180,098)
+        medium.001                       175.88K (180,098)
+        mesh1-geometry.015               149.40K (152,983)
+        mesh1-geometry.014               149.40K (152,983)
+        mesh1-geometry.012               149.40K (152,983)
+        mesh1-geometry.016               149.40K (152,983)
+        mesh1-geometry.017               149.40K (152,983)
+        mesh1-geometry.011               149.40K (152,983)
+        mesh1-geometry.010               149.40K (152,983)
+        mesh1-geometry.003               149.40K (152,983)
+        mesh1-geometry.013               149.40K (152,983)
+        mesh1-geometry.009               149.40K (152,983)
+        mesh1-geometry.018               149.40K (152,983)
+        mesh1-geometry.008               149.40K (152,983)
+        mesh1-geometry.001               149.40K (152,983)
+        mesh1-geometry.007               149.40K (152,983)
+        mesh1-geometry.006               149.40K (152,983)
+        mesh1-geometry.005               149.40K (152,983)
+        mesh1-geometry.002               149.40K (152,983)
+        mesh1-geometry.004               149.40K (152,983)
+        Plane.048                        24.42K (25,007)
+        Plane.039                        20.95K (21,454)
+        Plane.037                        13.91K (14,246)
+        Plane.047                        10.92K (11,186)
+        Plane.045                        5.73K (5,865)
+      00:45.723  render           | Fra: 1 | Remaining: 00:00.11 | Mem: 1351M | Reading full buffer from disk
+  Plane.042                        5.23K (5,355)
+        Plane.043                        4.90K (5,015)
+        Plane.055                        1.39K (1,428)
+        Plane.058                        1.11K (1,139)
+        Plane.059                        1.08K (1,105)
+        Plane.054                        765B (765)
+        Plane.057                        629B (629)
+        Plane.056                        561B (561)
+        Plane.040                        493B (493)
+        Plane.035                        493B (493)
+        Plane.009                        493B (493)
+        Plane.003                        493B (493)
+        Plane.005                        425B (425)
+        Plane.006                        425B (425)
+        Plane.008                        357B (357)
+        Plane.007                        357B (357)
+        Plane.004                        357B (357)
+        Plane.032                        221B (221)
+        Plane.011                        187B (187)
+        Plane.010                        187B (187)
+        TopMoss                          85B (85)
+        Flowers                          85B (85)
+        LipMoss                          85B (85)
+        TopGrassTall                     85B (85)
+        TopGrass                         85B (85)
+        backgroundlight                  50B (50)
+        Sun                              46B (46)
+Image statistics:
+  Full Images:
+    kloofendal_overcast_puresky_4k.hdr 128.00M (134,217,728)
+    fir_sapling_medium_twigs_alpha_2k.png 32.00M (33,554,432)
+    fir_sapling_medium_twigs_diff_2k.png 32.00M (33,554,432)
+    fir_sapling_medium_branches_diff_2k.png 32.00M (33,554,432)
+    fir_sapling_medium_twigs_mask_2k.png 32.00M (33,554,432)
+    flower_heliophila_nor_gl_2k.exr  32.00M (33,554,432)
+    fir_sapling_medium_twigs_nor_gl_2k.png 32.00M (33,554,432)
+    fir_sapling_medium_branches_nor_gl_2k.png 32.00M (33,554,432)
+    rock_moss_set_01_nor_gl_2k.exr   32.00M (33,554,432)
+    grass_medium_01_nor_gl_2k.exr    32.00M (33,554,432)
+    moss_01_nor_gl_2k.exr            32.00M (33,554,432)
+    flower_heliophila_diff_2k.jpg    16.00M (16,777,216)
+    cliff_side_Diffuse_2k.jpg        16.00M (16,777,216)
+    lichen_rock_Diffuse_2k.jpg       16.00M (16,777,216)
+    grass_medium_01_diff_2k.jpg      16.00M (16,777,216)
+    cliff_side_nor_gl_2k.jpg         16.00M (16,777,216)
+    rock_moss_set_01_rough_2k.jpg    16.00M (16,777,216)
+    rock_moss_set_01_diff_2k.jpg     16.00M (16,777,216)
+    forest_ground_04_Diffuse_2k.jpg  16.00M (16,777,216)
+    aerial_rocks_02_Diffuse_2k.jpg   16.00M (16,777,216)
+    moss_01_diff_2k.jpg              16.00M (16,777,216)
+    lichen_rock_nor_gl_2k.jpg        16.00M (16,777,216)
+    forest_ground_04_nor_gl_2k.jpg   16.00M (16,777,216)
+    lichen_rock_Displacement_2k.jpg  16.00M (16,777,216)
+    fir_sapling_medium_branches_disp_2k.png 8.00M (8,388,608)
+    flower_heliophila_translucency_2k.png 8.00M (8,388,608)
+    grass_medium_01_rough_2k.exr     8.00M (8,388,608)
+    moss_01_rough_2k.exr             8.00M (8,388,608)
+    grass_medium_01_alpha_2k.png     8.00M (8,388,608)
+    fir_sapling_medium_twigs_rough_2k.png 8.00M (8,388,608)
+    moss_01_alpha_2k.png             8.00M (8,388,608)
+    flower_heliophila_rough_2k.exr   8.00M (8,388,608)
+    fir_sapling_medium_branches_rough_2k.png 8.00M (8,388,608)
+    flower_heliophila_alpha_2k.png   8.00M (8,388,608)
+    cliff_side_Displacement_2k.jpg   4.00M (4,194,304)
+  Full image memory: 740.00M (775,946,240)
+  Overhead image memory: 3.83K (3,920)
+  Total image memory: 740.00M (775,950,160)
+Profiling information not available (only works with CPU rendering)
+00:45.883  render           | Fra: 1 | Remaining: 00:00.11 | Mem: 1351M | ViewLayer | Denoising
+01:00.065  render           | Fra: 1 | Remaining: 00:00.40 | Mem: 1952M | ViewLayer | Finishing
+01:00.840  render           | Saved: '/home/akamel/hero3d/out/still-223/p3/wide-s0-f0.png'
+01:00.845  render           | Time: 00:26.26 (Saving: 00:00.37)
+still: wrote /home/akamel/hero3d/out/still-223/p3/wide-s0-f0.png 3840x2160
+
+Blender quit
