@@ -6,7 +6,9 @@
   --canopy-700:#161C1B;
   --canopy-500:#27312D;
   --haze:#788B92;
-  --glass-smoke:rgb(40 44 46 / 0.55);
+  /* Option A (operator, 2026-09-29, #188): more opaque than the reference's
+     0.55 so text holds 4.5:1 over snow-bright tiles and the hero mist. */
+  --glass-smoke:rgb(40 44 46 / 0.68);
   --glass-clear:rgb(255 255 255 / 0.14);
   --glass-clear-strong:rgb(255 255 255 / 0.22);
   --glass-edge:rgb(255 255 255 / 0.14);
@@ -19,8 +21,8 @@
   --ink-2:#666C6C;
   --on-glass:#FFFFFF;
   --on-glass-2:rgb(255 255 255 / 0.85);
-  --on-glass-3:rgb(255 255 255 / 0.60);
-  --on-glass-4:rgb(255 255 255 / 0.45);
+  --on-glass-3:rgb(255 255 255 / 0.80);
+  --on-glass-4:rgb(255 255 255 / 0.80);
   --black:#000000;
   --badge-blue:#1C618A;
   --warn:#E0A94F;
@@ -39,7 +41,10 @@
 /* font stacks */
   --mono: "SF Mono", ui-monospace, "Cascadia Code", Consolas, monospace;
   --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-}
+}/* Over the map (the wide layout) the glass sits on satellite tiles, which run
+   brighter than the hero: a little more opaque there (Option A, #188). */
+@media (min-width: 1000px) { :root { --glass-smoke: rgb(40 44 46 / 0.75); } }
+
 
 /* Panel offsets are registered so their change can be delayed to a single
    discrete step (a 0 s transition with a delay); unregistered custom
