@@ -1047,6 +1047,15 @@ function analyzeFlownRun(prefix, frames, survivorId = null) {
     `settle→leaving ${ms(tSettle, tLeaving)}, leaving→commit ${ms(tLeaving, tDetach)}`,
   );
   check(prefix, ".leaving never joins the settling row", !mounted.some((f) => f.settling && f.leaving));
+  // The dissolve must not flip back to the pre-Flown reading (seen in the
+  // first 375 frame strip): every leaving sample still reads Flown.
+  const dissolving = mounted.filter((f) => f.leaving);
+  check(
+    prefix,
+    "the row still reads Flown while it dissolves",
+    dissolving.length > 0 && dissolving.every((f) => f.chipText === "Flown"),
+    `${dissolving.filter((f) => f.chipText !== "Flown").length} stale of ${dissolving.length} leaving samples`,
+  );
   check(
     prefix,
     "plays once: one settling run, none after the commit",
@@ -1327,15 +1336,12 @@ async function flownOverlap(browser) {
       `${frames.filter((f) => f.first?.settling && tSecond !== null && f.t > tSecond + 50).length} samples after the mark`,
     );
     const lit = frames.filter((f) => f.first && tSettleA !== null && f.t >= tSettleA);
-    // The dissolve itself renders the committed read (the existing single-mark
-    // behaviour); the reading and the settle state are asserted up to the
-    // moment the row enters `.leaving`.
-    const beforeLeaving = lit.filter((f) => !f.first.leaving);
+    // The reading holds through the dissolve too, not only until `.leaving`.
     check(
       "overlap",
-      "the first row keeps its Flown reading until it enters .leaving",
-      beforeLeaving.length > 0 && beforeLeaving.every((f) => f.first.chipText === "Flown"),
-      `${beforeLeaving.filter((f) => f.first.chipText !== "Flown").length} stale samples of ${beforeLeaving.length}`,
+      "the first row keeps its Flown reading until it is gone",
+      lit.length > 0 && lit.every((f) => f.first.chipText === "Flown"),
+      `${lit.filter((f) => f.first.chipText !== "Flown").length} stale samples of ${lit.length}`,
     );
     check(
       "overlap",

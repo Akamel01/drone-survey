@@ -148,6 +148,9 @@ export default function MissionList({ onEdit, onCopy, editingId = null, onRead, 
   // The parked read the settling row renders its Flown reading from, as state
   // (not the ref): the render may not read refs.
   const [settlingRead, setSettlingRead] = useState<MissionListRead | null>(null);
+  // Rows that settled Flown and are now dissolving: they keep the Flown reading
+  // from `settlingRead` until the commit, or the dissolve would show the old one.
+  const [dissolvingIds, setDissolvingIds] = useState<ReadonlySet<string>>(EMPTY_SET);
   // The operator's own Mark Flown cause: set only in `act()`, never by
   // load/poll/Refresh/storage/cache, and consumed only by a read issued after
   // it (generation > `seq`). A read already in flight when the mark lands can
@@ -212,6 +215,7 @@ export default function MissionList({ onEdit, onCopy, editingId = null, onRead, 
     setLeaving(EMPTY_SET);
     settlingIdsRef.current = EMPTY_SET;
     setSettlingIds(EMPTY_SET);
+    setDissolvingIds(EMPTY_SET);
     setSettlingRead(null);
     momentGenRef.current = null;
     if (arrivals.length > 0) {
@@ -251,6 +255,7 @@ export default function MissionList({ onEdit, onCopy, editingId = null, onRead, 
         flashTimerRef.current = null;
       }
       const toLeaving = () => {
+        setDissolvingIds(settlingIdsRef.current);
         settlingIdsRef.current = EMPTY_SET;
         setSettlingIds(EMPTY_SET);
         const nextSet = new Set(leavingRef.current);
@@ -406,6 +411,7 @@ export default function MissionList({ onEdit, onCopy, editingId = null, onRead, 
     setLeaving(EMPTY_SET);
     settlingIdsRef.current = EMPTY_SET;
     setSettlingIds(EMPTY_SET);
+    setDissolvingIds(EMPTY_SET);
     setSettlingRead(null);
     setFlashId(null);
     flownMarkerRef.current = null;
@@ -837,7 +843,8 @@ export default function MissionList({ onEdit, onCopy, editingId = null, onRead, 
         // committed one still on screen: chip + headline crossfade under the
         // settle hook while the rail already rests quiet. Falls back to the
         // committed reading if the parked read no longer carries the row.
-        const parked = isSettling ? (settlingRead?.missions.find((m) => m.id === row.id) ?? null) : null;
+        const parked =
+          isSettling || dissolvingIds.has(row.id) ? (settlingRead?.missions.find((m) => m.id === row.id) ?? null) : null;
         const settledView = parked
           ? (() => {
               const p = preview(parked.spec);
