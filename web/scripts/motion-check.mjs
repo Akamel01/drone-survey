@@ -36,6 +36,8 @@ fs.mkdirSync(OUT, { recursive: true });
 // an `ONLY=sheet` run never rewrites the committed ui-11 media.
 const SHEET_OUT = path.resolve(HERE, "../../docs/ui-theme/screenshots/ui-19");
 fs.mkdirSync(SHEET_OUT, { recursive: true });
+// UI-25 (#294) acceptance media; gitignored, never committed from this branch.
+const EVIDENCE_DIR = path.resolve(HERE, "../../.autoforge/evidence/ui-25");
 const VIDEO_DIR = fs.mkdtempSync(path.join(os.tmpdir(), "ui16-video-"));
 const PASSPHRASE_KEY = "drone-planner.wayfinder-key";
 
@@ -1813,10 +1815,11 @@ async function noticeMotion(browser) {
 
 /** A context whose store answers with a Loaded row, then with the Flown row
  *  once the Mark Flown POST lands. */
-async function settlePage(browser, { width, height, reduced = false, video = null }) {
+async function settlePage(browser, { width, height, mobile = false, reduced = false, video = null }) {
   const contextOptions = {
     viewport: { width, height },
     reducedMotion: reduced ? "reduce" : "no-preference",
+    ...(mobile ? { hasTouch: true, isMobile: true } : {}),
   };
   if (video) contextOptions.recordVideo = { dir: VIDEO_DIR, size: { width, height } };
   const context = await browser.newContext(contextOptions);
@@ -2054,6 +2057,83 @@ async function flownSettleMotion(browser) {
   }
   if (measured.full !== undefined && measured.reduced !== undefined) {
     note("flown", "hold measured", `full ${measured.full.toFixed(0)}ms, reduced ${measured.reduced.toFixed(0)}ms`);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// UI-25 (#294) acceptance evidence: the Flown moment recorded at 1440 and 375,
+// full and reduced motion, plus a DOM sample log per recording. Gated behind
+// an explicit ONLY=flown-evidence so a normal run never writes it; every file
+// lands in the gitignored .autoforge/evidence/ui-25/. Assertions stay in
+// `flownSettleMotion`; this case records and notes, it does not grade.
+// ---------------------------------------------------------------------------
+
+async function flownEvidence(browser) {
+  fs.mkdirSync(EVIDENCE_DIR, { recursive: true });
+  for (const mode of [
+    { width: 1440, height: 900, reduced: false, name: "flown-1440" },
+    { width: 375, height: 812, mobile: true, reduced: false, name: "flown-375" },
+    { width: 1440, height: 900, reduced: true, name: "flown-reduced-1440" },
+    { width: 375, height: 812, mobile: true, reduced: true, name: "flown-reduced-375" },
+  ]) {
+    const { context, page } = await settlePage(browser, { ...mode, video: true });
+    const video = page.video();
+    try {
+      const run = await page.evaluate(async ({ id }) => {
+        const frame = () =>
+          new Promise((resolve) => {
+            const t = setTimeout(resolve, 50);
+            requestAnimationFrame(() => {
+              clearTimeout(t);
+              resolve();
+            });
+          });
+        const slot = () => document.querySelector(`[data-row-id="${id}"]`);
+        const snap = () => {
+          const el = slot();
+          if (!el) return { present: false, t: performance.now() };
+          const chip = el.querySelector('[class*="chip"]');
+          return {
+            present: true,
+            t: performance.now(),
+            settling: el.className.includes("settling"),
+            leaving: el.className.includes("leaving"),
+            chipText: chip ? chip.textContent.trim() : null,
+          };
+        };
+        const btn = [...slot().querySelectorAll("button")].find((b) => b.textContent.trim() === "Mark Flown");
+        if (!btn) return { error: "Mark Flown button not found" };
+        const before = snap();
+        btn.click();
+        const samples = [];
+        const start = performance.now();
+        while (performance.now() - start < 2400) {
+          const s = snap();
+          samples.push(s);
+          if (!s.present && samples.length > 1 && samples[samples.length - 2].present) break;
+          await frame();
+        }
+        return { before, samples };
+      }, { id: SETTLE_ID });
+
+      if (run.error) {
+        note("flown-evidence", mode.name, run.error);
+        continue;
+      }
+      const mounted = run.samples.filter((s) => s.present);
+      const tSettle = mounted.find((s) => s.settling)?.t ?? null;
+      const tLeaving = mounted.find((s) => s.leaving)?.t ?? null;
+      const detach = run.samples.find((s, i) => !s.present && i > 0 && run.samples[i - 1].present)?.t ?? null;
+      fs.writeFileSync(path.join(EVIDENCE_DIR, `${mode.name}.samples.json`), JSON.stringify(run.samples, null, 2));
+      note(
+        "flown-evidence",
+        mode.name,
+        `${run.before.chipText} -> Flown: settle at ${tSettle === null ? "?" : Math.round(tSettle)}ms, leaving at ${tLeaving === null ? "?" : Math.round(tLeaving)}ms (hold ${tSettle !== null && tLeaving !== null ? Math.round(tLeaving - tSettle) : "?"}ms), detached at ${detach === null ? "?" : Math.round(detach)}ms, ${run.samples.length} samples`,
+      );
+    } finally {
+      await context.close();
+      await saveVideo(video, mode.name, EVIDENCE_DIR);
+    }
   }
 }
 
@@ -2544,6 +2624,9 @@ try {
   if (want("stills")) await stills(browser);
   if (want("notice")) await noticeMotion(browser);
   if (want("flown")) await flownSettleMotion(browser);
+  // Evidence-only, on an explicit ONLY: a bare run must not write media into
+  // .autoforge/.
+  if ((process.env.ONLY ?? "").split(",").includes("flown-evidence")) await flownEvidence(browser);
   if (want("sheet")) await sheetGesture(browser);
   if (want("sheet")) await sheetDesktopMotion(browser);
   if (want("sheet")) await sheetReducedMotion(browser);

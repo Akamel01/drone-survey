@@ -15,9 +15,11 @@
 // Like motion-check, a fetch wrapper answers /api/missions from memory and a
 // localStorage key stands in for the passphrase. Exits non-zero on a failure.
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { chromium } from "playwright-core";
+import { MISSIONS_CHANGED_KEY } from "../lib/actions.ts";
 import { DEFAULT_SPEC } from "../lib/spec.ts";
 import { deriveMissions } from "../lib/missionRecords.ts";
 
@@ -797,6 +799,125 @@ async function detailsShotsSection(browser) {
 }
 
 // ---------------------------------------------------------------------------
+// UI-25 (#294) acceptance evidence: the first-run view at both widths
+// (criterion a) and the first saved Mission replacing it (criterion b).
+// Gated behind ONLY=ui25-shots, so a normal check:look run writes nothing;
+// every file lands in the gitignored .autoforge/evidence/ui-25/.
+//
+// The (b) replacement is honest about its mechanism: no Save button is
+// clicked. The mock's GET payload is swapped for a one-row read and a
+// StorageEvent for MISSIONS_CHANGED_KEY is dispatched -- the exact path a
+// cross-window save takes (SummaryBar.runSave -> missionClient.save ->
+// noteMissionsChanged -> the other window's `storage` listener -> load() ->
+// applyRead -> commit). The report labels it as the read-refresh path.
+// ---------------------------------------------------------------------------
+
+const UI25_EVIDENCE = path.resolve(HERE, "../../.autoforge/evidence/ui-25");
+const UI25_VIDEO_DIR = fs.mkdtempSync(path.join(os.tmpdir(), "ui25-look-video-"));
+
+async function ui25SaveVideo(video, name) {
+  const target = path.join(UI25_EVIDENCE, `${name}.webm`);
+  await video.saveAs(target);
+  note("ui25-shots", `${name}.webm`, `${fs.statSync(target).size} bytes`);
+}
+
+async function ui25ShotsSection(browser) {
+  const section = "ui25-shots";
+  fs.mkdirSync(UI25_EVIDENCE, { recursive: true });
+  for (const vp of [
+    { width: 375, height: 812, mobile: true },
+    { width: 1440, height: 900 },
+  ]) {
+    const context = await browser.newContext({
+      viewport: { width: vp.width, height: vp.height },
+      hasTouch: !!vp.mobile,
+      isMobile: !!vp.mobile,
+      recordVideo: { dir: UI25_VIDEO_DIR, size: { width: vp.width, height: vp.height } },
+    });
+    await context.addInitScript(
+      ({ body, key }) => {
+        localStorage.setItem(key, "evidence");
+        window.__ui25Payload = body;
+        window.__ui25Samples = [];
+        window.__ui25Sampling = false;
+        const orig = window.fetch.bind(window);
+        window.fetch = (input, init) => {
+          const url = typeof input === "string" ? input : input && input.url ? input.url : String(input);
+          if (url.includes("/api/missions")) {
+            return Promise.resolve(
+              new Response(JSON.stringify(window.__ui25Payload), { status: 200, headers: { "Content-Type": "application/json" } }),
+            );
+          }
+          return orig(input, init);
+        };
+        const sample = () => {
+          const panel = document.querySelector("#missions-panel");
+          const title = document.querySelector("#missions-panel article h3");
+          window.__ui25Samples.push({
+            t: performance.now(),
+            empty: /No Missions in the store yet/.test(panel?.textContent ?? ""),
+            articles: document.querySelectorAll("#missions-panel article").length,
+            // The h3 holds the name text node then the Site · date span.
+            first: title ? title.firstChild?.textContent?.trim() ?? title.textContent.trim() : null,
+          });
+          if (window.__ui25Sampling) requestAnimationFrame(sample);
+        };
+        window.__ui25StartSampling = () => {
+          window.__ui25Sampling = true;
+          requestAnimationFrame(sample);
+        };
+      },
+      { body: payload(0), key: PASSPHRASE_KEY },
+    );
+    const page = await context.newPage();
+    const video = page.video();
+    try {
+      await openPlanner(page, { empty: true });
+      await page.screenshot({ path: path.join(UI25_EVIDENCE, `first-run-${vp.width}.png`) });
+      note(section, `${vp.width}: first-run view (three steps, empty store)`, `first-run-${vp.width}.png`);
+      await page.evaluate(() => window.__ui25StartSampling());
+      await page.waitForTimeout(300);
+      const result = await page.evaluate(
+        async ({ body, changedKey }) => {
+          // The read refresh a save triggers in this window: the store now
+          // answers with one Mission, and the changed-key event fires `load`.
+          window.__ui25Payload = body;
+          localStorage.setItem(changedKey, String(Date.now()));
+          window.dispatchEvent(new StorageEvent("storage", { key: changedKey, newValue: localStorage.getItem(changedKey) }));
+          const deadline = performance.now() + 5000;
+          while (performance.now() < deadline) {
+            if (document.querySelector("#missions-panel article")) break;
+            await new Promise((r) => requestAnimationFrame(r));
+          }
+          await new Promise((r) => setTimeout(r, 900)); // the 150ms arrival, settled
+          window.__ui25Sampling = false;
+          return { samples: window.__ui25Samples };
+        },
+        { body: payload(1), changedKey: MISSIONS_CHANGED_KEY },
+      );
+      const empties = result.samples.filter((s) => s.empty);
+      const rows = result.samples.filter((s) => s.articles > 0);
+      check(section, `${vp.width}: the empty first-run view is on screen before the refresh`, empties.length > 0, `${empties.length} samples`);
+      check(
+        section,
+        `${vp.width}: the refreshed one-row read commits and the first row replaces the steps`,
+        rows.length > 0 && rows[0].first === "North half",
+        `first row "${rows[0]?.first}" at t=${Math.round(rows[0]?.t ?? -1)}ms`,
+      );
+      fs.writeFileSync(
+        path.join(UI25_EVIDENCE, `first-save-replace-${vp.width}.samples.json`),
+        JSON.stringify(result.samples, null, 2),
+      );
+      await page.screenshot({ path: path.join(UI25_EVIDENCE, `first-save-replace-${vp.width}.png`) });
+      note(section, `${vp.width}: first row after the read refresh`, `first-save-replace-${vp.width}.png`);
+    } finally {
+      await context.close();
+      await ui25SaveVideo(video, `first-save-replace-${vp.width}`);
+    }
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Frame rate: panning the map under glass on a throttled phone
 // ---------------------------------------------------------------------------
 
@@ -915,6 +1036,7 @@ try {
   // Gated on an explicit ONLY: a bare run must not write evidence PNGs into
   // the tree.
   if ((process.env.ONLY ?? "").split(",").includes("details-shots")) await detailsShotsSection(browser);
+  if ((process.env.ONLY ?? "").split(",").includes("ui25-shots")) await ui25ShotsSection(browser);
 } finally {
   await browser.close();
 }
