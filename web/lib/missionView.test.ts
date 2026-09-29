@@ -495,3 +495,24 @@ test("only a stop-tone or Loaded row shows its detail; the rest keep it for Deta
   assert.equal(loaded.state, "loaded");
   assert.ok(loaded.headline.detail.length > 0, "the points check stays on a Loaded row");
 });
+
+test("a held row that is also blocked keeps its refusal apart from its blockers", () => {
+  // Details renders headline.detail above the blockers list exactly when the
+  // two differ; this pins the data side of that branch. A mismatch blocker
+  // (100 written of 202 planned) plus the host refusal is the conjunction.
+  const both = row({
+    state: "collected",
+    spec_key: KEY,
+    cards: [holding({ card: "way finder 1" })],
+    loaded_cards: [{ card: "way finder 1", name: "north half", waypoints: 100, path_length_m: 2370 }],
+  });
+  const heldBlocked = rowView(both, FIGS, [], NOTICE);
+  assert.equal(heldBlocked.blockers.length, 1);
+  assert.match(heldBlocked.headline.detail, /refused the Load/);
+  assert.notEqual(heldBlocked.headline.detail, heldBlocked.blockers[0]);
+
+  // Blocked alone: the headline just is the first blocker, so Details showing
+  // the list alone drops nothing.
+  const blocked = rowView(both, FIGS, [], null);
+  assert.equal(blocked.headline.detail, blocked.blockers[0]);
+});

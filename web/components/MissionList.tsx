@@ -679,15 +679,21 @@ export default function MissionList({ onEdit, onCopy, editingId = null, onRead, 
               {detailsRow.name}
             </h3>
             <div className={`${styles.detailsLine} mono`}>{detailsRow.spec_key ?? detailsRow.id}</div>
-            {/* The explanation for this state: a held row's refusal text arrives
-                here as headline.detail, never substituted; a blocked row lists
-                every blocker, the row having shown only the first. */}
+            {/* The explanation for this state: a blocked row lists every
+                blocker, the row having shown only the first — and a row both
+                held and blocked keeps its refusal text above them, since
+                headline.detail is the refusal there, not the first blocker. */}
             {detailsView.blockers.length > 0 ? (
-              detailsView.blockers.map((why) => (
-                <p key={why} className={styles.detailsLine}>
-                  {why}
-                </p>
-              ))
+              <>
+                {detailsView.headline.detail !== detailsView.blockers[0] && (
+                  <p className={styles.detailsLine}>{detailsView.headline.detail}</p>
+                )}
+                {detailsView.blockers.map((why) => (
+                  <p key={why} className={styles.detailsLine}>
+                    {why}
+                  </p>
+                ))}
+              </>
             ) : (
               <p className={styles.detailsLine}>{detailsView.headline.detail}</p>
             )}
