@@ -324,26 +324,78 @@
   padding: 0 20px;
 }
 
-/* A Mission's details: the one object in focus, so it gets the light panel
-   (spec § 8, § 14, § 15) -- ink text, not the sheet's own on-glass white. */
+/* A Mission's details: two light panels stacked with a 12 gap (spec §§ 7,
+   8) — ink text, not the sheet's own on-glass white. Radius 36, padding 24
+   top per the light-panel entry. Siblings, so the sheet's own --stagger
+   entrance staggers them and no motion is declared here. */
 .detailsPanel {
-  padding: 20px;
-  border-radius: 20px;
+  padding: 24px 24px 20px;
+  border-radius: 36px;
   color: var(--ink-2);
 }
 
+.detailsPanel + .detailsPanel {
+  margin-top: 12px;
+}
+
+/* The state, centred in a row above the Mission's name (spec § 8, chips). */
+.detailsChip {
+  display: inline-block;
+  margin-bottom: 8px;
+  padding: 4px 12px;
+  border-radius: 999px;
+  background: var(--chip);
+  font-size: 13px;
+  color: #272d2f;
+}
+
 .detailsTitle {
-  margin: 0 0 12px;
+  margin: 0 0 4px;
   font-size: 20px;
   font-weight: 500;
   letter-spacing: -0.01em;
-  color: var(--ink);
+  color: #000;
+}
+
+.detailsSecondary {
+  margin: 0 0 12px;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--ink-2);
 }
 
 .detailsLine {
   margin: 0 0 8px;
   font-size: 13px;
   line-height: 1.5;
+}
+
+/* The facts: label and value rows, the spec key last, small and mono. */
+.fact {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  margin: 0 0 8px;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.factLabel {
+  flex: none;
+  color: var(--ink-2);
+}
+
+.factValue {
+  text-align: right;
+  color: #000;
+  overflow-wrap: anywhere;
+}
+
+.specKey {
+  margin: 4px 0 0;
+  font-size: 11px;
+  color: var(--ink-2);
+  text-align: left;
 }
 
 /* Touch: 44 px is the floor for every row action, not just Dispatch (spec

@@ -12,6 +12,7 @@ import {
   flightReason,
   flightTimeDelta,
   flights,
+  formatStamp,
   hostLines,
   localDate,
   metres,
@@ -515,4 +516,12 @@ test("a held row that is also blocked keeps its refusal apart from its blockers"
   // the list alone drops nothing.
   const blocked = rowView(both, FIGS, [], null);
   assert.equal(blocked.headline.detail, blocked.blockers[0]);
+});
+
+test("formatStamp reads as a date, never raw ISO", () => {
+  const out = formatStamp("2026-09-26T14:05:00.000Z");
+  assert.match(out, /^\d{2} \S+ \d{4}, \d{2}:\d{2}$/);
+  assert.ok(!out.includes("T"), "no ISO separator reaches Details");
+  assert.equal(formatStamp(null), "");
+  assert.equal(formatStamp("not-a-stamp"), "not-a-stamp");
 });

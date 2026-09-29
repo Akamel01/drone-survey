@@ -23,7 +23,7 @@ import {
   cachedRead,
   cardList,
   checkedAgo,
-  flightTimeDelta,
+  formatStamp,
   hostLines,
   orbitAreaHectares,
   rowView,
@@ -674,72 +674,116 @@ export default function MissionList({ onEdit, onCopy, editingId = null, onRead, 
 
       <Sheet open={detailsOpen} onClose={closeDetails} labelledBy={detailsHeadingId}>
         {detailsRow && detailsView && detailsPreview && (
-          <div className={`panel-light ${styles.detailsPanel}`}>
-            <h3 id={detailsHeadingId} className={styles.detailsTitle}>
-              {detailsRow.name}
-            </h3>
-            <div className={`${styles.detailsLine} mono`}>{detailsRow.spec_key ?? detailsRow.id}</div>
-            {/* The explanation for this state: a blocked row lists every
-                blocker, the row having shown only the first — and a row both
-                held and blocked keeps its refusal text above them, since
-                headline.detail is the refusal there, not the first blocker. */}
-            {detailsView.blockers.length > 0 ? (
-              <>
-                {detailsView.headline.detail !== detailsView.blockers[0] && (
-                  <p className={styles.detailsLine}>{detailsView.headline.detail}</p>
-                )}
-                {detailsView.blockers.map((why) => (
-                  <p key={why} className={styles.detailsLine}>
-                    {why}
-                  </p>
-                ))}
-              </>
-            ) : (
-              <p className={styles.detailsLine}>{detailsView.headline.detail}</p>
-            )}
-            <div className={styles.detailsLine}>
-              {detailsRow.site} · {detailsRow.date}
-            </div>
-            <div className={styles.detailsLine}>
-              {detailsOrbit ? `Orbit area ${detailsAreaHa.toFixed(2)} ha` : `Area ${detailsAreaHa.toFixed(2)} ha`}
-            </div>
-            <div className={styles.detailsLine}>
-              Flight time {detailsPreview.flight_time_min.toFixed(1)} min
-            </div>
-            <div className={styles.detailsLine}>
-              {flightTimeDelta(detailsPreview.parts, detailsPreview.part_minutes)}
-            </div>
-            {detailsView.reason && <div className={styles.detailsLine}>{detailsView.reason}</div>}
-            <div className={styles.detailsLine}>{detailsPreview.photo_count} photos</div>
-            {detailsView.flights.length > 0 && (
-              <div className={styles.detailsLine}>Cards: {cardList(detailsRow.cards)}</div>
-            )}
-            <div className={styles.detailsLine}>Saved {detailsRow.created_at}</div>
-            {detailsRow.collected_at && (
-              <div className={styles.detailsLine}>Collected {detailsRow.collected_at}</div>
-            )}
-            {detailsRow.loaded_at && <div className={styles.detailsLine}>Loaded {detailsRow.loaded_at}</div>}
-            {detailsRow.flown_marked ? (
-              <div className={styles.detailsLine}>You marked this Flown.</div>
-            ) : null}
-            {detailsRow.flown_evidence_at && (
-              <div className={styles.detailsLine}>Imagery arrived {detailsRow.flown_evidence_at}</div>
-            )}
-            {detailsView.disagreement && (
-              <div className={styles.detailsLine}>
-                {detailsView.disagreement} Both answers are kept; yours is the one that decides.
+          // Two light panels stacked with a 12 gap (spec §§ 7, 8): the state
+          // first — chip, Mission name, "Site · date", then the explanation —
+          // the facts second. Direct children of the sheet body, so the
+          // sheet's own --stagger entrance and reduced-motion stay as they
+          // are; no motion of their own is declared here.
+          <>
+            <div className={`panel-light ${styles.detailsPanel}`}>
+              <span className={styles.detailsChip}>{detailsView.stateLabel}</span>
+              <h3 id={detailsHeadingId} className={styles.detailsTitle}>
+                {detailsRow.name}
+              </h3>
+              <div className={styles.detailsSecondary}>
+                {detailsRow.site} · {detailsRow.date}
               </div>
-            )}
-            {detailsRow.superseded_by && (
-              <div className={styles.detailsLine}>Superseded by the Mission saved after it.</div>
-            )}
-            {detailsRow.edit === "guarded" && (
-              <div className={styles.detailsLine}>
-                Editing is guarded: a file for this Mission is already on the Controller, and withdrawing
-                cannot reach it.
+              {/* The explanation for this state: a blocked row lists every
+                  blocker, the row having shown only the first — and a row both
+                  held and blocked keeps its refusal text above them, since
+                  headline.detail is the refusal there, not the first blocker. */}
+              {detailsView.blockers.length > 0 ? (
+                <>
+                  {detailsView.headline.detail !== detailsView.blockers[0] && (
+                    <p className={styles.detailsLine}>{detailsView.headline.detail}</p>
+                  )}
+                  {detailsView.blockers.map((why) => (
+                    <p key={why} className={styles.detailsLine}>
+                      {why}
+                    </p>
+                  ))}
+                </>
+              ) : (
+                <p className={styles.detailsLine}>{detailsView.headline.detail}</p>
+              )}
+              {detailsView.reason && <div className={styles.detailsLine}>{detailsView.reason}</div>}
+              {detailsView.disagreement && (
+                <div className={styles.detailsLine}>
+                  {detailsView.disagreement} Both answers are kept; yours is the one that decides.
+                </div>
+              )}
+              {detailsRow.superseded_by && (
+                <div className={styles.detailsLine}>Superseded by the Mission saved after it.</div>
+              )}
+              {detailsRow.edit === "guarded" && (
+                <div className={styles.detailsLine}>
+                  Editing is guarded: a file for this Mission is already on the Controller, and withdrawing
+                  cannot reach it.
+                </div>
+              )}
+            </div>
+            <div className={`panel-light-alt ${styles.detailsPanel}`}>
+              <div className={styles.fact}>
+                <span className={styles.factLabel}>Area</span>
+                <span className={styles.factValue}>
+                  {detailsOrbit ? `Orbit area ${detailsAreaHa.toFixed(2)} ha` : `${detailsAreaHa.toFixed(2)} ha`}
+                </span>
               </div>
-            )}
-          </div>
+              <div className={styles.fact}>
+                <span className={styles.factLabel}>Flight time</span>
+                <span className={styles.factValue}>
+                  {detailsPreview.flight_time_min.toFixed(1)} min
+                </span>
+              </div>
+              <div className={styles.fact}>
+                <span className={styles.factLabel}>Flights</span>
+                <span className={styles.factValue}>
+                  {detailsPreview.parts} flight{detailsPreview.parts === 1 ? "" : "s"}
+                </span>
+              </div>
+              <div className={styles.fact}>
+                <span className={styles.factLabel}>Photos</span>
+                <span className={styles.factValue}>{detailsPreview.photo_count} photos</span>
+              </div>
+              {detailsView.flights.length > 0 && (
+                <div className={styles.fact}>
+                  <span className={styles.factLabel}>Cards</span>
+                  <span className={styles.factValue}>{cardList(detailsRow.cards)}</span>
+                </div>
+              )}
+              <div className={styles.fact}>
+                <span className={styles.factLabel}>Saved</span>
+                <span className={styles.factValue}>{formatStamp(detailsRow.created_at)}</span>
+              </div>
+              {detailsRow.collected_at && (
+                <div className={styles.fact}>
+                  <span className={styles.factLabel}>Collected</span>
+                  <span className={styles.factValue}>{formatStamp(detailsRow.collected_at)}</span>
+                </div>
+              )}
+              {detailsRow.loaded_at && (
+                <div className={styles.fact}>
+                  <span className={styles.factLabel}>Loaded</span>
+                  <span className={styles.factValue}>{formatStamp(detailsRow.loaded_at)}</span>
+                </div>
+              )}
+              {detailsRow.flown_marked ? (
+                <div className={styles.fact}>
+                  <span className={styles.factLabel}>Flown</span>
+                  <span className={styles.factValue}>You marked this Flown.</span>
+                </div>
+              ) : null}
+              {detailsRow.flown_evidence_at && (
+                <div className={styles.fact}>
+                  <span className={styles.factLabel}>Imagery arrived</span>
+                  <span className={styles.factValue}>{formatStamp(detailsRow.flown_evidence_at)}</span>
+                </div>
+              )}
+              <div className={`${styles.factValue} ${styles.specKey} mono`}>
+                {detailsRow.spec_key ?? detailsRow.id}
+              </div>
+            </div>
+          </>
         )}
       </Sheet>
     </div>

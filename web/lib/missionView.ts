@@ -471,6 +471,26 @@ export function saveProblem(
   return null;
 }
 
+/** A stored stamp in the operator's locale, e.g. "26 Sep 2026, 14:05". Raw
+ *  ISO never reaches Details. The shape is fixed (day Mon year, HH:MM) while
+ *  the month name and timezone are the operator's own. Unparseable input
+ *  passes through; nullish input reads as absent. */
+export function formatStamp(iso: string | null | undefined): string {
+  if (iso == null) return "";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso;
+  const parts = new Intl.DateTimeFormat(undefined, {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).formatToParts(d);
+  const get = (t: string) => parts.find((p) => p.type === t)?.value ?? "";
+  return `${get("day")} ${get("month")} ${get("year")}, ${get("hour")}:${get("minute")}`;
+}
+
 /** A date as the operator's own calendar has it, YYYY-MM-DD. `toISOString`
  *  would give tomorrow's date every evening west of Greenwich. */
 export function localDate(d: Date): string {
