@@ -11,6 +11,7 @@ import {
   beginAction,
   isRunning,
   safeStorage,
+  subscribeMissionsChanged,
   type ActionState,
 } from "@/lib/actions";
 import * as missionClient from "@/lib/missionClient";
@@ -38,8 +39,10 @@ import {
   FLOWN_COUNT_MS,
   SETTLE_MS,
   arrivingIds,
+  canConsumeFlown,
   flipDeltas,
   holdMs,
+  isStaleForMoment,
   leavingIds,
   settleFlown,
   visibleMissions,
@@ -146,9 +149,18 @@ export default function MissionList({ onEdit, onCopy, editingId = null, onRead, 
   // (not the ref): the render may not read refs.
   const [settlingRead, setSettlingRead] = useState<MissionListRead | null>(null);
   // The operator's own Mark Flown cause: set only in `act()`, never by
-  // load/poll/Refresh/storage/cache, consumed exactly once by `applyRead`.
+  // load/poll/Refresh/storage/cache, and consumed only by a read issued after
+  // it (generation > `seq`). A read already in flight when the mark lands can
+  // neither swallow nor cancel the moment.
   const flownMarkerRef = useRef<FlownMarker>(null);
-  const flownSeqRef = useRef(0);
+  // Every `load()` takes the next generation at issue, before its fetch. Reads
+  // resolve out of order, so the generation -- not the resolution order -- is
+  // what says whether a read may act on the mark or on an active moment.
+  const readGenRef = useRef(0);
+  // The generation of the read that owns the active Flown moment, from the
+  // settle it started until its commit or a flush. Reads older than it are
+  // dropped whole: they predate the mark and must not touch the chain.
+  const momentGenRef = useRef<number | null>(null);
   const settlingIdsRef = useRef<ReadonlySet<string>>(EMPTY_SET);
   const flashTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const inFlight = useRef(false);
@@ -201,6 +213,7 @@ export default function MissionList({ onEdit, onCopy, editingId = null, onRead, 
     settlingIdsRef.current = EMPTY_SET;
     setSettlingIds(EMPTY_SET);
     setSettlingRead(null);
+    momentGenRef.current = null;
     if (arrivals.length > 0) {
       setArriving((prev) => new Set([...prev, ...arrivals]));
       if (arrivingTimerRef.current !== null) clearTimeout(arrivingTimerRef.current);
@@ -218,9 +231,11 @@ export default function MissionList({ onEdit, onCopy, editingId = null, onRead, 
    *  leavers so a mid-settle poll keeps the first deadline; the row stays out
    *  of `.leaving` until the dissolve phase. */
   const startFlownChain = useCallback(
-    (fresh: MissionListRead, id: string, leaverIds: string[]) => {
+    (fresh: MissionListRead, id: string, leaverIds: string[], gen: number) => {
       pendingReadRef.current = fresh;
       leavingRef.current = new Set(leaverIds);
+      // This read owns the moment now; any read older than it predates it.
+      momentGenRef.current = gen;
       // Add this mark's id to the settled set: an overlapping Mark Flown
       // retargets the one chain but never strands the earlier row on its
       // pre-Flown reading.
@@ -267,9 +282,10 @@ export default function MissionList({ onEdit, onCopy, editingId = null, onRead, 
    *  once, so idle re-polls never move. The operator's own Mark Flown settles
    *  first (Flown reading under `.settling`, row inert) and every other cause
    *  — poll, Refresh, storage, cache fallback, inferred Flown — never matches,
-   *  because only `act()` sets the marker and it is consumed once, here. */
+   *  because only `act()` sets the marker and only a read issued after it
+   *  consumes it, here. */
   const applyRead = useCallback(
-    (fresh: MissionListRead) => {
+    (fresh: MissionListRead, gen: number) => {
       const rendered = new Set<string>();
       listRef.current?.querySelectorAll<HTMLElement>("[data-row-id]").forEach((el) => {
         const id = el.dataset.rowId;
@@ -277,11 +293,15 @@ export default function MissionList({ onEdit, onCopy, editingId = null, onRead, 
       });
       const nextVisible = visibleMissions(fresh.missions, showArchivedRef.current).map((r) => r.id);
       const nextLeaving = leavingIds(rendered, nextVisible);
+      // A read issued before the moment's own read predates the mark that made
+      // it: it must neither consume the marker nor clear, park or commit over
+      // the chain. Dropped whole; the moment's own read still commits at the end.
+      if (isStaleForMoment(gen, momentGenRef.current)) return;
       const marker = flownMarkerRef.current;
-      if (marker !== null) {
+      if (canConsumeFlown(marker, gen)) {
         flownMarkerRef.current = null;
         if (settleFlown(marker, nextLeaving) && fresh.missions.some((m) => m.id === marker.id)) {
-          startFlownChain(fresh, marker.id, nextLeaving);
+          startFlownChain(fresh, marker.id, nextLeaving, gen);
           return;
         }
         // No departure for the marked id: filter-on Mark Flown, a cache
@@ -319,8 +339,10 @@ export default function MissionList({ onEdit, onCopy, editingId = null, onRead, 
         }
         pendingReadRef.current = fresh;
         setSettlingRead(fresh);
+        // This read drives the moment now: an older one may not clear it later.
+        momentGenRef.current = gen;
         if (nextLeaving.some((id) => !leavingRef.current.has(id))) {
-          startFlownChain(fresh, settled[0], nextLeaving);
+          startFlownChain(fresh, settled[0], nextLeaving, gen);
         }
         return;
       }
@@ -387,10 +409,14 @@ export default function MissionList({ onEdit, onCopy, editingId = null, onRead, 
     setSettlingRead(null);
     setFlashId(null);
     flownMarkerRef.current = null;
+    momentGenRef.current = null;
     if (parked) commit(parked);
   }, [commit]);
 
   const load = useCallback(async (): Promise<MissionListRead | null> => {
+    // Taken at issue, before the fetch: this read's place in the order the
+    // reads were asked for, which is what the marker and the moment judge by.
+    const gen = ++readGenRef.current;
     setLoading(true);
     try {
       // Always the whole list: `archived_count` and the archived rows come in
@@ -400,7 +426,7 @@ export default function MissionList({ onEdit, onCopy, editingId = null, onRead, 
       if (outcome.ok) {
         const fresh = outcome.read;
         const at = Date.now();
-        applyRead(fresh);
+        applyRead(fresh, gen);
         setReadAt(at);
         setNow(at);
         setLive(true);
@@ -429,7 +455,7 @@ export default function MissionList({ onEdit, onCopy, editingId = null, onRead, 
       const ls = safeStorage();
       const cached = ls ? cachedRead(ls) : null;
       if (cached) {
-        applyRead(cached.read);
+        applyRead(cached.read, gen);
         setReadAt(cached.read_at);
         setLive(false);
         setGate(false);
@@ -552,6 +578,11 @@ export default function MissionList({ onEdit, onCopy, editingId = null, onRead, 
       if (e.key === MISSIONS_CHANGED_KEY) void load();
     };
     window.addEventListener("storage", onWrite);
+    // This window's own save: `storage` never fires in the document that made
+    // the write, so the save path signals its own list directly (#294). Only
+    // a save signals -- a row action re-reads itself -- so nothing that was
+    // not saved spends a transaction here.
+    const unsubscribe = subscribeMissionsChanged(() => void load());
     const poll = setInterval(refresh, 300000);
     // Ageing the "checked N min ago" label is not a poll and asks the store
     // for nothing; it only keeps the screen from claiming to be fresher than
@@ -565,6 +596,7 @@ export default function MissionList({ onEdit, onCopy, editingId = null, onRead, 
       clearInterval(clock);
       document.removeEventListener("visibilitychange", refresh);
       window.removeEventListener("storage", onWrite);
+      unsubscribe();
     };
   }, [passphrase, load]);
 
@@ -583,10 +615,10 @@ export default function MissionList({ onEdit, onCopy, editingId = null, onRead, 
       // The cause, set here and nowhere else: only the operator's own Mark
       // Flown that the store accepted arms the settle. Polls, Refresh,
       // storage events and cache fallbacks never touch it, so an inferred or
-      // re-read Flown can never replay the moment. Consumed once by applyRead.
+      // re-read Flown can never replay the moment. Consumed by the first read
+      // issued after it (applyRead); reads already in flight cannot.
       if (label === "Mark Flown" && outcome.ok) {
-        flownSeqRef.current += 1;
-        flownMarkerRef.current = { id: on, seq: flownSeqRef.current };
+        flownMarkerRef.current = { id: on, seq: readGenRef.current };
       }
       const fresh = await load();
       onNotice?.({

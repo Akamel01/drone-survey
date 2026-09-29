@@ -6,7 +6,7 @@
 import { test, beforeEach, afterEach } from "node:test";
 import assert from "node:assert/strict";
 
-import { MISSIONS_CHANGED_KEY } from "./actions.ts";
+import { MISSIONS_CHANGED_KEY, subscribeMissionsChanged } from "./actions.ts";
 import { writePassphrase } from "./passphrase.ts";
 import { DEFAULT_SPEC } from "./spec.ts";
 import * as missionClient from "./missionClient.ts";
@@ -331,5 +331,46 @@ test("a successful run or save signals the other window; a refusal signals nothi
     install(() => answer({ mission: { name: "North" }, forked_from: null }, 200));
     await missionClient.save(draft());
     assert.notEqual(localStorage.getItem(MISSIONS_CHANGED_KEY), "sentinel", "a successful save signals too");
+  });
+});
+
+test("a successful save reads back in its own window; a row action and a refusal do not", async () => {
+  await withStorage(fakeStorage(), async () => {
+    const heard: string[] = [];
+    const unsubscribe = subscribeMissionsChanged(() => heard.push("read"));
+    try {
+      // A row action re-reads directly (`act`); a second same-window read here
+      // would spend one transaction per action for nothing.
+      install(() => answer({ error: "No Card is free; 2 needed, 0 available." }, 409));
+      await missionClient.run("Dispatch", "m1");
+      install(() => answer({ cards: ["way finder 1"] }, 200));
+      await missionClient.run("Dispatch", "m1");
+      assert.deepEqual(heard, [], "a row action never signals a same-window read");
+
+      const unauthorised =
+        "That passphrase is not the one this deployment expects. Retype it; it is kept only in this browser.";
+      install(() => answer({ error: unauthorised }, 401));
+      await missionClient.save(draft());
+      assert.deepEqual(heard, [], "a refused save signals nothing");
+
+      install(failing(new Error("boom")));
+      await missionClient.save(draft());
+      assert.deepEqual(heard, [], "a save that never reached the store signals nothing");
+
+      install(() => answer({ mission: { name: "North" }, forked_from: null }, 200));
+      await missionClient.save(draft());
+      assert.deepEqual(heard, ["read"], "a saved Mission is read back in this window at once");
+      assert.equal(
+        typeof localStorage.getItem(MISSIONS_CHANGED_KEY),
+        "string",
+        "and the other windows' key still changes",
+      );
+    } finally {
+      unsubscribe();
+    }
+
+    install(() => answer({ mission: { name: "North" }, forked_from: null }, 200));
+    await missionClient.save(draft());
+    assert.deepEqual(heard, ["read"], "after unsubscribing, the window is no longer told");
   });
 });

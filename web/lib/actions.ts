@@ -89,3 +89,26 @@ export function noteMissionsChanged(): void {
     // Private mode or a full quota: the other window still has its poll.
   }
 }
+
+// The writes this window made itself, for the listeners `storage` cannot
+// reach: `storage` fires only in the *other* windows. A row action re-reads
+// the list directly (`act`), so it does not notify; a Save has no read of its
+// own to follow it, and without this its list would sit stale until the
+// five-minute poll or a tab hide/show (#294 F1).
+type Listener = () => void;
+const localWrites = new Set<Listener>();
+
+/** Called when this window writes the store and its own list must read back
+ *  now. Returns the unsubscribe. */
+export function subscribeMissionsChanged(listener: Listener): () => void {
+  localWrites.add(listener);
+  return () => localWrites.delete(listener);
+}
+
+/** A Save that landed: tell the other windows the way every write does, and
+ *  this window's own listeners at once. Nothing but a successful save calls
+ *  this, so a refusal spends no read. */
+export function noteMissionSaved(): void {
+  noteMissionsChanged();
+  for (const notify of localWrites) notify();
+}

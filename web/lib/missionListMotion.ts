@@ -54,7 +54,9 @@ export function holdMs(reduced: boolean): number {
 
 /** The operator's own Mark Flown cause. Set only in `act()` on
  *  `label === "Mark Flown"` + `outcome.ok`; the ref lives in the component,
- *  the decision lives here. `seq` replays Unmark→re-Mark. */
+ *  the decision lives here. `seq` is the read generation at arming: a read
+ *  issued at or before it predates the mark and can never consume the marker,
+ *  so a poll already in flight can neither swallow nor cancel the moment. */
 export type FlownMarker = { id: string; seq: number } | null;
 
 /** Settle crossfade reuses the 150ms blur-in; the Flown reading hold is
@@ -67,6 +69,22 @@ export const FLOWN_COUNT_MS = 900;
 export function settleFlown(marker: FlownMarker, leaving: Iterable<string>): boolean {
   if (marker === null) return false;
   return new Set(leaving).has(marker.id);
+}
+
+/** Only a read issued after the mark was armed may consume the marker: its
+ *  generation is strictly greater than the arming `seq`. Everything the
+ *  operator did not cause -- the mark's own read aside -- resolves `false`,
+ *  and the marker stays armed for the next eligible read. */
+export function canConsumeFlown(marker: FlownMarker, gen: number): marker is { id: string; seq: number } {
+  return marker !== null && gen > marker.seq;
+}
+
+/** A read older than the active Flown moment's own read: it was issued before
+ *  the mark that started the chain. It must never consume the marker, clear
+ *  the settle, park itself or commit over the moment; the component drops it
+ *  whole, and the moment's own read still commits at the end. */
+export function isStaleForMoment(gen: number, momentGen: number | null): boolean {
+  return momentGen !== null && gen < momentGen;
 }
 
 /** The whole Flown moment: settle + reading hold + existing dissolve.
