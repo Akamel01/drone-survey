@@ -1155,6 +1155,12 @@ async function enlargedSection(browser) {
     await page.locator("dialog[open]").waitFor({ timeout: 10000 });
     await page.waitForTimeout(1000);
   };
+  // UI-27 (#304): the expanded Summary's Copy + tiles + quiet row, settled
+  // past the 500ms expand before the audit reads.
+  const expandSummary = async (page) => {
+    await page.getByRole("button", { name: "Show details" }).click();
+    await page.waitForTimeout(700);
+  };
   for (const pass of ENLARGED_PASSES) {
     const narrow = pass.width < 1000;
     // The sign-in forms only render where sign-in is configured, which this
@@ -1173,6 +1179,9 @@ async function enlargedSection(browser) {
       { name: "home-tall-form", url: "/reset-password?token=look-check", setup: [tallForm], roots: ["main"] },
       { name: "first-run", missions: 0, roots: ["main"] },
       { name: "missions", roots: ["main"] },
+      // UI-27 (#304): collapsed is covered by "missions" (trio line); this is
+      // the expanded Copy + tiles + quiet row, including no sideways scroll.
+      { name: "summary-expanded", setup: [expandSummary], roots: ["main"] },
       ...(narrow
         ? [
             { name: "map", setup: [tab("Map")], roots: ["main"] },
@@ -1331,14 +1340,20 @@ async function operatorShots(browser) {
     try {
       await openPlanner(page);
       await page.getByRole("navigation", { name: "Show" }).getByRole("button", { name: "Map" }).click();
-      await page.waitForTimeout(900);
+      await page.waitForTimeout(900); // collapsed on arrival: past any 500ms/250ms beat, at rest
       const split = await page.evaluate(() => {
         const map = document.querySelector("canvas.maplibregl-canvas")?.getBoundingClientRect();
         const summary = document.querySelector('[class*="summary"]')?.getBoundingClientRect();
         return { mapTop: map?.top, summaryTop: summary?.top, height: innerHeight };
       });
-      note(section, "375 Map tab: map visible above the Summary", `${Math.round(split.summaryTop - (split.mapTop ?? 0))} px of ${split.height}`);
+      // UI-27 (#304): the collapsed Summary leaves the Map tab's map ≥600 of
+      // 812px. The expanded size is unasserted by design; both states shot.
+      const mapVisible = Math.round(split.summaryTop - (split.mapTop ?? 0));
+      check(section, "375 Map tab: collapsed Summary leaves the map ≥600px of 812", mapVisible >= 600, `${mapVisible} px of ${split.height}`);
       await page.screenshot({ path: path.join(OUT, "375-map-tab.png") });
+      await page.getByRole("button", { name: "Show details" }).click();
+      await page.waitForTimeout(900);
+      await page.screenshot({ path: path.join(OUT, "375-map-tab-expanded.png") });
     } finally {
       await context.close();
     }
@@ -1365,6 +1380,43 @@ async function operatorShots(browser) {
 }
 
 // ---------------------------------------------------------------------------
+// UI-27 (#304) acceptance evidence: the Summary collapsed + expanded at 375
+// and 1440. Gated behind ONLY=summary-shots so a normal check:look run
+// writes nothing; every file lands in the gitignored .autoforge/evidence/304/
+// for the oc/304-shots assets branch, never the feature branch.
+// ---------------------------------------------------------------------------
+
+const UI27_EVIDENCE = path.resolve(HERE, "../../.autoforge/evidence/304");
+
+async function summaryShotsSection(browser) {
+  const section = "summary-shots";
+  fs.mkdirSync(UI27_EVIDENCE, { recursive: true });
+  for (const vp of [
+    { width: 375, height: 812, mobile: true },
+    { width: 1440, height: 900 },
+  ]) {
+    const { context, page } = await pageFor(browser, { ...vp, missions: 4 });
+    try {
+      await openPlanner(page);
+      if (vp.width < 1000) {
+        // The phone's Missions view hides the Summary outright; the Map tab
+        // is where it reads.
+        await page.getByRole("navigation", { name: "Show" }).getByRole("button", { name: "Map" }).click();
+        await page.waitForTimeout(700);
+      }
+      await page.screenshot({ path: path.join(UI27_EVIDENCE, `summary-collapsed-${vp.width}.png`) });
+      note(section, `${vp.width}: Summary collapsed`, `summary-collapsed-${vp.width}.png`);
+      await page.getByRole("button", { name: "Show details" }).click();
+      await page.waitForTimeout(900);
+      await page.screenshot({ path: path.join(UI27_EVIDENCE, `summary-expanded-${vp.width}.png`) });
+      note(section, `${vp.width}: Summary expanded`, `summary-expanded-${vp.width}.png`);
+    } finally {
+      await context.close();
+    }
+  }
+}
+
+// ---------------------------------------------------------------------------
 
 const browser = await chromium.launch(chromiumLaunchOptions());
 try {
@@ -1384,6 +1436,7 @@ try {
   // the tree.
   if ((process.env.ONLY ?? "").split(",").includes("details-shots")) await detailsShotsSection(browser);
   if ((process.env.ONLY ?? "").split(",").includes("ui25-shots")) await ui25ShotsSection(browser);
+  if ((process.env.ONLY ?? "").split(",").includes("summary-shots")) await summaryShotsSection(browser);
 } finally {
   await browser.close();
 }
