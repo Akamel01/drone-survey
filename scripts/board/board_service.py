@@ -8,8 +8,12 @@ run as a child process and unchanged: the decisions, the read-back and the
 rollback all stay there. This file only decides *whether to start it* and turns
 its output into JSON.
 
-    python3 board_service.py                 # 0.0.0.0:8787, announces board.local
-    python3 board_service.py --selftest      # run board_service_test.py
+    python3 board_service.py --cert board.crt --key board.key   # https, 0.0.0.0:8787, announces board.local
+    python3 board_service.py --insecure-http                    # plain http: development only
+    python3 board_service.py --selftest                         # run board_service_test.py
+
+The phone reaches the board over HTTPS (LOADER-2, #317): a certificate from our
+own CA, made by make_certs.py. Plain HTTP must be asked for by name.
 
 Interface (JSON everywhere; see README.md):
     GET  /health         controller plugged in? a Load running?
@@ -36,6 +40,7 @@ import re
 import secrets
 import signal
 import socket
+import ssl
 import struct
 import subprocess
 import sys
@@ -234,8 +239,38 @@ def parse_origins(text: str) -> tuple[str, ...]:
     return origins
 
 
+def tls_context(cert: str, key: str) -> ssl.SSLContext:
+    ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+    ctx.minimum_version = ssl.TLSVersion.TLSv1_2
+    ctx.load_cert_chain(cert, key)
+    return ctx
+
+
+class Server(ThreadingHTTPServer):
+    """ThreadingHTTPServer, optionally speaking TLS.
+
+    The handshake is left to the first read, which runs in the request's own
+    thread: done at accept(), one client stalling mid-handshake would stop the
+    board answering anyone.
+    """
+    daemon_threads = True
+
+    def __init__(self, addr, handler, context: ssl.SSLContext | None = None):
+        super().__init__(addr, handler)
+        if context:
+            self.socket = context.wrap_socket(self.socket, server_side=True, do_handshake_on_connect=False)
+
+    def handle_error(self, request, client_address):
+        if isinstance(sys.exc_info()[1], OSError):  # a phone that does not trust us, speaks http to us, or hung up
+            print(f"{client_address[0]} connection failed: {sys.exc_info()[1]}", flush=True)
+        else:
+            super().handle_error(request, client_address)
+
+
 def make_handler(board: Board, origins: tuple[str, ...]):
     class Handler(BaseHTTPRequestHandler):
+        timeout = 30  # a client that stalls in the handshake or a request frees its thread
+
         def log_message(self, fmt, *args):
             print(f"{self.client_address[0]} {fmt % args}", flush=True)
 
@@ -372,6 +407,11 @@ def main() -> None:
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("--bind", default="0.0.0.0")
     p.add_argument("--port", type=int, default=8787)
+    p.add_argument("--cert", default=os.environ.get("BOARD_TLS_CERT"),
+                   help="the board's certificate (PEM; env BOARD_TLS_CERT), from make_certs.py")
+    p.add_argument("--key", default=os.environ.get("BOARD_TLS_KEY"), help="its private key (PEM; env BOARD_TLS_KEY)")
+    p.add_argument("--insecure-http", action="store_true",
+                   help="serve plain http, no certificate: development only; an iPhone's installed web app cannot use it")
     p.add_argument("--hostname", default="board.local", help="the mDNS name announced")
     p.add_argument("--no-mdns", action="store_true", help="do not announce; use when Avahi already serves the name")
     p.add_argument("--allow-origin", default=os.environ.get("BOARD_ALLOW_ORIGIN", ",".join(DEFAULT_ORIGINS)),
@@ -387,9 +427,18 @@ def main() -> None:
         origins = parse_origins(args.allow_origin)
     except ValueError as e:
         p.error(str(e))
+    if bool(args.cert) != bool(args.key):
+        p.error("--cert and --key go together")
+    if not args.cert and not args.insecure_http:
+        p.error("no certificate: give --cert and --key (make_certs.py makes them), or --insecure-http for development")
+    if args.cert and args.insecure_http:
+        p.error("--insecure-http and --cert are opposites; choose one")
+    try:
+        context = tls_context(args.cert, args.key) if args.cert else None
+    except (OSError, ssl.SSLError) as e:
+        p.error(f"cannot load the certificate and key: {e}")
     board = Board()
-    server = ThreadingHTTPServer((args.bind, args.port), make_handler(board, origins))
-    server.daemon_threads = True
+    server = Server((args.bind, args.port), make_handler(board, origins), context)
     if not args.no_mdns:
         def announce():
             try:
@@ -401,7 +450,7 @@ def main() -> None:
     def stop(*_):
         raise SystemExit(0)
     signal.signal(signal.SIGTERM, stop)
-    print(f"board service on {args.bind}:{args.port} as {args.hostname}", flush=True)
+    print(f"board service on {'https' if context else 'http (INSECURE)'}://{args.bind}:{args.port} as {args.hostname}", flush=True)
     try:
         server.serve_forever()
     except (KeyboardInterrupt, SystemExit):
