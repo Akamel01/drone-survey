@@ -1,89 +1,636 @@
 {
-  "steps": [
+  "issue": 227,
+  "viewport": "375x812, touch",
+  "base": "next start, real Mission lifecycle over the in-memory store",
+  "mission_name": "north half",
+  "runs": [
     {
-      "name": "open planner",
-      "taps": 0,
-      "chars": 0,
-      "switches": 0,
-      "scrolls": 0,
-      "ms": 448
+      "run": "A1",
+      "site_mode": "existing",
+      "steps": [
+        {
+          "name": "Open the planner",
+          "taps": 0,
+          "chars": 0,
+          "switches": 0,
+          "scrolls": 0,
+          "app_ms": 216.2
+        },
+        {
+          "name": "Map tab",
+          "taps": 1,
+          "chars": 0,
+          "switches": 1,
+          "scrolls": 0,
+          "app_ms": 474.8
+        },
+        {
+          "name": "Polygon tool",
+          "taps": 1,
+          "chars": 0,
+          "switches": 0,
+          "scrolls": 0,
+          "app_ms": 51.5
+        },
+        {
+          "name": "Corner 1",
+          "taps": 1,
+          "chars": 0,
+          "switches": 0,
+          "scrolls": 0,
+          "app_ms": 58
+        },
+        {
+          "name": "Corner 2",
+          "taps": 1,
+          "chars": 0,
+          "switches": 0,
+          "scrolls": 0,
+          "app_ms": 35
+        },
+        {
+          "name": "Corner 3",
+          "taps": 1,
+          "chars": 0,
+          "switches": 0,
+          "scrolls": 0,
+          "app_ms": 42.1
+        },
+        {
+          "name": "Corner 4",
+          "taps": 1,
+          "chars": 0,
+          "switches": 0,
+          "scrolls": 0,
+          "app_ms": 100.3
+        },
+        {
+          "name": "Finish area",
+          "taps": 1,
+          "chars": 0,
+          "switches": 0,
+          "scrolls": 0,
+          "app_ms": 186
+        },
+        {
+          "name": "Save Mission (open the sheet)",
+          "taps": 1,
+          "chars": 0,
+          "switches": 0,
+          "scrolls": 0,
+          "app_ms": 67.1
+        },
+        {
+          "name": "Type the Mission name",
+          "taps": 0,
+          "chars": 10,
+          "switches": 0,
+          "scrolls": 0,
+          "app_ms": 547.4
+        },
+        {
+          "name": "Type the Site",
+          "taps": 1,
+          "chars": 4,
+          "switches": 0,
+          "scrolls": 0,
+          "app_ms": 47.8
+        },
+        {
+          "name": "Choose the Site",
+          "taps": 1,
+          "chars": 0,
+          "switches": 0,
+          "scrolls": 0,
+          "app_ms": 65.1
+        },
+        {
+          "name": "Confirm (Save Mission)",
+          "taps": 1,
+          "chars": 0,
+          "switches": 0,
+          "scrolls": 0,
+          "app_ms": 62.9
+        },
+        {
+          "name": "Missions tab",
+          "taps": 1,
+          "chars": 0,
+          "switches": 1,
+          "scrolls": 0,
+          "app_ms": 472.2
+        },
+        {
+          "name": "Dispatch",
+          "taps": 1,
+          "chars": 0,
+          "switches": 0,
+          "scrolls": 0,
+          "app_ms": 51.8
+        },
+        {
+          "name": "Read the status",
+          "taps": 0,
+          "chars": 0,
+          "switches": 0,
+          "scrolls": 0,
+          "app_ms": null
+        }
+      ],
+      "totals": {
+        "taps": 13,
+        "chars": 14,
+        "view_switches": 2,
+        "scrolls": 0,
+        "app_ms": 2478,
+        "wall_ms": 3266
+      },
+      "outcome": {
+        "status": {
+          "chip": "Dispatched",
+          "headline": "Waiting to be Collected"
+        },
+        "stored_state": "dispatched",
+        "site": "West Quarry",
+        "site_id": "west-quarry-d4e5f6",
+        "posts": 1,
+        "settings_visited": false,
+        "save_enabled_without_settings": true,
+        "plan_has_problems": false,
+        "name_focused_on_open": true,
+        "cards_reserved": 1
+      }
     },
     {
-      "name": "open draw tool",
-      "taps": 1,
-      "chars": 0,
-      "switches": 0,
-      "scrolls": 0,
-      "ms": 0
+      "run": "A2",
+      "site_mode": "existing",
+      "steps": [
+        {
+          "name": "Open the planner",
+          "taps": 0,
+          "chars": 0,
+          "switches": 0,
+          "scrolls": 0,
+          "app_ms": 214.1
+        },
+        {
+          "name": "Map tab",
+          "taps": 1,
+          "chars": 0,
+          "switches": 1,
+          "scrolls": 0,
+          "app_ms": 464.2
+        },
+        {
+          "name": "Polygon tool",
+          "taps": 1,
+          "chars": 0,
+          "switches": 0,
+          "scrolls": 0,
+          "app_ms": 66.7
+        },
+        {
+          "name": "Corner 1",
+          "taps": 1,
+          "chars": 0,
+          "switches": 0,
+          "scrolls": 0,
+          "app_ms": 42.3
+        },
+        {
+          "name": "Corner 2",
+          "taps": 1,
+          "chars": 0,
+          "switches": 0,
+          "scrolls": 0,
+          "app_ms": 68.7
+        },
+        {
+          "name": "Corner 3",
+          "taps": 1,
+          "chars": 0,
+          "switches": 0,
+          "scrolls": 0,
+          "app_ms": 44.4
+        },
+        {
+          "name": "Corner 4",
+          "taps": 1,
+          "chars": 0,
+          "switches": 0,
+          "scrolls": 0,
+          "app_ms": 174.4
+        },
+        {
+          "name": "Finish area",
+          "taps": 1,
+          "chars": 0,
+          "switches": 0,
+          "scrolls": 0,
+          "app_ms": 223.1
+        },
+        {
+          "name": "Save Mission (open the sheet)",
+          "taps": 1,
+          "chars": 0,
+          "switches": 0,
+          "scrolls": 0,
+          "app_ms": 51.2
+        },
+        {
+          "name": "Type the Mission name",
+          "taps": 0,
+          "chars": 10,
+          "switches": 0,
+          "scrolls": 0,
+          "app_ms": 554.6
+        },
+        {
+          "name": "Type the Site",
+          "taps": 1,
+          "chars": 4,
+          "switches": 0,
+          "scrolls": 0,
+          "app_ms": 29.9
+        },
+        {
+          "name": "Choose the Site",
+          "taps": 1,
+          "chars": 0,
+          "switches": 0,
+          "scrolls": 0,
+          "app_ms": 61.2
+        },
+        {
+          "name": "Confirm (Save Mission)",
+          "taps": 1,
+          "chars": 0,
+          "switches": 0,
+          "scrolls": 0,
+          "app_ms": 65
+        },
+        {
+          "name": "Missions tab",
+          "taps": 1,
+          "chars": 0,
+          "switches": 1,
+          "scrolls": 0,
+          "app_ms": 474.6
+        },
+        {
+          "name": "Dispatch",
+          "taps": 1,
+          "chars": 0,
+          "switches": 0,
+          "scrolls": 0,
+          "app_ms": 47.5
+        },
+        {
+          "name": "Read the status",
+          "taps": 0,
+          "chars": 0,
+          "switches": 0,
+          "scrolls": 0,
+          "app_ms": null
+        }
+      ],
+      "totals": {
+        "taps": 13,
+        "chars": 14,
+        "view_switches": 2,
+        "scrolls": 0,
+        "app_ms": 2582,
+        "wall_ms": 3313
+      },
+      "outcome": {
+        "status": {
+          "chip": "Dispatched",
+          "headline": "Waiting to be Collected"
+        },
+        "stored_state": "dispatched",
+        "site": "West Quarry",
+        "site_id": "west-quarry-d4e5f6",
+        "posts": 1,
+        "settings_visited": false,
+        "save_enabled_without_settings": true,
+        "plan_has_problems": false,
+        "name_focused_on_open": true,
+        "cards_reserved": 1
+      }
     },
     {
-      "name": "tap corner",
-      "taps": 1,
-      "chars": 0,
-      "switches": 0,
-      "scrolls": 0,
-      "ms": 0
+      "run": "B1",
+      "site_mode": "new",
+      "steps": [
+        {
+          "name": "Open the planner",
+          "taps": 0,
+          "chars": 0,
+          "switches": 0,
+          "scrolls": 0,
+          "app_ms": 211.3
+        },
+        {
+          "name": "Map tab",
+          "taps": 1,
+          "chars": 0,
+          "switches": 1,
+          "scrolls": 0,
+          "app_ms": 479.4
+        },
+        {
+          "name": "Polygon tool",
+          "taps": 1,
+          "chars": 0,
+          "switches": 0,
+          "scrolls": 0,
+          "app_ms": 45
+        },
+        {
+          "name": "Corner 1",
+          "taps": 1,
+          "chars": 0,
+          "switches": 0,
+          "scrolls": 0,
+          "app_ms": 18.9
+        },
+        {
+          "name": "Corner 2",
+          "taps": 1,
+          "chars": 0,
+          "switches": 0,
+          "scrolls": 0,
+          "app_ms": 53.7
+        },
+        {
+          "name": "Corner 3",
+          "taps": 1,
+          "chars": 0,
+          "switches": 0,
+          "scrolls": 0,
+          "app_ms": 44.2
+        },
+        {
+          "name": "Corner 4",
+          "taps": 1,
+          "chars": 0,
+          "switches": 0,
+          "scrolls": 0,
+          "app_ms": 124.6
+        },
+        {
+          "name": "Finish area",
+          "taps": 1,
+          "chars": 0,
+          "switches": 0,
+          "scrolls": 0,
+          "app_ms": 220.6
+        },
+        {
+          "name": "Save Mission (open the sheet)",
+          "taps": 1,
+          "chars": 0,
+          "switches": 0,
+          "scrolls": 0,
+          "app_ms": 61
+        },
+        {
+          "name": "Type the Mission name",
+          "taps": 0,
+          "chars": 10,
+          "switches": 0,
+          "scrolls": 0,
+          "app_ms": 573.9
+        },
+        {
+          "name": "Type the Site",
+          "taps": 1,
+          "chars": 10,
+          "switches": 0,
+          "scrolls": 0,
+          "app_ms": 24.8
+        },
+        {
+          "name": "Choose the Site",
+          "taps": 1,
+          "chars": 0,
+          "switches": 0,
+          "scrolls": 0,
+          "app_ms": 60.7
+        },
+        {
+          "name": "Confirm (Save Mission)",
+          "taps": 1,
+          "chars": 0,
+          "switches": 0,
+          "scrolls": 0,
+          "app_ms": 62.4
+        },
+        {
+          "name": "Missions tab",
+          "taps": 1,
+          "chars": 0,
+          "switches": 1,
+          "scrolls": 0,
+          "app_ms": 479.1
+        },
+        {
+          "name": "Dispatch",
+          "taps": 1,
+          "chars": 0,
+          "switches": 0,
+          "scrolls": 0,
+          "app_ms": 54.4
+        },
+        {
+          "name": "Read the status",
+          "taps": 0,
+          "chars": 0,
+          "switches": 0,
+          "scrolls": 0,
+          "app_ms": null
+        }
+      ],
+      "totals": {
+        "taps": 13,
+        "chars": 20,
+        "view_switches": 2,
+        "scrolls": 0,
+        "app_ms": 2514,
+        "wall_ms": 3099
+      },
+      "outcome": {
+        "status": {
+          "chip": "Dispatched",
+          "headline": "Waiting to be Collected"
+        },
+        "stored_state": "dispatched",
+        "site": "Ridge Lake",
+        "site_id": "ridge-evh1fs",
+        "posts": 1,
+        "settings_visited": false,
+        "save_enabled_without_settings": true,
+        "plan_has_problems": false,
+        "name_focused_on_open": true,
+        "cards_reserved": 1
+      }
     },
     {
-      "name": "tap corner",
-      "taps": 1,
-      "chars": 0,
-      "switches": 0,
-      "scrolls": 0,
-      "ms": 0
-    },
-    {
-      "name": "tap corner",
-      "taps": 1,
-      "chars": 0,
-      "switches": 0,
-      "scrolls": 0,
-      "ms": 0
-    },
-    {
-      "name": "tap corner",
-      "taps": 1,
-      "chars": 0,
-      "switches": 0,
-      "scrolls": 0,
-      "ms": 0
-    },
-    {
-      "name": "press enter",
-      "taps": 0,
-      "chars": 0,
-      "switches": 0,
-      "scrolls": 0,
-      "ms": 0
-    },
-    {
-      "name": "draw area total",
-      "taps": 0,
-      "chars": 0,
-      "switches": 0,
-      "scrolls": 0,
-      "ms": 35439
-    },
-    {
-      "name": "tap save/dispatch",
-      "taps": 1,
-      "chars": 0,
-      "switches": 0,
-      "scrolls": 0,
-      "ms": 0
-    },
-    {
-      "name": "read status",
-      "taps": 0,
-      "chars": 0,
-      "switches": 0,
-      "scrolls": 0,
-      "ms": 0
+      "run": "B2",
+      "site_mode": "new",
+      "steps": [
+        {
+          "name": "Open the planner",
+          "taps": 0,
+          "chars": 0,
+          "switches": 0,
+          "scrolls": 0,
+          "app_ms": 200.9
+        },
+        {
+          "name": "Map tab",
+          "taps": 1,
+          "chars": 0,
+          "switches": 1,
+          "scrolls": 0,
+          "app_ms": 480.7
+        },
+        {
+          "name": "Polygon tool",
+          "taps": 1,
+          "chars": 0,
+          "switches": 0,
+          "scrolls": 0,
+          "app_ms": 47.7
+        },
+        {
+          "name": "Corner 1",
+          "taps": 1,
+          "chars": 0,
+          "switches": 0,
+          "scrolls": 0,
+          "app_ms": 28.3
+        },
+        {
+          "name": "Corner 2",
+          "taps": 1,
+          "chars": 0,
+          "switches": 0,
+          "scrolls": 0,
+          "app_ms": 74.1
+        },
+        {
+          "name": "Corner 3",
+          "taps": 1,
+          "chars": 0,
+          "switches": 0,
+          "scrolls": 0,
+          "app_ms": 49.5
+        },
+        {
+          "name": "Corner 4",
+          "taps": 1,
+          "chars": 0,
+          "switches": 0,
+          "scrolls": 0,
+          "app_ms": 92.5
+        },
+        {
+          "name": "Finish area",
+          "taps": 1,
+          "chars": 0,
+          "switches": 0,
+          "scrolls": 0,
+          "app_ms": 222.2
+        },
+        {
+          "name": "Save Mission (open the sheet)",
+          "taps": 1,
+          "chars": 0,
+          "switches": 0,
+          "scrolls": 0,
+          "app_ms": 53.8
+        },
+        {
+          "name": "Type the Mission name",
+          "taps": 0,
+          "chars": 10,
+          "switches": 0,
+          "scrolls": 0,
+          "app_ms": 557.8
+        },
+        {
+          "name": "Type the Site",
+          "taps": 1,
+          "chars": 10,
+          "switches": 0,
+          "scrolls": 0,
+          "app_ms": 30.1
+        },
+        {
+          "name": "Choose the Site",
+          "taps": 1,
+          "chars": 0,
+          "switches": 0,
+          "scrolls": 0,
+          "app_ms": 67.5
+        },
+        {
+          "name": "Confirm (Save Mission)",
+          "taps": 1,
+          "chars": 0,
+          "switches": 0,
+          "scrolls": 0,
+          "app_ms": 70.7
+        },
+        {
+          "name": "Missions tab",
+          "taps": 1,
+          "chars": 0,
+          "switches": 1,
+          "scrolls": 0,
+          "app_ms": 484.8
+        },
+        {
+          "name": "Dispatch",
+          "taps": 1,
+          "chars": 0,
+          "switches": 0,
+          "scrolls": 0,
+          "app_ms": 54.4
+        },
+        {
+          "name": "Read the status",
+          "taps": 0,
+          "chars": 0,
+          "switches": 0,
+          "scrolls": 0,
+          "app_ms": null
+        }
+      ],
+      "totals": {
+        "taps": 13,
+        "chars": 20,
+        "view_switches": 2,
+        "scrolls": 0,
+        "app_ms": 2515,
+        "wall_ms": 3135
+      },
+      "outcome": {
+        "status": {
+          "chip": "Dispatched",
+          "headline": "Waiting to be Collected"
+        },
+        "stored_state": "dispatched",
+        "site": "Ridge Lake",
+        "site_id": "ridge-lomx9b",
+        "posts": 1,
+        "settings_visited": false,
+        "save_enabled_without_settings": true,
+        "plan_has_problems": false,
+        "name_focused_on_open": true,
+        "cards_reserved": 1
+      }
     }
-  ],
-  "total_taps": 6,
-  "total_characters": 0,
-  "total_view_switches": 0,
-  "total_scrolls": 0,
-  "total_ms": 97921
+  ]
 }
