@@ -444,7 +444,6 @@
 
   .edgeTab {
     position: absolute;
-    top: 50%;
     /* Individual `translate` (not `transform`) so the shared press scale
        composes with it instead of clobbering the vertical centring. */
     translate: 0 -50%;
@@ -462,10 +461,14 @@
 
   .edgeTabLeft {
     left: 12px;
+    /* Missions panel fold button centre: measured at 52.69px. */
+    top: 52.69px;
   }
 
   .edgeTabRight {
     right: 12px;
+    /* Settings panel fold button centre: measured at 44px. */
+    top: 44px;
   }
 
   /* Folded Settings edge-tab badge: overlays the strip corner, never a target

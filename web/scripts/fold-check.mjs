@@ -851,6 +851,87 @@ async function focusPass(browser) {
 }
 
 // ---------------------------------------------------------------------------
+// Pass 3b: UI-28 alignment check — reopen tabs centred at fold buttons
+// ---------------------------------------------------------------------------
+
+async function alignmentPass(browser) {
+  const viewports = [
+    { width: 1280, height: 800 },
+    { width: 1440, height: 900 },
+    { width: 1920, height: 1080 },
+  ];
+
+  for (const viewport of viewports) {
+    const { context, page } = await pageFor(browser, viewport);
+    try {
+      // Check Missions fold/expand alignment
+      const missionsAlign = await page.evaluate(() => {
+        const collapse = document.querySelector('[aria-label="Collapse Missions"]');
+        const expand = document.querySelector('[aria-label="Expand Missions"]');
+
+        if (!collapse || !expand) return null;
+
+        const collapseRect = collapse.getBoundingClientRect();
+        const expandRect = expand.getBoundingClientRect();
+
+        const collapseCenterY = collapseRect.top + collapseRect.height / 2;
+        const expandCenterY = expandRect.top + expandRect.height / 2;
+        const offset = Math.abs(expandCenterY - collapseCenterY);
+
+        return {
+          collapseCenterY: Math.round(collapseCenterY * 100) / 100,
+          expandCenterY: Math.round(expandCenterY * 100) / 100,
+          offset: Math.round(offset * 100) / 100,
+        };
+      });
+
+      if (missionsAlign) {
+        check(
+          `alignment/${viewport.width}x${viewport.height}`,
+          "Missions reopen tab Y centre within 8px of fold button",
+          missionsAlign.offset <= 8,
+          `collapse=${missionsAlign.collapseCenterY} expand=${missionsAlign.expandCenterY} offset=${missionsAlign.offset}px`
+        );
+      }
+
+      // Check Settings fold/expand alignment
+      const settingsAlign = await page.evaluate(() => {
+        const collapse = document.querySelector('[aria-label="Collapse Settings"]');
+        const expand = document.querySelector('[aria-label="Expand Settings"]');
+
+        if (!collapse || !expand) return null;
+
+        const collapseRect = collapse.getBoundingClientRect();
+        const expandRect = expand.getBoundingClientRect();
+
+        const collapseCenterY = collapseRect.top + collapseRect.height / 2;
+        const expandCenterY = expandRect.top + expandRect.height / 2;
+        const offset = Math.abs(expandCenterY - collapseCenterY);
+
+        return {
+          collapseCenterY: Math.round(collapseCenterY * 100) / 100,
+          expandCenterY: Math.round(expandCenterY * 100) / 100,
+          offset: Math.round(offset * 100) / 100,
+        };
+      });
+
+      if (settingsAlign) {
+        check(
+          `alignment/${viewport.width}x${viewport.height}`,
+          "Settings reopen tab Y centre within 8px of fold button",
+          settingsAlign.offset <= 8,
+          `collapse=${settingsAlign.collapseCenterY} expand=${settingsAlign.expandCenterY} offset=${settingsAlign.offset}px`
+        );
+      }
+    } catch (err) {
+      check(`alignment/${viewport.width}x${viewport.height}`, "alignment check completed", false, String(err).split("\n")[0]);
+    } finally {
+      await context.close();
+    }
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Pass 4: offline smoke (H11)
 // ---------------------------------------------------------------------------
 
@@ -1260,6 +1341,9 @@ async function main() {
 
     // Pass 3: focus / AT
     await guard("focus", () => focusPass(browser));
+
+    // Pass 3b: UI-28 alignment check
+    await guard("alignment", () => alignmentPass(browser));
 
     // Pass 4: offline smoke
     await guard("offline", () => offlinePass(browser));
