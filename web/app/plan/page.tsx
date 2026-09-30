@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { DEFAULT_SPEC, type CircleShape, type MissionSpec } from "@/lib/spec";
 import { preview, areaHectares } from "@/lib/mission";
 import type { MissionRow } from "@/lib/missionRecords";
-import { copyOf, localDate, sitesFrom, type MissionListRead, type SiteChoice } from "@/lib/missionView";
+import { copyOf, localDate, sitesFrom, type MissionListRead } from "@/lib/missionView";
 import { firstRunDestination, type FirstRunStep } from "@/lib/firstRun";
 import MapPane, { type DrawMode } from "@/components/MapPane";
 import HeroScene from "@/components/HeroScene";
@@ -126,9 +126,12 @@ export default function PlanPage() {
   const [openToken, setOpenToken] = useState(0);
   // Corner tapped on the map, waiting on the on-map Remove corner button.
   const [selectedCorner, setSelectedCorner] = useState<number | null>(null);
-  // The Sites already in the store. Taken from the Mission list's own read, so
+  // The Missions in the store, as the list last read them. The Sites to choose
+  // from and the state of the Mission being edited both come from this read, so
   // one page load is one storage transaction rather than two.
-  const [sites, setSites] = useState<SiteChoice[]>([]);
+  const [missions, setMissions] = useState<MissionRow[]>([]);
+  const sites = useMemo(() => sitesFrom(missions), [missions]);
+  const edited = editing.id ? (missions.find((m) => m.id === editing.id) ?? null) : null;
   // The single reporting path for action results (M2 seam): one slot owned
   // here, fed by children via onNotice (wired in M3/M4), rendered once below.
   const [notice, setNotice] = useState<NoticePayload | null>(null);
@@ -325,7 +328,7 @@ export default function PlanPage() {
     setView("map");
   };
 
-  const onListRead = (read: MissionListRead) => setSites(sitesFrom(read.missions));
+  const onListRead = (read: MissionListRead) => setMissions(read.missions);
 
   return (
     <main
@@ -438,9 +441,14 @@ export default function PlanPage() {
           spec={spec}
           preview={preview_}
           editing={editing}
-          onSaved={(row) => setEditing({ id: row.id, name: row.name })}
+          onSaved={(row) => {
+            setEditing({ id: row.id, name: row.name });
+            // The Sheet may have changed the Site; the editor now shows what was saved.
+            setSpecState((s) => ({ ...s, site: row.site, site_id: row.site_id }));
+          }}
           onNotice={showNotice}
           sites={sites}
+          edited={edited}
           countKey={openToken}
         />
       </div>

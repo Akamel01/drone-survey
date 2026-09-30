@@ -1,0 +1,121 @@
+/* The Save sheet (UI-30), on the sheet's own smoke glass (spec § 8): a title
+   and a lead line, then a form. Two direct children of the sheet body, so its
+   own --stagger entrance and reduced-motion apply and no motion is declared
+   here. Existing tokens only; controls are 44 tall (spec § 11). */
+
+.title {
+  margin: 0 0 8px;
+  font-size: 1.125rem;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.lead {
+  margin: 0 0 16px;
+  font-size: 0.875rem;
+  line-height: 1.5;
+  color: var(--on-glass-2);
+}
+
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+/* The choice: rows on clear glass, the chosen one in the active formula
+   (--pill-active, --ink), like the segmented pills. The native radio stays,
+   so the arrow keys and the screen reader's group come from the browser. */
+.options {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: none;
+}
+
+.option,
+.optionOn {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  min-height: 44px;
+  padding: 12px 14px;
+  border: 1px solid var(--glass-edge);
+  border-radius: 12px;
+  background: var(--glass-clear);
+  color: var(--on-glass);
+  cursor: pointer;
+}
+
+.optionOn {
+  border-color: transparent;
+  background: var(--pill-active);
+  color: var(--ink);
+}
+
+.option input,
+.optionOn input {
+  flex: none;
+  width: 18px;
+  height: 18px;
+  margin: 2px 0 0;
+  accent-color: var(--ink);
+}
+
+.optionLabel {
+  display: block;
+  font-weight: 600;
+}
+
+.optionDetail {
+  display: block;
+  font-size: 0.8125rem;
+  line-height: 1.4;
+}
+
+.option .optionDetail {
+  color: var(--on-glass-2);
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.field label {
+  color: var(--on-glass-2);
+}
+
+.field input[type="text"] {
+  min-height: 44px;
+  padding: 8px 12px;
+  font-size: 1rem;
+}
+
+/* A field the choice has fixed: shown as it will be saved, not offered. */
+.field input[type="text"][readonly] {
+  background: transparent;
+}
+
+.hint {
+  margin: 0;
+  font-size: 0.75rem;
+  line-height: 1.4;
+  color: var(--on-glass-2);
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.actions button {
+  min-height: 44px;
+  padding: 0 20px;
+}

@@ -151,8 +151,10 @@ export async function run(action: MissionAction, id: string): Promise<RunResult>
 }
 
 /** Save the editor's Mission. A change to a Mission already Dispatched saves
- *  as a new one, which is what `describeSave`'s fork sentence reports. */
-export async function save(draft: MissionDraft): Promise<SaveResult> {
+ *  as a replacement, which is what `describeSave`'s fork sentence reports;
+ *  `how` is which of the Save sheet's choices this was, so the sentence can
+ *  say so. */
+export async function save(draft: MissionDraft, how?: Parameters<typeof describeSave>[1]): Promise<SaveResult> {
   const reply = await attempt(
     () =>
       globalThis.fetch("/api/missions", {
@@ -183,6 +185,7 @@ export async function save(draft: MissionDraft): Promise<SaveResult> {
           superseded_on_dispatch?: string | null;
           mission?: { name?: string } | null;
         },
+        how,
       ),
     };
   }
