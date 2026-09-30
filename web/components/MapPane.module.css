@@ -439,10 +439,12 @@
    were not reachable (screenshots, ui-7 review). --toggle-h is the pill row's
    own measured height (MapPane.tsx), one or two lines depending on wrap, so
    the panel starts under it at any width or label length instead of guessing
-   a fixed offset. */
+   a fixed offset. The map toolbar's readout sits level with the pills at the
+   top-left (MapToolbar.tsx measures it), so the panel clears whichever is
+   taller. */
 @media (max-width: 999px) {
   .drawPanel {
-    top: calc(var(--toggle-h, 0px) + 20px);
+    top: calc(max(var(--toggle-h, 0px), var(--map-readout-h, 0px)) + 20px);
   }
 }
 

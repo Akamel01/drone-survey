@@ -1185,7 +1185,7 @@ async function main() {
               };
               c.port2.postMessage(0);
             });
-          const b = [...document.querySelectorAll("#settings-panel button")].find((x) => x.textContent.trim() === "Polygon");
+          const b = document.querySelector('[role="group"][aria-label="Map tools"] button[aria-label="Polygon"]');
           if (!b) return false;
           b.click();
           for (let i = 0; i < 5000; i++) {

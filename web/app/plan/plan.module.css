@@ -173,6 +173,8 @@
       opacity var(--dur-fast) var(--ease-out),
       visibility 0s linear var(--dur-slow);
   }
+  /* The map toolbar is a strip under the map in this column (MapToolbar). */
+  .map { flex-direction: column; }
   .missions { --i: 0; }
   .map      { --i: 1; }
   .settings { --i: 2; }

@@ -56,6 +56,17 @@ export function orbitAreaHectares(radiusM: number): number {
   return (Math.PI * radiusM * radiusM) / 10000;
 }
 
+/** Plain metric area for the map toolbar: m² under a square kilometre, km²
+ *  above. */
+export function formatArea(areaHa: number): string {
+  const m2 = areaHa * 10000;
+  if (m2 > 1_000_000) return `${(m2 / 1_000_000).toFixed(3)} km²`;
+  return `${Math.round(m2).toLocaleString()} m²`;
+}
+
+/** A [lat, lon] to five places, or a dash for a point not placed yet. */
+export const coord = (p: [number, number] | null) => (p ? `${p[0].toFixed(5)}, ${p[1].toFixed(5)}` : "—");
+
 /** The planner's own figures for a Mission, as `preview()` computes them. The
  *  row carries its Spec, so these are derived where they are read rather than
  *  trusted from a summary file the host also writes into. */

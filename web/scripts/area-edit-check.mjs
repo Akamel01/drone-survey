@@ -16,20 +16,22 @@
 //                              vertex drag with its canvas-cursor gate, then
 //                              the rectangle first click -> rubber band ->
 //                              opposite click commit
-//   touch-polygon-375.webm     4 taps (Settings -> Polygon -> Map), Finish area,
-//                              then a corner tap that opens Remove corner
+//   touch-polygon-375.webm     4 taps (Map -> Polygon on the map toolbar), Finish
+//                              area, then a corner tap that opens Remove corner
 //
 // Gating (any failure exits non-zero): the panel appears on tool pick; the
 // exact per-corner copy from lib/areaEditing (clickMeaning); Finish enabled at
 // three (mouse) / four (touch) corners; the panel detaches after finishing
-// (the UI-20 exit hold, reused from chrome-motion-check.mjs); Sidebar Clear
-// area enabled and the area readout non-zero after the mouse finish; the
+// (the UI-20 exit hold, reused from chrome-motion-check.mjs); the map
+// toolbar's Clear area enabled and its area readout non-zero after the mouse
+// finish; the picked tool reads aria-pressed and lets go when the draw ends;
+// every toolbar control is reachable by Tab and named (UI-29); the
 // .maplibregl-canvas inline cursor is "grabbing" while a vertex drag is held
 // and is restored after release; the rectangle rubber-band hint matches
 // /m — click to finish/; the touch corner tap opens the Remove corner panel
 // with its button enabled (the tap lands outside the 5px visible vertex but
 // inside the 44px touch hit layer, so a dropped hit layer would fail it); Add
-// points is enabled after the touch finish; each .webm is non-empty
+// points on the toolbar is enabled after the touch finish; each .webm is non-empty
 // (> 1500 bytes, the chrome-motion convention).
 //
 // Recorded, never asserted: the gesture pixels and timing, the rubber-band
@@ -37,7 +39,7 @@
 // wall-clock gates; every wait is a DOM signal (panel class/title, exact hint
 // text, button enabled, canvas cursor, [data-network="online"]); canvas
 // coordinates are fractions of the map canvas that avoid the display pills,
-// the drawing panel's corner and the bottom tab bar; timeouts are generous
+// the drawing panel's corner, the toolbar and the bottom tab bar; timeouts are generous
 // (10-15s) for tile/network slowness.
 import fs from "node:fs";
 import os from "node:os";
@@ -136,6 +138,10 @@ const waitOnline = (page, timeout = TIMEOUT) =>
   page.waitForFunction(() => document.querySelector('[data-network="online"]') !== null, undefined, {
     timeout,
   });
+
+// The map toolbar (UI-29): one home for the drawing tools, phone and wide.
+const TOOLBAR = 'section[aria-label="Map"] [role="group"][aria-label="Map tools"]';
+const tool = (page, name) => page.locator(TOOLBAR).getByRole("button", { name, exact: true });
 
 /** A viewport point at fraction (fx, fy) of the map canvas. The point is
  *  verified to land on the canvas before it is returned: a panel, the Summary
@@ -238,24 +244,19 @@ const waitCanvasCursor = async (page, value, timeout = TIMEOUT) => {
 const waitClearAreaEnabled = (page, timeout = TIMEOUT) =>
   page.waitForFunction(
     () => {
-      const b = [...document.querySelectorAll("#settings-panel button")].find(
-        (x) => x.textContent.trim() === "Clear area",
-      );
+      const b = document.querySelector('section[aria-label="Map"] button[aria-label="Clear area"]');
       return !!b && !b.disabled;
     },
     undefined,
     { timeout },
   );
 
+// The toolbar's readout leads with the area figure (its first .mono run).
+const AREA_FIGURE = 'section[aria-label="Map"] [class*="readout"] .mono';
 const readAreaText = (page) =>
-  page.evaluate(() => {
-    const row = [...document.querySelectorAll('#settings-panel [class*="readout"]')].find(
-      (el) => (el.firstElementChild?.textContent ?? "").trim() === "Area",
-    );
-    return row?.lastElementChild?.textContent?.trim() ?? null;
-  });
+  page.evaluate((sel) => document.querySelector(sel)?.textContent?.trim() ?? null, AREA_FIGURE);
 
-/** The Sidebar's formatArea output, as square metres. */
+/** The toolbar's formatArea output, as square metres. */
 const areaM2 = (text) => {
   if (typeof text !== "string") return NaN;
   const n = parseFloat(text.replace(/,/g, ""));
@@ -265,27 +266,37 @@ const areaM2 = (text) => {
 
 const waitAreaNonZero = (page, timeout = TIMEOUT) =>
   page.waitForFunction(
-    () => {
-      const row = [...document.querySelectorAll('#settings-panel [class*="readout"]')].find(
-        (el) => (el.firstElementChild?.textContent ?? "").trim() === "Area",
-      );
-      const t = row?.lastElementChild?.textContent?.trim() ?? "";
+    (sel) => {
+      const t = document.querySelector(sel)?.textContent?.trim() ?? "";
       const n = parseFloat(t.replace(/,/g, ""));
       return Number.isFinite(n) && n > 0;
     },
-    undefined,
+    AREA_FIGURE,
     { timeout },
   );
 
-/** Add points enabled is read from the inert Settings panel on a phone; the
- *  DOM property is still the app's own predicate result. */
+/** Add points enabled is the app's own predicate result, read off the DOM. */
 const readAddPointsDisabled = (page) =>
   page.evaluate(() => {
-    const b = [...document.querySelectorAll("#settings-panel button")].find(
-      (x) => x.textContent.trim() === "Add points",
-    );
+    const b = document.querySelector('section[aria-label="Map"] button[aria-label="Add points"]');
     return b ? b.disabled : null;
   });
+
+/** aria-pressed of one toolbar tool. */
+const pressed = (page, name) => tool(page, name).getAttribute("aria-pressed");
+
+/** Every toolbar control is reachable by Tab, in order, and named: focus the
+ *  first tool, Tab through the rest and read each one's accessible name. */
+async function tabOrder(page, first, expected) {
+  await tool(page, first).focus();
+  const seen = [first];
+  for (let i = 1; i < expected.length; i += 1) {
+    await page.keyboard.press("Tab");
+    seen.push(await page.evaluate(() => document.activeElement?.getAttribute("aria-label") ?? "(unnamed)"));
+  }
+  if (seen.join(" > ") !== expected.join(" > ")) throw new Error(`Tab order ${seen.join(" > ")}`);
+  return seen.join(" > ");
+}
 
 // ---------------------------------------------------------------------------
 // The UI-20 exit hold, reused from chrome-motion-check.mjs so "the panel
@@ -444,11 +455,16 @@ async function mouseFlow(browser) {
       return 'data-network="online" and the empty-store line';
     });
 
-    // Panel appears on tool pick.
-    await page.getByRole("radio", { name: "Polygon", exact: true }).click();
+    // Panel appears on tool pick, and the tool reads pressed.
+    await tool(page, "Polygon").click();
     await gate(motion, "panel appears on Polygon pick", async () => {
       await waitPanelTitle(page, "Drawing a polygon");
       return 'title "Drawing a polygon" visible';
+    });
+    await gate(motion, "Polygon reads pressed, Rectangle does not", async () => {
+      const [a, b] = [await pressed(page, "Polygon"), await pressed(page, "Rectangle")];
+      if (a !== "true" || b !== "false") throw new Error(`Polygon ${a}, Rectangle ${b}`);
+      return "aria-pressed true on the active tool only";
     });
 
     // Three corners, exact click copy after each (lib/areaEditing clickMeaning).
@@ -479,11 +495,19 @@ async function mouseFlow(browser) {
     await page.keyboard.press("Enter");
     detachCheck(motion, "Enter", await collectDetached(page));
 
-    // The Sidebar reads the committed area: Clear area enabled, non-zero m².
+    // The toolbar reads the committed area: Clear area enabled, non-zero m².
     await gate(motion, "Clear area enabled after finish", async () => {
       await waitClearAreaEnabled(page);
       return "Clear area no longer disabled";
     });
+    await gate(motion, "no tool reads pressed once the draw ended", async () => {
+      const a = await pressed(page, "Polygon");
+      if (a !== "false") throw new Error(`Polygon ${a}`);
+      return "aria-pressed false";
+    });
+    await gate(motion, "every toolbar control reachable by Tab and named", async () =>
+      tabOrder(page, "Polygon", ["Polygon", "Rectangle", "Circle", "Add points", "Clear area", "Set home point"]),
+    );
     await gate(motion, "area readout non-zero after finish", async () => {
       await waitAreaNonZero(page);
       const text = await readAreaText(page);
@@ -521,14 +545,11 @@ async function mouseFlow(browser) {
     });
     await gate(motion, "vertex drag changed the area readout", async () => {
       await page.waitForFunction(
-        (before) => {
-          const row = [...document.querySelectorAll('#settings-panel [class*="readout"]')].find(
-            (el) => (el.firstElementChild?.textContent ?? "").trim() === "Area",
-          );
-          const t = row?.lastElementChild?.textContent?.trim() ?? "";
+        ({ before, sel }) => {
+          const t = document.querySelector(sel)?.textContent?.trim() ?? "";
           return t.length > 0 && t !== before;
         },
-        areaBefore,
+        { before: areaBefore, sel: AREA_FIGURE },
         { timeout: TIMEOUT },
       );
       return `formatArea ${areaBefore} -> ${await readAreaText(page)}`;
@@ -536,7 +557,7 @@ async function mouseFlow(browser) {
 
     // Rectangle: first click, a mouse move rubber-bands with the measured hint,
     // the opposite click commits and the panel detaches.
-    await page.getByRole("radio", { name: "Rectangle", exact: true }).click();
+    await tool(page, "Rectangle").click();
     await gate(motion, "panel appears on Rectangle pick", async () => {
       await waitPanelTitle(page, "Drawing a rectangle");
       return 'title "Drawing a rectangle" visible';
@@ -569,9 +590,10 @@ async function mouseFlow(browser) {
 }
 
 // ---------------------------------------------------------------------------
-// Context B: touch at 375x812. The phone opens on Missions; pick Polygon in
-// Settings, switch to Map, tap four corners, tap Finish area, then tap a
-// corner: the selection opens the Remove corner panel. The corner tap lands
+// Context B: touch at 375x812. The phone opens on Missions; switch to Map,
+// pick Polygon on the map toolbar (no trip through Settings), tap four
+// corners, tap Finish area, then tap a corner: the selection opens the Remove
+// corner panel. The corner tap lands
 // 15px below the corner -- outside the 5px visible vertex, inside the 44px
 // touch hit layer -- so a missing hit layer fails this context (G6).
 // ---------------------------------------------------------------------------
@@ -585,8 +607,6 @@ async function touchFlow(browser) {
     });
 
     const nav = page.getByRole("navigation", { name: "Show" });
-    await nav.getByRole("button", { name: "Settings" }).tap();
-    await page.getByRole("radio", { name: "Polygon", exact: true }).tap();
     await nav.getByRole("button", { name: "Map" }).tap();
     await page.locator('section[aria-label="Map"] canvas').waitFor({ state: "visible", timeout: TIMEOUT });
     // Let the view slide settle: while the section is still animating in, its
@@ -596,20 +616,22 @@ async function touchFlow(browser) {
       .evaluate((el) => Promise.all(el.getAnimations().map((a) => a.finished)))
       .catch(() => {});
     await page.waitForTimeout(120);
+    await tool(page, "Polygon").tap();
     await gate(motion, "panel appears on Polygon pick", async () => {
       await waitPanelTitle(page, "Drawing a polygon");
       return 'title "Drawing a polygon" visible on the Map view';
     });
 
-    // Four taps, exact copy after each. On a phone the map canvas is only the
-    // top strip (the Summary bar owns the rest): the drawing panel covers
-    // x 24-304 / y 64-203 and the display pills x 257-351 / y 12-56, so the
-    // points sit in the free top-left, top-centre, right column and bottom band.
+    // Four taps, exact copy after each. On a phone the map canvas is what is
+    // left above the toolbar strip and the Summary: the drawing panel covers
+    // x 24-304 / y 64-210, the readout and the display pills sit along the top
+    // (y 12-56) and the scale bar and attribution along the bottom, so the
+    // points sit in the free band between the panel and the scale bar.
     const corners = [
-      [0.15, 0.08],
-      [0.65, 0.08],
-      [0.88, 0.5],
-      [0.25, 0.93],
+      [0.2, 0.55],
+      [0.75, 0.55],
+      [0.8, 0.8],
+      [0.3, 0.85],
     ];
     for (let i = 1; i <= 4; i += 1) {
       const { x, y } = await canvasPoint(page, ...corners[i - 1]);

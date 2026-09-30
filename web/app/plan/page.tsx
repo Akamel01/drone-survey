@@ -7,6 +7,7 @@ import type { MissionRow } from "@/lib/missionRecords";
 import { copyOf, localDate, sitesFrom, type MissionListRead, type SiteChoice } from "@/lib/missionView";
 import { firstRunDestination, type FirstRunStep } from "@/lib/firstRun";
 import MapPane, { type DrawMode } from "@/components/MapPane";
+import MapToolbar from "@/components/MapToolbar";
 import HeroScene from "@/components/HeroScene";
 import MissionList from "@/components/MissionList";
 import Notice, { type NoticePayload } from "@/components/Notice";
@@ -303,6 +304,14 @@ export default function PlanPage() {
     setMode(m);
   };
 
+  // A pick from the map toolbar. The corner tapped for Remove corner belongs to
+  // the shape the tool is about to act on or replace, so it does not survive.
+  const pickTool = (m: DrawMode) => {
+    setSelectedCorner(null);
+    selectMode(m);
+  };
+  const clearSubject = () => setSpecState((s) => ({ ...s, orbit: { ...s.orbit, center: null } }));
+
   const preview_ = useMemo(() => preview(spec), [spec]);
   const areaHa = useMemo(() => areaHectares(spec.aoi), [spec.aoi]);
 
@@ -382,6 +391,14 @@ export default function PlanPage() {
           onBasemapError={handleBasemapError}
           onBasemapLoaded={handleBasemapLoaded}
           />
+          <MapToolbar
+            spec={spec}
+            mode={mode}
+            areaHa={areaHa}
+            onTool={pickTool}
+            onClearArea={() => setAoi([], null)}
+            onClearSubject={clearSubject}
+          />
           {noNetwork && wide && (
             <div className={styles.noNetwork}>
               <HeroScene playing showOnWide />
@@ -417,9 +434,6 @@ export default function PlanPage() {
           <Sidebar
           spec={spec}
           setSpec={setSpec}
-          mode={mode}
-          onModeChange={selectMode}
-          areaHa={areaHa}
           preview={preview_}
           sites={sites}
           editing={editing}
