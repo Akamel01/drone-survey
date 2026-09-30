@@ -5,12 +5,13 @@ import type { MissionSpec } from "@/lib/spec";
 import type { Preview } from "@/lib/mission";
 import type { MissionRecord } from "@/lib/missionRecords";
 import { safeStorage } from "@/lib/actions";
-import { flightTimeDelta, saveProblem, type SiteChoice } from "@/lib/missionView";
+import { flightTimeDelta, specBlocker, type SiteChoice } from "@/lib/missionView";
 import * as missionClient from "@/lib/missionClient";
 import { firstSentence } from "@/lib/notice";
 import type { NoticePayload } from "./Notice";
 import type { Editing } from "@/app/plan/page";
 import CountUp from "./CountUp";
+import SaveSheet, { type EditedMission, type SaveReply, type SaveRequest } from "./SaveSheet";
 import styles from "./SummaryBar.module.css";
 
 interface SummaryBarProps {
@@ -24,6 +25,11 @@ interface SummaryBarProps {
   onSaved: (mission: MissionRecord) => void;
   /** The Sites already in the store, so a new Site cannot take one's name. */
   sites?: SiteChoice[];
+  /** The stored Mission being edited, as the list last read it. Its state is
+   *  what the Save sheet offers from, so it is the list's and not the one the
+   *  editor opened with: a Mission can be Loaded while it is being edited.
+   *  Absent while the list has not read it yet. */
+  edited?: EditedMission | null;
   /** Page-owned Notice slot (M2 seam). Accepted but ignored until M4 wires it. */
   onNotice?: (p: Omit<NoticePayload, "key">) => void;
   /** The open signal for the count-up. Changes only when a Mission opens, so a
@@ -43,10 +49,12 @@ const SUMMARY_OPEN_KEY = "drone-planner.summary-open";
 
 type SaveState = { kind: "idle" } | { kind: "saving" };
 
-export default function SummaryBar({ spec, preview, editing, onSaved, sites = [], onNotice, countKey }: SummaryBarProps) {
+export default function SummaryBar({ spec, preview, editing, onSaved, sites = [], edited, onNotice, countKey }: SummaryBarProps) {
   const [copied, setCopied] = useState(false);
   const [open, setOpen] = useState(false);
   const [save, setSave] = useState<SaveState>({ kind: "idle" });
+  // The Save sheet; `session` counts opens so each starts from the planner.
+  const [sheet, setSheet] = useState({ open: false, session: 0 });
   const hasProblems = preview.problems.length > 0;
   const isOrbit = spec.mission_type === "orbit";
   const toggleRef = useRef<HTMLButtonElement>(null);
@@ -84,37 +92,45 @@ export default function SummaryBar({ spec, preview, editing, onSaved, sites = []
   // stays exclusively under the lead.
   const trio = `${preview.parts} flight${preview.parts === 1 ? "" : "s"} · GSD ${preview.gsd_cm.toFixed(2)} cm/px · ${preview.photo_count} photos`;
 
-  const problem = saveProblem(spec, editing.name, sites);
+  const problem = specBlocker(spec);
+  // A Mission with an id has been stored. Until the list has read it (a save
+  // just made, not yet listed) it is the Planned one that save wrote.
+  const editedMission: EditedMission | null = editing.id
+    ? (edited ?? { state: "planned", name: editing.name, site: spec.site, site_id: spec.site_id, date: spec.date })
+    : null;
 
-  async function runSave() {
-    if (problem || save.kind === "saving") return;
+  // What the sheet is told: it closes on success and, on a failure, stays open
+  // with what was typed and shows `text` (UI-30, operator review of #311).
+  async function runSave({ choice, name, site }: SaveRequest): Promise<SaveReply> {
     setSave({ kind: "saving" });
-    // Save outcomes report through the page-owned Notice slot: the verbatim
-    // text goes to onNotice, never to an inline div. The saveProblem guard
-    // above and copy-feedback below stay where they are.
-    const report = (text: string, failed: boolean) => {
-      onNotice?.({ title: firstSentence(text), body: text, missionName: editing.name.trim(), failed });
+    // Save outcomes also report through the page-owned Notice slot: the
+    // verbatim text goes to onNotice. A failure is reported there and inside
+    // the sheet, which is still open in front of it.
+    const report = (text: string, failed: boolean): SaveReply => {
+      onNotice?.({ title: firstSentence(text), body: text, missionName: name, failed });
       setSave({ kind: "idle" });
+      return failed ? { ok: false, text } : { ok: true };
     };
     try {
-      const outcome = await missionClient.save({
-        id: editing.id ?? undefined,
-        // saveProblem above refuses a Spec with no site_id, so the guard here
-        // is the non-null.
-        site_id: spec.site_id!,
-        site: spec.site,
-        name: editing.name.trim(),
-        date: spec.date,
-        spec,
-      });
-      if (outcome.ok) {
-        onSaved(outcome.mission);
-        report(outcome.text, false);
-      } else {
-        report(outcome.text, true);
-      }
+      const outcome = await missionClient.save(
+        {
+          // Only a new Mission is a save with no id. Changes and a replacement
+          // name the Mission, and the store decides what that means from its
+          // state: in place while Planned, a fork once Dispatched.
+          id: choice === "new" ? undefined : (editing.id ?? undefined),
+          site_id: site.site_id,
+          site: site.site,
+          name,
+          date: spec.date,
+          // The Spec carries the Site it is saved under, as the store reads it.
+          spec: { ...spec, site: site.site, site_id: site.site_id },
+        },
+        editedMission ? { choice, from: editedMission.name } : undefined,
+      );
+      if (outcome.ok) onSaved(outcome.mission);
+      return report(outcome.text, !outcome.ok);
     } catch (err) {
-      report(
+      return report(
         `Not saved: ${err instanceof Error ? err.message : "the store could not be reached"}. Nothing changed.`,
         true,
       );
@@ -223,18 +239,18 @@ export default function SummaryBar({ spec, preview, editing, onSaved, sites = []
         <div className={styles.actions}>
           <button
             className="primary"
-            onClick={runSave}
+            onClick={() => setSheet((s) => ({ open: true, session: s.session + 1 }))}
             disabled={!!problem || save.kind === "saving"}
             // UI-22 hint: the save hint below describes the disabled Save;
             // no title (dead on disabled buttons, hover-only channel).
             aria-describedby={problem ? "save-hint" : undefined}
           >
-            {save.kind === "saving" ? "Saving…" : editing.id ? "Save Mission" : "Save new Mission"}
+            {save.kind === "saving" ? "Saving…" : "Save Mission"}
           </button>
           <button className="glass-clear" onClick={() => downloadMission(spec, editing.name)}>
             Download Mission Spec
           </button>
-          {/* UI-22 hint: saveProblem wording verbatim, no "Save:" prefix.
+          {/* UI-22 hint: specBlocker wording verbatim, no "Save:" prefix.
               Plain <p>, conditional so no dangling describedby. After both
               buttons, so they share one row and the hint sits under it. */}
           {problem && (
@@ -251,6 +267,21 @@ export default function SummaryBar({ spec, preview, editing, onSaved, sites = []
           ))}
         </ul>
       )}
+      <SaveSheet
+        open={sheet.open}
+        onClose={() => setSheet((s) => ({ ...s, open: false }))}
+        session={sheet.session}
+        spec={spec}
+        editing={editing}
+        edited={editedMission}
+        sites={sites}
+        problems={preview.problems}
+        onSave={async (request) => {
+          const reply = await runSave(request);
+          if (reply.ok) setSheet((s) => ({ ...s, open: false }));
+          return reply;
+        }}
+      />
     </div>
   );
 }
