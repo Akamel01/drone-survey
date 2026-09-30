@@ -25,7 +25,7 @@ masters + §6 cuts (D4/D5/D6; thresholds are CLI flags, #194 owns calibration):
         --frames-wide FW --frames-tall FT \
         --masters-dir M --cuts-dir C \
         [--raw-wide W --raw-tall T --cut-report R --reconstruction DIR \
-         --graded-wide W --graded-tall T] \
+         --graded-wide W --graded-tall T --grade-report R] \
         [--expect-frames N --expect-fps F --expect-duration S --duration-tol T \
          --min-dx P --ref-sizes J --size-bound B] \
         --out-verdict V
@@ -49,6 +49,11 @@ frame dir (labels `frames-wide[0]` / `frames-tall[0]`); C2 stays on the
 cut-report input_hashes (the Reconstruction is untouched by the cutover).
 Graded-still sanity stays optional.
 
+M5 adds the grade-report digest check, same verdict: `--grade-report FILE` must
+be readable, parse, carry `params_sha256`, and that digest must equal the sha256
+of the checked-in `nodes/grade/grade-params.json`. Presence/parse/digest only:
+no look thresholds (#194 owns those).
+
 The pure functions here are imported by nodes/check_showcase.py, the offline
 Blender-free check. No bpy, no GPU, no network.
 """
@@ -67,6 +72,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from common import emit_report, sha256_file  # noqa: E402
 
 RAW_SIZES = {"wide": (3840, 2160), "tall": (2160, 3840)}
+# M5: the checked-in grade params the report's digest must match (repo root =
+# parents[2]: nodes/check-showcase/gate.py -> nodes/check-showcase -> nodes -> repo).
+GRADE_PARAMS = Path(__file__).resolve().parents[2] / "nodes" / "grade" / "grade-params.json"
 # Product defaults (M4: 243f x16 + seam close = 3888f @120fps = 32.4s).
 # Defaults, not calibration: every one is a CLI flag; #194 owns the numbers.
 EXPECT_FRAMES = 3888
@@ -531,6 +539,27 @@ def cut_report_checks(cut_report_path: Path, reconstruction_dir: Path) -> list[d
     return [{"name": "cut-report: reconstruction files byte-identical", "ok": ok, "detail": detail}]
 
 
+def grade_report_checks(grade_report_path: Path, params_path: Path = GRADE_PARAMS) -> list[dict]:
+    """M5: grade-report.json parses and carries the checked-in params digest.
+
+    Presence/parse/digest only, no look thresholds (#194 owns those). Missing or
+    unreadable file, non-JSON, missing `params_sha256`, and a digest that is not
+    the sha256 of the checked-in params file each fail.
+    """
+    try:
+        report = json.loads(Path(grade_report_path).read_text(encoding="utf-8"))
+    except Exception as exc:
+        return [{"name": "grade-report: readable", "ok": False, "detail": f"{exc!r}"}]
+    if not isinstance(report, dict) or "params_sha256" not in report:
+        return [{"name": "grade-report: has params_sha256", "ok": False,
+                 "detail": "missing params_sha256"}]
+    want = sha256_file(Path(params_path))
+    got = report["params_sha256"]
+    return [{"name": "grade-report: params digest matches checked-in grade-params.json",
+             "ok": got == want,
+             "detail": f"report params_sha256={got}; checked-in {want} ({params_path})"}]
+
+
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description="Showcase gate: C4 framing + C2 re-hash + M6 seam/direction/counts.")
     ap.add_argument("--raw-wide", default=None, help="render Node's raw wide RGBA still (island alpha)")
@@ -540,6 +569,8 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--out-verdict", required=True, help="C7 verdict.json to write")
     ap.add_argument("--graded-wide", default=None, help="optional graded wide still sanity (opaque RGB)")
     ap.add_argument("--graded-tall", default=None, help="optional graded tall still sanity (opaque RGB)")
+    ap.add_argument("--grade-report", default=None,
+                    help="optional grade-report.json (M5: params_sha256 vs the checked-in params file)")
     ap.add_argument("--frames-wide", default=None, help="wide frame dir (seam + direction + frame-0 C4)")
     ap.add_argument("--frames-tall", default=None, help="tall frame dir (seam + direction + frame-0 C4)")
     ap.add_argument("--masters-dir", default=None, help="M4 masters dir (*-4k120-{hevc,av1}.mp4)")
@@ -566,6 +597,8 @@ def main(argv: list[str] | None = None) -> int:
             checks += still_checks("graded-wide", args.graded_wide, RAW_SIZES["wide"], want_alpha=False)
         if args.graded_tall:
             checks += still_checks("graded-tall", args.graded_tall, RAW_SIZES["tall"], want_alpha=False)
+        if args.grade_report:
+            checks += grade_report_checks(args.grade_report, GRADE_PARAMS)
         if args.frames_wide:
             checks.append(seam_check("seam-wide", args.frames_wide))
             checks += dir_frame0_checks("frames-wide", args.frames_wide)
@@ -594,7 +627,7 @@ def main(argv: list[str] | None = None) -> int:
                 checks += cut_report_checks(args.cut_report, args.reconstruction)
         if not checks:
             checks.append({"name": "gate: no inputs", "ok": False,
-                           "detail": "pass at least one of --raw-*/--frames-*/--masters-dir/--cuts-dir/--cut-report"})
+                           "detail": "pass at least one of --raw-*/--frames-*/--masters-dir/--cuts-dir/--cut-report/--grade-report"})
     except Exception as exc:  # verdict is a declared output: write one no matter what
         checks.append({"name": "gate: internal error", "ok": False, "detail": repr(exc)})
 

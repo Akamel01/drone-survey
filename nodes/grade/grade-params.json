@@ -1,0 +1,11 @@
+{
+  "haze": 0.09,
+  "glow": 0.2,
+  "lift": 0.04,
+  "clouds": {
+    "enabled": true,
+    "period_frames": 242,
+    "amplitude_px": 48,
+    "direction": "right"
+  }
+}

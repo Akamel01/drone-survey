@@ -2,7 +2,7 @@
 
 Three fixtures for the Showcase tracer (plan module M0). Status: placeholder
 fixtures for development; the boundary is **calibration debt**, the sky plate is
-a sampled stand-in.
+now generated from the hero's measured ramp (see below).
 
 ## `boundary-bellus.json`
 
@@ -62,40 +62,46 @@ The mesh the boundary indexes is the golden Capture's Reconstruction:
 
 ## `sky-plate.png`
 
-**What it is.** The hero's sky, as a stand-in plate: opaque RGB PNG
-(3840 × 2160, no alpha). `scripts/hero/grade.py:8` resizes it to the render's
-size and grades over it; the render is film-transparent
-(`film_transparent = True`), so this plate **is** the visible sky.
+**What it is.** The hero's sky, regenerated from the hero's own measured
+ramp: opaque RGB PNG (3840 × 2160, no alpha). `nodes/grade/grade.py:25`
+resizes it to the render's size and grades over it; the render is
+film-transparent (`film_transparent = True`), so this plate **is** the visible
+sky. The cloud sea is not in the plate:
+`nodes/render-background/cloud_pass.py` renders it and grade composites it,
+panned, over the plate (ADR-1, M4).
 
-**Where the colour comes from.** The hero sky is the HDRI
-`kloofendal_overcast_puresky_4k.hdr` (Poly Haven, CC0) at
-`akamel-linux:~/hero3d/assets/kloofendal_overcast_puresky/`, used as the world
-environment by `scripts/hero/hero.py:506-527` (strength 1.45, below-horizon
-ground ramped to near-black) and rendered with AgX / AgX - Medium High
-Contrast (`hero.py:553-554`). The HDRI's above-horizon row means are bright and
-blue-weighted (zenith-band sRGB ≈ #DCEFFF..#F3FFFF untonemapped, row-mean
-linear B > G > R); raw linear values are not display-referred, so the plate
-uses the hero sky's own sampled display values instead —
-`docs/ui-theme/spec.md` §3.1, "sampled from frames":
+**Where the colour comes from.** `docs/research/hero-look-spec.md` §4a — the
+approved hero's own sampled row means (tall framing, s0), as a vertical ramp
+through the six measured anchors, 8-bit per channel:
 
-| Gradient stop | Colour |
-|---|---|
-| Top | `#496C81` muted steel blue |
-| Middle | `#7C99AD` |
-| Bottom (horizon haze) | `#AABBCA` |
+| %H | 0.02 | 0.10 | 0.25 | 0.40 | 0.55 | 0.68 (horizon) |
+|---|---|---|---|---|---|---|
+| hex | `#24384A` | `#436580` | `#587998` | `#7896B0` | `#92AAC0` | `#C4CCD5` |
 
-`grade.py` adds its own haze, glow and lifted shadows on top
-(`HAZE, GLOW, LIFT = 0.09, 0.2, 0.04`), so the plate stays flat and ungraded.
-Rebuild: linear interpolation between the three stops, 2160 rows, one row
-resized to 3840 wide with Pillow.
+clamped above 0.02 H, held at `#C4CCD5` below the horizon row. Below the
+horizon sits a soft static ridge band near the measured haze `#B9C3D1`
+(`HorizonHaze` mean; ΔE ≈ 22 vs the `--haze` token, an open shared-token
+sign-off, D-2): the "distant mountains lost in haze" layer, no geometry
+(ADR-6, grilling Q8).
 
-**Debt and upgrade path.** The plate is a flat gradient, not a rendered frame
-of the HDRI: it does not carry the HDRI's cloud structure or sun glow, and its
-brightness is matched to the hero still's sampled values rather than to a
-colour-managed render of the world. For a production Showcase the plate should
-be replaced by a sky rendered (or tone-mapped) from the same HDRI the
-Reconstruction's lighting uses, through the same view transform; the path
-exists in `scripts/hero/hero.py`'s world setup and only needs a render step.
+The look-spec's fitted slopes (tall R 1.93 / G 1.62 / B 1.38 levels/%H; the
+plan and ADR-6 quote the rounded R 1.9 / G 1.6 / B 1.4) summarise that same
+measured curve; the plate is built through the anchors because a straight
+two-endpoint line loses the measured blue mid (`#6D8DA9` at 0.35 H).
+
+**Rebuild.** `python3 fixtures/showcase/generate_sky_plate.py [--out FILE]`
+(Pillow + stdlib only, deterministic); `--check` regenerates to a tempdir and
+compares decoded pixel bytes + dimensions, then samples the ramp anchors and
+the ridge band. F5: Pillow is unpinned in CI, so PNG bytes are not the
+contract — the decoded pixels are.
+
+**History.** Supersedes the M0 flat 3-stop plate (`#496C81` / `#7C99AD` /
+`#AABBCA`, linear interpolation, drawn 2026-09-25 by opencode run `190`); its
+debt note asked for a sky rendered (or tone-mapped) from the same HDRI through
+the same view transform — discharged by the measured ramp plus the separate
+HDRI-lit cloud pass, which carries the cloud structure the flat gradient
+lacked. Regenerated 2026-09-27 by the AutoForge M2 worker (opencode run `192`,
+`deepseek-v4.1-flash`).
 
 ## Synthetic golden fixtures (`turn-3f/`, `dir-a/`, `dir-b/`)
 

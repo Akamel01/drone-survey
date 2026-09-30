@@ -19,6 +19,9 @@ answers in-process:
     4 x 3 px = 12 px.
   - C2 byte-identical: an untouched Reconstruction re-hashes equal; a flipped
     byte, an extra file, and a missing file each fail.
+  - M5 grade-report digest, through the real gate CLI: a missing report and a
+    wrong `params_sha256` exit 1; a synthetic report carrying the sha256 of the
+    checked-in nodes/grade/grade-params.json exits 0.
   - The real gate CLI end-to-end on a synthetic pair: a healthy run exits 0 and
     writes a pass verdict; a clipped wide still (plus a wrong-size graded still)
     exits 1 and still writes a fail verdict.
@@ -29,6 +32,7 @@ answers in-process:
 from __future__ import annotations
 
 import importlib.util
+import hashlib
 import json
 import subprocess
 import sys
@@ -509,6 +513,44 @@ def check_gate_cli_new():
               "frames-wide[0]: island wholly in frame" in failed, json.dumps(sorted(failed)))
 
 
+def check_grade_report():
+    """M5: the gate CLI's --grade-report presence/parse/digest check."""
+    check("M5 grade-report: checked-in params file resolves",
+          gate.GRADE_PARAMS.is_file(), str(gate.GRADE_PARAMS))
+    with tempfile.TemporaryDirectory() as tmp:
+        tmp = Path(tmp)
+
+        result = run_gate_new(tmp, ["--grade-report", str(tmp / "missing.json")])
+        check("M5 grade-report: missing report exits 1", result.returncode == 1,
+              f"rc={result.returncode} {result.stderr[-200:]}")
+        verdict = json.loads((tmp / "verdict.json").read_text())
+        check("M5 grade-report: missing report fails the readable check",
+              any(not c["ok"] and c["name"].startswith("grade-report") for c in verdict["checks"]),
+              json.dumps(verdict["checks"]))
+
+        bad = tmp / "bad-report.json"
+        bad.write_text(json.dumps({"params_sha256": "0" * 64}))
+        result = run_gate_new(tmp, ["--grade-report", str(bad)])
+        check("M5 grade-report: wrong digest exits 1", result.returncode == 1,
+              f"rc={result.returncode}")
+        verdict = json.loads((tmp / "verdict.json").read_text())
+        check("M5 grade-report: wrong digest fails the digest check",
+              any(not c["ok"] and "digest" in c["name"] for c in verdict["checks"]),
+              json.dumps(verdict["checks"]))
+
+        good = tmp / "grade-report.json"
+        good.write_text(json.dumps(
+            {"params_sha256": hashlib.sha256(gate.GRADE_PARAMS.read_bytes()).hexdigest()}))
+        result = run_gate_new(tmp, ["--grade-report", str(good)])
+        check("M5 grade-report: digest of the repo params file exits 0", result.returncode == 0,
+              f"rc={result.returncode} {result.stderr[-200:]}")
+        verdict = json.loads((tmp / "verdict.json").read_text())
+        check("M5 grade-report: good digest passes and the digest check is named",
+              verdict["pass"] is True
+              and any(c["ok"] and "digest" in c["name"] for c in verdict["checks"]),
+              json.dumps(verdict["checks"]))
+
+
 def main() -> None:
     check_frame()
     check_right_third()
@@ -521,6 +563,7 @@ def main() -> None:
     check_sizes()
     check_cuts()
     check_gate_cli_new()
+    check_grade_report()
 
     if FAILURES:
         print(f"\n{len(FAILURES)} check(s) failed: {FAILURES}", file=sys.stderr)

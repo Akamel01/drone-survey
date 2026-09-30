@@ -9,7 +9,10 @@ C1: `--out-island DIR` gets island.obj + island.mtl + textures/, MTL-relative
 paths.  The captured top is never rewritten: every source `v`/`vt`/`vn` line is
 emitted in place, unchanged, so top-vertex positions and UVs are bit-identical
 to the Reconstruction mesh by construction, and only faces whose XY centroid
-falls outside the C6 polygon are dropped.  The Reconstruction is opened
+falls outside the C6 polygon are dropped.  The kept faces are then clipped to
+the polygon (Sutherland-Hodgman): a face that crosses the boundary contributes
+one convex n-gon whose new vertices sit on the polygon edge, so no rim vertex
+of the stitched island lies outside the cut.  The Reconstruction is opened
 read-only.
 
 C2: `--out-report FILE` gets {reconstruction, boundary_sha256, input_hashes,
@@ -36,8 +39,10 @@ the same bits.
 from __future__ import annotations
 
 import argparse
+import ast
 import json
 import math
+import random
 import shutil
 import sys
 import tempfile
@@ -69,9 +74,12 @@ for _t, *_ in LAYERS:
 STRATA = _z          # 1.09 hero metres (hero.py:47)
 UNDER = 2.7
 LUMPS = 0.34
+SEED = 11            # hero.py K["seed"], hero.py:31 (under-boulder placement RNG)
+UNDER_BOULDERS = 20  # hero.py K["under_boulders"], the bulbous underside (hero.py:479-490)
 SIDE_RINGS = 72
 UNDER_RINGS = 30
 TEX_M = 4.0          # real-world metres one generated-geometry texture tile spans
+CLIP_EPS = 1e-9      # rim-clip slack: float noise on a vertex that sits on the boundary
 
 HERO_TEX = {         # material -> (asset dir, file) in the hero's tex() layout
     "strata": ("cliff_side", "cliff_side_Diffuse_2k.jpg"),
@@ -100,7 +108,58 @@ def load_boundary(path: Path) -> list[tuple[float, float]]:
         polygon = polygon[:-1]        # C6 rings may repeat their first point
     if len(polygon) < 3:
         die(f"cut-island: boundary {path} needs >= 3 distinct points, got {len(polygon)}")
+    if not polygon_is_convex(polygon):
+        die(f"cut-island: boundary {path} is not convex; the rim clip is one "
+            f"Sutherland-Hodgman pass, which needs a convex ring -- upgrade to ear clipping "
+            f"or Greiner-Hormann for a concave Site")
     return polygon
+
+
+def polygon_orientation(polygon: list[tuple[float, float]]) -> int:
+    """+1 for a counter-clockwise ring, -1 for clockwise (shoelace sign)."""
+    area = 0.0
+    for i in range(len(polygon)):
+        x1, y1 = polygon[i - 1]
+        x2, y2 = polygon[i]
+        area += x1 * y2 - x2 * y1
+    return 1 if area >= 0.0 else -1
+
+
+def polygon_is_convex(polygon: list[tuple[float, float]]) -> bool:
+    """True when every turn has the same sign (collinear points allowed).
+
+    ADR-5's ceiling: clipping is one Sutherland-Hodgman pass, so a concave
+    boundary has to be rejected here rather than clipped wrongly.  Upgrade
+    path: ear clipping for a simple ring, Greiner-Hormann for general ones.
+    """
+    sign = 0
+    n = len(polygon)
+    for i in range(n):
+        x1, y1 = polygon[i - 1]
+        x2, y2 = polygon[i]
+        x3, y3 = polygon[(i + 1) % n]
+        cross = (x2 - x1) * (y3 - y2) - (y2 - y1) * (x3 - x2)
+        if cross == 0.0:
+            continue
+        turn = 1 if cross > 0 else -1
+        if sign == 0:
+            sign = turn
+        elif turn != sign:
+            return False
+    return sign != 0
+
+
+def inside_convex(x: float, y: float, polygon: list[tuple[float, float]],
+                  orient: int | None = None) -> bool:
+    """Half-plane test against every edge; the boundary itself counts as inside."""
+    orient = polygon_orientation(polygon) if orient is None else orient
+    return all(_inside(x, y, polygon[i - 1][0], polygon[i - 1][1],
+                       polygon[i][0], polygon[i][1], orient) for i in range(len(polygon)))
+
+
+def _inside(x: float, y: float, x1: float, y1: float, x2: float, y2: float,
+            orient: int, eps: float = CLIP_EPS) -> bool:
+    return orient * ((x2 - x1) * (y - y1) - (y2 - y1) * (x - x1)) >= -eps
 
 
 # --- seeded Perlin fbm (the shape of mathutils.noise.fractal, no bpy) --------
@@ -170,11 +229,82 @@ def layer_at(depth: float):
     return LAYERS[-1], 1.0
 
 
+# --- under-boulders (hero.py:479-490; ADR-4) ---------------------------------
+
+def boulder_specs(rng: random.Random, rim: list[tuple[float, float]], z_ref: float,
+                  scale: float) -> list[tuple[float, float, float, float]]:
+    """Hero's underside boulders, placed against the real rim: (x, y, z, radius).
+
+    `rim` is [(angle, radius), ...] in scene units; hero's `K["R"] * outline(ang)`
+    becomes the loop's actual radius at that angle, and hero metres scale by
+    `scale` (= the loop's mean radius / HERO_R).  Every centre sits below the
+    cut (`z < z_ref - STRATA * scale`, hero.py:487).
+    """
+    specs = []
+    for _ in range(UNDER_BOULDERS):
+        t = rng.uniform(0.08, 0.75)
+        ang = rng.uniform(0.0, 6.28)
+        i, best = 0, 1e18
+        for j, (a, _r) in enumerate(rim):
+            d = abs(math.atan2(math.sin(a - ang), math.cos(a - ang)))
+            if d < best:
+                best, i = d, j
+        rad = rim[i][1] * 0.82 * (1.0 - t) ** 0.55
+        r = rng.uniform(0.32, 0.62) * (1.1 - 0.5 * t) * scale
+        z = z_ref - (STRATA + t * UNDER) * scale
+        specs.append((math.cos(ang) * rad, math.sin(ang) * rad, z, r))
+    return specs
+
+
+def boulder_geometry(r: float, rng: random.Random):
+    """A lumpy low-poly sphere at the origin: ([(x, y, z, u, v)], [(a, b, c)])."""
+    rings, segs = 4, 7
+    off = (rng.uniform(0.0, 9.0), rng.uniform(0.0, 9.0), rng.uniform(0.0, 9.0))
+    verts = []
+    for j in range(rings + 1):
+        th = math.pi * j / rings
+        if j in (0, rings):
+            dirs = [(0.0, 0.0, 1.0 if j == 0 else -1.0)]
+        else:
+            dirs = [(math.sin(th) * math.cos(2.0 * math.pi * i / segs),
+                     math.sin(th) * math.sin(2.0 * math.pi * i / segs),
+                     math.cos(th)) for i in range(segs)]
+        for dx, dy, dz in dirs:
+            lump = 1.0 + 0.28 * fbm((dx * 1.7 + off[0], dy * 1.7 + off[1], dz * 1.7 + off[2]))
+            verts.append((dx * r * lump, dy * r * lump, dz * r * lump,
+                          0.5 + math.atan2(dy, dx) / (2.0 * math.pi), 0.5 - 0.5 * dz))
+    faces = []
+    for i in range(segs):
+        faces.append((0, 1 + i, 1 + (i + 1) % segs))
+    for j in range(rings - 2):
+        base = 1 + j * segs
+        for i in range(segs):
+            a, b = base + i, base + (i + 1) % segs
+            c, d = base + segs + (i + 1) % segs, base + segs + i
+            faces.append((a, d, c))
+            faces.append((a, c, b))
+    last = 1 + (rings - 2) * segs
+    for i in range(segs):
+        faces.append((last + i, len(verts) - 1, last + (i + 1) % segs))
+    return verts, faces
+
+
+def add_under_boulders(gen: "Generated", specs, rng: random.Random) -> None:
+    """Add each blob to the generated pool (closed and disjoint from the shell)."""
+    for x, y, z, r in specs:
+        verts, tris = boulder_geometry(r, rng)
+        base = len(gen.pos)
+        for vx, vy, vz, u, v in verts:
+            gen.add((x + vx, y + vy, z + vz), (u, v))
+        for a, b, c in tris:
+            gen.face("basalt", [("g", base + a), ("g", base + b), ("g", base + c)])
+
+
 # --- OBJ read (text, read-only) ----------------------------------------------
 
 class Mesh:
     __slots__ = ("verts", "faces", "face_mats", "raw_f", "raw_v", "raw_vt", "raw_vn",
-                 "v_to_vt", "v_to_vn", "mtllib")
+                 "vt", "vn", "v_to_vt", "v_to_vn", "mtllib", "clip")
 
     def __init__(self):
         self.verts: list[tuple[float, float, float]] = []
@@ -184,9 +314,12 @@ class Mesh:
         self.raw_v: list[str] = []
         self.raw_vt: list[str] = []
         self.raw_vn: list[str] = []
+        self.vt: list[tuple[float, float]] = []
+        self.vn: list[tuple[float, float, float]] = []
         self.v_to_vt: dict[int, int] = {}
         self.v_to_vn: dict[int, int] = {}
         self.mtllib: str | None = None
+        self.clip = ClipPool()
 
 
 def parse_obj(path: Path) -> Mesh:
@@ -201,9 +334,13 @@ def parse_obj(path: Path) -> Mesh:
                 m.raw_v.append(line.rstrip("\r\n"))
                 n_v += 1
             elif line.startswith("vt "):
+                p = line.split()
+                m.vt.append((float(p[1]), float(p[2]) if len(p) > 2 else 0.0))
                 m.raw_vt.append(line.rstrip("\r\n"))
                 n_vt += 1
             elif line.startswith("vn "):
+                p = line.split()
+                m.vn.append((float(p[1]), float(p[2]), float(p[3])))
                 m.raw_vn.append(line.rstrip("\r\n"))
                 n_vn += 1
             elif line.startswith("f "):
@@ -239,6 +376,173 @@ def pick_obj(reconstruction: Path) -> Path:
     die(f"cut-island: no {OBJ_NAME} (or exactly one *.obj) under {reconstruction}")
 
 
+# --- rim clip: Sutherland-Hodgman against the convex C6 polygon (ADR-5) ------
+
+class ClipPool:
+    """Rim-crossing vertices: one v/vt/vn block right after the source blocks.
+
+    Positions live in the extended `mesh.verts`; this holds the interpolated
+    vt/vn and the dedup index.  The key is the undirected source edge plus the
+    crossing parameter measured from its lower-index end, rounded: both faces
+    on that edge compute the same key from opposite directions, which is what
+    keeps the cut edge-manifold.
+    """
+
+    __slots__ = ("uv", "nrm", "index")
+
+    def __init__(self):
+        self.uv: list[tuple[float, float]] = []
+        self.nrm: list[tuple[float, float, float]] = []
+        self.index: dict[tuple[int, int, float], int] = {}
+
+    def add(self, mesh: Mesh, a: int, b: int, t: float) -> int:
+        lo, hi = (a, b) if a < b else (b, a)
+        tt = t if a < b else 1.0 - t
+        key = (lo, hi, round(tt, 6))
+        got = self.index.get(key)
+        if got is not None:
+            return got
+        if (lo not in mesh.v_to_vt or lo not in mesh.v_to_vn
+                or hi not in mesh.v_to_vt or hi not in mesh.v_to_vn):
+            die(f"cut-island: the boundary cuts edge {lo + 1}-{hi + 1}, which has no "
+                f"vt/vn corner; cannot stitch")
+        pos = _lerp3(mesh.verts[lo], mesh.verts[hi], tt)
+        uv = _lerp2(mesh.vt[mesh.v_to_vt[lo]], mesh.vt[mesh.v_to_vt[hi]], tt)
+        nrm = _norm(_lerp3(mesh.vn[mesh.v_to_vn[lo]], mesh.vn[mesh.v_to_vn[hi]], tt))
+        ref = len(mesh.verts)
+        mesh.verts.append(pos)
+        self.uv.append(uv)
+        self.nrm.append(nrm)
+        self.index[key] = ref
+        return ref
+
+    def add_point(self, mesh: Mesh, x: float, y: float, z: float,
+                  uv: tuple[float, float], nrm: tuple[float, float, float]) -> int:
+        """A polygon corner inside the face: its own vertex, nothing to share."""
+        ref = len(mesh.verts)
+        mesh.verts.append((x, y, z))
+        self.uv.append(uv)
+        self.nrm.append(_norm(nrm))
+        return ref
+
+
+def _lerp2(a, b, t):
+    return (a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t)
+
+
+def _lerp3(a, b, t):
+    return (a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t,
+            a[2] + (b[2] - a[2]) * t)
+
+
+def _norm(v):
+    length = math.sqrt(v[0] * v[0] + v[1] * v[1] + v[2] * v[2]) or 1.0
+    return (v[0] / length, v[1] / length, v[2] / length)
+
+
+def _edge_param(mesh: Mesh, face: list[int], x: float, y: float, z: float):
+    """The source edge of `face` a clipped vertex lies on: (u, v, t) or None."""
+    best = None
+    for k in range(len(face)):
+        u, v = face[k], face[(k + 1) % len(face)]
+        ux, uy, uz = mesh.verts[u]
+        vx, vy, vz = mesh.verts[v]
+        dx, dy, dz = vx - ux, vy - uy, vz - uz
+        length2 = dx * dx + dy * dy + dz * dz
+        if length2 == 0.0:
+            continue
+        t = ((x - ux) * dx + (y - uy) * dy + (z - uz) * dz) / length2
+        if t < -CLIP_EPS or t > 1.0 + CLIP_EPS:
+            continue
+        px, py, pz = ux + dx * t, uy + dy * t, uz + dz * t
+        d2 = (x - px) ** 2 + (y - py) ** 2 + (z - pz) ** 2
+        if d2 <= (CLIP_EPS * max(1.0, math.sqrt(length2))) ** 2 and (best is None or d2 < best[0]):
+            best = (d2, u, v, min(max(t, 0.0), 1.0))
+    return best
+
+
+def _record(mesh: Mesh, v: int) -> tuple:
+    uv = mesh.vt[mesh.v_to_vt[v]] if v in mesh.v_to_vt else (0.0, 0.0)
+    nrm = mesh.vn[mesh.v_to_vn[v]] if v in mesh.v_to_vn else (0.0, 0.0, 1.0)
+    return (v, *mesh.verts[v], *uv, *nrm)
+
+
+def _crossing(a: tuple, b: tuple, x1: float, y1: float, x2: float, y2: float) -> tuple:
+    """Where segment a->b meets the polygon edge line (x1, y1)-(x2, y2)."""
+    ax, ay, az = a[1], a[2], a[3]
+    den = (b[1] - ax) * (y2 - y1) - (b[2] - ay) * (x2 - x1)
+    t = (((x1 - ax) * (y2 - y1) - (y1 - ay) * (x2 - x1)) / den) if den != 0.0 else 0.0
+    out = [None]
+    for k in (1, 2, 3, 4, 5, 6, 7, 8):
+        out.append(a[k] + (b[k] - a[k]) * t)
+    return tuple(out)
+
+
+def clip_face(mesh: Mesh, face: list[int], polygon: list[tuple[float, float]],
+              pool: ClipPool) -> list[int]:
+    """Clip one face to the convex polygon; returns its refs, [] when fully outside.
+
+    A ref below `len(mesh.raw_v)` is a source vertex; a higher ref is a clip
+    vertex in the pool.  New vertices are canonicalised back onto the source
+    edge they lie on, so adjacent faces share one vertex along the cut.
+    """
+    orient = polygon_orientation(polygon)
+    cur = [_record(mesh, v) for v in face]
+    for i in range(len(polygon)):
+        if not cur:
+            return []
+        x1, y1 = polygon[i - 1]
+        x2, y2 = polygon[i]
+        inp, cur = cur, []
+        prev = inp[-1]
+        prev_in = _inside(prev[1], prev[2], x1, y1, x2, y2, orient)
+        for vert in inp:
+            cur_in = _inside(vert[1], vert[2], x1, y1, x2, y2, orient)
+            if cur_in != prev_in:
+                cur.append(_crossing(prev, vert, x1, y1, x2, y2))
+            if cur_in:
+                cur.append(vert)
+            prev, prev_in = vert, cur_in
+    refs: list[int] = []
+    for r in cur:
+        if r[0] is not None:
+            refs.append(r[0])
+            continue
+        hit = _edge_param(mesh, face, r[1], r[2], r[3])
+        if hit is not None:
+            refs.append(pool.add(mesh, hit[1], hit[2], hit[3]))
+        else:                                  # a polygon corner inside the face
+            refs.append(pool.add_point(mesh, r[1], r[2], r[3], (r[4], r[5]), (r[6], r[7], r[8])))
+    out: list[int] = []
+    for ref in refs:                           # a corner landing on a later clip edge
+        if not out or out[-1] != ref:          # reappears as its own crossing; collapse it
+            out.append(ref)
+    if len(out) > 1 and out[0] == out[-1]:
+        out.pop()
+    return out
+
+
+def clip_kept(mesh: Mesh, polygon: list[tuple[float, float]],
+              kept: list[int]) -> list[tuple[int, list[int] | None]]:
+    """Clip the centroid-filtered candidates to the polygon (ADR-5).
+
+    Returns one (source face index, refs) per output face: refs is None when
+    every vertex is inside and the raw f line can be written verbatim, else the
+    clipped convex n-gon's refs.
+    """
+    orient = polygon_orientation(polygon)
+    pieces: list[tuple[int, list[int] | None]] = []
+    for fi in kept:
+        face = mesh.faces[fi]
+        if all(inside_convex(mesh.verts[v][0], mesh.verts[v][1], polygon, orient) for v in face):
+            pieces.append((fi, None))
+            continue
+        refs = clip_face(mesh, face, polygon, mesh.clip)
+        if len(refs) >= 3:
+            pieces.append((fi, refs))
+    return pieces
+
+
 # --- trim + boundary loop ----------------------------------------------------
 
 def trim(mesh: Mesh, polygon: list[tuple[float, float]]) -> list[int]:
@@ -252,11 +556,10 @@ def trim(mesh: Mesh, polygon: list[tuple[float, float]]) -> list[int]:
     return kept
 
 
-def top_faces_up(mesh: Mesh, kept: list[int]) -> bool:
+def top_faces_up(mesh: Mesh, faces: list[list[int]]) -> bool:
     """Area-weighted sign of the kept faces' upward normal."""
     nz = 0.0
-    for fi in kept:
-        face = mesh.faces[fi]
+    for face in faces:
         for k in range(len(face)):
             x1, y1 = mesh.verts[face[k]][0], mesh.verts[face[k]][1]
             x2, y2 = mesh.verts[face[(k + 1) % len(face)]][0], mesh.verts[face[(k + 1) % len(face)]][1]
@@ -264,10 +567,9 @@ def top_faces_up(mesh: Mesh, kept: list[int]) -> bool:
     return nz > 0.0
 
 
-def boundary_loops(mesh: Mesh, kept: list[int]) -> list[list[int]]:
+def boundary_loops(mesh: Mesh, faces: list[list[int]]) -> list[list[int]]:
     counts: dict[tuple[int, int], int] = defaultdict(int)
-    for fi in kept:
-        face = mesh.faces[fi]
+    for face in faces:
         for k in range(len(face)):
             a, b = face[k], face[(k + 1) % len(face)]
             if a != b:
@@ -327,9 +629,9 @@ class Generated:
         self.acc: list[list[float]] = []
         self.nrm: list[tuple[float, float, float]] = []
         self.faces: list[tuple[str, list[tuple[int, int, int]]]] = []
-        self._n_v = len(mesh.raw_v)
-        self._n_vt = len(mesh.raw_vt)
-        self._n_vn = len(mesh.raw_vn)
+        self._n_v = len(mesh.raw_v) + len(mesh.clip.uv)      # generated block starts after the clip block
+        self._n_vt = len(mesh.raw_vt) + len(mesh.clip.uv)
+        self._n_vn = len(mesh.raw_vn) + len(mesh.clip.nrm)
 
     def add(self, p, uv) -> int:
         self.pos.append(p)
@@ -343,6 +645,10 @@ class Generated:
                 die(f"cut-island: boundary vertex {idx + 1} has no vt/vn corner; cannot stitch")
             return ((idx + 1, self.mesh.v_to_vt[idx] + 1, self.mesh.v_to_vn[idx] + 1),
                     self.mesh.verts[idx])
+        if kind == "c":
+            n_src = len(self.mesh.raw_v)
+            return ((n_src + idx + 1, len(self.mesh.raw_vt) + idx + 1,
+                     len(self.mesh.raw_vn) + idx + 1), self.mesh.verts[n_src + idx])
         return ((self._n_v + idx + 1, self._n_vt + idx + 1, self._n_vn + idx + 1), self.pos[idx])
 
     def face(self, material: str, corners: list[tuple[str, int]]) -> None:
@@ -405,7 +711,9 @@ def generate_island(mesh: Mesh, loop: list[int], up: bool) -> Generated:
     perimeter = cum[-1] + math.dist(pts[0][:2], pts[-1][:2])
 
     gen = Generated(mesh)
-    rings: list[list[tuple[str, int]]] = [[("s", v) for v in loop]]   # ring 0: the real top edge
+    n_src = len(mesh.raw_v)
+    corner = (lambda v: ("s", v) if v < n_src else ("c", v - n_src))
+    rings: list[list[tuple[str, int]]] = [[corner(v) for v in loop]]   # ring 0: the real top edge
     for k in range(1, SIDE_RINGS + 1):
         tt = k / SIDE_RINGS
         depth = tt * STRATA
@@ -451,6 +759,8 @@ def generate_island(mesh: Mesh, loop: list[int], up: bool) -> Generated:
                   (0.0, (STRATA + UNDER + 0.25) * scale / TEX_M))
     for i in range(n):
         gen.face("basalt", [last[i], ("g", tip), last[(i + 1) % n]])
+    rng = random.Random(SEED)
+    add_under_boulders(gen, boulder_specs(rng, [(ang[i], rho[i]) for i in range(n)], z_ref, scale), rng)
     return gen.finish()
 
 
@@ -493,10 +803,12 @@ def copy_texture(src: Path, tex_dir: Path, copied: set[str]) -> None:
     copied.add(src.name)
 
 
-def write_obj(path: Path, mesh: Mesh, kept: list[int], gen: Generated) -> None:
+def write_obj(path: Path, mesh: Mesh, pieces: list[tuple[int, list[int] | None]],
+              gen: Generated) -> None:
+    n_src = len(mesh.raw_v)
     with path.open("w", encoding="utf-8", newline="\n") as f:
         f.write("# cut-island: source v/vt/vn lines verbatim (C1 bit-identical top);\n")
-        f.write("# only faces outside the C6 polygon dropped; walls/underside generated.\n")
+        f.write("# kept faces clipped to the C6 polygon; walls/underside generated.\n")
         f.write("mtllib island.mtl\n")
         for line in mesh.raw_v:
             f.write(line + "\n")
@@ -504,13 +816,30 @@ def write_obj(path: Path, mesh: Mesh, kept: list[int], gen: Generated) -> None:
             f.write(line + "\n")
         for line in mesh.raw_vn:
             f.write(line + "\n")
+        f.write("# --- clipped rim geometry (M1) ---\n")
+        for p in mesh.verts[n_src:]:
+            f.write("v %.6f %.6f %.6f\n" % p)
+        for uv in mesh.clip.uv:
+            f.write("vt %.6f %.6f\n" % uv)
+        for nrm in mesh.clip.nrm:
+            f.write("vn %.6f %.6f %.6f\n" % nrm)
         cur = None
-        for fi in kept:
+        for fi, refs in pieces:
             mat = mesh.face_mats[fi]
             if mat != cur:
                 f.write(f"usemtl {mat}\n")
                 cur = mat
-            f.write(mesh.raw_f[fi] + "\n")
+            if refs is None:
+                f.write(mesh.raw_f[fi] + "\n")
+                continue
+            corners = []
+            for r in refs:
+                if r < n_src:
+                    corners.append((r + 1, mesh.v_to_vt[r] + 1, mesh.v_to_vn[r] + 1))
+                else:
+                    c = r - n_src
+                    corners.append((r + 1, len(mesh.raw_vt) + c + 1, len(mesh.raw_vn) + c + 1))
+            f.write("f " + " ".join(f"{a}/{b}/{c}" for a, b, c in corners) + "\n")
         f.write("# --- generated below-cut geometry ---\n")
         for p in gen.pos:
             f.write("v %.6f %.6f %.6f\n" % p)
@@ -540,14 +869,17 @@ def run(reconstruction: Path, boundary_path: Path, out_island: Path, out_report:
     dropped = len(mesh.faces) - len(kept)
     if not kept:
         die(f"cut-island: boundary keeps no face of {obj_path} -- wrong frame or polygon?")
-    up = top_faces_up(mesh, kept)
-    loops = boundary_loops(mesh, kept)
+    pieces = clip_kept(mesh, polygon, kept)
+    clipped = sum(1 for _, refs in pieces if refs is not None)
+    faces = [refs if refs is not None else mesh.faces[fi] for fi, refs in pieces]
+    up = top_faces_up(mesh, faces)
+    loops = boundary_loops(mesh, faces)
     if not loops:
         die("cut-island: trimmed mesh has no boundary edge loop; cannot stitch an island")
     loops.sort(key=lambda l: abs(loop_area(l, mesh)), reverse=True)
     main = loops[0]
-    print(f"cut-island: {len(mesh.faces)} faces -> kept {len(kept)}, dropped {dropped}; "
-          f"{len(loops)} boundary loop(s), main {len(main)} verts "
+    print(f"cut-island: {len(mesh.faces)} faces -> kept {len(kept)}, dropped {dropped}, "
+          f"clipped {clipped}; {len(loops)} boundary loop(s), main {len(main)} verts "
           f"({sum(abs(loop_area(l, mesh)) for l in loops[1:]):.0f} m2 in the rest)", flush=True)
 
     gen = generate_island(mesh, main, up)
@@ -576,7 +908,7 @@ def run(reconstruction: Path, boundary_path: Path, out_island: Path, out_report:
             print(f"cut-island: note: hero texture {asset_dir}/{asset_file} not found locally; "
                   f"the render container resolves it from its baked assets", file=sys.stderr)
 
-    write_obj(out_island / "island.obj", mesh, kept, gen)
+    write_obj(out_island / "island.obj", mesh, pieces, gen)
     out_lines = ["# cut-island materials"]
     for name in src_order:
         if name not in used:
@@ -607,15 +939,41 @@ def run(reconstruction: Path, boundary_path: Path, out_island: Path, out_report:
         "input_hashes": input_hashes,
         "kept_faces": len(kept),
         "dropped_faces": dropped,
+        "clipped_faces": clipped,
     }
     emit_report(out_report, report)
-    print(f"cut-island: wrote {len(mesh.raw_v)} source verts + {len(gen.pos)} generated verts, "
-          f"{len(kept)} kept + {len(gen.faces)} generated faces; {len(copied)} textures; "
-          f"report {out_report}", flush=True)
+    print(f"cut-island: wrote {len(mesh.raw_v)} source verts + {len(mesh.clip.uv)} clip verts + "
+          f"{len(gen.pos)} generated verts, {len(kept)} kept + {len(gen.faces)} generated faces "
+          f"({UNDER_BOULDERS} underside boulders); {len(copied)} textures; report {out_report}",
+          flush=True)
     return report
 
 
 # --- self-test (no bpy) ------------------------------------------------------
+
+def hero_constants() -> dict:
+    """K/LAYERS/BOUNDS from scripts/hero/hero.py:16-47, by AST source segment.
+
+    hero.py imports bpy at the top, so only the constants section is exec'd
+    (the pattern in nodes/grade/grade.py:91-98): the values this Node copied
+    from the hero must stay equal to the hero's.
+    """
+    hero = Path(__file__).resolve().parents[2] / "scripts/hero/hero.py"
+    src = hero.read_text(encoding="utf-8")
+    ns: dict = {}
+    for node in ast.parse(src).body:
+        seg = ast.get_source_segment(src, node)
+        if seg is None:
+            continue
+        assign = isinstance(node, ast.Assign) and (
+            any(isinstance(t, ast.Name) and t.id in ("K", "LAYERS", "BOUNDS", "_z")
+                for t in node.targets)
+            or any(isinstance(t, ast.Subscript) and getattr(t.value, "id", "") == "K"
+                   for t in node.targets))
+        if assign or (isinstance(node, ast.For) and "BOUNDS.append" in seg):
+            exec(compile(seg, str(hero), "exec"), ns)
+    return ns
+
 
 def self_test() -> None:
     square = [(0.0, 0.0), (10.0, 0.0), (10.0, 10.0), (0.0, 10.0)]
@@ -623,6 +981,25 @@ def self_test() -> None:
     assert not point_in_polygon(-1, 5, square)
     assert not point_in_polygon(5, 11, square)
     assert not point_in_polygon(11, 5, square)          # ray-cast must not leak past an edge
+
+    # ADR-5's guard: convex rings pass, a concave one is named as out of scope
+    assert polygon_is_convex(square)
+    assert polygon_is_convex(square[::-1])              # either winding
+    assert not polygon_is_convex([(0.0, 0.0), (4.0, 0.0), (4.0, 4.0), (2.0, 2.0), (0.0, 4.0)])
+
+    # hero-constants parity (ast-parsed from scripts/hero/hero.py, no bpy)
+    hero = hero_constants()
+    hk = hero["K"]
+    assert hk["R"] == HERO_R, (hk["R"], HERO_R)
+    assert hk["strata"] == STRATA, (hk["strata"], STRATA)
+    assert hk["under"] == UNDER, (hk["under"], UNDER)
+    assert hk["lumps"] == LUMPS, (hk["lumps"], LUMPS)
+    assert hk["under_boulders"] == UNDER_BOULDERS, (hk["under_boulders"], UNDER_BOULDERS)
+    assert hk["seed"] == SEED, (hk["seed"], SEED)
+    assert hero["LAYERS"] == LAYERS, "LAYERS drifted from scripts/hero/hero.py"
+    assert hero["BOUNDS"] == BOUNDS, "BOUNDS drifted from scripts/hero/hero.py"
+    print(f"self-test: hero constants parity ok (K/LAYERS/BOUNDS from hero.py:16-47; "
+          f"strata {STRATA}, under {UNDER}, lumps {LUMPS}, under_boulders {UNDER_BOULDERS})")
 
     with tempfile.TemporaryDirectory() as tmp:
         root = Path(tmp)
@@ -660,6 +1037,7 @@ def self_test() -> None:
         # 6x6 kept cells x 2 triangles; the 128-triangle grid's rim falls outside
         assert report["kept_faces"] == 72, report
         assert report["dropped_faces"] == 56, report
+        assert report["clipped_faces"] == 0, report      # faces on the boundary lines are inside
         assert report["boundary_sha256"] == sha256_file(boundary)
         assert set(report["input_hashes"]) == {
             str(p.relative_to(recon)) for p in sorted(recon.rglob("*")) if p.is_file()}
@@ -672,6 +1050,9 @@ def self_test() -> None:
         out_lines = (out / "island.obj").read_text().splitlines()
         out_v = [l for l in out_lines if l.startswith("v ")]
         assert out_v[:len(src_v)] == src_v, "top vertex lines are not byte-identical"
+        m_gen = out_lines.index("# --- generated below-cut geometry ---")
+        assert sum(1 for l in out_lines[:m_gen] if l.startswith("v ")) == len(src_v), \
+            "aligned boundary wrote unexpected clip verts"
         gen_f = sum(1 for l in out_lines if l.startswith("f "))
         assert gen_f > 72, f"no generated faces ({gen_f} total)"
 
@@ -685,8 +1066,124 @@ def self_test() -> None:
                     edges[(a, b) if a < b else (b, a)] += 1
         bad = [e for e, c in edges.items() if c != 2]
         assert not bad, f"{len(bad)} edges are not shared by exactly 2 faces: {bad[:5]}"
-        print(f"self-test ok: polygon math; 72/128 synthetic faces kept; "
-              f"{gen_f} output faces, closed ({len(edges)} edges x2); top verts byte-identical")
+
+        # the boulders land: generated faces form the shell plus one blob each
+        gstart = out_lines.index("# --- generated below-cut geometry ---")
+        gstart = sum(1 for l in out_lines[:gstart] if l.startswith("v "))
+        parent = list(range(len(out_v)))
+
+        def find(i):
+            while parent[i] != i:
+                parent[i] = parent[parent[i]]
+                i = parent[i]
+            return i
+
+        for line in out_lines:
+            if line.startswith("f "):
+                idx = [int(c.split("/")[0]) - 1 for c in line.split()[1:]]
+                if all(i >= gstart for i in idx):
+                    for b in idx[1:]:
+                        ra, rb = find(idx[0]), find(b)
+                        if ra != rb:
+                            parent[rb] = ra
+        comps = {find(i) for i in range(gstart, len(out_v))}
+        assert len(comps) == 1 + UNDER_BOULDERS, f"shell + boulders: {len(comps)} components"
+
+        # crossing faces: one convex n-gon, every output vertex inside the polygon;
+        # the rim (main boundary loop) has no vertex outside either
+        poly2 = [(1.5, 1.5), (6.5, 1.5), (6.5, 6.5), (1.5, 6.5)]
+        m2 = parse_obj(recon / OBJ_NAME)
+        pieces2 = clip_kept(m2, poly2, trim(m2, poly2))
+        clipped2 = sum(1 for _, refs in pieces2 if refs is not None)
+        assert clipped2 > 0, "boundary through the grid clipped nothing"
+        orient2 = polygon_orientation(poly2)
+        for fi, refs in pieces2:
+            for r in (refs if refs is not None else m2.faces[fi]):
+                x, y = m2.verts[r][0], m2.verts[r][1]
+                assert inside_convex(x, y, poly2, orient2), f"ref {r} outside: {x}, {y}"
+        faces2 = [refs if refs is not None else m2.faces[fi] for fi, refs in pieces2]
+        loops2 = boundary_loops(m2, faces2)
+        main2 = max(loops2, key=lambda l: abs(loop_area(l, m2)))
+        for v in main2:
+            x, y = m2.verts[v][0], m2.verts[v][1]
+            assert inside_convex(x, y, poly2, orient2), f"rim vertex {v} outside: {x}, {y}"
+
+        # two faces sharing an edge dedupe to one clip vertex on that edge
+        pm = Mesh()
+        pm.verts = [(-6.0, 0.0, 0.5), (0.0, 0.0, 0.0), (0.0, 2.0, 1.0), (0.0, -2.0, 1.0)]
+        pm.faces = [[0, 1, 2], [1, 0, 3]]
+        pm.face_mats = ["m", "m"]
+        pm.raw_v = ["v"] * 4
+        pm.raw_vt = ["vt"] * 4
+        pm.raw_vn = ["vn"] * 4
+        pm.vt = [(0.0, 0.0), (1.0, 0.0), (0.0, 1.0), (1.0, 1.0)]
+        pm.vn = [(0.0, 0.0, 1.0)] * 4
+        pm.v_to_vt = {i: i for i in range(4)}
+        pm.v_to_vn = {i: i for i in range(4)}
+        poly3 = [(-5.0, -5.0), (5.0, -5.0), (5.0, 5.0), (-5.0, 5.0)]
+        f1 = clip_face(pm, pm.faces[0], poly3, pm.clip)
+        f2 = clip_face(pm, pm.faces[1], poly3, pm.clip)
+        shared = {r for r in f1 if r >= len(pm.raw_v)} & {r for r in f2 if r >= len(pm.raw_v)}
+        assert len(shared) == 1, (f1, f2, pm.clip.index)
+        v = shared.pop()
+        assert abs(pm.verts[v][0] + 5.0) < 1e-9 and abs(pm.verts[v][1]) < 1e-9, pm.verts[v]
+        assert len(pm.clip.index) == 3, pm.clip.index
+
+        # concave boundary dies loudly, naming the upgrade path
+        import contextlib
+        import io
+        concave = root / "concave.json"
+        concave.write_text(json.dumps({"polygon": [[0, 0], [4, 0], [4, 4], [2, 2], [0, 4]]}))
+        err = io.StringIO()
+        with contextlib.redirect_stderr(err):
+            try:
+                load_boundary(concave)
+                raise AssertionError("concave boundary was accepted")
+            except SystemExit:
+                pass
+        assert "Greiner" in err.getvalue(), err.getvalue()
+
+        # crossing boundary end to end: clip verts written and referenced, report counts
+        boundary2 = root / "boundary2.json"
+        boundary2.write_text(json.dumps({"polygon": [list(p) for p in poly2]}))
+        report3 = run(recon, boundary2, root / "island3", root / "report3.json",
+                      asset_roots=(root / "no-assets",))
+        assert report3["clipped_faces"] == clipped2 > 0, report3
+        lines3 = (root / "island3" / "island.obj").read_text().splitlines()
+        m_gen = lines3.index("# --- generated below-cut geometry ---")
+        n_clip3 = sum(1 for l in lines3[:m_gen] if l.startswith("v ")) - len(src_v)
+        assert n_clip3 > 0, "clipped faces did not produce clip verts"
+        used_clip = 0
+        for l in lines3:
+            if l.startswith("f "):
+                for c in l.split()[1:]:
+                    i = int(c.split("/")[0])
+                    if len(src_v) < i <= len(src_v) + n_clip3:
+                        used_clip += 1
+        assert used_clip > 0, "no clipped face references a clip vertex"
+
+        # boulders: count, determinism, every centre below the cut
+        rim = [(2.0 * math.pi * i / 16.0, 30.0 + i) for i in range(16)]
+        b1 = boulder_specs(random.Random(SEED), rim, 1.0, 10.0)
+        b2 = boulder_specs(random.Random(SEED), rim, 1.0, 10.0)
+        assert len(b1) == UNDER_BOULDERS == 20, len(b1)
+        assert b1 == b2, "boulder placement differs across two seeded runs"
+        cut = 1.0 - STRATA * 10.0
+        assert all(z < cut for _x, _y, z, _r in b1), "a boulder centre is not under the cut"
+
+        # rerun determinism: clip and boulders byte-identical
+        run(recon, boundary, root / "island-again", root / "report-again.json",
+            asset_roots=(root / "no-assets",))
+        assert (out / "island.obj").read_bytes() == \
+            (root / "island-again" / "island.obj").read_bytes(), "rerun differs"
+
+        print(f"self-test: clip ok ({clipped2} crossing faces -> convex n-gons, every vertex "
+              f"inside; 2 shared-edge faces -> 1 clip vertex; {n_clip3} clip verts referenced)")
+        print(f"self-test: under_boulders ok ({UNDER_BOULDERS} deterministic blobs, "
+              f"1 shell + {UNDER_BOULDERS} components; all centres below z_ref - STRATA*scale)")
+        print(f"self-test ok: polygon math + convexity guard; 72/128 synthetic faces kept; "
+              f"{gen_f} output faces, closed ({len(edges)} edges x2); top verts byte-identical; "
+              f"rerun byte-identical")
 
 
 # --- CLI ---------------------------------------------------------------------
