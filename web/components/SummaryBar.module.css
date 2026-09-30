@@ -72,6 +72,81 @@
   color: var(--on-glass-2);
 }
 
+/* The collapsed header (UI-27): the shared lead beside its dedicated toggle,
+   never the whole bar. */
+.leadHead {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.leadHead .lead {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+/* A bare 24px chevron padded to a 44px target (spec §11), the sheet-close
+   pattern. The glyph turns with the state: collapse is the base rule's
+   250ms --ease-in, expand the 500ms --ease-emphasised below (the Notice's
+   Notice.module.css:30-48 split, verbatim tokens). */
+.toggle {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 44px;
+  min-height: 44px;
+  padding: 10px;
+  background: none;
+  border: none;
+  border-radius: 12px;
+  color: var(--on-glass-2);
+}
+
+.toggle svg {
+  width: 24px;
+  height: 24px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  transition: transform var(--dur-base) var(--ease-in);
+}
+
+.toggle[aria-expanded="true"] svg {
+  transform: rotate(180deg);
+  transition: transform 500ms var(--ease-emphasised);
+}
+
+/* The collapsed one-liner (E1→R4): 0.875rem like .leadDelta, wrapping onto
+   as many lines as it needs — never nowrap/ellipsis, contrast .tileLabel. */
+.trio {
+  margin: 2px 0 0;
+  font-size: 0.875rem;
+  color: var(--on-glass-2);
+  overflow-wrap: anywhere;
+}
+
+/* The expanded region: tiles, quiet row, relocated Copy. Mount-scoped
+   entrance, 500ms --ease-emphasised; collapse unmounts, so there is no exit
+   run to declare. Opacity only (spec §9.3). */
+.details {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  animation: detailsIn 500ms var(--ease-emphasised);
+}
+
+@keyframes detailsIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
 /* Metric tiles (spec § 8): GSD, Photos, Lines/Rings, Flights. A flat tint
    rather than the shared `glass-smoke` utility -- they already sit inside one
    blurred surface, and a blur nested in a blur is cost with nothing to show
@@ -154,41 +229,12 @@
   border-top: 1px solid var(--glass-edge);
 }
 
-/* The passphrase as a glass field (spec § 5), with the note that used to be
-   its only hover title now written beside it. */
-.passphraseWrap {
-  flex: 1 1 220px;
-  min-width: 180px;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.passphrase {
-  min-height: 44px;
-  background: var(--glass-clear);
-  border: 1px solid var(--glass-edge);
-  border-radius: 12px;
-  padding: 0 12px;
-  color: var(--on-glass);
-}
-
-.passphrase::placeholder {
-  color: var(--on-glass-3);
-}
-
-.passphraseHint {
-  margin: 0;
-  font-size: 0.6875rem;
-  line-height: 1.4;
-  color: var(--on-glass-3);
-}
-
-/* Save, Copy spec and Download Mission Spec: each hugs its own label (spec
-   § 8's primary button is never stretched to fill a row) and all three meet a
-   44 px touch target, wrapping onto their own line whenever the panel is too
-   narrow to hold them beside the passphrase field. */
-.actions button {
+/* Save and Download Mission Spec: each hugs its own label (spec § 8's
+   primary button is never stretched to fill a row) and both meet a 44 px
+   touch target, wrapping onto their own line whenever the panel is too
+   narrow. Copy spec lives in the expanded region and shares the shape. */
+.actions button,
+.detailsCopy {
   flex: 0 0 auto;
   min-height: 44px;
   padding: 0 20px;
@@ -198,10 +244,10 @@
 }
 
 /* UI-22 save hint: neutral text beside disabled Save, saveProblem wording
-   verbatim. Shape follows .passphraseHint, but 12px is deliberate (matches
-   the ex-.dispatchError body text, not the 11px .passphraseHint). Full-width
-   <p> under Save: without its own flex basis a bare <p> in .actions would
-   squeeze the buttons. No backing box, no error colour, no animation. */
+   verbatim. 12px is deliberate (matches the ex-dispatchError body text).
+   Full-width <p> under Save: without its own flex basis a bare <p> in
+   .actions would squeeze the buttons. No backing box, no error colour, no
+   animation. */
 .saveHint {
   flex: 1 1 100%;
   min-width: 0;
@@ -225,6 +271,28 @@
   color: var(--danger);
   font-size: 0.75rem;
   line-height: 1.6;
+}
+
+/* Collapsed with a long problems list (E2→R7): the header row and the
+   actions stay pinned and the list scrolls inside its own cap, so Save never
+   leaves the screen. Whole-wrap caps below remain as backstop. */
+.collapsed .problems {
+  max-height: 6rem;
+  overflow-y: auto;
+}
+
+/* Reduced motion (spec §12, R10): expand and the chevron turn shrink to
+   150ms crossfades. !important outranks the global kill-all in globals.css
+   (a class beats `*`), the Notice precedent (Notice.module.css:337-368). */
+@media (prefers-reduced-motion: reduce) {
+  .details {
+    animation: detailsIn 150ms ease-out !important;
+  }
+
+  .toggle svg,
+  .toggle[aria-expanded="true"] svg {
+    transition: transform 150ms ease-out !important;
+  }
 }
 
 /* The press transition above is already neutralised by globals.css's blanket
@@ -260,16 +328,13 @@
     padding-top: 10px;
   }
 
-  /* Save keeps its own row -- it is the primary action -- and Copy spec and
-     Download Mission Spec share the next one instead of each claiming a
-     full-width row of their own. */
-  .actions button:nth-of-type(1) {
-    flex-basis: 100%;
-  }
-
-  .actions button:nth-of-type(2),
-  .actions button:nth-of-type(3) {
+  /* Save and Download Mission Spec share one row as two equal columns
+     (UI-27), so the collapsed Summary leaves the map most of the screen. With
+     enlarged text a label wraps inside its button instead of spilling. */
+  .actions button {
     flex: 1 1 0;
+    padding: 0 10px;
+    white-space: normal;
   }
 }
 

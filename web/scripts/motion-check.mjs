@@ -591,6 +591,10 @@ async function pressMotion(browser) {
     // can never be mistaken for the motion.
     check("press", "target lead figure parses > 0", FINAL_90 > 0, String(FINAL_90));
 
+    // UI-27 (#304): Copy spec lives in the expanded Summary, so open it
+    // first and let the 500ms --ease-emphasised expand settle past it.
+    await page.getByRole("button", { name: "Show details" }).click();
+    await page.waitForTimeout(700);
     const summaryBtn = page.getByRole("button", { name: "Copy spec" });
     const s1 = await pressAndRead(page, summaryBtn);
     check("press", "summary button scales", s1.transform.startsWith("matrix(0.97"), s1.transform);
