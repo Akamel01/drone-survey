@@ -1156,9 +1156,15 @@ async function enlargedSection(browser) {
     await page.waitForTimeout(1000);
   };
   // UI-27 (#304): the expanded Summary's Copy + tiles + quiet row, settled
-  // past the 500ms expand before the audit reads.
+  // past the 500ms expand before the audit reads. Narrow layouts read the
+  // Summary on the Map tab (the Missions view hides it outright).
   const expandSummary = async (page) => {
-    await page.getByRole("button", { name: "Show details" }).click();
+    const toggle = page.getByRole("button", { name: "Show details" });
+    if (!(await toggle.isVisible())) {
+      await page.getByRole("navigation", { name: "Show" }).getByRole("button", { name: "Map" }).click();
+      await page.waitForTimeout(700);
+    }
+    await toggle.click();
     await page.waitForTimeout(700);
   };
   for (const pass of ENLARGED_PASSES) {
