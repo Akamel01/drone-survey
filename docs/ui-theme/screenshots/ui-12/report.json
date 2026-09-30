@@ -1,0 +1,89 @@
+{
+  "contrast": {
+    "pairs": 286,
+    "failing": [
+      {
+        "scene": "375 missions",
+        "label": "span.MissionList-module__PLY-ya_ \"checked just now\"",
+        "over": "hero",
+        "ratio": 4.43,
+        "on": "pixels rgb(68,104,137)",
+        "need": 4.5
+      },
+      {
+        "scene": "375 missions",
+        "label": "button. \"Refresh\"",
+        "over": "hero",
+        "ratio": 1.54,
+        "on": "mist",
+        "need": 4.5
+      },
+      {
+        "scene": "375 missions",
+        "label": "span.mono \"Planned\"",
+        "over": "hero",
+        "ratio": 3.88,
+        "on": "mist",
+        "need": 4.5
+      }
+    ]
+  },
+  "keyboard": [
+    "Toggle attribution",
+    "MapLibre",
+    "Base map: Satellite",
+    "Overlays, none on",
+    "Collapse Settings",
+    "Grid",
+    "Orbit",
+    "Polygon",
+    "Rectangle",
+    "Circle",
+    "More information",
+    "Set home point",
+    "INPUT[range]",
+    "INPUT[range]",
+    "INPUT[range]",
+    "INPUT[range]",
+    "INPUT[range]",
+    "Fly throughStop at point",
+    "More information",
+    "INPUT[range]",
+    "INPUT[range]",
+    "More information",
+    "INPUT[range]",
+    "1/20001/16001/12501/10001/8001/6",
+    "100200400800auto",
+    "SunnyCloudyAutoManual",
+    "INPUT[checkbox]",
+    "JPEGJPEG+RAW",
+    "More information",
+    "E2E SiteNew Site…",
+    "Name the new Site",
+    "north half, orbit",
+    "INPUT[date]",
+    "INPUT[date]",
+    "INPUT[date]",
+    "INPUT[date]",
+    "Show details",
+    "Download Mission Spec",
+    "Collapse Missions",
+    "Refresh",
+    "Dispatch",
+    "Edit",
+    "Remove",
+    "Copy",
+    "Details",
+    "Map"
+  ],
+  "fps": {
+    "375 phone, 4x CPU throttle": {
+      "glass": 60,
+      "opaque": 60
+    },
+    "1440 desktop": {
+      "glass": 60,
+      "opaque": 60
+    }
+  }
+}
