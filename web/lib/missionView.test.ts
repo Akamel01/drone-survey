@@ -8,7 +8,9 @@ import {
   cardList,
   checkedAgo,
   coord,
+  copyName,
   copyOf,
+  describeSave,
   figuresMismatch,
   flightReason,
   flightTimeDelta,
@@ -18,10 +20,15 @@ import {
   hostLines,
   localDate,
   metres,
+  nameProblem,
+  newSiteOffer,
   orbitAreaHectares,
   rowView,
-  saveProblem,
+  saveOptions,
+  siteMatches,
+  siteProblem,
   sitesFrom,
+  specBlocker,
   CACHE_KEY,
   cacheRead,
   cachedRead,
@@ -29,7 +36,7 @@ import {
   type KeyValue,
 } from "./missionView.ts";
 import type { MissionRow } from "./missionRecords.ts";
-import type { CardHolding } from "./model.ts";
+import { editBehaviour, type CardHolding } from "./model.ts";
 import { DEFAULT_SPEC } from "./spec.ts";
 
 const KEY = "specs/rehearsal-1/2026-09-23/20260923T120000Z.json";
@@ -410,8 +417,100 @@ test("a refusal is said above the list, and nothing is said without one", () => 
 test("a new Site cannot take an existing Site's name, whatever its case or spacing", () => {
   const sites = [{ site_id: "g-z2m4tx", site: "GeorgeTown2" }];
   const spec = { site: " georgetown2 ", site_id: "g-new001", date: "2026-09-24" };
-  assert.match(saveProblem(spec, "Ortho", sites)!, /already a Site called “GeorgeTown2”/);
-  assert.equal(saveProblem({ ...spec, site_id: "g-z2m4tx" }, "Ortho", sites), null, "the Site itself is fine");
+  assert.match(siteProblem(spec, sites)!, /already a Site called “GeorgeTown2”/);
+  assert.equal(siteProblem({ ...spec, site_id: "g-z2m4tx" }, sites), null, "the Site itself is fine");
+});
+
+// --- the Save sheet (UI-30) ----------------------------------------------------
+
+test("Save is blocked only by what the store would reject; a missing name or Site is asked for in the sheet", () => {
+  assert.equal(specBlocker({ date: "2026-09-24" }), null, "no name and no Site is not a reason to block");
+  assert.equal(specBlocker({ date: " " }), "Give this Mission a date.");
+  assert.equal(specBlocker({}), "Give this Mission a date.");
+});
+
+test("the sheet offers exactly what the Mission's state allows (ADR 0021)", () => {
+  const labels = (state: Parameters<typeof saveOptions>[0]) => saveOptions(state).options.map((o) => o.label);
+  assert.deepEqual(labels(null), [], "a new Mission has nothing to choose: straight to name and Site");
+  assert.deepEqual(labels("planned"), ["Save changes", "Save as new Mission"]);
+  assert.deepEqual(labels("dispatched"), ["Save as replacement", "Save as new Mission"]);
+  assert.deepEqual(labels("collected"), ["Save as replacement", "Save as new Mission"]);
+  for (const state of ["loaded", "flown", "withdrawn", "superseded"] as const) {
+    assert.deepEqual(labels(state), ["Save as new Mission"], state);
+  }
+});
+
+test("only the store's in-place edit is offered as Save changes, and a guarded Mission is never overwritten", () => {
+  for (const state of ["planned", "dispatched", "collected", "loaded", "flown", "withdrawn", "superseded"] as const) {
+    const choices = saveOptions(state).options.map((o) => o.choice);
+    assert.equal(choices.includes("changes"), editBehaviour(state) === "in-place", `${state} changes`);
+    assert.ok(choices.includes("new"), `${state} can always be saved as new`);
+    if (editBehaviour(state) === "guarded") assert.deepEqual(choices, ["new"], `${state} is on the Controller`);
+  }
+});
+
+test("a lone option says why, and the reason for a Loaded Mission names the Controller", () => {
+  assert.equal(saveOptions("planned").reason, null);
+  assert.equal(saveOptions("dispatched").reason, null);
+  assert.match(saveOptions("loaded").reason!, /already Loaded.*on the Controller/);
+  assert.equal(saveOptions("flown").reason, "This Mission is Flown, so it stays as it is.");
+  assert.equal(saveOptions("superseded").reason, "This Mission is Superseded, so it stays as it is.");
+});
+
+test("a new Mission from an existing one starts as name (2), then (3), and fits the name limit", () => {
+  assert.equal(copyName("north half"), "north half (2)");
+  assert.equal(copyName("north half (2)"), "north half (3)");
+  assert.equal(copyName("  orbit  "), "orbit (2)");
+  const long = "x".repeat(40);
+  assert.equal(copyName(long).length, 40);
+  assert.equal(nameProblem("new", copyName(long), long), null, "the suggestion is never itself refused");
+});
+
+test("a new Mission cannot take the name of the one it comes from; the other choices may keep it", () => {
+  assert.match(nameProblem("new", " North Half ", "north half")!, /other than “north half”/);
+  assert.equal(nameProblem("new", "north half (2)", "north half"), null);
+  assert.equal(nameProblem("new", "north half", null), null, "a copy has no Mission it replaces");
+  assert.equal(nameProblem("changes", "north half", "north half"), null);
+  assert.equal(nameProblem("replacement", "north half", "north half"), null);
+  assert.match(nameProblem("changes", "  ", "north half")!, /short name/);
+});
+
+test("typing finds Sites by part of their name, case and spacing ignored", () => {
+  const sites = [
+    { site_id: "a", site: "West Quarry" },
+    { site_id: "b", site: "Rehearsal Field" },
+    { site_id: "c", site: "Quarry Road" },
+  ];
+  assert.deepEqual(siteMatches(sites, "quar").map((s) => s.site_id), ["a", "c"]);
+  assert.deepEqual(siteMatches(sites, "  WESTQ ").map((s) => s.site_id), ["a"], "spacing is ignored");
+  assert.deepEqual(siteMatches(sites, "re hear").map((s) => s.site_id), ["b"]);
+  assert.deepEqual(siteMatches(sites, "").length, 3, "nothing typed lists them all");
+  assert.deepEqual(siteMatches(sites, "zzz"), []);
+});
+
+test("a new Site is only offered for a name no Site has; otherwise the Site itself is what matches", () => {
+  const sites = [{ site_id: "a", site: "West Quarry" }];
+  assert.equal(newSiteOffer(sites, "  North Ridge "), "North Ridge");
+  assert.equal(newSiteOffer(sites, "west   QUARRY"), null, "the twin guard: offer the existing Site instead (#166)");
+  assert.equal(newSiteOffer(sites, "west"), "west", "part of a name is not that Site's name");
+  assert.equal(newSiteOffer(sites, "   "), null);
+  assert.equal(newSiteOffer([], "First Site"), "First Site");
+});
+
+test("the outcome says which save it was", () => {
+  const body = { mission: { name: "north half" } };
+  assert.equal(describeSave(body), "“north half” is saved. It is Planned until you Dispatch it.");
+  assert.equal(
+    describeSave(body, { choice: "changes", from: "north half" }),
+    "Changes are saved to “north half”. It is Planned until you Dispatch it.",
+  );
+  assert.match(
+    describeSave({ mission: { name: "north half (2)" } }, { choice: "new", from: "north half" }),
+    /^“north half \(2\)” is saved as a new Mission; “north half” is left as it is\./,
+  );
+  const fork = describeSave({ ...body, forked_from: "abc" }, { choice: "replacement", from: "north half" });
+  assert.match(fork, /^“north half” is saved as a replacement\./);
+  assert.match(fork, /supersedes it and releases its Cards/);
 });
 
 // --- copying a Mission ----------------------------------------------------------

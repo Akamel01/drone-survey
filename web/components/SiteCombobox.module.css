@@ -1,0 +1,44 @@
+/* The Site field's list (UI-30): in the flow beneath the input, on clear glass,
+   with the active formula (--pill-active, --ink, 600) on the highlighted
+   choice (spec § 8). Radii are concentric: the list is 12 like the field
+   above it, its padding 4, so a choice is 8. Choices are 44 tall (spec § 11).
+   No motion: the list appears and goes, which keeps it clear of § 9.3. */
+
+.list {
+  list-style: none;
+  margin: 4px 0 0;
+  padding: 4px;
+  max-height: 232px;
+  overflow-y: auto;
+  border: 1px solid var(--glass-edge);
+  border-radius: 12px;
+  background: var(--glass-clear);
+}
+
+.option {
+  display: flex;
+  align-items: center;
+  min-height: 44px;
+  padding: 0 12px;
+  border-radius: 8px;
+  color: var(--on-glass);
+  cursor: pointer;
+  overflow-wrap: anywhere;
+}
+
+.option[aria-selected="true"] {
+  background: var(--pill-active);
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.hint {
+  margin: 4px 0 0;
+  font-size: 0.75rem;
+  color: var(--on-glass-2);
+}
+
+.use {
+  min-height: 44px;
+  margin-left: 4px;
+}

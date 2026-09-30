@@ -673,6 +673,31 @@ async function missionRowsSection(browser) {
       });
       check(section, `${vp.width}: Escape returns focus to that row's Details button`,
         focus.button === "Details" && (focus.row ?? "").includes("North half"), JSON.stringify(focus));
+      // UI-30 (#309): Save asks in a sheet. It is announced by its heading,
+      // focus starts on its first field, and Escape cancels back to Save.
+      await target.getByRole("button", { name: "Edit", exact: true }).click();
+      await page.waitForTimeout(500);
+      const saveButton = page.getByRole("button", { name: "Save Mission", exact: true }).first();
+      await saveButton.click();
+      await page.locator("dialog[open]").waitFor({ timeout: 10000 });
+      const ask = await page.evaluate(() => {
+        const d = document.querySelector("dialog[open]");
+        const h = document.getElementById(d?.getAttribute("aria-labelledby") ?? "");
+        const el = document.activeElement;
+        return {
+          heading: h?.textContent ?? null,
+          focus: el?.labels?.[0]?.textContent?.trim().slice(0, 12) ?? null,
+          inside: !!d?.contains(el),
+        };
+      });
+      check(section, `${vp.width}: Save opens a sheet announced as "Save Mission"`, ask.heading === "Save Mission",
+        JSON.stringify(ask));
+      check(section, `${vp.width}: focus starts on the sheet's first field`, ask.inside && ask.focus === "Save changes",
+        JSON.stringify(ask));
+      await page.keyboard.press("Escape");
+      await page.waitForFunction(() => !document.querySelector("dialog[open]"), null, { timeout: 10000 });
+      check(section, `${vp.width}: Escape cancels and returns focus to Save Mission`,
+        await saveButton.evaluate((el) => el === document.activeElement));
     } finally {
       await context.close();
     }
@@ -1157,6 +1182,15 @@ async function enlargedSection(browser) {
     await page.locator("dialog[open]").waitFor({ timeout: 10000 });
     await page.waitForTimeout(1000);
   };
+  // UI-30 (#309): the Save sheet for an opened Planned Mission -- the choice,
+  // the name and the Site. Edit moves a phone to the Map tab, where Save is.
+  const saveSheet = async (page) => {
+    await page.locator("article", { hasText: "North half" }).getByRole("button", { name: "Edit", exact: true }).click();
+    await page.waitForTimeout(500);
+    await page.getByRole("button", { name: "Save Mission", exact: true }).first().click();
+    await page.locator("dialog[open]").waitFor({ timeout: 10000 });
+    await page.waitForTimeout(1000);
+  };
   // UI-27 (#304): the expanded Summary's Copy + tiles + quiet row, settled
   // past the 500ms expand before the audit reads. Narrow layouts read the
   // Summary on the Map tab (the Missions view hides it outright).
@@ -1206,6 +1240,7 @@ async function enlargedSection(browser) {
       { name: "notice-expanded", failDispatch: true, setup: [raiseNotice, async (p) => p.waitForTimeout(900)], roots: ['[class*="notice"]', ...(narrow ? [] : ['[class*="basemapToggle"]'])] },
       { name: "details-sheet", setup: [sheet("Details")], roots: ["dialog[open]"] },
       { name: "remove-sheet", setup: [sheet("Remove")], roots: ["dialog[open]"] },
+      { name: "save-sheet", setup: [saveSheet], roots: ["dialog[open]"] },
     ];
     for (const scene of scenes) {
       const label = `${pass.name} ${scene.name}`;

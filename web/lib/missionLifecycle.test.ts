@@ -321,6 +321,26 @@ test("identity: an area that is not flyable is refused at Dispatch, saying what 
   }
 });
 
+test("identity: a plan with problems is saved as Planned but never Dispatched, and the problem is named (UI-30)", async () => {
+  const tooHigh: MissionSpec = { ...spec(), flight: { ...spec().flight, altitude_m: 400 } };
+  const cases: [string, MissionSpec, RegExp][] = [
+    ["an orbit with no point of interest", { ...spec([]), mission_type: "orbit" }, /an orbit needs a subject/],
+    ["an altitude above the ceiling", tooHigh, /altitude 400 m is above the 120 m ceiling/],
+  ];
+  for (const [label, s, why] of cases) {
+    const { store, lc } = fresh();
+    const id = await saved(lc, { spec: s });
+    assert.equal((await rowOf(lc, id)).state, "planned", `${label}: saved as an unfinished Planned Mission`);
+    const r = expectRefusal(await dispatch(lc, id));
+    assert.equal(r.kind, "invalid", label);
+    assert.match(r.message, /^This Mission cannot be Dispatched: /, label);
+    assert.match(r.message, why, label);
+    assert.deepEqual(held(store), [], `${label}: no Card is reserved`);
+    assert.equal(store.specs().size, 0, `${label}: no Spec is written for the host to Collect`);
+    assert.equal((await rowOf(lc, id)).state, "planned", `${label}: still Planned`);
+  }
+});
+
 test("identity: bad ids, bad bodies and missing Missions are refused in the route's words", async () => {
   const { lc } = fresh();
   for (const id of ["../ledger", "a/b", "", 42, null]) {

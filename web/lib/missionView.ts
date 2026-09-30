@@ -16,6 +16,7 @@
 import type { CardHolding, MissionState } from "./model.ts";
 import {
   ACTION_ORDER,
+  MISSION_NAME_MAX,
   SITE_NAME_MAX,
   UNPRINTABLE,
   actionProblem,
@@ -460,26 +461,122 @@ export function asOfStamp(at: number): string {
 // Saving what is in the editor
 // ---------------------------------------------------------------------------
 
-/** What must hold before Save is worth pressing, in the operator's words.
+/** Why Save cannot be pressed: what the store itself would reject about the
+ *  plan, which is a Mission with no date (`missionProblem`).
  *
- *  The server enforces all of this (`missionProblem`, `draftProblem`) and its
- *  copy is the one that counts; this only says so beside the control instead
- *  of after a round trip. Null when the Mission can be saved. */
-export function saveProblem(
-  spec: { site?: string; site_id?: string; date?: string },
-  name: string,
-  sites: SiteChoice[] = [],
-): string | null {
+ *  A plan with problems (`preview.problems`) is not blocked: it is saved as an
+ *  unfinished Planned Mission, its problems still listed, and Dispatch refuses
+ *  it until they are fixed (`dispatch`, operator decision 2026-09-29). A missing
+ *  Mission Name or Site is asked for in the Save sheet instead of blocking the
+ *  button (UI-30). Null when the sheet can open. */
+export function specBlocker(spec: { date?: string }): string | null {
+  return spec.date?.trim() ? null : "Give this Mission a date.";
+}
+
+/** What must hold of the Site before a Mission is saved under it, in the
+ *  operator's words. The server enforces all of this (`missionProblem`) and its
+ *  copy is the one that counts; this only says so beside the field instead of
+ *  after a round trip. Null when the Site is usable. */
+export function siteProblem(spec: { site?: string; site_id?: string }, sites: SiteChoice[] = []): string | null {
   if (!spec.site?.trim()) return "Choose the Site this Mission belongs to, or name a new one.";
   if (UNPRINTABLE.test(spec.site)) return "A Site name cannot contain invisible control characters; retype it.";
   if (spec.site.trim().length > SITE_NAME_MAX) return `A Site name is at most ${SITE_NAME_MAX} characters; shorten it.`;
   const twin = siteTwin(sites, spec.site_id, spec.site);
-  if (twin) return `There is already a Site called “${twin.site}”. Choose it from the Site list instead.`;
+  if (twin) return `There is already a Site called “${twin.site}”. Choose it in the Site field instead.`;
   if (!spec.site_id?.trim()) return "This Site has no identifier yet. Name it, and one is assigned.";
-  const badName = missionNameProblem(name);
-  if (badName) return badName;
-  if (!spec.date?.trim()) return "Give this Mission a date.";
   return null;
+}
+
+/** The Mission Name for a save, judged against what it is saved as. A new
+ *  Mission cannot reuse the name of the one it comes from: the same Site, date
+ *  and name is the same Mission repeated, which a Dispatch would supersede
+ *  (ADR 0021). `from` is that Mission's name, or null when there is none. */
+export function nameProblem(choice: SaveChoice, name: string, from: string | null): string | null {
+  const bad = missionNameProblem(name);
+  if (bad) return bad;
+  if (choice === "new" && from !== null && sameName(name, from)) {
+    return `Give the new Mission a name other than “${from}”. The same name would make it a replacement.`;
+  }
+  return null;
+}
+
+// ---------------------------------------------------------------------------
+// The Save sheet (UI-30)
+// ---------------------------------------------------------------------------
+
+/** What Save can do with the Mission in the editor. `changes` overwrites a
+ *  Planned one, `replacement` is the store's fork (a new Mission under the same
+ *  Site, date and name, which supersedes the old one at Dispatch), `new` is a
+ *  save with no id. */
+export type SaveChoice = "changes" | "replacement" | "new";
+
+export interface SaveOption {
+  choice: SaveChoice;
+  label: string;
+  detail: string;
+}
+
+const SAVE_CHANGES: SaveOption = {
+  choice: "changes",
+  label: "Save changes",
+  detail: "Overwrite this Mission with what is in the planner. It stays Planned.",
+};
+const SAVE_REPLACEMENT: SaveOption = {
+  choice: "replacement",
+  label: "Save as replacement",
+  detail: "Same name, Site and date. Dispatching it supersedes the old Mission and releases its Cards.",
+};
+const SAVE_NEW: SaveOption = {
+  choice: "new",
+  label: "Save as new Mission",
+  detail: "Leave this Mission as it is and save what is in the planner as a new one, under a different name.",
+};
+
+/** What the sheet offers for the Mission being edited, by its state
+ *  (`editBehaviour`, ADR 0021). A Spec is never edited, so from Dispatched on
+ *  the change is a replacement or a new Mission; a Loaded Mission's file is
+ *  already on the Controller, so only a new one is left. `reason` says why when
+ *  there is only that one. A null state is a new Mission: nothing to choose,
+ *  straight to name and Site. */
+export function saveOptions(state: MissionState | null): { options: SaveOption[]; reason: string | null } {
+  if (state === null) return { options: [], reason: null };
+  if (state === "planned") return { options: [SAVE_CHANGES, SAVE_NEW], reason: null };
+  if (state === "dispatched" || state === "collected") return { options: [SAVE_REPLACEMENT, SAVE_NEW], reason: null };
+  if (state === "loaded") {
+    return {
+      options: [SAVE_NEW],
+      reason:
+        "This Mission is already Loaded: its file is on the Controller, so it cannot be changed or replaced. " +
+        "The Loaded one is left as it is.",
+    };
+  }
+  return { options: [SAVE_NEW], reason: `This Mission is ${STATE_LABEL[state]}, so it stays as it is.` };
+}
+
+/** The name a new Mission starts with when it comes from an existing one:
+ *  "north half" becomes "north half (2)", and "north half (2)" "(3)". Cut to
+ *  fit the Mission Name limit, so the suggestion is never itself refused. */
+export function copyName(name: string): string {
+  const trimmed = name.trim();
+  const m = /^(.*) \((\d+)\)$/.exec(trimmed);
+  const suffix = ` (${m ? Number(m[2]) + 1 : 2})`;
+  return (m ? m[1] : trimmed).slice(0, MISSION_NAME_MAX - suffix.length).trimEnd() + suffix;
+}
+
+/** The Sites whose name contains what was typed, case and spacing ignored. */
+export function siteMatches(sites: SiteChoice[], typed: string): SiteChoice[] {
+  const squash = (s: string) => s.toLowerCase().replace(/\s+/g, "");
+  const q = squash(typed);
+  return q ? sites.filter((s) => squash(s.site).includes(q)) : sites;
+}
+
+/** The name to offer as "New Site: <name>", or null. Never offered when it is
+ *  empty, and never for a name an existing Site already has: two Sites under
+ *  one name split their Captures between them (#166), so that Site is what the
+ *  field offers instead. */
+export function newSiteOffer(sites: SiteChoice[], typed: string): string | null {
+  const name = typed.trim();
+  return name && !sites.some((s) => sameName(s.site, name)) ? name : null;
 }
 
 /** A stored stamp in the operator's locale, e.g. "26 Sep 2026, 14:05". Raw
@@ -536,22 +633,33 @@ export function siteTwin(sites: SiteChoice[], site_id: string | undefined, site:
   return sites.find((s) => s.site_id !== site_id && sameName(s.site, site)) ?? null;
 }
 
-/** What `POST /api/missions` just did, said plainly.
+/** What `POST /api/missions` just did, said plainly, and which of the sheet's
+ *  choices it was. The store decides what a save is (a fork is a replacement
+ *  whatever the sheet asked), so a fork is reported from the body; `how.from`
+ *  is the Mission a new one was saved beside.
  *
  *  A fork is not a failure and must not read as one: a Spec is never edited, so
- *  a change to a Dispatched Mission is a new Mission, and Dispatching it
+ *  a change to a Dispatched Mission is a replacement, and Dispatching it
  *  supersedes the old one. Saying "saved" alone would hide that (ADR 0021). */
-export function describeSave(body: {
-  forked_from?: string | null;
-  superseded_on_dispatch?: string | null;
-  mission?: { name?: string } | null;
-}): string {
+export function describeSave(
+  body: {
+    forked_from?: string | null;
+    superseded_on_dispatch?: string | null;
+    mission?: { name?: string } | null;
+  },
+  how?: { choice: SaveChoice; from: string },
+): string {
   const name = body.mission?.name ? `“${body.mission.name}”` : "This Mission";
-  if (!body.forked_from) return `${name} is saved. It is Planned until you Dispatch it.`;
-  return (
-    `${name} is saved as a new Mission, because the one it came from has already been Dispatched — ` +
-    "a Spec is never edited. Dispatching this one supersedes that one and releases its Cards."
-  );
+  const planned = "It is Planned until you Dispatch it.";
+  if (body.forked_from) {
+    return (
+      `${name} is saved as a replacement. The Mission it replaces has already been Dispatched and a Spec is ` +
+      "never edited, so that one is left as it is: Dispatching this one supersedes it and releases its Cards."
+    );
+  }
+  if (how?.choice === "changes") return `Changes are saved to ${name}. ${planned}`;
+  if (how?.choice === "new") return `${name} is saved as a new Mission; “${how.from}” is left as it is. ${planned}`;
+  return `${name} is saved. ${planned}`;
 }
 
 /**
