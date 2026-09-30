@@ -155,7 +155,9 @@ K2 = {
     "moss_y": (-2.2, 0.3),   # world y ramp: front (low in frame) -> back
     "tint_firs": (0.25, 0.32, 0.18),
     "fir_turns": (1.57,),
-    "fir_fill_scale": 0.75,       # extra crown copies per fir (radians)   # the hero's spruces are darker
+    "fir_fill_scale": 0.55,       # extra crown copies per fir (radians)   # the hero's spruces are darker
+    # pass 7 (#223): 0.75 -> 0.55 targets wide 4h only — FirFill copies hide on
+    # tall, so tall rows cannot move; 0.85->0.75 moved wide 4h 15.7->15.4 %
     # pebble courses are the gravel texture (hero.py mat_strata, HSV s 0.7
     # v 0.8): the hero's are dark olive (#212111), ours read grey (#262626)
     "pebble_hsv": (1.3, 0.35),
