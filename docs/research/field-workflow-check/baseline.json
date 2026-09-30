@@ -6,7 +6,7 @@
       "chars": 0,
       "switches": 0,
       "scrolls": 0,
-      "ms": 442
+      "ms": 448
     },
     {
       "name": "open draw tool",
@@ -62,7 +62,7 @@
       "chars": 0,
       "switches": 0,
       "scrolls": 0,
-      "ms": 35532
+      "ms": 35439
     },
     {
       "name": "tap save/dispatch",
@@ -85,5 +85,5 @@
   "total_characters": 0,
   "total_view_switches": 0,
   "total_scrolls": 0,
-  "total_ms": 98059
+  "total_ms": 97921
 }

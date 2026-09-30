@@ -82,9 +82,8 @@ remote-check-host.sh -- host executor for web/scripts/remote-check.sh (#299)
 
 Script table: serve-mode (build + host-picked port + URL argv[2]): check:look,
 check:motion, check:map-chrome, check:scrollbar, check:chrome-motion,
-check:mission-rows, check:fold, check:area-edit, check:field-workflow.
-Self-managed: test:e2e. Refused (WebKit): check:showcase-player. Unknown
-scripts run toolchain-only.
+check:mission-rows, check:fold, check:area-edit. Self-managed: test:e2e.
+Refused (WebKit): check:showcase-player. Unknown scripts run toolchain-only.
 EOF
 }
 # ---------------------------------------------------------------- table lookup
