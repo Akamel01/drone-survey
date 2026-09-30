@@ -1,10 +1,10 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useId, useRef, useState, type KeyboardEvent } from "react";
 import type { MissionSpec } from "@/lib/spec";
 import type { Preview } from "@/lib/mission";
 import type { MissionRecord } from "@/lib/missionRecords";
-import { readPassphrase, subscribePassphrase, writePassphrase } from "@/lib/passphrase";
+import { safeStorage } from "@/lib/actions";
 import { flightTimeDelta, saveProblem, type SiteChoice } from "@/lib/missionView";
 import * as missionClient from "@/lib/missionClient";
 import { firstSentence } from "@/lib/notice";
@@ -35,31 +35,54 @@ interface SummaryBarProps {
 // live on the Mission's own row, where its state is: the screen that failed had
 // one Mission's controls in two places under two names, and a Dispatch button
 // beside an editor cannot say which Mission it means (ADR 0021).
+
+// Per-browser memory for the collapse, beside the passphrase key convention
+// (`lib/passphrase.ts:14`). Read once after mount, written on every toggle.
+// Where storage itself is blocked both no-op and the Summary stays collapsed.
+const SUMMARY_OPEN_KEY = "drone-planner.summary-open";
+
 type SaveState = { kind: "idle" } | { kind: "saving" };
 
 export default function SummaryBar({ spec, preview, editing, onSaved, sites = [], onNotice, countKey }: SummaryBarProps) {
   const [copied, setCopied] = useState(false);
-  const [passphrase, setPassphrase] = useState("");
+  const [open, setOpen] = useState(false);
   const [save, setSave] = useState<SaveState>({ kind: "idle" });
   const hasProblems = preview.problems.length > 0;
   const isOrbit = spec.mission_type === "orbit";
+  const toggleRef = useRef<HTMLButtonElement>(null);
+  const regionId = useId();
 
-  // Empty on the server (no localStorage there), filled in after mount, so the
-  // server-rendered and first client-rendered HTML match. From here on this
-  // field and the Missions view's own (plan decision 17) are one value: typed
-  // into either, kept by `lib/passphrase.ts`, and echoed to both live.
+  // Collapsed on the server (no localStorage there) and on first paint, so
+  // the server-rendered and first client-rendered HTML match; the stored
+  // choice applies after mount. The Summary's own passphrase field is gone
+  // (UI-27, #304) — the Missions view keeps its field until #244.
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- one-time client-only read of localStorage
-    setPassphrase(readPassphrase() ?? "");
-    return subscribePassphrase(setPassphrase);
+    if (safeStorage()?.getItem(SUMMARY_OPEN_KEY) === "1") setOpen(true);
   }, []);
 
-  function updatePassphrase(v: string) {
-    // Persists (or silently no-ops where storage is unavailable) and notifies
-    // the Missions view's field; that subscription is what sets `passphrase`
-    // here too, so this field's own state does not need setting directly.
-    writePassphrase(v);
+  function setSummaryOpen(v: boolean) {
+    setOpen(v);
+    try {
+      safeStorage()?.setItem(SUMMARY_OPEN_KEY, v ? "1" : "0");
+    } catch {
+      // Unavailable: persistence no-ops and the next load stays collapsed.
+    }
   }
+
+  // Escape inside the expanded region collapses back to the toggle and
+  // returns focus to it (spec §10). On the toggle itself Escape is a no-op:
+  // only the region owns this handler.
+  function collapseOnEscape(e: KeyboardEvent<HTMLDivElement>) {
+    if (e.key !== "Escape") return;
+    setSummaryOpen(false);
+    toggleRef.current?.focus();
+  }
+
+  // The collapsed one-liner (E1→R4): flights-count-only from `preview.parts`,
+  // so the orbit's lines/rings edge never reads here; the per-battery split
+  // stays exclusively under the lead.
+  const trio = `${preview.parts} flight${preview.parts === 1 ? "" : "s"} · GSD ${preview.gsd_cm.toFixed(2)} cm/px · ${preview.photo_count} photos`;
 
   const problem = saveProblem(spec, editing.name, sites);
 
@@ -105,85 +128,96 @@ export default function SummaryBar({ spec, preview, editing, onSaved, sites = []
   }
 
   return (
-    <div className={styles.wrap}>
+    <div className={`${styles.wrap} ${open ? styles.open : styles.collapsed}`}>
       <div className={styles.bar}>
         <div className={styles.figures}>
-          {/* One number leads (spec § 8): flight time, with the per-battery
-              split named in words underneath it instead of hiding in a hover
-              title (#183). */}
-          <div className={styles.lead}>
-            <span className={styles.leadLabel}>Flight time</span>
-            <div className={styles.leadRow}>
-              <CountUp
-                value={preview.flight_time_min}
-                decimals={1}
-                countKey={countKey}
-                className={styles.leadFigure}
-              />
-              <span className={styles.leadUnit}>min</span>
+          <div className={styles.leadHead}>
+            {/* One number leads (spec § 8): flight time, with the per-battery
+                split named in words underneath it instead of hiding in a hover
+                title (#183). This block is shared by both states, so its
+                CountUp keeps `countKey` and never replays on toggle. */}
+            <div className={styles.lead}>
+              <span className={styles.leadLabel}>Flight time</span>
+              <div className={styles.leadRow}>
+                <CountUp
+                  value={preview.flight_time_min}
+                  decimals={1}
+                  countKey={countKey}
+                  className={styles.leadFigure}
+                />
+                <span className={styles.leadUnit}>min</span>
+              </div>
+              <p className={styles.leadDelta}>{flightTimeDelta(preview.parts, preview.part_minutes)}</p>
             </div>
-            <p className={styles.leadDelta}>{flightTimeDelta(preview.parts, preview.part_minutes)}</p>
+            {/* Dedicated toggle, never the whole bar (R1): a chevron with a
+                directional name, a ≥44px target (spec §11), focus staying on
+                it across expand and collapse. */}
+            <button
+              ref={toggleRef}
+              type="button"
+              className={styles.toggle}
+              aria-expanded={open}
+              aria-controls={regionId}
+              aria-label={open ? "Hide details" : "Show details"}
+              onClick={() => setSummaryOpen(!open)}
+            >
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M6 9l6 6 6-6" />
+              </svg>
+            </button>
           </div>
-          <div className={styles.tiles}>
-            <Tile label="GSD" value={preview.gsd_cm.toFixed(2)} unit="cm/px" decimals={2} countKey={countKey} />
-            <Tile label="Photos" value={String(preview.photo_count)} countKey={countKey} />
-            {/* The same three numbers mean different things for an orbit, so
-                they are named for what they are rather than left quietly
-                wrong. */}
-            <Tile
-              label={isOrbit ? "Rings" : "Lines"}
-              value={String(preview.line_count)}
-              countKey={countKey}
-            />
-            <Tile
-              label={preview.parts > 1 ? "Flights" : "Flight"}
-              value={String(preview.parts)}
-              warn={preview.parts > 1}
-              countKey={countKey}
-            />
-          </div>
-          <div className={styles.quiet}>
-            <QuietStat
-              label={isOrbit ? "Arc spacing" : "Fwd spacing"}
-              value={preview.fwd_spacing_m.toFixed(1)}
-              unit="m"
-              decimals={1}
-              countKey={countKey}
-            />
-            <QuietStat
-              label={isOrbit ? "Ring spacing" : "Side spacing"}
-              value={preview.side_spacing_m.toFixed(1)}
-              unit="m"
-              decimals={1}
-              countKey={countKey}
-            />
-            <QuietStat
-              label="Effective speed"
-              value={preview.capped_speed_ms.toFixed(1)}
-              unit="m/s"
-              warn={preview.capped_speed_ms < spec.flight.speed_ms}
-              decimals={1}
-              countKey={countKey}
-            />
-          </div>
+          {!open && <p className={styles.trio}>{trio}</p>}
+          {open && (
+            <div id={regionId} className={styles.details} onKeyDown={collapseOnEscape}>
+              <div className={styles.tiles}>
+                <Tile label="GSD" value={preview.gsd_cm.toFixed(2)} unit="cm/px" decimals={2} countKey={undefined} />
+                <Tile label="Photos" value={String(preview.photo_count)} countKey={undefined} />
+                {/* The same three numbers mean different things for an orbit, so
+                    they are named for what they are rather than left quietly
+                    wrong. */}
+                <Tile
+                  label={isOrbit ? "Rings" : "Lines"}
+                  value={String(preview.line_count)}
+                  countKey={undefined}
+                />
+                <Tile
+                  label={preview.parts > 1 ? "Flights" : "Flight"}
+                  value={String(preview.parts)}
+                  warn={preview.parts > 1}
+                  countKey={undefined}
+                />
+              </div>
+              <div className={styles.quiet}>
+                <QuietStat
+                  label={isOrbit ? "Arc spacing" : "Fwd spacing"}
+                  value={preview.fwd_spacing_m.toFixed(1)}
+                  unit="m"
+                  decimals={1}
+                  countKey={undefined}
+                />
+                <QuietStat
+                  label={isOrbit ? "Ring spacing" : "Side spacing"}
+                  value={preview.side_spacing_m.toFixed(1)}
+                  unit="m"
+                  decimals={1}
+                  countKey={undefined}
+                />
+                <QuietStat
+                  label="Effective speed"
+                  value={preview.capped_speed_ms.toFixed(1)}
+                  unit="m/s"
+                  warn={preview.capped_speed_ms < spec.flight.speed_ms}
+                  decimals={1}
+                  countKey={undefined}
+                />
+              </div>
+              <button className={`glass-clear ${styles.detailsCopy}`} onClick={copy}>
+                {copied ? "Copied" : "Copy spec"}
+              </button>
+            </div>
+          )}
         </div>
         <div className={styles.actions}>
-          <div className={styles.passphraseWrap}>
-            <input
-              type="password"
-              className={styles.passphrase}
-              placeholder="Wayfinder passphrase"
-              // The secret shared with the store, typed once per browser and
-              // held there — not a DJI or Wayfinder account.
-              aria-label="Store passphrase"
-              aria-describedby="summary-passphrase-hint"
-              value={passphrase}
-              onChange={(e) => updatePassphrase(e.target.value)}
-            />
-            <p className={styles.passphraseHint} id="summary-passphrase-hint">
-              Shared secret, typed once per browser and held only here.
-            </p>
-          </div>
           <button
             className="primary"
             onClick={runSave}
@@ -201,9 +235,6 @@ export default function SummaryBar({ spec, preview, editing, onSaved, sites = []
               {problem}
             </p>
           )}
-          <button className="glass-clear" onClick={copy}>
-            {copied ? "Copied" : "Copy spec"}
-          </button>
           <button className="glass-clear" onClick={() => downloadMission(spec, editing.name)}>
             Download Mission Spec
           </button>
