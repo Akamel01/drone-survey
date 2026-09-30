@@ -105,7 +105,7 @@ node scripts/auth-evidence.mjs
 ## Layout
 
 - `app/plan/` — the planner screen.
-- `components/` — `MapPane` (MapLibre map + hand-rolled drawing tools), `Sidebar` (flight/camera settings), `SummaryBar` (computed figures + export).
+- `components/` — `MapPane` (MapLibre map + hand-rolled drawing tools), `MapToolbar` (the drawing and map-editing tools, on the map), `Sidebar` (flight/camera settings), `SummaryBar` (computed figures + export).
 - `lib/spec.ts` — the `MissionSpec` contract (owned separately).
 - `lib/mission.ts` — flight-path geometry (`preview()`, `areaHectares()`) (owned separately).
 - `lib/basemap.ts` — the two MapLibre basemap styles (Esri satellite, OSM).

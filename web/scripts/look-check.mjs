@@ -1440,6 +1440,7 @@ async function toolbarSection(browser) {
     { width: 375, height: 812, mobile: true },
     { width: 1440, height: 900 },
     { width: 1280, height: 800 },
+    { width: 1000, height: 800 },
   ]) {
     const phone = !!vp.mobile;
     const at = `${vp.width}`;

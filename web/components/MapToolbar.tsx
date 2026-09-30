@@ -114,6 +114,7 @@ export default function MapToolbar({ spec, mode, areaHa, onTool, onClearArea, on
 
   const [howOpen, setHowOpen] = useState(false);
   const howId = useId();
+  const dockRef = useRef<HTMLDivElement>(null);
   const readoutRef = useRef<HTMLDivElement>(null);
 
   // The how-to closes on a press outside and on Escape. Escape is caught on
@@ -136,6 +137,22 @@ export default function MapToolbar({ spec, mode, areaHa, onTool, onClearArea, on
       document.removeEventListener("keydown", closeOnEscape, true);
     };
   }, [howOpen]);
+
+  // On a wide screen the toolbar floats above the Summary, whose tallest size
+  // stops short of it (plan.module.css reads this). A phone's dock has no box.
+  useEffect(() => {
+    const el = dockRef.current;
+    if (!el) return;
+    const root = document.documentElement;
+    const ro = new ResizeObserver(() =>
+      root.style.setProperty("--map-toolbar-h", `${el.getBoundingClientRect().height}px`),
+    );
+    ro.observe(el);
+    return () => {
+      ro.disconnect();
+      root.style.removeProperty("--map-toolbar-h");
+    };
+  }, []);
 
   // On a phone the readout sits at the map's top-left beside the Base map and
   // Overlays buttons, and the drawing panel starts under whichever is taller
@@ -164,7 +181,7 @@ export default function MapToolbar({ spec, mode, areaHa, onTool, onClearArea, on
         : null;
 
   return (
-    <div className={styles.dock}>
+    <div ref={dockRef} className={styles.dock}>
       <div ref={readoutRef} className={styles.status}>
         <div className={`${styles.readout} glass-smoke`}>
           {/* Announced once when a placement starts; the figures change with

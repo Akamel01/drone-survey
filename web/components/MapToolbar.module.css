@@ -103,8 +103,9 @@
   gap: 6px;
 }
 
-/* 44 px to a finger on a phone and the icon alone; the word joins it wide. The
-   pressed look is the global `button.active`, which is what aria-pressed
+/* 44 px to a finger and the icon alone; the word joins it where the strip
+   between the panels is wide enough to hold the words in a row or two (below).
+   The pressed look is the global `button.active`, which is what aria-pressed
    states. */
 .tool {
   min-width: 44px;
@@ -154,6 +155,11 @@
     /* The block is what takes clicks, not the strip around it: the map under
        the gaps still pans. */
     pointer-events: none;
+    /* The strip's own width decides icons or words (rem, so a larger text size
+       asks for more room): a narrow strip with words is a column of pills
+       taller than the window at 1000 px, and at 200 % text it left no room
+       above the Summary. */
+    container: dock / inline-size;
   }
 
   .status,
@@ -184,7 +190,9 @@
     gap: 8px 16px;
     border-radius: 20px;
   }
+}
 
+@container dock (min-width: 30rem) {
   .tool {
     padding: 0 14px;
   }
