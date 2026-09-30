@@ -289,7 +289,8 @@ test("a new Mission: the sheet asks for name and Site; a Site is found by typing
     assert.equal(posted[0].name, "north half");
     assert.equal(store.records().length, before + 1);
     const notice = await noticeText(page);
-    assert.match(notice, /“north half” is saved\./);
+    // The Notice shows the first sentence as its title, without its full stop.
+    assert.match(notice, /“north half” is saved/);
     assert.match(notice, /It is Planned until you Dispatch it\./);
   } finally {
     await context.close();
@@ -398,7 +399,7 @@ test("Planned: Save changes overwrites it", async () => {
     assert.equal(posted[0].id, "m-planned", "changes name the Mission");
     assert.equal(store.records().length, before, "overwritten, not added");
     assert.equal(byId(store, "m-planned").name, "Orchard east");
-    assert.match(await noticeText(page), /Changes are saved to “Orchard east”\./);
+    assert.match(await noticeText(page), /Changes are saved to “Orchard east”/);
     assert.equal(await page.locator("#mission-name").inputValue(), "Orchard east");
   } finally {
     await context.close();
@@ -433,7 +434,7 @@ test("Planned: Save as new Mission keeps it and saves a copy under a different n
     assert.deepEqual(byId(store, "m-planned"), original, "the Planned Mission is untouched");
     assert.match(
       await noticeText(page),
-      /“Orchard \(2\)” is saved as a new Mission; “Orchard” is left as it is\./,
+      /“Orchard \(2\)” is saved as a new Mission; “Orchard” is left as it is/,
     );
   } finally {
     await context.close();
@@ -469,7 +470,7 @@ for (const [id, name] of [
       assert.ok(fork, "the replacement is a new Mission");
       assert.equal(fork.dispatched_key, null, "it is Planned until Dispatched");
       assert.equal(supersessionGroup(fork), supersessionGroup(original), "so Dispatching it supersedes the old one");
-      assert.match(await noticeText(page), new RegExp(`“${name}” is saved as a replacement\\.`));
+      assert.match(await noticeText(page), new RegExp(`“${name}” is saved as a replacement`));
     } finally {
       await context.close();
     }
@@ -495,7 +496,7 @@ test("Dispatched: Save as new Mission leaves the old one alone, under a differen
     assert.deepEqual(byId(store, "m-dispatched"), original);
     const added = store.records().find((r) => r.name === "Roadside (2)");
     assert.notEqual(supersessionGroup(added), supersessionGroup(original), "it does not replace the old one");
-    assert.match(await noticeText(page), /is saved as a new Mission; “Roadside” is left as it is\./);
+    assert.match(await noticeText(page), /is saved as a new Mission; “Roadside” is left as it is/);
   } finally {
     await context.close();
   }
@@ -530,7 +531,7 @@ test("Loaded: only Save as new Mission, with the reason; the state is the list's
     assert.equal(posted[0].id, undefined, "a new Mission, never an overwrite of the Loaded one");
     assert.equal(store.records().length, before + 1);
     assert.deepEqual(byId(store, "m-loading"), original);
-    assert.match(await noticeText(page), /“Meadow \(2\)” is saved as a new Mission; “Meadow” is left as it is\./);
+    assert.match(await noticeText(page), /“Meadow \(2\)” is saved as a new Mission; “Meadow” is left as it is/);
   } finally {
     await context.close();
   }
