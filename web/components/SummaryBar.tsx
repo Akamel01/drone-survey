@@ -147,7 +147,10 @@ export default function SummaryBar({ spec, preview, editing, onSaved, sites = []
                 />
                 <span className={styles.leadUnit}>min</span>
               </div>
-              <p className={styles.leadDelta}>{flightTimeDelta(preview.parts, preview.part_minutes)}</p>
+              {/* Collapsed, the one-liner below carries the flight count; the
+                  per-battery split shows only when the details are open, so
+                  the count never appears twice. */}
+              {open && <p className={styles.leadDelta}>{flightTimeDelta(preview.parts, preview.part_minutes)}</p>}
             </div>
             {/* Dedicated toggle, never the whole bar (R1): a chevron with a
                 directional name, a ≥44px target (spec §11), focus staying on
@@ -228,16 +231,17 @@ export default function SummaryBar({ spec, preview, editing, onSaved, sites = []
           >
             {save.kind === "saving" ? "Saving…" : editing.id ? "Save Mission" : "Save new Mission"}
           </button>
+          <button className="glass-clear" onClick={() => downloadMission(spec, editing.name)}>
+            Download Mission Spec
+          </button>
           {/* UI-22 hint: saveProblem wording verbatim, no "Save:" prefix.
-              Plain <p>, conditional so no dangling describedby. */}
+              Plain <p>, conditional so no dangling describedby. After both
+              buttons, so they share one row and the hint sits under it. */}
           {problem && (
             <p id="save-hint" className={styles.saveHint}>
               {problem}
             </p>
           )}
-          <button className="glass-clear" onClick={() => downloadMission(spec, editing.name)}>
-            Download Mission Spec
-          </button>
         </div>
       </div>
       {hasProblems && (

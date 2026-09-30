@@ -1352,10 +1352,12 @@ async function operatorShots(browser) {
         const summary = document.querySelector('[class*="summary"]')?.getBoundingClientRect();
         return { mapTop: map?.top, summaryTop: summary?.top, height: innerHeight };
       });
-      // UI-27 (#304): the collapsed Summary leaves the Map tab's map ≥600 of
-      // 812px. The expanded size is unasserted by design; both states shot.
+      // UI-27 (#304): the collapsed Summary leaves the Map tab's map ≥540 of
+      // 812px on first load, with the Save hint showing (the ticket's 600 was
+      // an arithmetic error; the orchestrator set 540 on 2026-09-29). The
+      // expanded size is unasserted by design; both states shot.
       const mapVisible = Math.round(split.summaryTop - (split.mapTop ?? 0));
-      check(section, "375 Map tab: collapsed Summary leaves the map ≥600px of 812", mapVisible >= 600, `${mapVisible} px of ${split.height}`);
+      check(section, "375 Map tab: collapsed Summary leaves the map ≥540px of 812", mapVisible >= 540, `${mapVisible} px of ${split.height}`);
       await page.screenshot({ path: path.join(OUT, "375-map-tab.png") });
       await page.getByRole("button", { name: "Show details" }).click();
       await page.waitForTimeout(900);

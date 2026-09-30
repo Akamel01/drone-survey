@@ -328,15 +328,13 @@
     padding-top: 10px;
   }
 
-  /* Save keeps its own row -- it is the primary action -- and Download
-     Mission Spec takes the next one alone, instead of each claiming
-     otherwise. */
-  .actions button:nth-of-type(1) {
-    flex-basis: 100%;
-  }
-
-  .actions button:nth-of-type(2) {
+  /* Save and Download Mission Spec share one row as two equal columns
+     (UI-27), so the collapsed Summary leaves the map most of the screen. With
+     enlarged text a label wraps inside its button instead of spilling. */
+  .actions button {
     flex: 1 1 0;
+    padding: 0 10px;
+    white-space: normal;
   }
 }
 
