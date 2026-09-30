@@ -4,9 +4,8 @@ import { Children, cloneElement, Fragment, isValidElement, useEffect, useId, use
 import type { MissionSpec, MissionType, TurnMode } from "@/lib/spec";
 import { orbitTilt, type Preview } from "@/lib/mission";
 import { MISSION_NAME_MAX, missionNameProblem } from "@/lib/missionRecords";
-import type { SiteChoice } from "@/lib/missionView";
+import { coord, type SiteChoice } from "@/lib/missionView";
 import type { Editing } from "@/app/plan/page";
-import { isDrawing, type DrawMode } from "./MapPane";
 import SiteCombobox from "./SiteCombobox";
 import styles from "./Sidebar.module.css";
 import { authClient, signOutToHome } from "@/lib/authClient";
@@ -17,9 +16,6 @@ import type { NoticePayload } from "./Notice";
 interface SidebarProps {
   spec: MissionSpec;
   setSpec: (updater: (s: MissionSpec) => MissionSpec) => void;
-  mode: DrawMode;
-  onModeChange: (m: DrawMode) => void;
-  areaHa: number;
   preview: Preview;
   /** The Sites already in the store. A Site is chosen from these, never typed
    *  fresh: a Site is the unit a client buys work about, identified once at
@@ -34,15 +30,6 @@ interface SidebarProps {
   /** Where the Accounts section reports how many Accounts wait for Approval. */
   onPendingCount?: (n: number) => void;
 }
-
-// Plain metric area: m² under a square kilometre, km² above.
-function formatArea(areaHa: number): string {
-  const m2 = areaHa * 10000;
-  if (m2 > 1_000_000) return `${(m2 / 1_000_000).toFixed(3)} km²`;
-  return `${Math.round(m2).toLocaleString()} m²`;
-}
-
-const coord = (p: [number, number] | null) => (p ? `${p[0].toFixed(5)}, ${p[1].toFixed(5)}` : "—");
 
 /**
  * Explanation on demand.
@@ -183,9 +170,6 @@ function Field({
 export default function Sidebar({
   spec,
   setSpec,
-  mode,
-  onModeChange,
-  areaHa,
   preview,
   sites,
   editing,
@@ -210,10 +194,6 @@ export default function Sidebar({
   // An empty preview caps nothing, so it must not read as a cap.
   const overridden = preview.photo_count > 0 && preview.capped_speed_ms < flight.speed_ms;
 
-  // A draw in progress is a different state from a finished area, and every
-  // control below that a click would mean something else in has to say so.
-  const drawing = isDrawing(mode);
-
   const rings = orbit.altitudes_m;
   const setRing = (i: number, v: number) =>
     setOrbit("altitudes_m", rings.map((a, j) => (j === i ? v : a)));
@@ -231,32 +211,13 @@ export default function Sidebar({
         />
         <p className={styles.hint}>
           {isOrbit
-            ? "Rings around a subject, the camera aimed at it."
-            : "Parallel passes over an area, camera down."}
+            ? "Rings around a subject, the camera aimed at it. Set the subject with the tools on the map."
+            : "Parallel passes over an area, camera down. Draw the area with the tools on the map."}
         </p>
       </Section>
 
-      {isOrbit ? (
-        <Section key={isOrbit ? "subject" : "area"} title="Subject">
-          <div className={styles.group}>
-            <button
-              className={mode === "set-poi" ? "active" : ""}
-              onClick={() => onModeChange(mode === "set-poi" ? "idle" : "set-poi")}
-            >
-              {mode === "set-poi" ? "Click the map…" : "Set point of interest"}
-            </button>
-            <button
-              disabled={!orbit.center}
-              onClick={() => setSpec((s) => ({ ...s, orbit: { ...s.orbit, center: null } }))}
-            >
-              Clear subject
-            </button>
-          </div>
-          <div className={styles.readout}>
-            <span>Subject</span>
-            <span className="mono">{coord(orbit.center)}</span>
-          </div>
-
+      {isOrbit && (
+        <Section title="Subject">
           <Field label="Subject height" value={String(orbit.target_height_m)} unit="m">
             <input
               type="range"
@@ -367,96 +328,12 @@ export default function Sidebar({
             />
           </Field>
         </Section>
-      ) : (
-        <Section key={isOrbit ? "subject" : "area"} title="Area">
-          <div className={styles.groupLabel}>
-            Shape{drawing ? " — drawing on the map" : ""}
-          </div>
-          {/* While drawing, the selector shows the tool in use; once idle it shows
-              what the area actually is, so a finished circle does not read as a
-              polygon. A rectangle is four corners once drawn and indistinguishable
-              from a polygon, so it settles on Polygon. */}
-          <Segmented<DrawMode>
-            value={
-              mode === "draw-rectangle" || mode === "draw-circle" || mode === "draw-polygon"
-                ? mode
-                : spec.shape
-                  ? ("draw-circle" as DrawMode)
-                  : ("draw-polygon" as DrawMode)
-            }
-            options={[
-              { value: "draw-polygon" as DrawMode, label: "Polygon" },
-              { value: "draw-rectangle" as DrawMode, label: "Rectangle" },
-              { value: "draw-circle" as DrawMode, label: "Circle" },
-            ]}
-            onChange={(v) => onModeChange(v)}
-          />
-
-          <div className={styles.groupLabel}>Edit</div>
-          <div className={styles.group}>
-            {/* Switching to "Add points" halfway through a shape was a silent
-                mode change, and the corners already placed made it look like
-                nothing had happened. Finish or cancel the draw first. */}
-            <button
-              className={mode === "append-polygon" ? "active" : ""}
-              disabled={(drawing && mode !== "append-polygon") || spec.aoi.length < 3 || !!spec.shape}
-              title={
-                drawing && mode !== "append-polygon"
-                  ? "Finish or cancel the shape you are drawing first"
-                  : undefined
-              }
-              onClick={() => onModeChange("append-polygon")}
-            >
-              Add points
-            </button>
-            <button
-              disabled={spec.aoi.length === 0}
-              onClick={() => setSpec((s) => ({ ...s, aoi: [], shape: null }))}
-            >
-              Clear area
-            </button>
-          </div>
-          {/* The reshape hint is false while drawing: there a map click adds a
-              corner, and the midpoint handles it names are not on screen. */}
-          {drawing ? (
-            <div className={styles.warnHint}>
-              {mode === "draw-polygon" || mode === "append-polygon"
-                ? "Each click on the map adds a corner. Finish the area from the panel on the map, or press Enter; Escape cancels."
-                : mode === "draw-rectangle"
-                  ? "Click one corner on the map, then the opposite one. Escape cancels."
-                  : "Click the centre on the map, then drag out the radius. Escape cancels."}
-            </div>
-          ) : (
-            <div className={styles.hint}>
-              Drag inside the shape to move it whole. Drag a corner to reshape it, or an amber
-              midpoint to add one; right-click a corner to remove it. On touch: drag a handle
-              with your fingertip, or tap a corner and then Remove corner.
-            </div>
-          )}
-
-        <div className={styles.readout}>
-          <span>Area</span>
-          <span className="mono">{formatArea(areaHa)}</span>
-        </div>
-        <div className={styles.readout}>
-          <span>{spec.shape ? "Radius" : "Corners"}</span>
-          <span className="mono">{spec.shape ? `${Math.round(spec.shape.radius_m)} m` : spec.aoi.length}</span>
-        </div>
-        </Section>
       )}
 
       <Section
         title="Take-off"
         info="DJI Fly measures its maximum-distance limit from the take-off point and suspends the flight in the air if the mission exceeds it. That limit lives in the app and cannot be read from here, so check it against the furthest-waypoint figure before you fly."
       >
-        <div className={styles.group}>
-          <button
-            className={mode === "set-home" ? "active" : ""}
-            onClick={() => onModeChange(mode === "set-home" ? "idle" : "set-home")}
-          >
-            {mode === "set-home" ? "Click the map…" : "Set home point"}
-          </button>
-        </div>
         <div className={styles.readout}>
           <span>Home</span>
           <span className="mono">{coord(spec.home)}</span>

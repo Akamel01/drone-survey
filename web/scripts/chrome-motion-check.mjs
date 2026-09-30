@@ -15,6 +15,11 @@
 // defaults to http://127.0.0.1:3101. Recordings (.webm, one per motion per
 // context) and stills land in SHOT_DIR; absolute paths are printed at the end.
 //
+// UI-29: the shape tools moved from Settings to the map toolbar, so Grid has no
+// Settings section of its own any more: the Grid/Orbit swap fades the Orbit's
+// Subject section in and out, and the map toolbar's bar fades the other tool
+// set in. The Polygon probes below are the toolbar's Polygon button.
+//
 // Keyboard note: the Mission-type Segmented is role="radio" buttons with no
 // arrow-key handler, so the keyboard path is Tab onto the Orbit radio and
 // Enter/Space to activate it. Arrow keys are deliberately not exercised.
@@ -125,7 +130,7 @@ const still = (page, name) => page.screenshot({ path: path.join(SHOT_DIR, `${nam
 // Concurrent rAF sampler. Started BEFORE the trigger (never awaited until the
 // window elapses) so reads land inside the animation; the values are logged
 // and never gate. `kind` picks the probed node: a section title, "draw" for
-// the drawing panel, "polygon" for the Shape Polygon radio.
+// the drawing panel, "polygon" for the map toolbar's Polygon button.
 // ---------------------------------------------------------------------------
 function sampleStyle(page, kind, ms) {
   return page.evaluate(
@@ -136,9 +141,7 @@ function sampleStyle(page, kind, ms) {
         const find = () => {
           if (kind === "draw") return document.querySelector('[class*="drawPanel"]');
           if (kind === "polygon")
-            return [...document.querySelectorAll('button[role="radio"]')].find(
-              (b) => b.textContent.trim() === "Polygon",
-            );
+            return document.querySelector('[role="group"][aria-label="Map tools"] button[aria-label="Polygon"]');
           return [...document.querySelectorAll("#settings-panel section")].find((el) =>
             (el.querySelector("h2")?.textContent ?? "").startsWith(kind),
           );
@@ -185,6 +188,10 @@ const readSection = (page, title) =>
       opacity: cs.opacity,
     };
   }, title);
+
+/** The map toolbar's Polygon button (a button with aria-pressed, UI-29). */
+const polygonTool = (page) =>
+  page.locator('[role="group"][aria-label="Map tools"]').getByRole("button", { name: "Polygon", exact: true });
 
 const readDraw = (page) =>
   page.evaluate(() => {
@@ -264,44 +271,27 @@ async function gridOrbitMouse(browser) {
   const motion = "grid-orbit";
   const { context, page } = await open(browser, { width: 1440, height: 900, video: true });
   try {
-    await markSection(page, "Area", "area");
     await markSection(page, "Take-off", "takeoff");
 
     const sampler = sampleStyle(page, "Subject", 260);
     const subjectFrames = captureEntranceKeyframes(page, "Subject", "sectionIn");
+    const toolsFrames = captureEntranceKeyframes(page, "tools", "barIn");
     await page.getByRole("radio", { name: "Orbit", exact: true }).click();
     keyframeCheck(motion, "Grid->Orbit mouse: sectionIn keyframe body starts at opacity 0", await subjectFrames, "start");
+    keyframeCheck(motion, "Grid->Orbit mouse: the map toolbar's barIn keyframe body starts at opacity 0", await toolsFrames, "start");
     await page.waitForTimeout(70);
     await still(page, "grid-orbit-1440-mouse-mid");
     logSamples(motion, await sampler, "opacity");
     await assertSectionEntrance(page, motion, "Subject", "Grid->Orbit mouse");
-    const swapped = await page.evaluate(() => {
-      const el = [...document.querySelectorAll("#settings-panel section")].find((s) =>
-        (s.querySelector("h2")?.textContent ?? "").startsWith("Subject"),
-      );
-      return { isOld: el != null && el === (window.__motion?.area ?? null), oldConnected: window.__motion?.area?.isConnected ?? null };
-    });
-    check(motion, "Grid->Orbit: new Subject is a new node", swapped.isOld === false, JSON.stringify(swapped));
     const probe = await sectionProbe(page);
-    check(motion, "Grid->Orbit: old Area node was marked and is disconnected", probe.area?.connected === false && probe.area?.mark === "area", JSON.stringify(probe.area));
     check(motion, "Grid->Orbit: Take-off keeps node identity", probe.takeoffSame === true, JSON.stringify(probe));
 
     await markSection(page, "Subject", "subject");
-    const sampler2 = sampleStyle(page, "Area", 260);
-    const areaFrames = captureEntranceKeyframes(page, "Area", "sectionIn");
+    const toolsFrames2 = captureEntranceKeyframes(page, "tools", "barIn");
     await page.getByRole("radio", { name: "Grid", exact: true }).click();
-    keyframeCheck(motion, "Orbit->Grid mouse: sectionIn keyframe body starts at opacity 0", await areaFrames, "start");
+    keyframeCheck(motion, "Orbit->Grid mouse: the map toolbar's barIn keyframe body starts at opacity 0", await toolsFrames2, "start");
     await page.waitForTimeout(70);
     await still(page, "grid-orbit-1440-mouse-reverse-mid");
-    logSamples(motion, await sampler2, "opacity");
-    await assertSectionEntrance(page, motion, "Area", "Orbit->Grid mouse");
-    const swapped2 = await page.evaluate(() => {
-      const el = [...document.querySelectorAll("#settings-panel section")].find((s) =>
-        (s.querySelector("h2")?.textContent ?? "").startsWith("Area"),
-      );
-      return { isOld: el != null && el === (window.__motion?.subject ?? null), oldConnected: window.__motion?.subject?.isConnected ?? null };
-    });
-    check(motion, "Orbit->Grid: new Area is a new node", swapped2.isOld === false, JSON.stringify(swapped2));
     const probe2 = await sectionProbe(page);
     check(motion, "Orbit->Grid: old Subject node was marked and is disconnected", probe2.subject?.connected === false && probe2.subject?.mark === "subject", JSON.stringify(probe2.subject));
     check(motion, "Orbit->Grid: Take-off keeps node identity", probe2.takeoffSame === true, JSON.stringify(probe2));
@@ -314,7 +304,6 @@ async function gridOrbitKeyboard(browser) {
   const motion = "grid-orbit-keyboard";
   const { context, page } = await open(browser, { width: 1440, height: 900, video: true });
   try {
-    await markSection(page, "Area", "area");
     await markSection(page, "Take-off", "takeoff");
 
     let tabs = 0;
@@ -338,7 +327,6 @@ async function gridOrbitKeyboard(browser) {
     logSamples(motion, await sampler, "opacity");
     await assertSectionEntrance(page, motion, "Subject", "Enter");
     const probe = await sectionProbe(page);
-    check(motion, "Enter: old Area node disconnected", probe.area?.connected === false, JSON.stringify(probe.area));
     check(motion, "Enter: Take-off keeps node identity", probe.takeoffSame === true, JSON.stringify(probe));
 
     await page.keyboard.press("Shift+Tab");
@@ -346,14 +334,9 @@ async function gridOrbitKeyboard(browser) {
     check(motion, "Shift+Tab lands back on Grid", back === "Grid", `focused "${back}"`);
 
     await markSection(page, "Subject", "subject");
-    const sampler2 = sampleStyle(page, "Area", 260);
-    const areaFrames = captureEntranceKeyframes(page, "Area", "sectionIn");
     await page.keyboard.press("Space");
-    keyframeCheck(motion, "Space: sectionIn keyframe body starts at opacity 0", await areaFrames, "start");
     await page.waitForTimeout(70);
     await still(page, "grid-orbit-1440-keyboard-reverse-mid");
-    logSamples(motion, await sampler2, "opacity");
-    await assertSectionEntrance(page, motion, "Area", "Space");
     const probe2 = await sectionProbe(page);
     check(motion, "Space: old Subject node disconnected", probe2.subject?.connected === false, JSON.stringify(probe2.subject));
     check(motion, "Space: Take-off keeps node identity", probe2.takeoffSame === true, JSON.stringify(probe2));
@@ -369,7 +352,6 @@ async function gridOrbitTouch(browser) {
     const nav = page.getByRole("navigation", { name: "Show" });
     await nav.getByRole("button", { name: "Settings" }).tap();
     await page.waitForTimeout(450);
-    await markSection(page, "Area", "area");
     await markSection(page, "Take-off", "takeoff");
 
     const sampler = sampleStyle(page, "Subject", 260);
@@ -381,7 +363,6 @@ async function gridOrbitTouch(browser) {
     logSamples(motion, await sampler, "opacity");
     await assertSectionEntrance(page, motion, "Subject", "Settings tap");
     const probe = await sectionProbe(page);
-    check(motion, "tap: old Area node disconnected", probe.area?.connected === false, JSON.stringify(probe.area));
     check(motion, "tap: Take-off keeps node identity", probe.takeoffSame === true, JSON.stringify(probe));
   } finally {
     await finish(context, page, "grid-orbit-375-touch");
@@ -393,7 +374,7 @@ async function gridOrbitTouch(browser) {
 // ---------------------------------------------------------------------------
 /** Poll from before the close is triggered until the first frame with
  *  drawPanelOut on screen, and return that frame's computed style. Pre-armed
- *  so the 160ms hold can never be missed by roundtrip latency. */
+ *  so the exit hold can never be missed by roundtrip latency. */
 function captureClosingStyle(page, ms) {
   return page.evaluate(
     (ms) =>
@@ -459,9 +440,11 @@ function captureEntranceKeyframes(page, kind, expected, ms = KEYFRAME_WINDOW_MS)
         const find = () =>
           kind === "draw"
             ? document.querySelector('[class*="drawPanel"]')
-            : [...document.querySelectorAll("#settings-panel section")].find((s) =>
-                (s.querySelector("h2")?.textContent ?? "").startsWith(kind),
-              );
+            : kind === "tools"
+              ? document.querySelector('[role="group"][aria-label="Map tools"]')
+              : [...document.querySelectorAll("#settings-panel section")].find((s) =>
+                  (s.querySelector("h2")?.textContent ?? "").startsWith(kind),
+                );
         const probe = () => {
           const el = find();
           if (!el) return null;
@@ -520,7 +503,7 @@ function closingStateCheck(motion, label, exit) {
 }
 
 /** The whole detach sequence must land inside this window. Deliberately
- *  generous and jitter-proof: the hold itself is 160ms, but the window only
+ *  generous and jitter-proof: the hold ends with the exit animation, but the window only
  *  fails a panel that never detaches or an animation that never finishes. */
 const DETACH_WINDOW_MS = 3000;
 
@@ -651,7 +634,7 @@ async function drawMouse(browser) {
   const motion = "draw";
   const { context, page } = await open(browser, { width: 1440, height: 900, video: true });
   try {
-    const poly = page.getByRole("radio", { name: "Polygon", exact: true });
+    const poly = polygonTool(page);
     const sampler = sampleStyle(page, "draw", 260);
     const openFrames = captureEntranceKeyframes(page, "draw", "drawPanelIn");
     await poly.click();
@@ -704,9 +687,9 @@ async function drawTouch(browser) {
   const { context, page } = await open(browser, { width: 375, height: 812, mobile: true, video: true });
   try {
     const nav = page.getByRole("navigation", { name: "Show" });
-    await nav.getByRole("button", { name: "Settings" }).tap();
+    await nav.getByRole("button", { name: "Map" }).tap();
     await page.waitForTimeout(450);
-    const poly = page.getByRole("radio", { name: "Polygon", exact: true });
+    const poly = polygonTool(page);
     const sampler = sampleStyle(page, "draw", 260);
     const openFrames = captureEntranceKeyframes(page, "draw", "drawPanelIn");
     await poly.tap();
@@ -716,7 +699,6 @@ async function drawTouch(browser) {
     check(motion, "open: duration 0.15s", live?.duration === "0.15s", live?.duration ?? "missing");
     check(motion, "open: easing is --ease-out", live?.timing === EASE_OUT, live?.timing ?? "missing");
 
-    await nav.getByRole("button", { name: "Map" }).tap();
     logSamples(motion, await sampler, "opacity");
     await page.waitForTimeout(450);
     await still(page, "draw-375-touch-mid");
@@ -746,7 +728,7 @@ async function hoverMouse(browser) {
   const motion = "hover";
   const { context, page } = await open(browser, { width: 1440, height: 900, video: true });
   try {
-    const poly = page.getByRole("radio", { name: "Polygon", exact: true });
+    const poly = polygonTool(page);
     const rest = await poly.evaluate((el) => {
       const cs = getComputedStyle(el);
       return {
@@ -788,9 +770,9 @@ async function hoverTouch(browser) {
     check(motion, "touch context: hover/pointer-fine media query is false", hoverCapable === false, String(hoverCapable));
 
     const nav = page.getByRole("navigation", { name: "Show" });
-    await nav.getByRole("button", { name: "Settings" }).tap();
+    await nav.getByRole("button", { name: "Map" }).tap();
     await page.waitForTimeout(450);
-    const poly = page.getByRole("radio", { name: "Polygon", exact: true });
+    const poly = polygonTool(page);
     const sampler = sampleStyle(page, "polygon", 220);
     await poly.tap();
     const samples = await sampler;
@@ -812,7 +794,6 @@ async function reducedGridOrbit(browser) {
   const motion = "reduced-grid-orbit";
   const { context, page } = await open(browser, { width: 1440, height: 900, reduced: true, video: true });
   try {
-    await markSection(page, "Area", "area");
     await page.getByRole("radio", { name: "Orbit", exact: true }).click();
     const sec = await readSection(page, "Subject");
     check(motion, "switch shows the final state (no animation)", sec?.animationName === "none", sec?.animationName ?? "missing");
@@ -821,8 +802,6 @@ async function reducedGridOrbit(browser) {
     await still(page, "reduced-1440-grid-orbit-mid");
     const settled = await readSection(page, "Subject");
     check(motion, "settled opacity stays 1", settled?.opacity === "1", settled?.opacity ?? "missing");
-    const probe = await sectionProbe(page);
-    check(motion, "old Area node disconnected", probe.area?.connected === false, JSON.stringify(probe.area));
   } finally {
     await finish(context, page, "reduced-1440-grid-orbit");
   }
@@ -832,7 +811,7 @@ async function reducedDraw(browser) {
   const motion = "reduced-draw";
   const { context, page } = await open(browser, { width: 1440, height: 900, reduced: true, video: true });
   try {
-    const poly = page.getByRole("radio", { name: "Polygon", exact: true });
+    const poly = polygonTool(page);
     const openFrames = captureEntranceKeyframes(page, "draw", "drawPanelIn");
     await poly.click();
     keyframeCheck(motion, "open: drawPanelIn keyframe body starts at opacity 0", await openFrames, "start");
@@ -864,7 +843,7 @@ async function reducedHover(browser) {
   const motion = "reduced-hover";
   const { context, page } = await open(browser, { width: 1440, height: 900, reduced: true, video: true });
   try {
-    const poly = page.getByRole("radio", { name: "Polygon", exact: true });
+    const poly = polygonTool(page);
     const duration = await poly.evaluate((el) => getComputedStyle(el).transitionDuration);
     check(motion, "hover transition is instant (duration 0s)", duration.split(",").every((d) => d.trim() === "0s"), duration);
     await poly.hover();
@@ -903,7 +882,7 @@ async function regressions(browser) {
   const motion = "regress";
   const { context, page } = await open(browser, { width: 1440, height: 900 });
   try {
-    const poly = page.getByRole("radio", { name: "Polygon", exact: true });
+    const poly = polygonTool(page);
     await poly.hover();
     await page.mouse.down();
     await waitForScale(poly);

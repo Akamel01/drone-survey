@@ -1114,11 +1114,14 @@ async function reducedPass(browser) {
 async function recordMobile(browser) {
   const { context, page, video } = await pageFor(browser, { width: 375, height: 812, mobile: true, video: true, allowOffline: true });
   try {
+    // The fold controls by their accessible names, not a class substring: the
+    // Summary's own `.collapsed` class matched "collapse" (UI-27). Two of each
+    // must exist, so an empty list cannot pass for "absent".
     const hidden = await page.evaluate(() => ({
-      collapse: [...document.querySelectorAll('[class*="collapse"]')].map((el) => getComputedStyle(el).display),
-      tabs: [...document.querySelectorAll('[class*="edgeTab"]')].map((el) => getComputedStyle(el).display),
+      collapse: [...document.querySelectorAll('button[aria-label^="Collapse "]')].map((el) => getComputedStyle(el).display),
+      tabs: [...document.querySelectorAll('button[aria-label^="Expand "]')].map((el) => getComputedStyle(el).display),
     }));
-    check("video", "375: wide fold controls are absent", hidden.collapse.every((d) => d === "none") && hidden.tabs.every((d) => d === "none"), JSON.stringify(hidden));
+    check("video", "375: wide fold controls are absent", hidden.collapse.length === 2 && hidden.tabs.length === 2 && hidden.collapse.every((d) => d === "none") && hidden.tabs.every((d) => d === "none"), JSON.stringify(hidden));
     const nav = page.getByRole("navigation", { name: "Show" });
     await nav.getByRole("button", { name: "Map" }).click();
     await waitForSettled(page, 'section[aria-label="Map"]', "open");
@@ -1266,7 +1269,7 @@ async function main() {
               };
               c.port2.postMessage(0);
             });
-          const b = [...document.querySelectorAll("#settings-panel button")].find((x) => x.textContent.trim() === "Polygon");
+          const b = document.querySelector('[role="group"][aria-label="Map tools"] button[aria-label="Polygon"]');
           if (!b) return false;
           b.click();
           for (let i = 0; i < 5000; i++) {

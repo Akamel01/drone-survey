@@ -7,6 +7,7 @@ import {
   asOfStamp,
   cardList,
   checkedAgo,
+  coord,
   copyName,
   copyOf,
   describeSave,
@@ -14,6 +15,7 @@ import {
   flightReason,
   flightTimeDelta,
   flights,
+  formatArea,
   formatStamp,
   hostLines,
   localDate,
@@ -623,4 +625,11 @@ test("formatStamp reads as a date, never raw ISO", () => {
   assert.ok(!out.includes("T"), "no ISO separator reaches Details");
   assert.equal(formatStamp(null), "");
   assert.equal(formatStamp("not-a-stamp"), "not-a-stamp");
+});
+
+test("the map toolbar reads area in m² below a square kilometre and km² above, and a point to five places", () => {
+  assert.equal(formatArea(0.05), "500 m²");
+  assert.equal(formatArea(200), "2.000 km²");
+  assert.equal(coord([49.1891, -122.8396]), "49.18910, -122.83960");
+  assert.equal(coord(null), "—");
 });

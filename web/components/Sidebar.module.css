@@ -189,29 +189,6 @@
   font-weight: 600;
 }
 
-.groupLabel {
-  font-size: 0.75rem;
-  font-weight: 500;
-  color: var(--on-glass-2);
-  margin: 14px 0 6px;
-}
-
-.groupLabel:first-child {
-  margin-top: 0;
-}
-
-.group {
-  display: flex;
-  gap: 6px;
-  flex-wrap: wrap;
-  margin-bottom: 10px;
-}
-
-.group button {
-  flex: 1;
-  min-width: 110px;
-}
-
 .ringRow {
   display: flex;
   align-items: center;

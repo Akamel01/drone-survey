@@ -173,6 +173,8 @@
       opacity var(--dur-fast) var(--ease-out),
       visibility 0s linear var(--dur-slow);
   }
+  /* The map toolbar is a strip under the map in this column (MapToolbar). */
+  .map { flex-direction: column; }
   .missions { --i: 0; }
   .map      { --i: 1; }
   .settings { --i: 2; }
@@ -414,8 +416,11 @@
        the attribution line and pill row (4rem together, growing with the
        text). At the default text size the Summary is shorter than this in
        every wide window 800 px tall or more, so nothing changes there
-       (UI-26). */
-    max-height: calc(100% - 52px - 4rem);
+       (UI-26). The map toolbar floats in the same column above the Summary
+       (its 3rem lift clears the attribution), so the band also holds its
+       measured height (MapToolbar.tsx): an expanded Summary at 200 % text
+       used to push the toolbar off the top of the window (UI-29). */
+    max-height: calc(100% - 52px - 4rem - 3rem - var(--map-toolbar-h, 0px));
     overflow-y: auto;
   }
 

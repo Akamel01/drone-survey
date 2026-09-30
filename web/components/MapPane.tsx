@@ -367,8 +367,11 @@ export default function MapPane({
   // animation. closingDraw is set during the render that first sees the mode
   // leave drawing -- not in an effect, because Escape (window keydown) and the
   // map's dblclick close outside React's events, and an effect would paint one
-  // frame with the panel already gone. 160ms covers the 150ms reduced-motion
-  // crossfade (globals.css) with the 10ms margin the menus use over theirs.
+  // frame with the panel already gone. The hold ends when the exit animation
+  // does (`animationend` on the panel, below), not on a timer racing it: a
+  // 160ms timer against the 150ms reduced-motion crossfade left 10ms, less
+  // than one frame at 60Hz, so a late frame removed the node before the fade
+  // had finished. The timer is only the backstop.
   const [closingDraw, setClosingDraw] = useState(false);
   // Previous-render bookkeeping. State, not refs: this lint's react-hooks/refs
   // (React Compiler) forbids touching a ref during render, and both values are
@@ -399,11 +402,13 @@ export default function MapPane({
   // is leaving, so idle copy never flashes during the exit.
   const panelMode = drawing ? mode : lastDrawMode;
 
-  // Ends the exit. Drawing again during the hold cancelled this timer already
-  // by flipping closingDraw back during that render.
+  // Backstop for the exit: the panel's own animationend normally ends it first,
+  // and this covers a browser that never runs the animation. Drawing again
+  // during the hold cancelled this timer already by flipping closingDraw back
+  // during that render.
   useEffect(() => {
     if (!closingDraw) return;
-    const t = setTimeout(() => setClosingDraw(false), 160);
+    const t = setTimeout(() => setClosingDraw(false), 500);
     return () => clearTimeout(t);
   }, [closingDraw]);
 
@@ -1078,6 +1083,9 @@ export default function MapPane({
       {(drawing || closingDraw) && (
         <div
           className={`${styles.drawPanel} glass-smoke ${drawing ? styles.drawPanelLive : styles.drawPanelClosing}`}
+          onAnimationEnd={(e) => {
+            if (!drawing && e.target === e.currentTarget && e.animationName.endsWith("drawPanelOut")) setClosingDraw(false);
+          }}
         >
           <div className={styles.drawTitle}>{drawModeLabel(panelMode)}</div>
           <div className={styles.drawClick}>{meaning}</div>
