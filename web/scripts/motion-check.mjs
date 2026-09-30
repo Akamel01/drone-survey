@@ -1377,6 +1377,10 @@ async function noticeRapid(browser, vp) {
       await wait(700);
       fire("save", () => document.querySelector('dialog[open] form button[type="submit"]').click());
       await wait(250);
+      // This save fails in the mock, and a failed save keeps the sheet open for
+      // a retry; close it, as the operator would, so the page is live again.
+      document.querySelector("dialog[open]")?.close();
+      await wait(300);
       fire("dispatch-2", () => N.byText("Dispatch").click());
       await wait(250);
       fire("escape", () => N.escape());

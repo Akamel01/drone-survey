@@ -147,6 +147,9 @@ async function planner(viewport = { width: 1440, height: 900 }) {
   const store = memoryMissionStore(seed());
   const lifecycle = createMissionLifecycle(store);
   const posted = [];
+  // Saves the browser is to lose on the wire: the request goes out and no
+  // answer comes back, as when the network drops.
+  let dropped = 0;
   const context = await browser.newContext({ viewport });
   await context.addInitScript((key) => localStorage.setItem(key, "e2e"), PASSPHRASE_KEY);
   await context.route(
@@ -158,6 +161,11 @@ async function planner(viewport = { width: 1440, height: 900 }) {
         outcome = await lifecycle.list(CALLER, { archived: true });
       } else if (request.method() === "POST") {
         posted.push(request.postDataJSON());
+        if (dropped > 0) {
+          dropped -= 1;
+          await route.abort("failed");
+          return;
+        }
         outcome = await lifecycle.save(CALLER, request.postDataJSON());
       } else {
         outcome = await lifecycle.remove(CALLER, { id: new URL(request.url()).searchParams.get("id") });
@@ -168,7 +176,15 @@ async function planner(viewport = { width: 1440, height: 900 }) {
   );
   const page = await context.newPage();
   await load(page);
-  return { store, posted, context, page };
+  return {
+    store,
+    posted,
+    context,
+    page,
+    dropNextSave: () => {
+      dropped += 1;
+    },
+  };
 }
 
 async function load(page) {
@@ -569,6 +585,95 @@ test("Flown, Withdrawn and Superseded: only Save as new Mission", async () => {
     assert.equal(posted[0].id, undefined);
     assert.equal(store.records().length, before + 1);
     assert.deepEqual(byId(store, "m-flown"), original);
+  } finally {
+    await context.close();
+  }
+});
+
+// ---------------------------------------------------------------------------
+// A failed save keeps the sheet and what was typed; retrying works
+// ---------------------------------------------------------------------------
+
+test("a refused save keeps the sheet open with the choice, name and Site, says why, and a retry succeeds", async () => {
+  const { page, store, posted, context } = await planner();
+  try {
+    await edit(page, "m-planned");
+    const before = store.records().length;
+    const sheet = await openSheet(page);
+    await sheet.getByRole("radio", { name: /^Save as new Mission/ }).check();
+    const { name, site } = fields(sheet);
+    await name.fill("Orchard field");
+    await site.fill("rehe");
+    await sheet.getByRole("option", { name: "Rehearsal Field", exact: true }).click();
+
+    // The store refuses this one write, as when the bucket cannot be reached.
+    store.failNext("writeMission", new Error("the bucket is unreachable"));
+    const confirm = sheet.locator('form button[type="submit"]');
+    await confirm.click();
+    const alert = sheet.getByRole("alert");
+    await alert.waitFor({ state: "visible", timeout: 10_000 });
+    assert.match((await alert.textContent()) ?? "", /Could not reach the store: the bucket is unreachable\./);
+    await shot(page, "failed-1440");
+    assert.ok(await sheet.isVisible(), "the sheet stays open");
+    assert.equal(posted.length, 1);
+    assert.equal(store.records().length, before, "nothing was written");
+
+    // Everything is where it was, and Save is ready to try again.
+    assert.ok(await sheet.getByRole("radio", { name: /^Save as new Mission/ }).isChecked(), "the choice is kept");
+    assert.equal(await name.inputValue(), "Orchard field");
+    assert.equal(await site.inputValue(), "Rehearsal Field");
+    assert.equal(await confirmName(sheet), "Save as new Mission");
+    assert.ok(await confirm.isEnabled());
+    assert.ok(await confirm.evaluate((el) => el === document.activeElement), "focus is still on Save");
+    // The Notice reports it too, behind the sheet.
+    assert.match(await noticeText(page), /Could not reach the store/);
+
+    await confirm.click();
+    await sheet.waitFor({ state: "hidden", timeout: 10_000 });
+    assert.equal(posted.length, 2);
+    assert.deepEqual(posted[1], posted[0], "the retry sends the same save");
+    assert.equal(posted[1].id, undefined);
+    assert.equal(posted[1].name, "Orchard field");
+    assert.equal(posted[1].site_id, SITES.field.id);
+    assert.equal(store.records().length, before + 1);
+    assert.match(await noticeText(page), /“Orchard field” is saved as a new Mission/);
+  } finally {
+    await context.close();
+  }
+});
+
+test("a save lost to the network keeps the sheet open, and changing the name clears the message", async () => {
+  const { page, store, posted, context, dropNextSave } = await planner();
+  try {
+    await edit(page, "m-planned");
+    const before = store.records().length;
+    const sheet = await openSheet(page);
+    const { name } = fields(sheet);
+    await name.fill("Orchard west");
+    dropNextSave();
+    const confirm = sheet.locator('form button[type="submit"]');
+    await confirm.click();
+    const alert = sheet.getByRole("alert");
+    await alert.waitFor({ state: "visible", timeout: 10_000 });
+    assert.match((await alert.textContent()) ?? "", /^Not saved: .*Nothing changed\./);
+    assert.ok(await sheet.isVisible(), "the sheet stays open");
+    assert.equal(store.records().length, before);
+    assert.ok(await sheet.getByRole("radio", { name: /^Save changes/ }).isChecked(), "the choice is kept");
+    assert.equal(await name.inputValue(), "Orchard west");
+    assert.ok(await confirm.isEnabled());
+
+    // A message about the last try is not left standing over a changed form.
+    await name.fill("Orchard west 2");
+    await alert.waitFor({ state: "detached", timeout: 5_000 });
+
+    await confirm.click();
+    await sheet.waitFor({ state: "hidden", timeout: 10_000 });
+    assert.equal(posted.length, 2);
+    assert.equal(posted[1].id, "m-planned");
+    assert.equal(posted[1].name, "Orchard west 2");
+    assert.equal(byId(store, "m-planned").name, "Orchard west 2");
+    assert.equal(store.records().length, before);
+    assert.match(await noticeText(page), /Changes are saved to “Orchard west 2”/);
   } finally {
     await context.close();
   }

@@ -108,6 +108,16 @@
   color: var(--on-glass-2);
 }
 
+/* Why the save failed, in the sheet's own words on its own glass: neutral text,
+   no colour of its own (the Notice carries the failure's tone). */
+.failure {
+  margin: 0;
+  font-size: 0.875rem;
+  line-height: 1.5;
+  color: var(--on-glass);
+  overflow-wrap: anywhere;
+}
+
 .actions {
   display: flex;
   flex-wrap: wrap;

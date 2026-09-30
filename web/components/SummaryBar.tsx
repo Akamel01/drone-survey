@@ -11,7 +11,7 @@ import { firstSentence } from "@/lib/notice";
 import type { NoticePayload } from "./Notice";
 import type { Editing } from "@/app/plan/page";
 import CountUp from "./CountUp";
-import SaveSheet, { type EditedMission, type SaveRequest } from "./SaveSheet";
+import SaveSheet, { type EditedMission, type SaveReply, type SaveRequest } from "./SaveSheet";
 import styles from "./SummaryBar.module.css";
 
 interface SummaryBarProps {
@@ -99,15 +99,17 @@ export default function SummaryBar({ spec, preview, editing, onSaved, sites = []
     ? (edited ?? { state: "planned", name: editing.name, site: spec.site, site_id: spec.site_id, date: spec.date })
     : null;
 
-  async function runSave({ choice, name, site }: SaveRequest) {
-    if (save.kind === "saving") return;
+  // What the sheet is told: it closes on success and, on a failure, stays open
+  // with what was typed and shows `text` (UI-30, operator review of #311).
+  async function runSave({ choice, name, site }: SaveRequest): Promise<SaveReply> {
     setSave({ kind: "saving" });
-    // Save outcomes report through the page-owned Notice slot: the verbatim
-    // text goes to onNotice, never to an inline div. The Save sheet has
-    // already closed by now, so the outcome is read on the page behind it.
-    const report = (text: string, failed: boolean) => {
+    // Save outcomes also report through the page-owned Notice slot: the
+    // verbatim text goes to onNotice. A failure is reported there and inside
+    // the sheet, which is still open in front of it.
+    const report = (text: string, failed: boolean): SaveReply => {
       onNotice?.({ title: firstSentence(text), body: text, missionName: name, failed });
       setSave({ kind: "idle" });
+      return failed ? { ok: false, text } : { ok: true };
     };
     try {
       const outcome = await missionClient.save(
@@ -125,14 +127,10 @@ export default function SummaryBar({ spec, preview, editing, onSaved, sites = []
         },
         editedMission ? { choice, from: editedMission.name } : undefined,
       );
-      if (outcome.ok) {
-        onSaved(outcome.mission);
-        report(outcome.text, false);
-      } else {
-        report(outcome.text, true);
-      }
+      if (outcome.ok) onSaved(outcome.mission);
+      return report(outcome.text, !outcome.ok);
     } catch (err) {
-      report(
+      return report(
         `Not saved: ${err instanceof Error ? err.message : "the store could not be reached"}. Nothing changed.`,
         true,
       );
@@ -277,9 +275,10 @@ export default function SummaryBar({ spec, preview, editing, onSaved, sites = []
         editing={editing}
         edited={editedMission}
         sites={sites}
-        onSave={(request) => {
-          setSheet((s) => ({ ...s, open: false }));
-          void runSave(request);
+        onSave={async (request) => {
+          const reply = await runSave(request);
+          if (reply.ok) setSheet((s) => ({ ...s, open: false }));
+          return reply;
         }}
       />
     </div>

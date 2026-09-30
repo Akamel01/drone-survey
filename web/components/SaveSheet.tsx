@@ -41,6 +41,10 @@ export interface SaveRequest {
   site: SiteChoice;
 }
 
+/** How the save went. The sheet closes on success; on a failure it stays open
+ *  with everything typed, says `text`, and Save is ready to try again. */
+export type SaveReply = { ok: true } | { ok: false; text: string };
+
 interface SaveSheetProps {
   open: boolean;
   onClose: () => void;
@@ -51,7 +55,7 @@ interface SaveSheetProps {
   editing: Editing;
   edited: EditedMission | null;
   sites: SiteChoice[];
-  onSave: (request: SaveRequest) => void;
+  onSave: (request: SaveRequest) => Promise<SaveReply>;
 }
 
 export default function SaveSheet({ open, onClose, session, ...form }: SaveSheetProps) {
@@ -80,16 +84,18 @@ function SaveForm({
   headingId,
   formRef,
   onCancel,
-  spec,
-  editing,
-  edited,
-  sites,
   onSave,
+  ...live
 }: Omit<SaveSheetProps, "open" | "onClose" | "session"> & {
   headingId: string;
   formRef: RefObject<HTMLFormElement | null>;
   onCancel: () => void;
 }) {
+  // The sheet describes the planner as it was when it opened. A save moves the
+  // editor on to the Mission it wrote while the sheet is still leaving, and a
+  // list re-read can change the state under it; neither may rearrange a form
+  // the operator is looking at.
+  const [{ spec, editing, edited, sites }] = useState(live);
   const nameId = useId();
   const siteId = useId();
   const nameHintId = useId();
@@ -105,6 +111,9 @@ function SaveForm({
     new: edited ? copyName(edited.name) : editing.name,
   });
   const [chosen, setChosen] = useState<{ site: string; site_id?: string }>({ site: spec.site, site_id: spec.site_id });
+  const [saving, setSaving] = useState(false);
+  // Why the last try failed, until the operator changes something or tries again.
+  const [failure, setFailure] = useState<string | null>(null);
 
   // A replacement is only one while it shares the Mission's Site, date and
   // name (`supersessionGroup`), so its name and Site are the Mission's own.
@@ -117,10 +126,16 @@ function SaveForm({
   const problem = nameBad ?? siteBad;
   const option = options.find((o) => o.choice === choice);
 
-  const submit = (e: FormEvent) => {
+  const submit = async (e: FormEvent) => {
     e.preventDefault();
-    if (problem || !site.site_id) return;
-    onSave({ choice, name: name.trim(), site: { site: site.site.trim(), site_id: site.site_id } });
+    if (problem || !site.site_id || saving) return;
+    setSaving(true);
+    setFailure(null);
+    const reply = await onSave({ choice, name: name.trim(), site: { site: site.site.trim(), site_id: site.site_id } });
+    setSaving(false);
+    // Removed above and inserted here, so a screen reader announces every
+    // failure, even the same one twice.
+    if (!reply.ok) setFailure(reply.text);
   };
 
   return (
@@ -147,7 +162,10 @@ function SaveForm({
                   type="radio"
                   name="save-choice"
                   checked={o.choice === choice}
-                  onChange={() => setChoice(o.choice)}
+                  onChange={() => {
+                    setChoice(o.choice);
+                    setFailure(null);
+                  }}
                 />
                 <span>
                   <span className={styles.optionLabel}>{o.label}</span>
@@ -167,7 +185,10 @@ function SaveForm({
             maxLength={MISSION_NAME_MAX}
             placeholder="north half, orbit"
             aria-describedby={nameBad ? nameHintId : undefined}
-            onChange={(e) => setNames((n) => ({ ...n, [choice]: e.target.value }))}
+            onChange={(e) => {
+              setNames((n) => ({ ...n, [choice]: e.target.value }));
+              setFailure(null);
+            }}
           />
           {nameBad && (
             <p id={nameHintId} className={styles.hint}>
@@ -184,7 +205,10 @@ function SaveForm({
             site_id={site.site_id}
             readOnly={replacing}
             describedBy={siteBad ? siteHintId : undefined}
-            onChoose={setChosen}
+            onChoose={(picked) => {
+              setChosen(picked);
+              setFailure(null);
+            }}
           />
           {siteBad && (
             <p id={siteHintId} className={styles.hint}>
@@ -197,12 +221,19 @@ function SaveForm({
             The date is no longer {edited.date}, so Dispatching this will not supersede “{edited.name}”.
           </p>
         )}
+        {failure && (
+          <p role="alert" className={styles.failure}>
+            {failure}
+          </p>
+        )}
         <div className={styles.actions}>
           <button type="button" onClick={onCancel}>
             Cancel
           </button>
-          <button type="submit" className="primary" disabled={!!problem}>
-            {option?.label ?? "Save Mission"}
+          {/* Not disabled while saving: a disabled button drops focus out of the
+              sheet, and Save has to be right where it was for a retry. */}
+          <button type="submit" className="primary" disabled={!!problem} aria-busy={saving || undefined}>
+            {saving ? "Saving…" : (option?.label ?? "Save Mission")}
           </button>
         </div>
       </form>
