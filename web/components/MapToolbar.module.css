@@ -1,18 +1,18 @@
-/* The map toolbar (UI-29). Two pieces of smoke glass (spec § 5), nothing
-   nested: the readout (with its how-to) and the bar of tools. A tool is the
-   app's ordinary glass pill, so an inactive one is clear glass with white text
-   and an active one is the --pill-active formula with --ink (spec § 8).
+/* The map toolbar (UI-29): the readout (with its how-to) and the tools.
 
-   Phone (below 1000 px): the bar is a strip of the Map view's own column,
-   directly under the map and above the collapsed Summary -- the thumb zone --
-   so it never covers the map, its scale or its attribution, and the map is
-   what is left. One row of 44 px targets holds every Grid tool at 375 px wide.
-   The readout floats at the map's top-left, level with the Base map and
-   Overlays buttons.
+   Phone (below 1000 px): the tools are a strip of smoke glass (spec § 5) in
+   the Map view's own column, directly under the map and above the collapsed
+   Summary -- the thumb zone -- so they never cover the map, its scale or its
+   attribution, and the map is what is left. A tool is the app's ordinary glass
+   pill: clear glass with white text, and the --pill-active formula with --ink
+   when it is on (spec § 8). One row of 44 px targets holds every Grid tool at
+   375 px wide. The readout floats at the map's top-left, smoke glass, level
+   with the Base map and Overlays buttons.
 
-   Wide: both float over the map as one block above the Summary, centred
-   between the Missions and Settings panels, lifted clear of the scale bar and
-   the attribution that share the bottom edge. */
+   Wide: the readout and one row of tools float over the map above the Summary,
+   centred between the Missions and Settings panels, lifted clear of the scale
+   bar and the attribution that share the bottom edge. No block around them
+   (below). */
 
 .dock {
   /* No box of its own on a phone: the bar becomes a flex item of the Map view
@@ -139,12 +139,18 @@
   display: none;
 }
 
+/* Wide: no enclosing glass. The readout and every tool is a pill with its own
+   glass, the material of the Base map and Overlays pills (MapPane.module.css
+   .pill: 50 % white, dark ink, so the 4.5:1 holds on any tile), 8 px apart
+   (spec § 7, the chip gap). The selectors carry .dock so they outrank the
+   global glass-smoke and button rules the phone strip still uses. */
 @media (min-width: 1000px) {
   .dock {
     position: absolute;
     z-index: 1;
-    left: calc(var(--missions-w, 0px) + 36px);
-    right: calc(var(--settings-w, 0px) + 36px);
+    /* 12 px off the panels, the room the pills need for words in one row. */
+    left: calc(var(--missions-w, 0px) + 24px);
+    right: calc(var(--settings-w, 0px) + 24px);
     /* Above the Summary and above the scale bar and attribution that sit on
        its top edge (the attribution wraps to two lines in a narrow strip). */
     bottom: calc(var(--summary-h, 0px) + 24px + 3rem);
@@ -152,14 +158,9 @@
     flex-direction: column;
     align-items: center;
     gap: 8px;
-    /* The block is what takes clicks, not the strip around it: the map under
-       the gaps still pans. */
+    /* The pills take clicks, not the strip around them: the map under the gaps
+       still pans. */
     pointer-events: none;
-    /* The strip's own width decides icons or words (rem, so a larger text size
-       asks for more room): a narrow strip with words is a column of pills
-       taller than the window at 1000 px, and at 200 % text it left no room
-       above the Summary. */
-    container: dock / inline-size;
   }
 
   .status,
@@ -173,7 +174,7 @@
     left: auto;
   }
 
-  .readout {
+  .dock .readout {
     max-width: none;
   }
 
@@ -184,20 +185,81 @@
     translate: -50% 0;
   }
 
-  .bar {
+  .dock .bar {
     max-width: 100%;
-    padding: 8px;
-    gap: 8px 16px;
-    border-radius: 20px;
-  }
-}
-
-@container dock (min-width: 30rem) {
-  .tool {
-    padding: 0 14px;
+    padding: 0;
+    gap: 8px;
+    border: 0;
+    border-radius: 0;
+    background: none;
+    box-shadow: none;
+    backdrop-filter: none;
   }
 
-  .label {
+  .dock .group {
+    gap: 8px;
+  }
+
+  .dock .tool,
+  .dock .readout {
+    border: 1px solid rgb(255 255 255 / 0.55);
+    background: rgb(255 255 255 / 0.5);
+    backdrop-filter: blur(20px) saturate(120%);
+    box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.55);
+    color: var(--ink);
+  }
+
+  .dock .tool:global(.active) {
+    background: var(--pill-active);
+    border-color: transparent;
+  }
+
+  .dock .how {
+    color: var(--ink);
+  }
+
+  /* The words join the icons only where they fit one row (MapToolbar.tsx
+     measures it and sets data-words); without them the icons wrap as a last
+     resort, in a strip too narrow for even those. */
+  .bar[data-words="on"] {
+    flex-wrap: nowrap;
+  }
+
+  .bar[data-words="on"] .tool {
+    padding: 0 10px 0 8px;
+    gap: 6px;
+  }
+
+  .bar[data-words="on"] .icon {
+    width: 18px;
+    height: 18px;
+  }
+
+  .bar[data-words="on"] .label {
     display: inline;
+  }
+
+  @supports not (backdrop-filter: blur(20px)) {
+    .dock .tool,
+    .dock .readout {
+      background: var(--panel-light-alt);
+      border-color: transparent;
+    }
+  }
+
+  @media (prefers-contrast: more) {
+    .dock .tool,
+    .dock .readout {
+      border-color: #fff;
+    }
+  }
+
+  @media (prefers-reduced-transparency: reduce) {
+    .dock .tool,
+    .dock .readout {
+      background: var(--panel-light-alt);
+      border-color: transparent;
+      backdrop-filter: none;
+    }
   }
 }
