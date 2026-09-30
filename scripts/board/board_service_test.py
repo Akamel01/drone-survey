@@ -31,6 +31,7 @@ SPEC = "site-a/2026-09-30/20260930T010203Z-aaaa1111.json"
 OTHER = "site-a/2026-09-30/20260930T010204Z-bbbb2222.json"
 DONE = "site-b/2026-09-29/20260929T000000Z.json"
 DRAFTLESS = "site-c/2026-09-30/20260930T020202Z.json"  # Collected, but no Reservation
+ALLOWED = "https://planner.example"
 SHEET = "Open way finder 4: Site A 2026-09-30 (125 waypoints)\nClose and reopen each card's waypoint editor.\n"
 
 
@@ -239,15 +240,15 @@ class LocalOnlyTest(unittest.TestCase):
 class HttpTest(unittest.TestCase):
     def setUp(self):
         self.f = Fixture(self)
-        self.server = ThreadingHTTPServer(("127.0.0.1", 0), bs.make_handler(self.f.board, "*"))
+        self.server = ThreadingHTTPServer(("127.0.0.1", 0), bs.make_handler(self.f.board, (ALLOWED,)))
         self.server.daemon_threads = True
         threading.Thread(target=self.server.serve_forever, daemon=True).start()
         self.addCleanup(self.server.server_close)
         self.addCleanup(self.server.shutdown)
         self.base = f"http://127.0.0.1:{self.server.server_address[1]}"
 
-    def call(self, method, path, body=None):
-        req = urllib.request.Request(self.base + path, method=method,
+    def call(self, method, path, body=None, origin=None):
+        req = urllib.request.Request(self.base + path, method=method, headers={"Origin": origin} if origin else {},
                                      data=None if body is None else json.dumps(body).encode())
         try:
             with urllib.request.urlopen(req) as r:
@@ -258,7 +259,7 @@ class HttpTest(unittest.TestCase):
     def test_the_whole_interface(self):
         status, headers, body = self.call("GET", "/health")
         self.assertEqual((status, body["controller"], body["busy"]), (200, True, None))
-        self.assertEqual(headers["Access-Control-Allow-Private-Network"], "true")
+        self.assertNotIn("Access-Control-Allow-Origin", headers)  # no Origin sent: nothing to echo
         status, _, body = self.call("GET", "/missions")
         self.assertEqual([m["id"] for m in body["missions"]], [SPEC, OTHER])
         status, _, rec = self.call("POST", "/loads", {"mission": SPEC})
@@ -277,10 +278,44 @@ class HttpTest(unittest.TestCase):
         self.assertEqual(self.call("GET", "/loads/deadbeef")[0], 404)
         self.assertEqual(self.call("GET", "/elsewhere")[0], 404)
 
-    def test_preflight(self):
-        status, headers, _ = self.call("OPTIONS", "/loads")
+    def test_preflight_from_an_allowed_origin(self):
+        status, headers, _ = self.call("OPTIONS", "/loads", origin=ALLOWED)
         self.assertEqual(status, 204)
         self.assertIn("POST", headers["Access-Control-Allow-Methods"])
+        self.assertEqual(headers["Access-Control-Allow-Origin"], ALLOWED)  # echoed, never *
+        self.assertEqual(headers["Access-Control-Allow-Private-Network"], "true")
+
+    def test_allowed_origin_may_start_a_load(self):
+        status, headers, rec = self.call("POST", "/loads", {"mission": SPEC}, origin=ALLOWED)
+        self.assertEqual((status, rec["state"]), (202, "running"))
+        self.assertEqual(headers["Access-Control-Allow-Origin"], ALLOWED)
+        self.f.finish()
+
+    def test_foreign_origin_is_refused_by_the_server_and_starts_nothing(self):
+        for origin in ("https://evil.example", "null", ALLOWED + ".evil.example", "http://localhost:3000"):
+            status, headers, body = self.call("POST", "/loads", {"mission": SPEC}, origin=origin)
+            self.assertEqual((status, body["error"]), (403, "bad_origin"), origin)
+            self.assertNotIn("Access-Control-Allow-Origin", headers)
+        self.assertEqual(self.call("OPTIONS", "/loads", origin="https://evil.example")[0], 403)
+        self.assertEqual(self.f.calls, [])
+
+    def test_no_origin_is_allowed_from_the_local_network(self):
+        status, _, rec = self.call("POST", "/loads", {"mission": SPEC})  # curl, the host itself
+        self.assertEqual(status, 202)
+        self.f.finish()
+
+
+class OriginsTest(unittest.TestCase):
+    def test_parse(self):
+        self.assertEqual(bs.parse_origins("https://a.example/, http://localhost:3000"),
+                         ("https://a.example", "http://localhost:3000"))
+        for bad in ("*", "https://a.example,*", " , "):
+            with self.assertRaises(ValueError):
+                bs.parse_origins(bad)
+
+    def test_default_is_the_planner_and_localhost_never_a_wildcard(self):
+        self.assertEqual(bs.DEFAULT_ORIGINS, ("https://web-auditor-ai1.vercel.app", "http://localhost:3000"))
+        self.assertNotIn("*", bs.DEFAULT_ORIGINS)
 
 
 class MdnsTest(unittest.TestCase):

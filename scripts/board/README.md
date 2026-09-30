@@ -6,7 +6,9 @@ Python standard library only (3.9+). One file: `board_service.py`.
 
 ## HTTP interface
 
-Default `http://board.local:8787`. Every response is JSON. Only clients on the local network are answered (loopback, private, link-local addresses); anything else gets `403 not_local`. CORS allows any origin, plus `Access-Control-Allow-Private-Network: true` on preflight; narrow it with `--allow-origin`.
+Default `http://board.local:8787`. Every response is JSON. Only clients on the local network are answered (loopback, private, link-local addresses); anything else gets `403 not_local`. 
+
+**Origins.** Only the planner's pages may call the board from a browser: `https://web-auditor-ai1.vercel.app` and `http://localhost:3000` by default. Set others with `BOARD_ALLOW_ORIGIN` (or `--allow-origin`), a comma-separated list; `*` is refused at start. The server itself answers `403 bad_origin` to any request whose `Origin` header is present and not in the list (POST, GET and the preflight alike), so it does not rely on the browser honouring CORS headers. A request with no `Origin` (curl, the host itself) is not a browser page and stays allowed from the local network. For an allowed origin the reply echoes it in `Access-Control-Allow-Origin` and adds `Access-Control-Allow-Private-Network: true`.
 
 A refusal is `{"error": "<code>", "reason": "<a sentence for the operator>"}` with a 4xx status.
 
@@ -93,7 +95,7 @@ curl localhost:8787/health
 
 The loader keeps its own configuration: B2 credentials at `~/.config/wayfinder/b2-status.env`, Card calibration in `wayfinder_slots.json` beside `load.py`. The service reads nothing else and never prints them.
 
-Run by hand: `python3 scripts/board/board_service.py [--port N] [--no-mdns] [--allow-origin URL]`.
+Run by hand: `python3 scripts/board/board_service.py [--port N] [--no-mdns] [--allow-origin URL,URL]`.
 
 To keep the service up when nobody is logged in (a headless Pi), the operator runs once: `sudo loginctl enable-linger $USER`. This is the only step that needs sudo, and it is not needed while the user has a session.
 

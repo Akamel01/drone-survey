@@ -57,6 +57,8 @@ import load_core  # noqa: E402  (queue_specs, split_reserved: what cron decides 
 CONTROLLER_USB = ("2ca3", "1021")  # the RC2, as cron's lsusb -d checks it
 CRON_LOCK = Path(os.environ.get("BOARD_CRON_LOCK", "/tmp/wayfinder-load.lock"))
 LOAD_TIMEOUT_S = 900
+# Pages allowed to call the board: the planner in production, and local development.
+DEFAULT_ORIGINS = ("https://web-auditor-ai1.vercel.app", "http://localhost:3000")
 KEEP = 20  # Loads remembered in memory; a restart forgets them
 
 CARD_LINE = re.compile(r"^Open (?P<card>.+?): (?P<name>.+) \((?P<waypoints>\d+) waypoints\)\s*$")
@@ -224,7 +226,15 @@ def is_local(addr: str) -> bool:
     return ip.is_loopback or ip.is_private or ip.is_link_local
 
 
-def make_handler(board: Board, allow_origin: str):
+def parse_origins(text: str) -> tuple[str, ...]:
+    """A comma-separated list of origins. `*` is refused: any page on the phone could then Load."""
+    origins = tuple(o.strip().rstrip("/") for o in text.split(",") if o.strip())
+    if not origins or "*" in origins:
+        raise ValueError("name the origins allowed to call the board, comma-separated; '*' is not accepted")
+    return origins
+
+
+def make_handler(board: Board, origins: tuple[str, ...]):
     class Handler(BaseHTTPRequestHandler):
         def log_message(self, fmt, *args):
             print(f"{self.client_address[0]} {fmt % args}", flush=True)
@@ -232,7 +242,9 @@ def make_handler(board: Board, allow_origin: str):
         def _send(self, status: int, body: object = None):
             data = b"" if body is None else json.dumps(body).encode()
             self.send_response(status)
-            self.send_header("Access-Control-Allow-Origin", allow_origin)
+            if self.headers.get("Origin") in origins:  # else no CORS header: the browser will not show the reply
+                self.send_header("Access-Control-Allow-Origin", self.headers["Origin"])
+                self.send_header("Vary", "Origin")
             self.send_header("Access-Control-Allow-Private-Network", "true")
             self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
             self.send_header("Access-Control-Allow-Headers", "Content-Type")
@@ -244,6 +256,12 @@ def make_handler(board: Board, allow_origin: str):
         def _serve(self, route):
             if not is_local(self.client_address[0]):
                 return self._send(403, {"error": "not_local", "reason": "The board answers only on the local network."})
+            origin = self.headers.get("Origin")
+            if origin is not None and origin not in origins:
+                # Enforced here, not left to the browser honouring CORS: a page
+                # on the phone's hotspot must not be able to start a Load. No
+                # Origin (curl, the host itself) is not a browser and stays allowed.
+                return self._send(403, {"error": "bad_origin", "reason": f"Requests from {origin!r} are not accepted."})
             try:
                 status, body = route()
             except Refused as r:
@@ -356,16 +374,21 @@ def main() -> None:
     p.add_argument("--port", type=int, default=8787)
     p.add_argument("--hostname", default="board.local", help="the mDNS name announced")
     p.add_argument("--no-mdns", action="store_true", help="do not announce; use when Avahi already serves the name")
-    p.add_argument("--allow-origin", default=os.environ.get("BOARD_ALLOW_ORIGIN", "*"),
-                   help="CORS origin the phone's page comes from (default: any)")
+    p.add_argument("--allow-origin", default=os.environ.get("BOARD_ALLOW_ORIGIN", ",".join(DEFAULT_ORIGINS)),
+                   help="origins allowed to call the board, comma-separated (env BOARD_ALLOW_ORIGIN; "
+                        "default: the planner's production origin and http://localhost:3000)")
     p.add_argument("--selftest", action="store_true")
     args = p.parse_args()
     if args.selftest:
         sys.path.insert(0, str(HERE))
         import board_service_test
         sys.exit(board_service_test.run())
+    try:
+        origins = parse_origins(args.allow_origin)
+    except ValueError as e:
+        p.error(str(e))
     board = Board()
-    server = ThreadingHTTPServer((args.bind, args.port), make_handler(board, args.allow_origin))
+    server = ThreadingHTTPServer((args.bind, args.port), make_handler(board, origins))
     server.daemon_threads = True
     if not args.no_mdns:
         def announce():
