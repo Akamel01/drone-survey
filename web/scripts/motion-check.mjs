@@ -605,7 +605,10 @@ async function pressMotion(browser) {
     check("press", "map pill scales", s2.transform.startsWith("matrix(0.97"), s2.transform);
     check("press", "map pill wash", s2.boxShadow.includes("999px"), s2.boxShadow);
 
-    const disabled = page.getByRole("button", { name: "Save new Mission" });
+    // Save is disabled only while the plan itself cannot be saved (UI-30), so
+    // a cleared date is what gives this check a disabled button to press.
+    await page.locator('#settings-panel input[type="date"]').fill("");
+    const disabled = page.getByRole("button", { name: "Save Mission", exact: true });
     const s3 = await pressAndRead(page, disabled, false);
     check("press", "disabled button does not move", s3.transform === "none", s3.transform);
 
@@ -1369,7 +1372,10 @@ async function noticeRapid(browser, vp) {
       };
       fire("dispatch-1", () => N.byText("Dispatch").click());
       await wait(250);
-      fire("save", () => N.byText("Save Mission").click());
+      // Save opens the Save sheet (UI-30); the sheet's own button is the save.
+      N.byText("Save Mission").click();
+      await wait(700);
+      fire("save", () => document.querySelector('dialog[open] form button[type="submit"]').click());
       await wait(250);
       fire("dispatch-2", () => N.byText("Dispatch").click());
       await wait(250);
@@ -1570,7 +1576,11 @@ async function noticeFailure(browser) {
       let aria = null;
       let stagger = null;
       let expandedAt = null;
+      // Save opens the Save sheet (UI-30); the failure the Notice reports is
+      // the sheet's own button being pressed.
       save.click();
+      await N.settle(700);
+      document.querySelector('dialog[open] form button[type="submit"]').click();
       const start = performance.now();
       // A starved host can delay the notice's mount past the old 1300 ms
       // window, so sample long enough to see the latch and the settled box.
