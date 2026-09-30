@@ -730,7 +730,7 @@ export default function MissionList({ onEdit, onCopy, editingId = null, onRead, 
       >
         <p className={styles.gateText}>
           Type the Wayfinder passphrase to read the Missions in the store. It is typed once per browser
-          and kept only here — the same field as the one beside Save.
+          and kept only here.
         </p>
         <input
           type="password"

@@ -1,7 +1,7 @@
-// The Wayfinder passphrase, held in this browser's storage and shown by two
-// fields on the same page: the Missions view's own (plan decision 17) and the
-// Summary's, beside Save. They are one stored value, not two -- so a change in
-// either has to reach the other while the tab is open.
+// The Wayfinder passphrase, held in this browser's storage and shown by one
+// field on the page: the Missions view's own (plan decision 17). The
+// Summary's field beside Save is gone (UI-27, #304); the stored value and
+// its in-tab signal stay as they are.
 //
 // localStorage's own `storage` event fires only in *other* tabs of the same
 // origin, never the one that made the write (MDN), so two fields in one tab
