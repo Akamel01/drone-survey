@@ -15,6 +15,8 @@
 // clipped or overlapped text and hidden or colliding controls; the frame rate
 // of panning the map under glass on a throttled phone; and two screenshots the
 // operator decides on (the phone Map tab, a long Missions list over the hero).
+// The map toolbar (UI-29) has its own section: the drawing and map-editing
+// tools sit on the map in both layouts and Settings holds none of them.
 // Like motion-check, a fetch wrapper answers /api/missions from memory and a
 // localStorage key stands in for the passphrase. Exits non-zero on a failure.
 import fs from "node:fs";
@@ -604,7 +606,7 @@ async function keyboardSection(browser) {
     report.keyboard = stops.map((s) => s.name);
     check(section, `every Tab stop shows a visible focus ring (${stops.length} stops)`, missing.length === 0, missing.slice(0, 8).map((m) => `${m.name}${m.visible ? "" : " (off-screen)"}`).join("; "));
     const names = stops.map((s) => s.name.toLowerCase());
-    for (const want of ["refresh", "dispatch", "overlays", "grid", "orbit", "download mission spec"]) {
+    for (const want of ["refresh", "dispatch", "overlays", "grid", "orbit", "download mission spec", "polygon", "rectangle", "circle", "set home point"]) {
       check(section, `reaches "${want}"`, names.some((n) => n.includes(want)));
     }
   } finally {
@@ -1336,6 +1338,232 @@ async function fpsSection(browser) {
 }
 
 // ---------------------------------------------------------------------------
+// The map toolbar (UI-29, #308)
+// ---------------------------------------------------------------------------
+
+const TOOLBAR = '[role="group"][aria-label="Map tools"]';
+const TOOL_NAMES = [
+  "Polygon", "Rectangle", "Circle", "Add points", "Clear area", "Set home point",
+  "Set point of interest", "Clear subject",
+];
+const overlap = (a, b) => !!a && !!b && a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height && b.y < a.y + a.height;
+
+/** Corner points as fractions of the map canvas, clear of the pills, the
+ *  drawing panel, the toolbar and the scale bar (phone), or of the panels and
+ *  the toolbar block (wide). */
+const CORNERS = {
+  phone: [[0.2, 0.55], [0.75, 0.55], [0.8, 0.8], [0.3, 0.85]],
+  wide: [[0.3, 0.35], [0.55, 0.3], [0.45, 0.45]],
+};
+
+async function openMapView(page, phone) {
+  await openPlanner(page);
+  if (phone) {
+    await page.getByRole("navigation", { name: "Show" }).getByRole("button", { name: "Map" }).click();
+    await page.waitForTimeout(900);
+  }
+}
+
+async function chooseMissionType(page, phone, type) {
+  const nav = page.getByRole("navigation", { name: "Show" });
+  if (phone) {
+    await nav.getByRole("button", { name: "Settings" }).click();
+    await page.waitForTimeout(700);
+  }
+  await page.getByRole("radio", { name: type, exact: true }).click();
+  await page.waitForTimeout(300);
+  if (phone) {
+    await nav.getByRole("button", { name: "Map" }).click();
+    await page.waitForTimeout(900);
+  }
+}
+
+async function pressTool(page, phone, name) {
+  const tool = page.locator(TOOLBAR).getByRole("button", { name, exact: true });
+  await (phone ? tool.tap() : tool.click());
+}
+
+async function tapCanvas(page, phone, fx, fy) {
+  const box = await page.locator("canvas.maplibregl-canvas").first().boundingBox();
+  const x = box.x + box.width * fx;
+  const y = box.y + box.height * fy;
+  if (phone) await page.touchscreen.tap(x, y);
+  else await page.mouse.click(x, y);
+  await page.waitForTimeout(150);
+}
+
+/** Draw a polygon on the canvas: pick Polygon, place the corners, and either
+ *  leave it mid-draw or finish it from the panel. */
+async function drawPolygon(page, phone, { finish }) {
+  await pressTool(page, phone, "Polygon");
+  for (const [fx, fy] of phone ? CORNERS.phone : CORNERS.wide) await tapCanvas(page, phone, fx, fy);
+  if (finish) {
+    const b = page.locator('[class*="drawPanel"]').getByRole("button", { name: "Finish area" });
+    await (phone ? b.tap() : b.click());
+    await page.waitForTimeout(500);
+  }
+}
+
+/** What Settings holds: any of the map tools there is a failure. */
+const settingsToolNames = (page) =>
+  page.evaluate((names) => {
+    const panel = document.querySelector("#settings-panel");
+    return [...(panel?.querySelectorAll("button, [role='radio']") ?? [])]
+      .map((el) => (el.getAttribute("aria-label") || el.textContent || "").trim())
+      .filter((t) => names.includes(t));
+  }, TOOL_NAMES);
+
+const toolRects = (page) =>
+  page.evaluate((sel) => {
+    const box = (el) => {
+      if (!el) return null;
+      const r = el.getBoundingClientRect();
+      return { x: r.x, y: r.y, width: r.width, height: r.height };
+    };
+    const group = document.querySelector(sel);
+    const panel = document.querySelector('[class*="drawPanel"]');
+    return {
+      group: box(group),
+      buttons: [...(group?.querySelectorAll("button") ?? [])].map((b) => ({ name: b.getAttribute("aria-label"), ...box(b) })),
+      panelButtons: [...(panel?.querySelectorAll("button") ?? [])].map((b) => ({ name: b.textContent.trim(), ...box(b) })),
+      readout: box(document.querySelector('section[aria-label="Map"] [class*="readout"]')),
+      canvas: box(document.querySelector("canvas.maplibregl-canvas")),
+      summary: box(document.querySelector('main > [class*="summary"]')),
+      scale: box(document.querySelector(".maplibregl-ctrl-bottom-left .maplibregl-ctrl")),
+      attribution: box(document.querySelector(".maplibregl-ctrl-bottom-right .maplibregl-ctrl-attrib")),
+    };
+  }, TOOLBAR);
+
+async function toolbarSection(browser) {
+  const section = "toolbar";
+  for (const vp of [
+    { width: 375, height: 812, mobile: true },
+    { width: 1440, height: 900 },
+    { width: 1280, height: 800 },
+  ]) {
+    const phone = !!vp.mobile;
+    const at = `${vp.width}`;
+    const { context, page } = await pageFor(browser, { ...vp, missions: 4 });
+    try {
+      await openMapView(page, phone);
+
+      // Grid: the tools are on the map, Settings holds none of them.
+      const grid = await toolRects(page);
+      const gridNames = grid.buttons.map((b) => b.name);
+      check(section, `${at} Grid: the toolbar holds the shape, edit and home tools`,
+        ["Polygon", "Rectangle", "Circle", "Add points", "Clear area", "Set home point"].every((n) => gridNames.includes(n)) && gridNames.length === 6,
+        gridNames.join(", "));
+      check(section, `${at} Grid: every tool is a named target of at least 44 px`,
+        grid.buttons.every((b) => b.name && b.width >= 43.5 && b.height >= 43.5),
+        grid.buttons.filter((b) => !b.name || b.width < 43.5 || b.height < 43.5).map((b) => `${b.name} ${Math.round(b.width)}x${Math.round(b.height)}`).join("; "));
+      check(section, `${at} Grid: Settings holds none of the drawing and map-editing tools`,
+        (await settingsToolNames(page)).length === 0, (await settingsToolNames(page)).join(", "));
+      if (phone) {
+        // The ticket's 480: what the map keeps above the toolbar strip, with
+        // the collapsed Summary showing.
+        const visible = Math.round(grid.group.y - grid.canvas.y);
+        check(section, `${at} Grid: the map keeps at least 480 of ${vp.height} px above the toolbar`, visible >= 480, `${visible} px`);
+      } else {
+        check(section, `${at} Grid: the toolbar floats clear of the Summary, the scale bar and the attribution`,
+          !overlap(grid.group, grid.summary) && !overlap(grid.group, grid.scale) && !overlap(grid.group, grid.attribution),
+          JSON.stringify({ group: grid.group, summary: grid.summary, scale: grid.scale, attribution: grid.attribution }));
+      }
+
+      // Mid-draw: the polygon tool reads pressed and the toolbar does not
+      // cover the drawing panel's Finish and Cancel.
+      await pressTool(page, phone, "Polygon");
+      await page.waitForTimeout(400);
+      const drawing = await toolRects(page);
+      const pressedNow = await page.locator(TOOLBAR).getByRole("button", { name: "Polygon", exact: true }).getAttribute("aria-pressed");
+      check(section, `${at} drawing: the active tool reads aria-pressed`, pressedNow === "true", String(pressedNow));
+      const covered = drawing.panelButtons.filter((b) => overlap(b, drawing.group) || overlap(b, drawing.readout));
+      check(section, `${at} drawing: the toolbar covers neither Finish area nor Cancel`,
+        drawing.panelButtons.some((b) => b.name === "Finish area") && drawing.panelButtons.some((b) => b.name === "Cancel") && covered.length === 0,
+        covered.map((b) => b.name).join(", ") || drawing.panelButtons.map((b) => b.name).join(", "));
+      if (phone) {
+        const visible = Math.round(drawing.group.y - drawing.canvas.y);
+        check(section, `${at} drawing: the map keeps at least 480 of ${vp.height} px above the toolbar`, visible >= 480, `${visible} px`);
+      }
+      await page.keyboard.press("Escape");
+      await page.waitForTimeout(300);
+
+      // Orbit: its own tools, still none in Settings.
+      await chooseMissionType(page, phone, "Orbit");
+      const orbit = await toolRects(page);
+      const orbitNames = orbit.buttons.map((b) => b.name);
+      check(section, `${at} Orbit: the toolbar holds the subject and home tools`,
+        ["Set point of interest", "Clear subject", "Set home point"].every((n) => orbitNames.includes(n)) && orbitNames.length === 3,
+        orbitNames.join(", "));
+      check(section, `${at} Orbit: Settings holds none of the drawing and map-editing tools`,
+        (await settingsToolNames(page)).length === 0, (await settingsToolNames(page)).join(", "));
+      await pressTool(page, phone, "Set point of interest");
+      const poiPressed = await page.locator(TOOLBAR).getByRole("button", { name: "Set point of interest", exact: true }).getAttribute("aria-pressed");
+      check(section, `${at} Orbit: Set point of interest reads pressed while it waits for the map`, poiPressed === "true", String(poiPressed));
+      await tapCanvas(page, phone, 0.5, phone ? 0.5 : 0.3);
+      const after = await page.locator(TOOLBAR).getByRole("button", { name: "Clear subject", exact: true }).isEnabled();
+      check(section, `${at} Orbit: a click on the map places the subject and Clear subject wakes`, after, String(after));
+      if (phone) {
+        // With the subject placed: an Orbit with none puts a "no point of
+        // interest set" line in the Summary, a line the Summary owns and which
+        // costs the map 49 px whatever sits above it.
+        const placed = await toolRects(page);
+        const visible = Math.round(placed.group.y - placed.canvas.y);
+        check(section, `${at} Orbit: the map keeps at least 480 of ${vp.height} px above the toolbar`, visible >= 480, `${visible} px`);
+      }
+    } finally {
+      await context.close();
+    }
+  }
+}
+
+// ---------------------------------------------------------------------------
+// UI-29 (#308) acceptance evidence: the map toolbar at 375 x 812 (Map tab,
+// idle and drawing, Grid and Orbit) and 1440 x 900. Gated behind
+// ONLY=toolbar-shots so a normal check:look run writes nothing; every file
+// lands in the gitignored .autoforge/evidence/308/ for the oc/308-shots
+// branch, never the feature branch.
+// ---------------------------------------------------------------------------
+
+const UI29_EVIDENCE = path.resolve(HERE, "../../.autoforge/evidence/308");
+
+async function toolbarShotsSection(browser) {
+  const section = "toolbar-shots";
+  fs.mkdirSync(UI29_EVIDENCE, { recursive: true });
+  for (const vp of [
+    { width: 375, height: 812, mobile: true },
+    { width: 1440, height: 900 },
+  ]) {
+    const phone = !!vp.mobile;
+    const { context, page } = await pageFor(browser, { ...vp, missions: 4 });
+    const shot = async (name) => {
+      await page.waitForTimeout(400);
+      await page.screenshot({ path: path.join(UI29_EVIDENCE, `${name}-${vp.width}.png`) });
+      note(section, `${vp.width}: ${name}`, `${name}-${vp.width}.png`);
+    };
+    try {
+      await openMapView(page, phone);
+      await shot("grid-idle");
+      await drawPolygon(page, phone, { finish: false });
+      await shot("grid-drawing");
+      await page.locator('[class*="drawPanel"]').getByRole("button", { name: "Finish area" }).click();
+      await page.waitForTimeout(500);
+      await shot("grid-drawn");
+      await page.getByRole("button", { name: "How to use the map tools" }).click();
+      await shot("grid-how-to");
+      await page.keyboard.press("Escape");
+      await chooseMissionType(page, phone, "Orbit");
+      await shot("orbit-idle");
+      await pressTool(page, phone, "Set point of interest");
+      await shot("orbit-placing");
+      await tapCanvas(page, phone, 0.5, phone ? 0.5 : 0.3);
+      await shot("orbit-placed");
+    } finally {
+      await context.close();
+    }
+  }
+}
+
+// ---------------------------------------------------------------------------
 // For the operator
 // ---------------------------------------------------------------------------
 
@@ -1352,6 +1580,8 @@ async function operatorShots(browser) {
         const summary = document.querySelector('[class*="summary"]')?.getBoundingClientRect();
         return { mapTop: map?.top, summaryTop: summary?.top, height: innerHeight };
       });
+      // UI-29 (#308): the map toolbar takes its strip out of the same space;
+      // the ticket's 480 is asserted in the "toolbar" section.
       // UI-27 (#304): the collapsed Summary leaves the Map tab's map ≥540 of
       // 812px on first load, with the Save hint showing (the ticket's 600 was
       // an arithmetic error; the orchestrator set 540 on 2026-09-29). The
@@ -1439,12 +1669,14 @@ try {
   if (want("mission-rows")) await missionRowsSection(browser);
   if (want("enlarged")) await enlargedSection(browser);
   if (want("fps")) await fpsSection(browser);
+  if (want("toolbar")) await toolbarSection(browser);
   if (want("operator")) await operatorShots(browser);
   // Gated on an explicit ONLY: a bare run must not write evidence PNGs into
   // the tree.
   if ((process.env.ONLY ?? "").split(",").includes("details-shots")) await detailsShotsSection(browser);
   if ((process.env.ONLY ?? "").split(",").includes("ui25-shots")) await ui25ShotsSection(browser);
   if ((process.env.ONLY ?? "").split(",").includes("summary-shots")) await summaryShotsSection(browser);
+  if ((process.env.ONLY ?? "").split(",").includes("toolbar-shots")) await toolbarShotsSection(browser);
 } finally {
   await browser.close();
 }

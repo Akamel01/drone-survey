@@ -31,7 +31,10 @@
 // /m — click to finish/; the touch corner tap opens the Remove corner panel
 // with its button enabled (the tap lands outside the 5px visible vertex but
 // inside the 44px touch hit layer, so a dropped hit layer would fail it); Add
-// points on the toolbar is enabled after the touch finish; each .webm is non-empty
+// points on the toolbar is enabled after the touch finish; on the phone the
+// rest of the edit is done from the Map tab too: Remove corner, Set home point
+// (with its prompt and its marker), Clear area, then an Orbit's Set point of
+// interest and Clear subject (UI-29); each .webm is non-empty
 // (> 1500 bytes, the chrome-motion convention).
 //
 // Recorded, never asserted: the gesture pixels and timing, the rubber-band
@@ -672,6 +675,65 @@ async function touchFlow(browser) {
       const disabled = await readAddPointsDisabled(page);
       if (disabled !== false) throw new Error(`Add points disabled read: ${disabled}`);
       return "enabled (idle, four corners, no circle)";
+    });
+
+    // UI-29: the rest of the edit is on the map too -- reshape (Remove corner),
+    // set the home point, clear the area -- and then an Orbit's subject, with
+    // no trip to Settings but the one that chooses the Mission type.
+    const readout = () =>
+      page.evaluate(
+        () => document.querySelector('section[aria-label="Map"] [class*="readoutText"]')?.textContent?.trim() ?? "(absent)",
+      );
+    const waitReadout = (re) =>
+      page.waitForFunction(
+        (source) =>
+          new RegExp(source).test(
+            document.querySelector('section[aria-label="Map"] [class*="readoutText"]')?.textContent?.trim() ?? "",
+          ),
+        re.source,
+        { timeout: TIMEOUT },
+      );
+    await page.locator('[class*="drawPanel"]').getByRole("button", { name: "Remove corner 1" }).tap();
+    await gate(motion, "reshape: Remove corner leaves three corners", async () => {
+      await waitReadout(/3 corners/);
+      return `readout "${await readout()}"`;
+    });
+    await tool(page, "Set home point").tap();
+    await gate(motion, "Set home point reads pressed and says what the next tap does", async () => {
+      const a = await pressed(page, "Set home point");
+      if (a !== "true") throw new Error(`aria-pressed ${a}`);
+      await waitReadout(/place the home point/);
+      return `readout "${await readout()}"`;
+    });
+    const home = await canvasPoint(page, 0.5, 0.65);
+    await page.touchscreen.tap(home.x, home.y);
+    await gate(motion, "a tap places the home point and the tool lets go", async () => {
+      await page.waitForSelector('section[aria-label="Map"] [class*="homeMarker"]', { timeout: TIMEOUT });
+      const a = await pressed(page, "Set home point");
+      if (a !== "false") throw new Error(`aria-pressed ${a}`);
+      return "home marker on the map, aria-pressed false";
+    });
+    await tool(page, "Clear area").tap();
+    await gate(motion, "Clear area empties the area", async () => {
+      await waitReadout(/^0 m² · 0 corners$/);
+      if (!(await tool(page, "Clear area").isDisabled())) throw new Error("Clear area still enabled");
+      return `readout "${await readout()}"`;
+    });
+    await nav.getByRole("button", { name: "Settings" }).tap();
+    await page.getByRole("radio", { name: "Orbit", exact: true }).tap();
+    await nav.getByRole("button", { name: "Map" }).tap();
+    await page.waitForTimeout(700);
+    await tool(page, "Set point of interest").tap();
+    const subject = await canvasPoint(page, 0.5, 0.5);
+    await page.touchscreen.tap(subject.x, subject.y);
+    await gate(motion, "Orbit: a tap places the subject", async () => {
+      await waitReadout(/^Subject \d/);
+      return `readout "${await readout()}"`;
+    });
+    await tool(page, "Clear subject").tap();
+    await gate(motion, "Orbit: Clear subject clears it", async () => {
+      await waitReadout(/^Subject not set$/);
+      return `readout "${await readout()}"`;
     });
   } finally {
     await finish(context, page, "touch-polygon-375");
