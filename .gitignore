@@ -52,3 +52,6 @@ __pycache__/
 
 # Local npm/vitest caches (root) — never in git
 node_modules/
+
+# App icons: rendered from web/scripts/make-icons.mjs, and shipped
+!web/public/icons/*.png
