@@ -1,0 +1,21 @@
+# A systemd USER unit: no sudo to install or run. See README.md for the steps.
+# Edit ExecStart to where this checkout lives on the board.
+[Unit]
+Description=Board Load service (the phone Loads a Mission over the hotspot)
+After=network-online.target
+
+[Service]
+Type=simple
+# BOARD_LOADER_DIR=<dir holding load.py> if the loader is not at ../mission
+# (the deployed host loader is ~/wayfinder/bin). Optional file, one KEY=value per line.
+EnvironmentFile=-%h/.config/board-service.env
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/usr/bin/python3 %h/drone-survey/scripts/board/board_service.py
+Restart=on-failure
+RestartSec=5
+# SIGTERM goes to the service alone, which lets a Load in flight finish; SIGKILL to all after 5 minutes.
+KillMode=mixed
+TimeoutStopSec=300
+
+[Install]
+WantedBy=default.target
