@@ -374,7 +374,7 @@ async function gridOrbitTouch(browser) {
 // ---------------------------------------------------------------------------
 /** Poll from before the close is triggered until the first frame with
  *  drawPanelOut on screen, and return that frame's computed style. Pre-armed
- *  so the 160ms hold can never be missed by roundtrip latency. */
+ *  so the exit hold can never be missed by roundtrip latency. */
 function captureClosingStyle(page, ms) {
   return page.evaluate(
     (ms) =>
@@ -503,7 +503,7 @@ function closingStateCheck(motion, label, exit) {
 }
 
 /** The whole detach sequence must land inside this window. Deliberately
- *  generous and jitter-proof: the hold itself is 160ms, but the window only
+ *  generous and jitter-proof: the hold ends with the exit animation, but the window only
  *  fails a panel that never detaches or an animation that never finishes. */
 const DETACH_WINDOW_MS = 3000;
 

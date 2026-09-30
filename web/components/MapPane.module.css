@@ -389,7 +389,7 @@
 /* Smoke-glass panel (spec §5): the `glass-smoke` global class on the element
    supplies the fill, blur and edge highlight (plus its own reduced-
    transparency / contrast / no-backdrop-filter fallbacks); only layout lives
-   here. Present while a draw is in progress (plus its 160ms exit hold,
+   here. Present while a draw is in progress (plus its exit hold,
    UI-20) or a corner is selected, so its presence is itself the mode
    indicator. */
 .drawPanel {
@@ -407,8 +407,8 @@
 
 /* Drawing panel presence (UI-20). Opens with the 150ms --ease-out chrome
    fade (spec §9.1 "Next screen chrome"), closes over 120ms --ease-in with
-   forwards so the last frame sticks until closingDraw lets it unmount at
-   160ms. Opacity only: the panel sits over the WebGL map, where a blur would
+   forwards so the last frame sticks until the animation ends and closingDraw
+   lets it unmount (MapPane.tsx). Opacity only: the panel sits over the WebGL map, where a blur would
    repaint on every pan frame (spec §12), and no transform -- this is chrome
    arriving, not an object moving. The render picks one class or the other, so
    declaration order here is defensive, not load-bearing. */
