@@ -442,7 +442,7 @@
 
   .edgeTab {
     position: absolute;
-    top: 50%;
+    top: 28px;
     /* Individual `translate` (not `transform`) so the shared press scale
        composes with it instead of clobbering the vertical centring. */
     translate: 0 -50%;
