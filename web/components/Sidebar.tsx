@@ -1,12 +1,13 @@
 "use client";
 
 import { Children, cloneElement, Fragment, isValidElement, useEffect, useId, useRef, useState, type ReactElement, type ReactNode } from "react";
-import { newSiteId, type MissionSpec, type MissionType, type TurnMode } from "@/lib/spec";
+import type { MissionSpec, MissionType, TurnMode } from "@/lib/spec";
 import { orbitTilt, type Preview } from "@/lib/mission";
 import { MISSION_NAME_MAX, missionNameProblem } from "@/lib/missionRecords";
-import { siteTwin, type SiteChoice } from "@/lib/missionView";
+import type { SiteChoice } from "@/lib/missionView";
 import type { Editing } from "@/app/plan/page";
 import { isDrawing, type DrawMode } from "./MapPane";
+import SiteCombobox from "./SiteCombobox";
 import styles from "./Sidebar.module.css";
 import { authClient, signOutToHome } from "@/lib/authClient";
 import { accountLabel } from "@/lib/home";
@@ -732,13 +733,14 @@ function SignedInLine() {
 }
 
 /**
- * Choosing the Site, or naming a new one.
+ * Choosing the Site, or naming a new one, in one field.
  *
  * The field this replaces was labelled "Site name" and typed fresh for every
  * Mission, which minted a new Site id each time and broke Capture accumulation
  * before the 3D Timelapse was ever built (ADR 0021). A new Site is still
- * possible -- it is how the first one exists -- but it is a deliberate act with
- * its own control, not what happens by default.
+ * possible -- it is how the first one exists -- but it is a deliberate choice
+ * ("New Site: <name>") in the combobox, not what typing does by default. The
+ * Save sheet asks for the Site with the same field (UI-30).
  */
 function SiteField({
   sites,
@@ -751,55 +753,9 @@ function SiteField({
   site_id?: string;
   onChoose: (choice: SiteChoice) => void;
 }) {
-  const known = site_id != null && sites.some((s) => s.site_id === site_id);
-  const naming = !known;
-  const twin = naming ? siteTwin(sites, site_id, site) : null;
   return (
     <Field label="Site" value={site.trim() || "—"}>
-      <select
-        id="site-select"
-        value={known ? (site_id as string) : "new"}
-        onChange={(e) => {
-          if (e.target.value === "new") {
-            onChoose({ site_id: newSiteId(""), site: "" });
-            return;
-          }
-          const chosen = sites.find((s) => s.site_id === e.target.value);
-          if (chosen) onChoose(chosen);
-        }}
-      >
-        {sites.map((s) => (
-          <option key={s.site_id} value={s.site_id}>
-            {s.site}
-          </option>
-        ))}
-        <option value="new">New Site…</option>
-      </select>
-      {naming && (
-        <input
-          type="text"
-          value={site}
-          placeholder="Name the new Site"
-          onChange={(e) =>
-            onChoose({
-              site: e.target.value,
-              // The id is minted once, when the Site first gets a name, and
-              // never again: renaming a Site must not change the place it is.
-              site_id: site_id && site.trim() ? site_id : newSiteId(e.target.value),
-            })
-          }
-        />
-      )}
-      {twin && (
-        // Naming a "new" Site after an existing one is the accident that
-        // splits a Site's Captures in two (#166). Offer the real one.
-        <div className={styles.hint}>
-          There is already a Site called “{twin.site}”.{" "}
-          <button type="button" onClick={() => onChoose(twin)}>
-            Use it
-          </button>
-        </div>
-      )}
+      <SiteCombobox id="site-select" label="Site" sites={sites} site={site} site_id={site_id} onChoose={onChoose} />
       <div className={styles.hint}>
         {/* The hint follows whether this Site has an identifier, not whether it
             is in the list: the list is empty when the store could not be read,
