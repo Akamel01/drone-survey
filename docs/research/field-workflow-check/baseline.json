@@ -1,0 +1,89 @@
+{
+  "steps": [
+    {
+      "name": "open planner",
+      "taps": 0,
+      "chars": 0,
+      "switches": 0,
+      "scrolls": 0,
+      "ms": 442
+    },
+    {
+      "name": "open draw tool",
+      "taps": 1,
+      "chars": 0,
+      "switches": 0,
+      "scrolls": 0,
+      "ms": 0
+    },
+    {
+      "name": "tap corner",
+      "taps": 1,
+      "chars": 0,
+      "switches": 0,
+      "scrolls": 0,
+      "ms": 0
+    },
+    {
+      "name": "tap corner",
+      "taps": 1,
+      "chars": 0,
+      "switches": 0,
+      "scrolls": 0,
+      "ms": 0
+    },
+    {
+      "name": "tap corner",
+      "taps": 1,
+      "chars": 0,
+      "switches": 0,
+      "scrolls": 0,
+      "ms": 0
+    },
+    {
+      "name": "tap corner",
+      "taps": 1,
+      "chars": 0,
+      "switches": 0,
+      "scrolls": 0,
+      "ms": 0
+    },
+    {
+      "name": "press enter",
+      "taps": 0,
+      "chars": 0,
+      "switches": 0,
+      "scrolls": 0,
+      "ms": 0
+    },
+    {
+      "name": "draw area total",
+      "taps": 0,
+      "chars": 0,
+      "switches": 0,
+      "scrolls": 0,
+      "ms": 35532
+    },
+    {
+      "name": "tap save/dispatch",
+      "taps": 1,
+      "chars": 0,
+      "switches": 0,
+      "scrolls": 0,
+      "ms": 0
+    },
+    {
+      "name": "read status",
+      "taps": 0,
+      "chars": 0,
+      "switches": 0,
+      "scrolls": 0,
+      "ms": 0
+    }
+  ],
+  "total_taps": 6,
+  "total_characters": 0,
+  "total_view_switches": 0,
+  "total_scrolls": 0,
+  "total_ms": 98059
+}

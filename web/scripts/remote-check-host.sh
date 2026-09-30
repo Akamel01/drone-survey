@@ -44,7 +44,7 @@ DEFAULT_CHROMIUM_JSON='{"channel":"chromium","args":["--use-angle=gl-egl","--ign
 # The script table (frozen; grilling.md section A -- the one place to edit).
 # serve = wrapper build + host-picked port + URL as argv[2]; self = the suite
 # builds/serves itself; refused = launches WebKit, which bootstrap never installs.
-SERVE_SCRIPTS="check:look check:motion check:map-chrome check:scrollbar check:chrome-motion check:mission-rows check:fold check:area-edit"
+SERVE_SCRIPTS="check:look check:motion check:map-chrome check:scrollbar check:chrome-motion check:mission-rows check:fold check:area-edit check:field-workflow"
 SELF_SCRIPTS="test:e2e"
 REFUSED_SCRIPTS="check:showcase-player"
 PROBE_SCRIPTS="check:look check:motion test:e2e"
@@ -82,8 +82,9 @@ remote-check-host.sh -- host executor for web/scripts/remote-check.sh (#299)
 
 Script table: serve-mode (build + host-picked port + URL argv[2]): check:look,
 check:motion, check:map-chrome, check:scrollbar, check:chrome-motion,
-check:mission-rows, check:fold, check:area-edit. Self-managed: test:e2e.
-Refused (WebKit): check:showcase-player. Unknown scripts run toolchain-only.
+check:mission-rows, check:fold, check:area-edit, check:field-workflow.
+Self-managed: test:e2e. Refused (WebKit): check:showcase-player. Unknown
+scripts run toolchain-only.
 EOF
 }
 # ---------------------------------------------------------------- table lookup

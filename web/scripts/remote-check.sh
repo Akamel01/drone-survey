@@ -17,7 +17,7 @@ LOCK_PATH=""
 # Classification from the frozen table in .autoforge/requirements/grilling.md.
 script_mode() {
   case "$1" in
-    check:look|check:motion|check:map-chrome|check:scrollbar|check:chrome-motion|check:mission-rows|check:fold|check:area-edit) printf 'serve\n' ;;
+    check:look|check:motion|check:map-chrome|check:scrollbar|check:chrome-motion|check:mission-rows|check:fold|check:area-edit|check:field-workflow) printf 'serve\n' ;;
     test:e2e) printf 'self\n' ;;
     check:showcase-player) printf 'refused\n' ;;
     *) printf 'unknown\n' ;;
@@ -33,10 +33,10 @@ remote-check.sh -- run web browser checks on akamel-linux (#299).
 USAGE
   remote-check.sh <npm-script> [args...]
       serve mode (check:look, check:motion, check:map-chrome, check:scrollbar,
-      check:chrome-motion, check:mission-rows, check:fold, check:area-edit):
-      build, serve, run the check against the served URL. self mode (test:e2e)
-      starts its own server, no wrapper build. check:showcase-player is
-      refused: it needs WebKit, absent on the host.
+      check:chrome-motion, check:mission-rows, check:fold, check:area-edit,
+      check:field-workflow): build, serve, run the check against the served URL.
+      self mode (test:e2e) starts its own server, no wrapper build.
+      check:showcase-player is refused: it needs WebKit, absent on the host.
   remote-check.sh --prune <folder>...   remove ~/drone/webcheck/<folder> only
   remote-check.sh --selftest            local self-checks, no host access
   remote-check.sh --help
