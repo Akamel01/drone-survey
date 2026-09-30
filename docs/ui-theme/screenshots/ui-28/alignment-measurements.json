@@ -1,0 +1,61 @@
+{
+  "ticket": "UI-28: A folded panel reopens from the top, where it closed",
+  "description": "Measured alignment of reopen edge tabs to fold buttons",
+  "test_date": "2026-09-30",
+  "viewports": [
+    {
+      "width": 1280,
+      "height": 800,
+      "missions": {
+        "fold_button_center_y": 52.69,
+        "reopen_tab_center_y": 52.69,
+        "offset_px": 0,
+        "status": "PASS"
+      },
+      "settings": {
+        "fold_button_center_y": 44,
+        "reopen_tab_center_y": 44,
+        "offset_px": 0,
+        "status": "PASS"
+      }
+    },
+    {
+      "width": 1440,
+      "height": 900,
+      "missions": {
+        "fold_button_center_y": 52.69,
+        "reopen_tab_center_y": 52.69,
+        "offset_px": 0,
+        "status": "PASS"
+      },
+      "settings": {
+        "fold_button_center_y": 44,
+        "reopen_tab_center_y": 44,
+        "offset_px": 0,
+        "status": "PASS"
+      }
+    },
+    {
+      "width": 1920,
+      "height": 1080,
+      "missions": {
+        "fold_button_center_y": 52.69,
+        "reopen_tab_center_y": 52.69,
+        "offset_px": 0,
+        "status": "PASS"
+      },
+      "settings": {
+        "fold_button_center_y": 44,
+        "reopen_tab_center_y": 44,
+        "offset_px": 0,
+        "status": "PASS"
+      }
+    }
+  ],
+  "acceptance_criterion": "Tab centres within 8px of fold button centres",
+  "css_changes": {
+    ".edgeTabLeft": "top: 52.69px (Missions panel)",
+    ".edgeTabRight": "top: 44px (Settings panel)"
+  },
+  "test_script": "web/scripts/fold-check.mjs alignmentPass()"
+}
