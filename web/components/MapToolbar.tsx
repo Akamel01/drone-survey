@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useId, useRef, useState, type ReactNode } from "react";
+import { useEffect, useId, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { isDrawing, type DrawMode } from "@/lib/areaEditing";
 import { coord, formatArea } from "@/lib/missionView";
 import type { MissionSpec } from "@/lib/spec";
@@ -115,6 +115,7 @@ export default function MapToolbar({ spec, mode, areaHa, onTool, onClearArea, on
   const [howOpen, setHowOpen] = useState(false);
   const howId = useId();
   const dockRef = useRef<HTMLDivElement>(null);
+  const barRef = useRef<HTMLDivElement>(null);
   const readoutRef = useRef<HTMLDivElement>(null);
 
   // The how-to closes on a press outside and on Escape. Escape is caught on
@@ -137,6 +138,26 @@ export default function MapToolbar({ spec, mode, areaHa, onTool, onClearArea, on
       document.removeEventListener("keydown", closeOnEscape, true);
     };
   }, [howOpen]);
+
+  // On a wide screen the words join the icons only where all the tools fit in
+  // one row: measured with the words on (a row that cannot wrap), and turned
+  // off when that overflows, so it falls back to icons before it would ever
+  // wrap. Measured, not guessed from a width, because the words are as wide as
+  // the reader's fonts and text size make them. The bar is a new node when the
+  // Mission type swaps, so the fit runs again for it.
+  useLayoutEffect(() => {
+    const dock = dockRef.current;
+    const bar = barRef.current;
+    if (!dock || !bar) return;
+    const fit = () => {
+      bar.dataset.words = "on";
+      bar.dataset.words = bar.scrollWidth > bar.clientWidth + 1 ? "off" : "on";
+    };
+    fit();
+    const ro = new ResizeObserver(fit);
+    ro.observe(dock);
+    return () => ro.disconnect();
+  }, [isOrbit]);
 
   // On a wide screen the toolbar floats above the Summary, whose tallest size
   // stops short of it (plan.module.css reads this). A phone's dock has no box.
@@ -224,7 +245,7 @@ export default function MapToolbar({ spec, mode, areaHa, onTool, onClearArea, on
       </div>
 
       {/* Keyed on the Mission type, so a swap in Settings fades the other set in. */}
-      <div key={isOrbit ? "orbit" : "grid"} className={`${styles.bar} glass-smoke`} role="group" aria-label="Map tools">
+      <div ref={barRef} key={isOrbit ? "orbit" : "grid"} className={`${styles.bar} glass-smoke`} role="group" aria-label="Map tools">
         {isOrbit ? (
           <div className={styles.group}>
             <Tool

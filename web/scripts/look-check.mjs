@@ -1422,8 +1422,23 @@ const toolRects = (page) =>
     };
     const group = document.querySelector(sel);
     const panel = document.querySelector('[class*="drawPanel"]');
+    const bar = group ? getComputedStyle(group) : null;
+    // What the words would need in one row, against the room the dock has.
+    let wordsWidth = null;
+    if (group) {
+      const was = group.dataset.words;
+      group.dataset.words = "on";
+      wordsWidth = group.scrollWidth;
+      if (was === undefined) delete group.dataset.words;
+      else group.dataset.words = was;
+    }
     return {
+      wordsWidth,
+      dockWidth: group?.parentElement?.getBoundingClientRect().width ?? null,
       group: box(group),
+      barBackground: bar?.backgroundColor ?? null,
+      barFilter: bar?.backdropFilter ?? null,
+      words: group?.dataset.words ?? null,
       buttons: [...(group?.querySelectorAll("button") ?? [])].map((b) => ({ name: b.getAttribute("aria-label"), ...box(b) })),
       panelButtons: [...(panel?.querySelectorAll("button") ?? [])].map((b) => ({ name: b.textContent.trim(), ...box(b) })),
       readout: box(document.querySelector('section[aria-label="Map"] [class*="readout"]')),
@@ -1468,6 +1483,16 @@ async function toolbarSection(browser) {
         check(section, `${at} Grid: the toolbar floats clear of the Summary, the scale bar and the attribution`,
           !overlap(grid.group, grid.summary) && !overlap(grid.group, grid.scale) && !overlap(grid.group, grid.attribution),
           JSON.stringify({ group: grid.group, summary: grid.summary, scale: grid.scale, attribution: grid.attribution }));
+        // No glass block around the tools: each pill carries its own glass.
+        check(section, `${at} Grid: no glass block around the tools`,
+          grid.barBackground === "rgba(0, 0, 0, 0)" && (grid.barFilter === "none" || !grid.barFilter),
+          `${grid.barBackground} / ${grid.barFilter}`);
+        // One compact row: the icons fall back before a second row, and the
+        // words are on wherever the strip can hold them (1440 and up).
+        const rows = new Set(grid.buttons.map((b) => Math.round(b.y)));
+        check(section, `${at} Grid: the tools are one row`, vp.width < 1200 || rows.size === 1, `${rows.size} rows, words ${grid.words}`);
+        if (vp.width >= 1440) check(section, `${at} Grid: the words fit in that one row`, grid.words === "on", `words ${grid.words}, bar ${Math.round(grid.group.width)} px`);
+        note(section, `${at} Grid: bar`, `${Math.round(grid.group.width)} px, words ${grid.words}, ${rows.size} row(s); the words need ${grid.wordsWidth} px of ${Math.round(grid.dockWidth)}`);
       }
 
       // Mid-draw: the polygon tool reads pressed and the toolbar does not
@@ -1497,6 +1522,11 @@ async function toolbarSection(browser) {
         orbitNames.join(", "));
       check(section, `${at} Orbit: Settings holds none of the drawing and map-editing tools`,
         (await settingsToolNames(page)).length === 0, (await settingsToolNames(page)).join(", "));
+      if (!phone && vp.width >= 1200) {
+        const rows = new Set(orbit.buttons.map((b) => Math.round(b.y)));
+        check(section, `${at} Orbit: the tools are one row`, rows.size === 1, `${rows.size} rows, words ${orbit.words}`);
+        if (vp.width >= 1440) check(section, `${at} Orbit: the words fit in that one row`, orbit.words === "on", `words ${orbit.words}, bar ${Math.round(orbit.group.width)} px`);
+      }
       await pressTool(page, phone, "Set point of interest");
       const poiPressed = await page.locator(TOOLBAR).getByRole("button", { name: "Set point of interest", exact: true }).getAttribute("aria-pressed");
       check(section, `${at} Orbit: Set point of interest reads pressed while it waits for the map`, poiPressed === "true", String(poiPressed));
