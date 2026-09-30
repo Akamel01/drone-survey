@@ -55,6 +55,9 @@ interface SaveSheetProps {
   editing: Editing;
   edited: EditedMission | null;
   sites: SiteChoice[];
+  /** What is still wrong with the plan (`preview.problems`). It is saved
+   *  anyway, as an unfinished Planned Mission; Dispatch refuses it. */
+  problems: string[];
   onSave: (request: SaveRequest) => Promise<SaveReply>;
 }
 
@@ -95,7 +98,7 @@ function SaveForm({
   // editor on to the Mission it wrote while the sheet is still leaving, and a
   // list re-read can change the state under it; neither may rearrange a form
   // the operator is looking at.
-  const [{ spec, editing, edited, sites }] = useState(live);
+  const [{ spec, editing, edited, sites, problems }] = useState(live);
   const nameId = useId();
   const siteId = useId();
   const nameHintId = useId();
@@ -151,6 +154,19 @@ function SaveForm({
               ? `A copy of ${editing.copied_from}. Saving makes a new Mission; that one is not changed.`
               : "Name this Mission and choose the Site it belongs to."}
         </p>
+        {problems.length > 0 && (
+          <div className={styles.draft}>
+            <p>
+              This plan still has problems, so it is saved as an unfinished Planned Mission. It cannot be Dispatched
+              until they are fixed:
+            </p>
+            <ul>
+              {problems.map((p) => (
+                <li key={p}>{p}</li>
+              ))}
+            </ul>
+          </div>
+        )}
       </div>
       <form ref={formRef} className={styles.form} onSubmit={submit}>
         {options.length > 1 && (

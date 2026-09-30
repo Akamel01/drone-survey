@@ -17,6 +17,24 @@
   color: var(--on-glass-2);
 }
 
+/* A plan with problems still saves, as an unfinished Planned Mission: the
+   problems are said here, under the lead, in the sheet's quiet small text. */
+.draft {
+  margin: -8px 0 16px;
+  font-size: 0.8125rem;
+  line-height: 1.4;
+  color: var(--on-glass-2);
+}
+
+.draft p {
+  margin: 0;
+}
+
+.draft ul {
+  margin: 4px 0 0;
+  padding-left: 18px;
+}
+
 .form {
   display: flex;
   flex-direction: column;

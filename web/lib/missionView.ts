@@ -450,15 +450,16 @@ export function asOfStamp(at: number): string {
 // Saving what is in the editor
 // ---------------------------------------------------------------------------
 
-/** Why Save cannot be pressed: the Spec itself is not one that can be saved.
+/** Why Save cannot be pressed: what the store itself would reject about the
+ *  plan, which is a Mission with no date (`missionProblem`).
  *
- *  Only the plan is judged here. A missing Mission Name or Site is asked for in
- *  the Save sheet instead of blocking the button (UI-30), so the operator finds
- *  out what is missing by pressing it. Null when the sheet can open. */
-export function specBlocker(spec: { date?: string }, problems: string[]): string | null {
-  if (problems.length) return "This plan has problems, listed below. Fix them to save.";
-  if (!spec.date?.trim()) return "Give this Mission a date.";
-  return null;
+ *  A plan with problems (`preview.problems`) is not blocked: it is saved as an
+ *  unfinished Planned Mission, its problems still listed, and Dispatch refuses
+ *  it until they are fixed (`dispatch`, operator decision 2026-09-29). A missing
+ *  Mission Name or Site is asked for in the Save sheet instead of blocking the
+ *  button (UI-30). Null when the sheet can open. */
+export function specBlocker(spec: { date?: string }): string | null {
+  return spec.date?.trim() ? null : "Give this Mission a date.";
 }
 
 /** What must hold of the Site before a Mission is saved under it, in the

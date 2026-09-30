@@ -153,11 +153,13 @@ async function planner(viewport = { width: 1440, height: 900 }) {
   const context = await browser.newContext({ viewport });
   await context.addInitScript((key) => localStorage.setItem(key, "e2e"), PASSPHRASE_KEY);
   await context.route(
-    (url) => url.pathname === "/api/missions",
+    (url) => url.pathname === "/api/missions" || url.pathname === "/api/missions/dispatch",
     async (route) => {
       const request = route.request();
       let outcome;
-      if (request.method() === "GET") {
+      if (new URL(request.url()).pathname === "/api/missions/dispatch") {
+        outcome = await lifecycle.dispatch(CALLER, request.postDataJSON());
+      } else if (request.method() === "GET") {
         outcome = await lifecycle.list(CALLER, { archived: true });
       } else if (request.method() === "POST") {
         posted.push(request.postDataJSON());
@@ -178,6 +180,7 @@ async function planner(viewport = { width: 1440, height: 900 }) {
   await load(page);
   return {
     store,
+    lifecycle,
     posted,
     context,
     page,
@@ -585,6 +588,56 @@ test("Flown, Withdrawn and Superseded: only Save as new Mission", async () => {
     assert.equal(posted[0].id, undefined);
     assert.equal(store.records().length, before + 1);
     assert.deepEqual(byId(store, "m-flown"), original);
+  } finally {
+    await context.close();
+  }
+});
+
+// ---------------------------------------------------------------------------
+// A plan with problems is a draft: it saves, and Dispatch refuses it
+// ---------------------------------------------------------------------------
+
+test("an Orbit with no point of interest saves as a Planned Mission; Dispatch refuses it, naming the problem", async () => {
+  const { page, store, lifecycle, posted, context } = await planner();
+  try {
+    // A new Orbit with no subject set: the planner lists the problem, and Save
+    // is still there (operator decision 2026-09-29: allow drafts).
+    await page.locator("#settings-panel").getByRole("radio", { name: "Orbit", exact: true }).click();
+    await page.getByText("no point of interest set").first().waitFor({ timeout: 10_000 });
+    const save = saveButton(page);
+    assert.equal((await save.textContent())?.trim(), "Save Mission");
+    assert.ok(await save.isEnabled(), "a plan with problems can still be saved");
+
+    const sheet = await openSheet(page);
+    const said = (await sheet.textContent()) ?? "";
+    assert.match(said, /still has problems, so it is saved as an unfinished Planned Mission/);
+    assert.match(said, /It cannot be Dispatched until they are fixed/);
+    assert.match(said, /no point of interest set/, "the problems are named in the sheet");
+    const { name, site } = fields(sheet);
+    await name.fill("Tower orbit");
+    await site.fill("west");
+    await sheet.getByRole("option", { name: "West Quarry", exact: true }).click();
+    await sheet.locator('form button[type="submit"]').click();
+    await sheet.waitFor({ state: "hidden", timeout: 10_000 });
+
+    assert.equal(posted[0].spec.mission_type, "orbit");
+    assert.equal(posted[0].spec.orbit.center, null);
+    const rows = async () => (await lifecycle.list(CALLER, { archived: true })).body.missions;
+    const draft = (await rows()).find((r) => r.name === "Tower orbit");
+    assert.ok(draft, "the Mission was stored");
+    assert.equal(draft.state, "planned", "saved as an unfinished Planned Mission");
+
+    // Dispatch on it is refused, in the planner's own list, with the problem named.
+    const row = rowOf(page, draft.id);
+    await row.waitFor({ state: "visible", timeout: 10_000 });
+    await row.getByRole("button", { name: "Dispatch", exact: true }).click();
+    const alert = page.locator('[class*="notice"][role="alert"]').first();
+    await alert.waitFor({ state: "attached", timeout: 10_000 });
+    const refusal = (await alert.textContent()) ?? "";
+    assert.match(refusal, /This Mission cannot be Dispatched: an orbit needs a subject/);
+    assert.equal((await rows()).find((r) => r.id === draft.id).state, "planned", "still Planned");
+    assert.deepEqual(store.ledger().holdings, {}, "no Card is reserved");
+    assert.equal(store.specs().size, 0, "no Spec is written for the host to Collect");
   } finally {
     await context.close();
   }

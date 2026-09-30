@@ -92,7 +92,7 @@ export default function SummaryBar({ spec, preview, editing, onSaved, sites = []
   // stays exclusively under the lead.
   const trio = `${preview.parts} flight${preview.parts === 1 ? "" : "s"} · GSD ${preview.gsd_cm.toFixed(2)} cm/px · ${preview.photo_count} photos`;
 
-  const problem = specBlocker(spec, preview.problems);
+  const problem = specBlocker(spec);
   // A Mission with an id has been stored. Until the list has read it (a save
   // just made, not yet listed) it is the Planned one that save wrote.
   const editedMission: EditedMission | null = editing.id
@@ -275,6 +275,7 @@ export default function SummaryBar({ spec, preview, editing, onSaved, sites = []
         editing={editing}
         edited={editedMission}
         sites={sites}
+        problems={preview.problems}
         onSave={async (request) => {
           const reply = await runSave(request);
           if (reply.ok) setSheet((s) => ({ ...s, open: false }));

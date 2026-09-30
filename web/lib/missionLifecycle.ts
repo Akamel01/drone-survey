@@ -346,9 +346,18 @@ export function createMissionLifecycle(store: MissionStore): MissionLifecycle {
             `This Mission cannot be Dispatched: ${bad}. Fix it in the planner and Dispatch again.`,
           );
         }
+        // A plan with problems is saved as an unfinished Planned Mission (the
+        // planner lists them beside Save), but it is never Dispatched: the
+        // same problems the planner shows, named, until they are fixed.
+        const summary = preview(spec);
+        if (summary.problems.length) {
+          return no(
+            "invalid",
+            `This Mission cannot be Dispatched: ${summary.problems.join("; ")}. Fix it in the planner and Dispatch again.`,
+          );
+        }
         // A Site larger than one battery is flown as several Missions, and each
         // Mission occupies one Card (CONTEXT.md, Card).
-        const summary = preview(spec);
         const needed = Math.max(1, summary.parts);
 
         const group = supersessionGroup(record);

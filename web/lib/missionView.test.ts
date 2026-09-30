@@ -421,10 +421,10 @@ test("a new Site cannot take an existing Site's name, whatever its case or spaci
 
 // --- the Save sheet (UI-30) ----------------------------------------------------
 
-test("Save is blocked only by the plan itself; a missing name or Site is asked for in the sheet", () => {
-  assert.equal(specBlocker({ date: "2026-09-24" }, []), null, "no name and no Site is not a reason to block");
-  assert.match(specBlocker({ date: "2026-09-24" }, ["speed 30 outside the aircraft's 1..15"])!, /problems, listed below/);
-  assert.equal(specBlocker({ date: " " }, []), "Give this Mission a date.");
+test("Save is blocked only by what the store would reject; a missing name or Site is asked for in the sheet", () => {
+  assert.equal(specBlocker({ date: "2026-09-24" }), null, "no name and no Site is not a reason to block");
+  assert.equal(specBlocker({ date: " " }), "Give this Mission a date.");
+  assert.equal(specBlocker({}), "Give this Mission a date.");
 });
 
 test("the sheet offers exactly what the Mission's state allows (ADR 0021)", () => {
