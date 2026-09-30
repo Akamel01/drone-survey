@@ -12,7 +12,9 @@ from __future__ import annotations
 import json
 import os
 import socket
+import ssl
 import struct
+import subprocess
 import sys
 import tempfile
 import threading
@@ -26,6 +28,7 @@ HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 
 import board_service as bs  # noqa: E402
+import make_certs  # noqa: E402
 
 SPEC = "site-a/2026-09-30/20260930T010203Z-aaaa1111.json"
 OTHER = "site-a/2026-09-30/20260930T010204Z-bbbb2222.json"
@@ -342,6 +345,78 @@ class MdnsTest(unittest.TestCase):
         for pkt in (self.query("other.local"), self.query(qtype=28), b"", b"\x00" * 5,
                     struct.pack("!HHHHHH", 0, 0x8400, 1, 0, 0, 0) + bs._name("board.local") + struct.pack("!HH", 1, 1)):
             self.assertIsNone(bs.mdns_answer(pkt, "board.local", "10.0.0.2", True))
+
+
+class TlsTest(unittest.TestCase):
+    """The service with TLS on a free port: a client that trusts the test CA connects, one that does not is refused."""
+
+    @classmethod
+    def setUpClass(cls):
+        tmp = tempfile.TemporaryDirectory()
+        cls.addClassCleanup(tmp.cleanup)
+        cls.pki, cls.other = Path(tmp.name) / "ca", Path(tmp.name) / "other"
+        for folder in (cls.pki, cls.other):
+            folder.mkdir(mode=0o700)
+            make_certs.make_ca(folder)
+        crt = make_certs.issue_board_cert(cls.pki, ["192.168.43.1"])
+        cls.context = bs.tls_context(str(crt), str(crt.with_suffix(".key")))
+
+    def setUp(self):
+        self.f = Fixture(self)
+        self.server = bs.Server(("127.0.0.1", 0), bs.make_handler(self.f.board, (ALLOWED,)), self.context)
+        threading.Thread(target=self.server.serve_forever, daemon=True).start()
+        self.addCleanup(self.server.server_close)
+        self.addCleanup(self.server.shutdown)
+        self.port = self.server.server_address[1]
+
+    def get(self, cafile, name="board.local"):
+        """GET /health over TLS, checking the certificate against `cafile` for `name`."""
+        ctx = ssl.create_default_context(cafile=cafile)
+        with socket.create_connection(("127.0.0.1", self.port), timeout=5) as raw, \
+                ctx.wrap_socket(raw, server_hostname=name) as tls:
+            tls.sendall(b"GET /health HTTP/1.0\r\n\r\n")
+            data = b""
+            while chunk := tls.recv(4096):
+                data += chunk
+            return data
+
+    def test_a_client_that_trusts_the_ca_connects_by_name_and_by_address(self):
+        for name in ("board.local", "127.0.0.1", "192.168.43.1"):  # the last is only in the SANs, not dialled
+            data = self.get(str(self.pki / "ca.crt"), name)
+            self.assertIn(b"200 OK", data.splitlines()[0])
+            self.assertIn(b'"controller": true', data)
+
+    def test_a_client_that_does_not_trust_it_is_refused(self):
+        for cafile in (None, str(self.other / "ca.crt")):  # the system store; a different CA
+            with self.assertRaises(ssl.SSLCertVerificationError):
+                self.get(cafile)
+
+    def test_a_certificate_for_another_name_is_refused(self):
+        with self.assertRaises(ssl.SSLCertVerificationError):
+            self.get(str(self.pki / "ca.crt"), "evil.example")
+
+    def test_plain_http_to_the_tls_port_gets_no_answer_and_the_board_lives_on(self):
+        with socket.create_connection(("127.0.0.1", self.port), timeout=5) as raw:
+            raw.sendall(b"GET /health HTTP/1.0\r\n\r\n")
+            try:
+                reply = raw.recv(4096)
+            except ConnectionError:  # reset is as good a refusal as silence
+                reply = b""
+            self.assertNotIn(b"200", reply)
+        self.assertIn(b"200 OK", self.get(str(self.pki / "ca.crt")).splitlines()[0])
+
+    def test_a_stalled_handshake_does_not_block_other_clients(self):
+        with socket.create_connection(("127.0.0.1", self.port), timeout=5):  # connects, says nothing
+            self.assertIn(b"200 OK", self.get(str(self.pki / "ca.crt")).splitlines()[0])
+
+    def test_http_needs_asking_for_by_name(self):
+        cmd = [sys.executable, str(HERE / "board_service.py"), "--no-mdns", "--port", "0"]
+        for extra, message in (([], "no certificate"), (["--cert", "x"], "go together"),
+                               (["--insecure-http", "--cert", "x", "--key", "y"], "opposites"),
+                               (["--cert", "/nonexistent", "--key", "/nonexistent"], "cannot load")):
+            done = subprocess.run(cmd + extra, capture_output=True, text=True, timeout=30, env={**os.environ, "BOARD_TLS_CERT": "", "BOARD_TLS_KEY": ""})
+            self.assertEqual(done.returncode, 2, extra)
+            self.assertIn(message, done.stderr)
 
 
 def run() -> int:
