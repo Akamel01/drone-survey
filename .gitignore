@@ -52,3 +52,7 @@ __pycache__/
 
 # Local npm/vitest caches (root) — never in git
 node_modules/
+
+# #223 still-review work files — fetched renders + venv, never in git
+hero3d-local/
+.review-venv/
