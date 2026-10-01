@@ -1,0 +1,58 @@
+{
+  "dof_lapvar_D1": {
+    "attr": "4e",
+    "note": "",
+    "region": "x0.70-0.98:y0.55-0.80",
+    "unit": "levels2",
+    "value": 656.5290490254574
+  },
+  "dof_lapvar_D2": {
+    "attr": "4e",
+    "note": "",
+    "region": "x0.02-0.35:y0.72-0.85",
+    "unit": "levels2",
+    "value": 3.4122998416335033
+  },
+  "dof_lapvar_D3": {
+    "attr": "4e",
+    "note": "",
+    "region": "x0.02-0.35:y0.62-0.72",
+    "unit": "levels2",
+    "value": 3.3592561630150333
+  },
+  "dof_ratio_D1_D2": {
+    "attr": "4e",
+    "note": "",
+    "region": "x0.02-0.35:y0.72-0.85",
+    "unit": "ratio",
+    "value": 192.40075007921055
+  },
+  "dof_sigma_D2_pctH": {
+    "attr": "4e",
+    "note": "",
+    "region": "x0.02-0.35:y0.72-0.85",
+    "unit": "%H",
+    "value": 0.05463759104410807
+  },
+  "dof_sigma_D2_px": {
+    "attr": "4e",
+    "note": "D1 blurred to match band; sharp end is TOOL",
+    "region": "x0.02-0.35:y0.72-0.85",
+    "unit": "px",
+    "value": 2.09808349609375
+  },
+  "dof_sigma_D3_pctH": {
+    "attr": "4e",
+    "note": "",
+    "region": "x0.02-0.35:y0.62-0.72",
+    "unit": "%H",
+    "value": 0.05486011505126953
+  },
+  "dof_sigma_D3_px": {
+    "attr": "4e",
+    "note": "D1 blurred to match band; sharp end is TOOL",
+    "region": "x0.02-0.35:y0.62-0.72",
+    "unit": "px",
+    "value": 2.10662841796875
+  }
+}

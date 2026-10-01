@@ -84,12 +84,18 @@ LAYERS = [  # top to bottom
     # soil (0.10 -> 0.08): pebble sum 0.50 -> 0.52, total strata unchanged,
     # so silhouette/S2 hold while the +-3 % pebble window fills with lit
     # olive instead of recessed-shadow pixels.
+    # pass 24 (#223): thin the recessed middle pebble course to the 0.08
+    # floor (0.10 -> 0.08) and give the +0.02 to the dark soil (0.10 ->
+    # 0.12): the tall soil window still reads middle-pebble shadow pixels
+    # (tint p21 and relief p22 both 0.00 dE there), so swap those shadow
+    # pixels for soil-target pixels. Pebble sum 0.52 -> 0.50, total strata
+    # unchanged, so silhouette/S2 hold.
     (0.20, (0.015, 0.015, 0.006), 0.050, 1),        # pebble band, proud+thick
     (0.08, (0.0110, 0.0130, 0.0176), 0.02, 0),      # soil -> #1B1E24
-    (0.10, (0.015, 0.015, 0.006), 0.000, 1),        # pebble band, recessed+thin
+    (0.08, (0.015, 0.015, 0.006), 0.000, 1),        # pebble band, recessed+floor
     (0.12, (0.0110, 0.0130, 0.0176), 0.03, 0),      # sediment -> soil target
     (0.22, (0.015, 0.015, 0.006), 0.050, 1),        # pebble band, proud+thick
-    (0.10, (0.0110, 0.0130, 0.0176), 0.01, 0),      # dark soil
+    (0.12, (0.0110, 0.0130, 0.0176), 0.01, 0),      # dark soil
     (0.20, (0.0027, 0.0037, 0.0056), 0.05, 0),      # weathered rock -> #090C11
 ]
 
