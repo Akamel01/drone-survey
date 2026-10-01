@@ -76,11 +76,15 @@ LAYERS = [  # top to bottom
     (0.18, (0.030, 0.028, 0.025), -0.08, 0),        # humus under the turf
     # pass 5: pebble courses twice as thick (soil thinner) so they can fill
     # measure.py's +-3 %-of-island-height pebble window
-    (0.16, (0.015, 0.015, 0.006), 0.015, 1),        # pebble band
+    # pass 18 (#223): pebble-course protrusion per layer — alternating
+    # proud/recessed/proud courses so the cut faces read as uneven strata
+    # casting real crevice shadows (pass 17: uniform 0.015 casts none).
+    # Thicknesses untouched, so island bulk/silhouette hold.
+    (0.16, (0.015, 0.015, 0.006), 0.030, 1),        # pebble band, proud
     (0.10, (0.0110, 0.0130, 0.0176), 0.02, 0),      # soil -> #1B1E24
-    (0.16, (0.015, 0.015, 0.006), 0.015, 1),        # pebble band
+    (0.16, (0.015, 0.015, 0.006), 0.000, 1),        # pebble band, recessed
     (0.12, (0.0110, 0.0130, 0.0176), 0.03, 0),      # sediment -> soil target
-    (0.18, (0.015, 0.015, 0.006), 0.015, 1),        # pebble band
+    (0.18, (0.015, 0.015, 0.006), 0.030, 1),        # pebble band, proud
     (0.10, (0.0110, 0.0130, 0.0176), 0.01, 0),      # dark soil
     (0.20, (0.0027, 0.0037, 0.0056), 0.05, 0),      # weathered rock -> #090C11
 ]
