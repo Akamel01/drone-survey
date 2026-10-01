@@ -1,0 +1,44 @@
+{
+  "shadow_floor_lifted": {
+    "attr": "4d",
+    "note": "1 = p1 >= 8 levels, i.e. clearly above the codec floor",
+    "region": "x0.55-1.00:y0.72-0.90",
+    "unit": "bool",
+    "value": 0.0
+  },
+  "shadow_min": {
+    "attr": "4d",
+    "note": "",
+    "region": "x0.55-1.00:y0.72-0.90",
+    "unit": "levels",
+    "value": 0.0
+  },
+  "shadow_p0_1": {
+    "attr": "4d",
+    "note": "",
+    "region": "x0.55-1.00:y0.72-0.90",
+    "unit": "levels",
+    "value": 1.7873999999999999
+  },
+  "shadow_p1": {
+    "attr": "4d",
+    "note": "black floor = p1; HEVC crush is the limit",
+    "region": "x0.55-1.00:y0.72-0.90",
+    "unit": "levels",
+    "value": 3.0722
+  },
+  "shadow_p5": {
+    "attr": "4d",
+    "note": "",
+    "region": "x0.55-1.00:y0.72-0.90",
+    "unit": "levels",
+    "value": 5.0722
+  },
+  "shadow_p50": {
+    "attr": "4d",
+    "note": "",
+    "region": "x0.55-1.00:y0.72-0.90",
+    "unit": "levels",
+    "value": 31.647
+  }
+}
