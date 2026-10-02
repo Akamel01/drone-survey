@@ -1,0 +1,2 @@
+tall S2 PASS bbox x 0.480-1.000 y 0.448-0.885 ref x 0.50-1.00 y 0.45-0.88 tol x 0.03 y 0.01 (s0 island mask; union gate needs 8 frames)
+wide S2 PASS bbox x 0.602-0.931 y 0.290-0.858 ref x 0.59-0.93 y 0.29-0.86 tol x 0.03 y 0.01 (s0 island mask; union gate needs 8 frames)

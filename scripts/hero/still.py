@@ -405,6 +405,27 @@ def fill_firs(k2):
             extra.scale = ob.scale * k2["fir_fill_scale"]
 
 
+def add_wide_fill():
+    """Pass 26 (#223): wide-only warm bounce for the gravel courses. The wide
+    pebble residual is yellow-deficient (ours #28261E vs union #2D2C10: -R -G
+    +B) and every albedo lever on it was inert or away (p6/p8/p10/p11/p23),
+    so warm the camera-facing gravel facets with light instead of re-tinting
+    them: a frontal sun adds R+G with little B while recess shadows stay
+    pinned, and the tall framing never sees it (hidden in render_shot), so
+    the thin tall-pebble margin is protected by construction."""
+    data = bpy.data.lights.new("WideFill", "SUN")
+    data.energy = 0.6
+    data.angle = math.radians(5.0)
+    data.color = (1.0, 0.68, 0.38)
+    ob = bpy.data.objects.new("WideFill", data)
+    # from the camera side, slightly above (hero.py sun convention): the
+    # strata cut faces take it near full while the turf top takes it at a
+    # graze and the underside takes nothing
+    src = Vector((0.0, -1.0, 0.35))
+    ob.rotation_euler = (-src).to_track_quat("-Z", "Y").to_euler()
+    bpy.context.scene.collection.objects.link(ob)
+
+
 def bulk_underside(k2):
     """Pass 3: hero.py's underside boulders (copies carrying the basalt
     material, hero.py:480-490) scaled up and pushed out so they bulge."""
@@ -599,6 +620,9 @@ def render_shot(sc, framing, path, res, camera, sky_nts, ridges, spec):
     for ob in bpy.data.objects:
         if ob.name.startswith("FirFill"):
             ob.hide_render = not spec["fir_fill"]
+    fill = bpy.data.objects.get("WideFill")
+    if fill is not None:
+        fill.hide_render = framing != "wide"    # pass 26: tall never sees it
     for mat_name in ("grass_medium_01", "grass_medium_01.001"):
         group = next(n for n in bpy.data.materials[mat_name].node_tree.nodes if n.type == "GROUP")
         group.inputs["Value"].default_value = spec["grass_value"]
@@ -660,6 +684,7 @@ def main():
     island_palette(K2)
     bulk_underside(K2)
     fill_firs(K2)
+    add_wide_fill()
 
     cam_tall = bpy.data.objects["Cam"]
     cam_wide = bpy.data.objects.new("CamWide", bpy.data.cameras.new("CamWide"))
