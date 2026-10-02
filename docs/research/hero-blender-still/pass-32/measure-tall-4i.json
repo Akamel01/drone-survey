@@ -1,0 +1,184 @@
+{
+  "cloud_band_y_pctH": {
+    "attr": "4i",
+    "note": "",
+    "region": "x0.05-0.45:y0.72-0.95",
+    "unit": "%H",
+    "value": 85.78125
+  },
+  "cloud_texture_zero_x_px": {
+    "attr": "4i",
+    "note": "first zero of 2-D autocorrelation along x",
+    "region": "x0.05-0.45:y0.72-0.95",
+    "unit": "px",
+    "value": 432.0
+  },
+  "cloud_texture_zero_y_px": {
+    "attr": "4i",
+    "note": "first zero of 2-D autocorrelation along y",
+    "region": "x0.05-0.45:y0.72-0.95",
+    "unit": "px",
+    "value": 201.0
+  },
+  "drift_adj_dx_s0": {
+    "attr": "4i",
+    "note": "pair s0->s1 dt=4.05s",
+    "region": "x0.05-0.45:y0.72-0.95",
+    "unit": "px",
+    "value": -1.2634488528626946e-20
+  },
+  "drift_adj_dx_s1": {
+    "attr": "4i",
+    "note": "pair s1->s2 dt=4.05s",
+    "region": "x0.05-0.45:y0.72-0.95",
+    "unit": "px",
+    "value": -1.2634488528626946e-20
+  },
+  "drift_adj_dx_s2": {
+    "attr": "4i",
+    "note": "pair s2->s3 dt=4.05s",
+    "region": "x0.05-0.45:y0.72-0.95",
+    "unit": "px",
+    "value": -1.2634488528626946e-20
+  },
+  "drift_adj_dx_s3": {
+    "attr": "4i",
+    "note": "pair s3->s4 dt=4.05s",
+    "region": "x0.05-0.45:y0.72-0.95",
+    "unit": "px",
+    "value": -1.2634488528626946e-20
+  },
+  "drift_adj_dx_s4": {
+    "attr": "4i",
+    "note": "pair s4->s5 dt=4.05s",
+    "region": "x0.05-0.45:y0.72-0.95",
+    "unit": "px",
+    "value": -1.2634488528626946e-20
+  },
+  "drift_adj_dx_s5": {
+    "attr": "4i",
+    "note": "pair s5->s6 dt=4.05s",
+    "region": "x0.05-0.45:y0.72-0.95",
+    "unit": "px",
+    "value": -1.2634488528626946e-20
+  },
+  "drift_adj_dx_s6": {
+    "attr": "4i",
+    "note": "pair s6->s7 dt=4.05s",
+    "region": "x0.05-0.45:y0.72-0.95",
+    "unit": "px",
+    "value": -1.2634488528626946e-20
+  },
+  "drift_adj_dy_s0": {
+    "attr": "4i",
+    "note": "pair s0->s1 dt=4.05s",
+    "region": "x0.05-0.45:y0.72-0.95",
+    "unit": "px",
+    "value": -0.5
+  },
+  "drift_adj_dy_s1": {
+    "attr": "4i",
+    "note": "pair s1->s2 dt=4.05s",
+    "region": "x0.05-0.45:y0.72-0.95",
+    "unit": "px",
+    "value": -0.5
+  },
+  "drift_adj_dy_s2": {
+    "attr": "4i",
+    "note": "pair s2->s3 dt=4.05s",
+    "region": "x0.05-0.45:y0.72-0.95",
+    "unit": "px",
+    "value": -0.5
+  },
+  "drift_adj_dy_s3": {
+    "attr": "4i",
+    "note": "pair s3->s4 dt=4.05s",
+    "region": "x0.05-0.45:y0.72-0.95",
+    "unit": "px",
+    "value": -0.5
+  },
+  "drift_adj_dy_s4": {
+    "attr": "4i",
+    "note": "pair s4->s5 dt=4.05s",
+    "region": "x0.05-0.45:y0.72-0.95",
+    "unit": "px",
+    "value": -0.5
+  },
+  "drift_adj_dy_s5": {
+    "attr": "4i",
+    "note": "pair s5->s6 dt=4.05s",
+    "region": "x0.05-0.45:y0.72-0.95",
+    "unit": "px",
+    "value": -0.5
+  },
+  "drift_adj_dy_s6": {
+    "attr": "4i",
+    "note": "pair s6->s7 dt=4.05s",
+    "region": "x0.05-0.45:y0.72-0.95",
+    "unit": "px",
+    "value": -0.5
+  },
+  "drift_dx_px": {
+    "attr": "4i",
+    "note": "pair s0->s7 dt=28.35s",
+    "region": "x0.05-0.45:y0.72-0.95",
+    "unit": "px",
+    "value": -1.2634488528626946e-20
+  },
+  "drift_dy_px": {
+    "attr": "4i",
+    "note": "pair s0->s7 dt=28.35s",
+    "region": "x0.05-0.45:y0.72-0.95",
+    "unit": "px",
+    "value": -0.5
+  },
+  "drift_floor_adjmax_px": {
+    "attr": "4i",
+    "note": "max |d| of static MountainBand control over adjacent pairs",
+    "region": "x0.02-0.40:y0.72-0.95",
+    "unit": "px",
+    "value": 0.5
+  },
+  "drift_floor_pctW_turn": {
+    "attr": "4i",
+    "note": "",
+    "region": "x0.02-0.40:y0.72-0.95",
+    "unit": "%W/turn",
+    "value": 0.02645502645502645
+  },
+  "drift_floor_px": {
+    "attr": "4i",
+    "note": "max |d| of static MountainBand control, pair s0->s7",
+    "region": "x0.02-0.40:y0.72-0.95",
+    "unit": "px",
+    "value": 0.5
+  },
+  "drift_floor_px_s": {
+    "attr": "4i",
+    "note": "",
+    "region": "x0.02-0.40:y0.72-0.95",
+    "unit": "px/s",
+    "value": 0.01763668430335097
+  },
+  "drift_not_measurable": {
+    "attr": "4i",
+    "note": "1 = cloud max(|dx|,|dy|) <= d_floor",
+    "region": "x0.05-0.45:y0.72-0.95",
+    "unit": "bool",
+    "value": 1.0
+  },
+  "drift_pctW_turn": {
+    "attr": "4i",
+    "note": "",
+    "region": "x0.05-0.45:y0.72-0.95",
+    "unit": "%W/turn",
+    "value": -6.684914565411082e-22
+  },
+  "drift_speed_px_s": {
+    "attr": "4i",
+    "note": "",
+    "region": "x0.05-0.45:y0.72-0.95",
+    "unit": "px/s",
+    "value": -4.456609710274055e-22
+  }
+}
