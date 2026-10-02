@@ -412,9 +412,13 @@ def add_wide_fill():
     so warm the camera-facing gravel facets with light instead of re-tinting
     them: a frontal sun adds R+G with little B while recess shadows stay
     pinned, and the tall framing never sees it (hidden in render_shot), so
-    the thin tall-pebble margin is protected by construction."""
+    the thin tall-pebble margin is protected by construction.
+    Pass 29 (#223): energy 0.6 -> 0.75 at fixed chroma — p28 proved chroma
+    and power are coupled through this lamp (re-chrome at fixed energy cut
+    total power and moved the target +2.04 the wrong way), so add power
+    without hue shift and measure p27's R-overshoot objection."""
     data = bpy.data.lights.new("WideFill", "SUN")
-    data.energy = 0.6
+    data.energy = 0.75
     data.angle = math.radians(5.0)
     data.color = (1.0, 0.68, 0.38)
     ob = bpy.data.objects.new("WideFill", data)
