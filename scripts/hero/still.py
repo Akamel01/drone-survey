@@ -175,6 +175,10 @@ K2 = {
     # pebble courses are the gravel texture (hero.py mat_strata, HSV s 0.7
     # v 0.8): the hero's are dark olive (#212111), ours read grey (#262626)
     "pebble_hsv": (1.3, 0.35),
+    # pass 33 (#223): gravel hue rotation, Hue 0.5 (neutral) -> 0.53. p11
+    # prescribed hue-side (untried) or lighting for the wide pebble B
+    # residual; lighting mapped since (p26/p28/p29/p30), hue never rendered.
+    "pebble_hue": 0.53,
     "pebble_tint": (0.80, 0.80, 0.30),
     "ledge_scale": 2.0,      # LAYERS protrusions x this: rugged strata
     "strata_disp": 0.12,     # hero.py mat_strata displacement 0.05
@@ -375,6 +379,7 @@ def island_palette(k2):
     hsv = next(n for n in nt.nodes if n.type == "HUE_SAT"
                and abs(n.inputs["Saturation"].default_value - 0.7) < 1e-6)   # the gravel
     hsv.inputs["Saturation"].default_value, hsv.inputs["Value"].default_value = k2["pebble_hsv"]
+    hsv.inputs["Hue"].default_value = k2["pebble_hue"]  # pass 33: 0.53
     mix = nt.nodes.new("ShaderNodeMix")
     mix.data_type, mix.blend_type = "RGBA", "MULTIPLY"
     mix.inputs[0].default_value = 1.0
