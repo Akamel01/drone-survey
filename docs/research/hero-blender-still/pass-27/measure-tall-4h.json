@@ -1,0 +1,16 @@
+{
+  "conifer_dark_area_pct": {
+    "attr": "4h",
+    "note": "",
+    "region": "x0.62-0.95:y0.44-0.62",
+    "unit": "%",
+    "value": 30.84112908300063
+  },
+  "conifer_edge_density": {
+    "attr": "4h",
+    "note": "Sobel mag > 12 levels",
+    "region": "x0.62-0.95:y0.44-0.62",
+    "unit": "fraction",
+    "value": 0.5711644201240961
+  }
+}

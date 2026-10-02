@@ -1,0 +1,366 @@
+{
+  "palette_basalt_k1_hex": {
+    "attr": "4g",
+    "note": "k-means k=3 seed 0; informational",
+    "region": "x0.58-0.96:y0.28-0.90",
+    "unit": "hex",
+    "value": "#060707"
+  },
+  "palette_basalt_k1_share": {
+    "attr": "4g",
+    "note": "",
+    "region": "x0.58-0.96:y0.28-0.90",
+    "unit": "fraction",
+    "value": 0.37666837456816304
+  },
+  "palette_basalt_k2_hex": {
+    "attr": "4g",
+    "note": "k-means k=3 seed 0; informational",
+    "region": "x0.58-0.96:y0.28-0.90",
+    "unit": "hex",
+    "value": "#0D0D0E"
+  },
+  "palette_basalt_k2_share": {
+    "attr": "4g",
+    "note": "",
+    "region": "x0.58-0.96:y0.28-0.90",
+    "unit": "fraction",
+    "value": 0.34033572946840296
+  },
+  "palette_basalt_k3_hex": {
+    "attr": "4g",
+    "note": "k-means k=3 seed 0; informational",
+    "region": "x0.58-0.96:y0.28-0.90",
+    "unit": "hex",
+    "value": "#141414"
+  },
+  "palette_basalt_k3_share": {
+    "attr": "4g",
+    "note": "",
+    "region": "x0.58-0.96:y0.28-0.90",
+    "unit": "fraction",
+    "value": 0.282995895963434
+  },
+  "palette_basalt_meanS": {
+    "attr": "4g",
+    "note": "",
+    "region": "x0.58-0.96:y0.28-0.90",
+    "unit": "S",
+    "value": 0.11288538560364049
+  },
+  "palette_basalt_meanV": {
+    "attr": "4g",
+    "note": "",
+    "region": "x0.58-0.96:y0.28-0.90",
+    "unit": "levels",
+    "value": 13.539769585487234
+  },
+  "palette_basalt_median_hex": {
+    "attr": "4g",
+    "note": "island-local split; +-2 %H boundary",
+    "region": "x0.58-0.96:y0.28-0.90",
+    "unit": "hex",
+    "value": "#0C0D0D"
+  },
+  "palette_basalt_share": {
+    "attr": "4g",
+    "note": "",
+    "region": "x0.58-0.96:y0.28-0.90",
+    "unit": "fraction",
+    "value": 0.22309909718221707
+  },
+  "palette_basalt_vs_474B59_deltaE": {
+    "attr": "4g",
+    "note": "informational: #474B59 is a reference-reel value, not a hero target",
+    "region": "x0.58-0.96:y0.28-0.90",
+    "unit": "dE76",
+    "value": 29.819697458473808
+  },
+  "palette_moss_k1_hex": {
+    "attr": "4g",
+    "note": "k-means k=3 seed 0; informational",
+    "region": "x0.58-0.96:y0.28-0.90",
+    "unit": "hex",
+    "value": "#37410C"
+  },
+  "palette_moss_k1_share": {
+    "attr": "4g",
+    "note": "",
+    "region": "x0.58-0.96:y0.28-0.90",
+    "unit": "fraction",
+    "value": 0.44981396140161406
+  },
+  "palette_moss_k2_hex": {
+    "attr": "4g",
+    "note": "k-means k=3 seed 0; informational",
+    "region": "x0.58-0.96:y0.28-0.90",
+    "unit": "hex",
+    "value": "#272F0B"
+  },
+  "palette_moss_k2_share": {
+    "attr": "4g",
+    "note": "",
+    "region": "x0.58-0.96:y0.28-0.90",
+    "unit": "fraction",
+    "value": 0.35588481140938105
+  },
+  "palette_moss_k3_hex": {
+    "attr": "4g",
+    "note": "k-means k=3 seed 0; informational",
+    "region": "x0.58-0.96:y0.28-0.90",
+    "unit": "hex",
+    "value": "#4B570D"
+  },
+  "palette_moss_k3_share": {
+    "attr": "4g",
+    "note": "",
+    "region": "x0.58-0.96:y0.28-0.90",
+    "unit": "fraction",
+    "value": 0.19430122718900486
+  },
+  "palette_moss_meanS": {
+    "attr": "4g",
+    "note": "",
+    "region": "x0.58-0.96:y0.28-0.90",
+    "unit": "S",
+    "value": 0.8033958362504002
+  },
+  "palette_moss_meanV": {
+    "attr": "4g",
+    "note": "",
+    "region": "x0.58-0.96:y0.28-0.90",
+    "unit": "levels",
+    "value": 62.675124087375266
+  },
+  "palette_moss_median_hex": {
+    "attr": "4g",
+    "note": "island-local split; +-2 %H boundary",
+    "region": "x0.58-0.96:y0.28-0.90",
+    "unit": "hex",
+    "value": "#343D0B"
+  },
+  "palette_moss_share": {
+    "attr": "4g",
+    "note": "",
+    "region": "x0.58-0.96:y0.28-0.90",
+    "unit": "fraction",
+    "value": 0.15300141358833003
+  },
+  "palette_pebble_k1_hex": {
+    "attr": "4g",
+    "note": "k-means k=3 seed 0; informational",
+    "region": "x0.58-0.96:y0.28-0.90",
+    "unit": "hex",
+    "value": "#312C1F"
+  },
+  "palette_pebble_k1_share": {
+    "attr": "4g",
+    "note": "",
+    "region": "x0.58-0.96:y0.28-0.90",
+    "unit": "fraction",
+    "value": 0.4750524786048765
+  },
+  "palette_pebble_k2_hex": {
+    "attr": "4g",
+    "note": "k-means k=3 seed 0; informational",
+    "region": "x0.58-0.96:y0.28-0.90",
+    "unit": "hex",
+    "value": "#1F1D12"
+  },
+  "palette_pebble_k2_share": {
+    "attr": "4g",
+    "note": "",
+    "region": "x0.58-0.96:y0.28-0.90",
+    "unit": "fraction",
+    "value": 0.31771354755368963
+  },
+  "palette_pebble_k3_hex": {
+    "attr": "4g",
+    "note": "k-means k=3 seed 0; informational",
+    "region": "x0.58-0.96:y0.28-0.90",
+    "unit": "hex",
+    "value": "#453F31"
+  },
+  "palette_pebble_k3_share": {
+    "attr": "4g",
+    "note": "",
+    "region": "x0.58-0.96:y0.28-0.90",
+    "unit": "fraction",
+    "value": 0.20723397384143388
+  },
+  "palette_pebble_meanS": {
+    "attr": "4g",
+    "note": "",
+    "region": "x0.58-0.96:y0.28-0.90",
+    "unit": "S",
+    "value": 0.378120787203702
+  },
+  "palette_pebble_meanV": {
+    "attr": "4g",
+    "note": "",
+    "region": "x0.58-0.96:y0.28-0.90",
+    "unit": "levels",
+    "value": 48.10188922977555
+  },
+  "palette_pebble_median_hex": {
+    "attr": "4g",
+    "note": "island-local split; +-2 %H boundary",
+    "region": "x0.58-0.96:y0.28-0.90",
+    "unit": "hex",
+    "value": "#2E2A1E"
+  },
+  "palette_pebble_share": {
+    "attr": "4g",
+    "note": "",
+    "region": "x0.58-0.96:y0.28-0.90",
+    "unit": "fraction",
+    "value": 0.035045446468688846
+  },
+  "palette_soil_k1_hex": {
+    "attr": "4g",
+    "note": "k-means k=3 seed 0; informational",
+    "region": "x0.58-0.96:y0.28-0.90",
+    "unit": "hex",
+    "value": "#202021"
+  },
+  "palette_soil_k1_share": {
+    "attr": "4g",
+    "note": "",
+    "region": "x0.58-0.96:y0.28-0.90",
+    "unit": "fraction",
+    "value": 0.42052961092639635
+  },
+  "palette_soil_k2_hex": {
+    "attr": "4g",
+    "note": "k-means k=3 seed 0; informational",
+    "region": "x0.58-0.96:y0.28-0.90",
+    "unit": "hex",
+    "value": "#353433"
+  },
+  "palette_soil_k2_share": {
+    "attr": "4g",
+    "note": "",
+    "region": "x0.58-0.96:y0.28-0.90",
+    "unit": "fraction",
+    "value": 0.3631207065086876
+  },
+  "palette_soil_k3_hex": {
+    "attr": "4g",
+    "note": "k-means k=3 seed 0; informational",
+    "region": "x0.58-0.96:y0.28-0.90",
+    "unit": "hex",
+    "value": "#534939"
+  },
+  "palette_soil_k3_share": {
+    "attr": "4g",
+    "note": "",
+    "region": "x0.58-0.96:y0.28-0.90",
+    "unit": "fraction",
+    "value": 0.21634968256491607
+  },
+  "palette_soil_meanS": {
+    "attr": "4g",
+    "note": "",
+    "region": "x0.58-0.96:y0.28-0.90",
+    "unit": "S",
+    "value": 0.15511433740048855
+  },
+  "palette_soil_meanV": {
+    "attr": "4g",
+    "note": "",
+    "region": "x0.58-0.96:y0.28-0.90",
+    "unit": "levels",
+    "value": 52.66197645196532
+  },
+  "palette_soil_median_hex": {
+    "attr": "4g",
+    "note": "island-local split; +-2 %H boundary",
+    "region": "x0.58-0.96:y0.28-0.90",
+    "unit": "hex",
+    "value": "#2F2E2C"
+  },
+  "palette_soil_share": {
+    "attr": "4g",
+    "note": "",
+    "region": "x0.58-0.96:y0.28-0.90",
+    "unit": "fraction",
+    "value": 0.3346107312744817
+  },
+  "palette_turf_k1_hex": {
+    "attr": "4g",
+    "note": "k-means k=3 seed 0; informational",
+    "region": "x0.58-0.96:y0.28-0.90",
+    "unit": "hex",
+    "value": "#2E3819"
+  },
+  "palette_turf_k1_share": {
+    "attr": "4g",
+    "note": "",
+    "region": "x0.58-0.96:y0.28-0.90",
+    "unit": "fraction",
+    "value": 0.42526800615084137
+  },
+  "palette_turf_k2_hex": {
+    "attr": "4g",
+    "note": "k-means k=3 seed 0; informational",
+    "region": "x0.58-0.96:y0.28-0.90",
+    "unit": "hex",
+    "value": "#1B240E"
+  },
+  "palette_turf_k2_share": {
+    "attr": "4g",
+    "note": "",
+    "region": "x0.58-0.96:y0.28-0.90",
+    "unit": "fraction",
+    "value": 0.35013883119438555
+  },
+  "palette_turf_k3_hex": {
+    "attr": "4g",
+    "note": "k-means k=3 seed 0; informational",
+    "region": "x0.58-0.96:y0.28-0.90",
+    "unit": "hex",
+    "value": "#47541A"
+  },
+  "palette_turf_k3_share": {
+    "attr": "4g",
+    "note": "",
+    "region": "x0.58-0.96:y0.28-0.90",
+    "unit": "fraction",
+    "value": 0.2245931626547731
+  },
+  "palette_turf_meanS": {
+    "attr": "4g",
+    "note": "",
+    "region": "x0.58-0.96:y0.28-0.90",
+    "unit": "S",
+    "value": 0.6094334895560211
+  },
+  "palette_turf_meanV": {
+    "attr": "4g",
+    "note": "",
+    "region": "x0.58-0.96:y0.28-0.90",
+    "unit": "levels",
+    "value": 55.17522610172209
+  },
+  "palette_turf_median_hex": {
+    "attr": "4g",
+    "note": "island-local split; +-2 %H boundary",
+    "region": "x0.58-0.96:y0.28-0.90",
+    "unit": "hex",
+    "value": "#2B3511"
+  },
+  "palette_turf_share": {
+    "attr": "4g",
+    "note": "",
+    "region": "x0.58-0.96:y0.28-0.90",
+    "unit": "fraction",
+    "value": 0.15529891904066132
+  },
+  "palette_turf_vs_517046_deltaE": {
+    "attr": "4g",
+    "note": "informational: #517046 is a reference-reel value, not a hero target",
+    "region": "x0.58-0.96:y0.28-0.90",
+    "unit": "dE76",
+    "value": 25.14199149050941
+  }
+}
