@@ -95,7 +95,11 @@ LAYERS = [  # top to bottom
     (0.08, (0.015, 0.015, 0.006), 0.000, 1),        # pebble band, recessed+floor
     (0.12, (0.0110, 0.0130, 0.0176), 0.03, 0),      # sediment -> soil target
     (0.22, (0.015, 0.015, 0.006), 0.050, 1),        # pebble band, proud+thick
-    (0.12, (0.0110, 0.0130, 0.0176), 0.01, 0),      # dark soil
+    # pass 35 (#223): dark-soil single-course albedo x0.5 — p21 dosed all
+    # three soil rows at x0.85 (median 0.00), so a 2x cut on the most
+    # recessed course alone is the falsification dose for WHAT the tall
+    # soil window reads; sibling soil/sediment tints untouched.
+    (0.12, (0.0055, 0.0065, 0.0088), 0.01, 0),      # dark soil
     (0.20, (0.0027, 0.0037, 0.0056), 0.05, 0),      # weathered rock -> #090C11
 ]
 
