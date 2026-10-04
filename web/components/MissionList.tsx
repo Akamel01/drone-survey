@@ -457,7 +457,9 @@ export default function MissionList({ onEdit, onCopy, editingId = null, onRead, 
     // more than an empty screen -- but only if it can never be mistaken for
     // the live one, which is what the stamp on it is for.
     function fallBackToCache(why: string) {
-      setError(why);
+      // No signal at all is said as such: it is the common case at a Site, and
+      // "could not be reached" reads like a fault (PWA-1, #313).
+      setError(typeof navigator !== "undefined" && navigator.onLine === false ? "You are offline" : why);
       const ls = safeStorage();
       const cached = ls ? cachedRead(ls) : null;
       if (cached) {
