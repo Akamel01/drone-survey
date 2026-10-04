@@ -375,6 +375,65 @@ test("the same Mission edited in two windows keeps the later edit, whole", async
 });
 
 // ---------------------------------------------------------------------------
+// Edits made offline (PWA-3)
+// ---------------------------------------------------------------------------
+
+test("offline: a save against the version it was made against is written; one against an older version is refused with both", async () => {
+  const { lc, store } = fresh();
+  const id = await saved(lc, { name: "Ortho" });
+  const version = (await rowOf(lc, id)).updated_at;
+  await new Promise((r) => setTimeout(r, 5)); // updated_at is to the millisecond
+
+  const ok = expectOk(await saveMission(lc, { id, name: "Mine", base_updated_at: version }));
+  assert.equal(ok.mission.name, "Mine");
+
+  // The version is now the one that save wrote, so the same base is stale.
+  const writes = () => store.calls.filter((c) => c.startsWith("write")).length;
+  const before = writes();
+  const stale = expectRefusal(await saveMission(lc, { id, name: "Later", base_updated_at: version }));
+  assert.equal(stale.kind, "refused");
+  assert.match(stale.message, /changed in the store after you edited it here/);
+  assert.equal((stale.extras?.conflict as { name: string }).name, "Mine");
+  assert.equal(stale.extras?.state, "planned");
+  assert.equal(writes(), before, "a refused save writes nothing");
+  assert.equal((await rowOf(lc, id)).name, "Mine");
+
+  // No base, the browser's own interactive save: unchanged, last write wins whole.
+  expectOk(await saveMission(lc, { id, name: "Typed" }));
+  assert.equal((await rowOf(lc, id)).name, "Typed");
+});
+
+test("offline: a stale edit of a Mission that was Dispatched since is refused, not forked", async () => {
+  const { lc } = fresh();
+  const id = await saved(lc);
+  const version = (await rowOf(lc, id)).updated_at;
+  await new Promise((r) => setTimeout(r, 5));
+  expectOk(await dispatch(lc, id));
+  const r = expectRefusal(await saveMission(lc, { id, name: "Mine", base_updated_at: version }));
+  assert.equal(r.extras?.state, "dispatched");
+  assert.equal(expectOk(await list(lc)).missions.length, 1, "no replacement was made");
+});
+
+test("offline: a Mission made with no signal is created under the id the phone gave it, once", async () => {
+  const { lc } = fresh();
+  const made = expectOk(await saveMission(lc, { id: "local-abc123", name: "Offline" }));
+  assert.equal(made.mission.id, "local-abc123");
+  assert.equal(made.forked_from, null);
+  assert.equal((await rowOf(lc, "local-abc123")).state, "planned");
+
+  // The answer was lost and the phone tries again: an edit in place, not a second Mission.
+  expectOk(await saveMission(lc, { id: "local-abc123", name: "Offline" }));
+  assert.equal(expectOk(await list(lc)).missions.length, 1);
+
+  // Another Mission's name is still refused, local id or not.
+  const clash = expectRefusal(await saveMission(lc, { id: "local-other", name: "Offline" }));
+  assert.match(clash.message, /already exists/);
+
+  // Only the phone's own namespace creates; any other unknown id is gone from the store.
+  assert.equal(expectRefusal(await saveMission(lc, { id: "not-there", name: "X" })).kind, "not_found");
+});
+
+// ---------------------------------------------------------------------------
 // Time and keys
 // ---------------------------------------------------------------------------
 

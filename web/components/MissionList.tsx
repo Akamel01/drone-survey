@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { areaHectares, preview } from "@/lib/mission";
-import type { MissionRow } from "@/lib/missionRecords";
+import type { MissionRecord, MissionRow } from "@/lib/missionRecords";
 import Sheet from "./Sheet";
 import type { NoticePayload } from "./Notice";
 import {
@@ -15,8 +15,24 @@ import {
   type ActionState,
 } from "@/lib/actions";
 import * as missionClient from "@/lib/missionClient";
-import type { MissionAction } from "@/lib/missionClient";
+import type { MissionAction, MissionDraft } from "@/lib/missionClient";
 import { firstSentence } from "@/lib/notice";
+import {
+  compareFacts,
+  discard,
+  enqueue,
+  forMission,
+  keepMine,
+  noSignal,
+  overlay,
+  readOutbox,
+  replay,
+  subscribeOutbox,
+  unshown,
+  waitingLabel,
+  type Entry,
+  type OutboxOp,
+} from "@/lib/outbox";
 import { readPassphrase, subscribePassphrase, writePassphrase } from "@/lib/passphrase";
 import {
   asOfStamp,
@@ -96,6 +112,9 @@ interface MissionListProps {
    *  store to offer them for choosing, and taking them from this read rather
    *  than fetching again keeps one page load to one storage transaction. */
   onRead?: (read: MissionListRead) => void;
+  /** Edits that waited offline and have now reached the store, by Mission id
+   *  and the version they wrote. */
+  onSent?: (sent: { id: string; updated_at?: string }[]) => void;
   /** Page-owned Notice slot. The page stamps `key` itself, so this takes the
    *  payload without it. */
   onNotice?: (p: Omit<NoticePayload, "key">) => void;
@@ -105,7 +124,23 @@ interface MissionListProps {
   onFirstRunNavigate?: (step: FirstRunStep) => void;
 }
 
-export default function MissionList({ onEdit, onCopy, editingId = null, onRead, onNotice, onFirstRunNavigate }: MissionListProps) {
+/** Why Dispatch is not offered, or null. It reserves Cards, so it is never kept
+ *  for later: a refusal has to reach the operator while they can still do
+ *  something about it (ADR 0022). */
+const NEEDS_NETWORK =
+  "Dispatch needs the network: it reserves a Card, and a refusal has to reach you while you can still act on it. Dispatch it when you are back online.";
+/** The row actions that wait for the network when there is none. Dispatch is
+ *  not among them. */
+const OP_OF: Partial<Record<MissionAction, OutboxOp>> = {
+  Withdraw: "withdraw",
+  "Mark Flown": "flown",
+  "Unmark Flown": "unflown",
+  Remove: "remove",
+};
+const WAITING_FIRST =
+  "Dispatch waits until this Mission's changes have synced, so the store Dispatches what you see.";
+
+export default function MissionList({ onEdit, onCopy, editingId = null, onRead, onSent, onNotice, onFirstRunNavigate }: MissionListProps) {
   const [passphrase, setPassphrase] = useState<string | null>(null);
   // True until the first good read, whatever is typed meanwhile: the field
   // asking for the passphrase must not vanish mid-keystroke just because the
@@ -130,6 +165,13 @@ export default function MissionList({ onEdit, onCopy, editingId = null, onRead, 
   const [detailsOpen, setDetailsOpen] = useState(false);
   const removeHeadingId = useId();
   const detailsHeadingId = useId();
+  // What is waiting to sync, the Mission whose two versions are being compared,
+  // and whether the browser says it has no network (PWA-3).
+  const [entries, setEntries] = useState<Entry[]>([]);
+  const [compare, setCompare] = useState<Entry | null>(null);
+  const [compareOpen, setCompareOpen] = useState(false);
+  const [offline, setOffline] = useState(false);
+  const compareHeadingId = useId();
   // The clock the age is measured against, advanced on a timer rather than
   // read during render: a render is not an event, and a screen that re-reads
   // the clock whenever React happens to re-run it cannot be trusted to say
@@ -186,9 +228,14 @@ export default function MissionList({ onEdit, onCopy, editingId = null, onRead, 
   // restart the poll -- restarting it is how a five-minute poll becomes a
   // per-render one, which is the failure this budget exists to prevent.
   const reportRead = useRef(onRead);
+  const reportSent = useRef(onSent);
   useEffect(() => {
     reportRead.current = onRead;
+    reportSent.current = onSent;
   });
+  // The outbox replay `load` starts after a good read, defined below it.
+  const syncRef = useRef<() => void>(() => {});
+  const rowsRef = useRef<MissionRow[]>([]);
 
   // `load` is stable and runs long after the render that made it; it must read
   // the filter as it is now, so it does not dissolve rows the operator has just
@@ -441,6 +488,8 @@ export default function MissionList({ onEdit, onCopy, editingId = null, onRead, 
         const ls = safeStorage();
         if (ls) cacheRead(ls, fresh, at);
         reportRead.current?.(fresh);
+        // The store answered: whatever waited offline goes now.
+        syncRef.current();
         return fresh;
       }
       fallBackToCache(outcome.text);
@@ -472,6 +521,62 @@ export default function MissionList({ onEdit, onCopy, editingId = null, onRead, 
       }
     }
   }, [applyRead]);
+
+  // Send what waited offline, in order, and say what happened (PWA-3). Called
+  // after every good read; a pass that finds nothing to send does nothing.
+  const syncOutbox = useCallback(async () => {
+    const ls = safeStorage();
+    if (!ls || missionClient.signedOut() || !readOutbox(ls).some((e) => !e.problem)) return;
+    const report = await replay(ls, missionClient.send);
+    if (report.sent.length === 0 && report.refused.length === 0) return;
+    reportSent.current?.(report.sent);
+    const named = (e: Entry) =>
+      `“${e.draft?.name ?? e.problem?.conflict?.name ?? rowsRef.current.find((r) => r.id === e.mission_id)?.name ?? "A Mission"}”`;
+    const lines = report.refused.map((e) =>
+      e.problem?.conflict
+        ? `${named(e)} changed in the store while you were offline. Compare the two versions on its row and choose which to keep.`
+        : `${named(e)} could not be sent: ${e.problem?.text}`,
+    );
+    const n = report.sent.length;
+    if (n > 0) lines.push(`${n} ${n === 1 ? "change" : "changes"} made offline ${n === 1 ? "is" : "are"} now in the store.`);
+    onNotice?.({
+      title: firstSentence(lines[0]),
+      body: lines.join(" "),
+      missionName: "",
+      failed: report.refused.length > 0,
+    });
+    void load();
+  }, [load, onNotice]);
+  useEffect(() => {
+    syncRef.current = () => void syncOutbox();
+  }, [syncOutbox]);
+  useEffect(() => {
+    rowsRef.current = read?.missions ?? [];
+  }, [read]);
+
+  // What waits, read from this browser's storage and kept current by every
+  // change to it, from this window or another; and the browser's own word on
+  // the network, so Dispatch can say why it is not offered.
+  useEffect(() => {
+    const ls = safeStorage();
+    const sync = () => setEntries(ls ? readOutbox(ls) : []);
+    sync();
+    const stop = subscribeOutbox(sync);
+    const goOffline = () => setOffline(true);
+    const goOnline = () => {
+      setOffline(false);
+      if (!missionClient.signedOut()) void load();
+    };
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- one-time client-only read of the network
+    setOffline(navigator.onLine === false);
+    addEventListener("offline", goOffline);
+    addEventListener("online", goOnline);
+    return () => {
+      stop();
+      removeEventListener("offline", goOffline);
+      removeEventListener("online", goOnline);
+    };
+  }, [load]);
 
   // FLIP: the last commit left the survivors' old offsets in `flipRef`, and
   // this runs before the browser paints. No dependency array: a pass without a
@@ -617,7 +722,21 @@ export default function MissionList({ onEdit, onCopy, editingId = null, onRead, 
       if (missionClient.signedOut() || inFlight.current) return;
       inFlight.current = true;
       setAction((s) => beginAction(s, label, on));
-      const outcome = await missionClient.run(label, on);
+      // With no signal Dispatch is refused with the reason, and every other
+      // action is kept on this device and sent when the network is back
+      // (PWA-3).
+      let queued = false;
+      let outcome: missionClient.RunResult;
+      if (noSignal()) {
+        const ls = safeStorage();
+        const op = OP_OF[label];
+        queued = !!(ls && op && enqueue(ls, op, on));
+        outcome = queued
+          ? { ok: true, text: `${label} kept on this device, waiting to sync. It is sent to the store when the network is back.` }
+          : { ok: false, text: op ? `${label} failed: this browser has no room to keep it for later. Nothing changed.` : `Dispatch failed: ${NEEDS_NETWORK}` };
+      } else {
+        outcome = await missionClient.run(label, on);
+      }
       inFlight.current = false;
       setAction(IDLE);
       // The cause, set here and nowhere else: only the operator's own Mark
@@ -625,7 +744,7 @@ export default function MissionList({ onEdit, onCopy, editingId = null, onRead, 
       // storage events and cache fallbacks never touch it, so an inferred or
       // re-read Flown can never replay the moment. Consumed by the first read
       // issued after it (applyRead); reads already in flight cannot.
-      if (label === "Mark Flown" && outcome.ok) {
+      if (label === "Mark Flown" && outcome.ok && !queued) {
         flownMarkerRef.current = { id: on, seq: readGenRef.current };
       }
       const fresh = await load();
@@ -682,7 +801,33 @@ export default function MissionList({ onEdit, onCopy, editingId = null, onRead, 
     if (id) listRef.current?.querySelector<HTMLElement>(`[data-row-id="${id}"] .more`)?.focus();
   }, [detailsRow]);
 
-  const all = useMemo(() => read?.missions ?? [], [read]);
+  // The store's rows with each edit that is waiting to sync laid over its row,
+  // so a reload shows the change the operator made, marked as not sent yet.
+  const all = useMemo(() => overlay(read?.missions ?? [], entries), [read, entries]);
+  const apart = useMemo(() => unshown(read?.missions ?? [], entries), [read, entries]);
+  // What waits on a row of its own (the rest is listed apart), and why Dispatch
+  // is not offered on it, or null.
+  const waitingOn = (row: MissionRow) => forMission(entries, row.id).filter((e) => !apart.includes(e));
+  const dispatchWhy = (row: MissionRow) =>
+    offline || !live ? NEEDS_NETWORK : waitingOn(row).length > 0 ? WAITING_FIRST : null;
+
+  const takeStores = (entry: Entry) => {
+    const ls = safeStorage();
+    if (ls) discard(ls, entry.seq);
+    setCompareOpen(false);
+  };
+  const keepMineNow = (entry: Entry) => {
+    const ls = safeStorage();
+    if (ls && entry.problem?.conflict) keepMine(ls, entry.seq, entry.problem.conflict.updated_at);
+    setCompareOpen(false);
+    void syncOutbox();
+  };
+  const resolve = (entry: Entry) => {
+    if (entry.problem?.conflict) {
+      setCompare(entry);
+      setCompareOpen(true);
+    } else takeStores(entry);
+  };
   // The planner's own figures, derived from each Mission's Spec. They are one
   // half of the mismatch check, so they must come from the Spec the row
   // carries and not from a summary file the host also writes into.
@@ -759,6 +904,11 @@ export default function MissionList({ onEdit, onCopy, editingId = null, onRead, 
           {readAt === null ? "not read yet" : checkedAgo(readAt, Math.max(now, readAt))}
           {!live && readAt !== null && <span className={styles.stale}> · {asOfStamp(readAt)}</span>}
         </span>
+        {entries.length > 0 && (
+          <span className={styles.waiting} data-waiting={entries.length} role="status">
+            {entries.length} waiting to sync
+          </span>
+        )}
         <button
           onClick={() => {
             if (missionClient.signedOut()) return;
@@ -806,7 +956,11 @@ export default function MissionList({ onEdit, onCopy, editingId = null, onRead, 
         </p>
       ))}
 
-      {visible.length === 0 && !error &&
+      {apart.map((entry) => (
+        <PendingRow key={entry.seq} entry={entry} onResolve={() => resolve(entry)} />
+      ))}
+
+      {visible.length === 0 && apart.length === 0 && !error &&
         (all.length === 0 ? (
           <>
             <p className={styles.quiet}>
@@ -876,6 +1030,9 @@ export default function MissionList({ onEdit, onCopy, editingId = null, onRead, 
               row={parked ?? row}
               view={settledView ?? rowView(row, figures.get(row.id) ?? null, read?.stale_cards ?? [], read?.host?.notice ?? null)}
               editing={row.id === editingId}
+              waiting={waitingOn(row)}
+              dispatchWhy={dispatchWhy(row)}
+              onResolve={resolve}
               busy={action.running !== null}
               running={(name) => isRunning(action, name, row.id)}
               onAction={(name) => runAction(name, row)}
@@ -1021,7 +1178,112 @@ export default function MissionList({ onEdit, onCopy, editingId = null, onRead, 
           </>
         )}
       </Sheet>
+
+      <Sheet open={compareOpen} onClose={() => setCompareOpen(false)} labelledBy={compareHeadingId}>
+        {compare?.problem?.conflict && compare.draft && (
+          <Compare
+            headingId={compareHeadingId}
+            mine={compare.draft}
+            store={compare.problem.conflict}
+            storeState={compare.problem.state}
+            onKeepMine={() => keepMineNow(compare)}
+            onTakeStores={() => takeStores(compare)}
+          />
+        )}
+      </Sheet>
     </div>
+  );
+}
+
+/** The two versions of a Mission changed in both places: yours (made offline)
+ *  and the store's. Nothing is saved until one is chosen -- no merge, because a
+ *  merge would be a Mission neither of them made (PWA-3, #278). */
+function Compare({
+  headingId,
+  mine,
+  store,
+  storeState,
+  onKeepMine,
+  onTakeStores,
+}: {
+  headingId: string;
+  mine: MissionDraft;
+  store: MissionRecord;
+  storeState?: string;
+  onKeepMine: () => void;
+  onTakeStores: () => void;
+}) {
+  const yours = compareFacts(mine);
+  const theirs = compareFacts(store);
+  const versions = [
+    { which: "mine", label: "Yours", facts: yours, other: theirs, material: "panel-light" },
+    { which: "store", label: "The store's", facts: theirs, other: yours, material: "panel-light-alt" },
+  ];
+  // What "keep mine" does is the store's rule, not a merge: in place while
+  // Planned, a replacement once Dispatched (editBehaviour, ADR 0021).
+  const keepDetail =
+    storeState === "planned"
+      ? "Saves your version over the store's."
+      : storeState === "loaded"
+        ? "This Mission is Loaded, so its file is on the Controller and the store will refuse your version."
+        : "This Mission has been Dispatched since, so your version is saved as a replacement that supersedes it when Dispatched.";
+  return (
+    <>
+      <h3 id={headingId} className={styles.sheetTitle}>
+        Two versions of “{store.name}”
+      </h3>
+      <p className={styles.sheetText}>
+        You edited it here with no signal, and it was changed in the store since. Nothing is saved until you choose.
+      </p>
+      {versions.map(({ which, label, facts, other, material }) => (
+        <div key={which} className={`${material} ${styles.detailsPanel}`} data-version={which}>
+          <span className={styles.detailsChip}>{label}</span>
+          {facts.map(([name, value], i) => (
+            <div key={name} className={styles.fact}>
+              <span className={styles.factLabel}>{name}</span>
+              <span className={`${styles.factValue} ${value !== other[i][1] ? styles.differs : ""}`}>{value}</span>
+            </div>
+          ))}
+        </div>
+      ))}
+      <p className={styles.sheetText}>{keepDetail}</p>
+      <div className={styles.sheetActions}>
+        <button type="button" onClick={onTakeStores}>
+          Take the store&rsquo;s
+        </button>
+        <button type="button" className="primary" onClick={onKeepMine}>
+          Keep mine
+        </button>
+      </div>
+    </>
+  );
+}
+
+/** A save with no row of its own yet: a Mission made with no signal, or a
+ *  replacement of a Dispatched one. It is on this device and not in the store. */
+function PendingRow({ entry, onResolve }: { entry: Entry; onResolve: () => void }) {
+  const draft = entry.draft!;
+  return (
+    <article className={`${styles.row} glass-smoke ${entry.problem ? styles.toneStop : styles.toneWait}`} data-pending-id={entry.mission_id}>
+      <header className={styles.head}>
+        <h3 className={styles.title}>
+          {draft.name}
+          <span className={styles.site}>
+            {draft.site} · {draft.date}
+          </span>
+        </h3>
+        <span className={`mono ${styles.chip}`}>Not sent</span>
+      </header>
+      <p className={styles.headline}>{entry.problem ? "Waiting for your choice" : "Waiting to sync"}</p>
+      <p className={entry.problem ? styles.stop : styles.detail}>{waitingLabel(entry, false)}</p>
+      {entry.problem && (
+        <div className={styles.actions}>
+          <button type="button" onClick={onResolve}>
+            {entry.problem.conflict ? "Compare" : "Discard my change"}
+          </button>
+        </div>
+      )}
+    </article>
   );
 }
 
@@ -1032,6 +1294,9 @@ function Row({
   row,
   view,
   editing,
+  waiting,
+  dispatchWhy,
+  onResolve,
   busy,
   running,
   onAction,
@@ -1040,6 +1305,10 @@ function Row({
   row: MissionRow;
   view: RowView;
   editing: boolean;
+  /** What of this Mission's has not reached the store (PWA-3). */
+  waiting: Entry[];
+  dispatchWhy: string | null;
+  onResolve: (entry: Entry) => void;
   busy: boolean;
   running: (name: ActionName) => boolean;
   onAction: (name: ActionName) => void;
@@ -1095,12 +1364,26 @@ function Row({
       )}
       {/* view.reason lives in Details (M2); the row leads with the answer. */}
 
+      {/* What has not reached the store, in the Mission's own row: the state
+          above is the store's last word, and this is what is on the way. */}
+      {waiting.map((entry) => (
+        <p key={entry.seq} className={entry.problem ? styles.stop : styles.note} data-waiting-op={entry.op}>
+          {waitingLabel(entry, true)}{" "}
+          {entry.problem && (
+            <button type="button" className={styles.inline} onClick={() => onResolve(entry)}>
+              {entry.problem.conflict ? "Compare" : "Discard my change"}
+            </button>
+          )}
+        </p>
+      ))}
+
       <div className={styles.actions}>
         {view.actions.map((name) => (
           <button
             key={name}
             onClick={() => onAction(name)}
-            disabled={busy && name !== "Edit" && name !== "Copy"}
+            disabled={(busy || waiting.length > 0 || (name === "Dispatch" && dispatchWhy !== null)) && name !== "Edit" && name !== "Copy"}
+            aria-describedby={name === "Dispatch" && dispatchWhy ? `${row.id}-why` : undefined}
             className={name === "Dispatch" ? "primary" : undefined}
           >
             {running(name) ? `${name}…` : name}
@@ -1108,6 +1391,11 @@ function Row({
         ))}
         {editing && <span className={styles.editingNote}>open in the editor</span>}
       </div>
+      {view.actions.includes("Dispatch") && dispatchWhy && (
+        <p id={`${row.id}-why`} className={styles.note}>
+          {dispatchWhy}
+        </p>
+      )}
 
       {/* The old disclosure's contents now live in a sheet, on a light panel
           (spec § 8, § 14) -- this only opens it. */}

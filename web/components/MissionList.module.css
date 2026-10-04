@@ -451,3 +451,27 @@
     border: 1px solid var(--on-glass);
   }
 }
+
+/* What is waiting to sync (PWA-3): a count in the bar, in the warm tone the
+   stale-read stamp uses, and a plain-text button inside a row's own note. */
+.waiting {
+  color: var(--warn);
+  font-variant-numeric: tabular-nums;
+}
+
+.inline {
+  display: inline;
+  padding: 0;
+  min-height: 0;
+  background: none;
+  border: none;
+  font: inherit;
+  color: var(--on-glass);
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+/* The compare: the facts that differ between the two versions read heavier. */
+.differs {
+  font-weight: 600;
+}

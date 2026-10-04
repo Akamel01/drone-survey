@@ -40,6 +40,9 @@ export interface Editing {
   /** Set while the editor holds an unsaved copy of another Mission, so the
    *  operator can see that saving makes a new one. */
   copied_from?: string;
+  /** The `updated_at` of the stored Mission when it was opened (or last saved
+   *  or sent from here): what an edit made with no signal is guarded by. */
+  base?: string;
 }
 
 /** Which column a narrow screen shows. Wide screens show all three. */
@@ -324,7 +327,7 @@ export default function PlanPage() {
   // On a narrow screen, opening a Mission moves to the map, where it is.
   const editMission = (row: MissionRow) => {
     setSpecState(row.spec);
-    setEditing({ id: row.id, name: row.name });
+    setEditing({ id: row.id, name: row.name, base: row.updated_at });
     setOpenToken((t) => t + 1);
     setView("map");
   };
@@ -338,6 +341,13 @@ export default function PlanPage() {
   };
 
   const onListRead = (read: MissionListRead) => setMissions(read.missions);
+  // Edits that waited offline have reached the store: the Mission in the editor
+  // is now at the version they wrote.
+  const onSent = (sent: { id: string; updated_at?: string }[]) =>
+    setEditing((e) => {
+      const done = sent.findLast((s) => s.id === e.id);
+      return done?.updated_at ? { ...e, base: done.updated_at } : e;
+    });
 
   return (
     <main
@@ -373,7 +383,7 @@ export default function PlanPage() {
               ‹
             </button>
           </div>
-          <MissionList onEdit={editMission} onCopy={copyMission} editingId={editing.id} onRead={onListRead} onNotice={showNotice} onFirstRunNavigate={navigateFirstRun} />
+          <MissionList onEdit={editMission} onCopy={copyMission} editingId={editing.id} onRead={onListRead} onSent={onSent} onNotice={showNotice} onFirstRunNavigate={navigateFirstRun} />
         </section>
         <section className={styles.map} aria-label="Map" inert={!wide && view !== "map"}>
           <MapPane
@@ -456,7 +466,7 @@ export default function PlanPage() {
           preview={preview_}
           editing={editing}
           onSaved={(row) => {
-            setEditing({ id: row.id, name: row.name });
+            setEditing({ id: row.id, name: row.name, base: row.updated_at || undefined });
             // The Sheet may have changed the Site; the editor now shows what was saved.
             setSpecState((s) => ({ ...s, site: row.site, site_id: row.site_id }));
           }}

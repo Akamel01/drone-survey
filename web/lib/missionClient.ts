@@ -10,6 +10,7 @@ import { readPassphrase, subscribePassphrase } from "./passphrase.ts";
 import { describeResult, noteMissionSaved, noteMissionsChanged } from "./actions.ts";
 import { describeSave } from "./missionView.ts";
 import type { ActionResult } from "./actions.ts";
+import type { Entry, OutboxOp, Sent } from "./outbox.ts";
 import type { MissionRecord } from "./missionRecords.ts";
 import type { MissionListRead } from "./missionView.ts";
 import type { MissionSpec } from "./spec.ts";
@@ -25,6 +26,9 @@ export interface CallFailure {
   ok: false;
   status?: number;
   text: string;
+  /** A save refused because the store's Mission is not the version it was
+   *  made against: the store's record and its state (PWA-3). */
+  conflict?: { record: MissionRecord; state?: string };
 }
 
 /** GET /api/missions?archived=1, already shape-checked (an array of Missions)
@@ -47,6 +51,9 @@ export interface MissionDraft {
   name: string;
   date: string;
   spec: MissionSpec;
+  /** The `updated_at` of the stored Mission this edit was made against, when it
+   *  waited offline: the route refuses it if the store has moved on. */
+  base_updated_at?: string;
 }
 
 // The credential, seeded lazily from storage and kept current by the shared
@@ -167,6 +174,7 @@ export async function save(draft: MissionDraft, how?: Parameters<typeof describe
           name: draft.name,
           date: draft.date,
           spec: draft.spec,
+          base_updated_at: draft.base_updated_at,
         }),
       }),
     "the store could not be reached",
@@ -195,5 +203,32 @@ export async function save(draft: MissionDraft, how?: Parameters<typeof describe
     ok: false,
     status,
     text: typeof body.error === "string" ? body.error : `Not saved (HTTP ${status}). Nothing changed.`,
+    ...(body.conflict ? { conflict: { record: body.conflict as MissionRecord, state: body.state as string | undefined } } : {}),
   };
+}
+
+const ACTION_OF: Record<Exclude<OutboxOp, "save">, MissionAction> = {
+  withdraw: "Withdraw",
+  flown: "Mark Flown",
+  unflown: "Unmark Flown",
+  remove: "Remove",
+};
+
+/** One waiting edit, to the route that owns it, for `replay`: sent, refused
+ *  with the store's own sentence, or the store could not be reached. A 5xx is
+ *  the store failing, not the edit being wrong, so the edit waits for the next
+ *  try. */
+export async function send(entry: Entry): Promise<Sent> {
+  if (entry.op === "save" && entry.draft) {
+    const saved = await save(entry.draft);
+    return saved.ok ? { ok: true, id: saved.mission.id, updated_at: saved.mission.updated_at } : unsent(saved);
+  }
+  const done = await run(ACTION_OF[entry.op as keyof typeof ACTION_OF], entry.mission_id);
+  return done.ok ? { ok: true } : unsent(done);
+}
+
+function unsent(failure: CallFailure): Sent {
+  if (failure.status === undefined || failure.status >= 500) return { ok: false, later: true };
+  const { conflict } = failure;
+  return { ok: false, problem: { text: failure.text, ...(conflict ? { conflict: conflict.record, state: conflict.state } : {}) } };
 }
