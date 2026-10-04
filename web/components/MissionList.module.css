@@ -89,13 +89,22 @@
   align-items: center;
   gap: 8px;
   font-size: 0.75rem;
-  color: var(--on-glass-3);
+  /* The age sits bare on the hero; --on-glass-3 (0.80) reads 4.43:1 on its
+     brightest pixels at 375 px, --on-glass-2 (0.85) clears 4.5:1. */
+  color: var(--on-glass-2);
 }
 
 .bar button {
   padding: 6px 12px;
   font-size: 0.75rem;
   min-height: 32px;
+}
+
+/* Refresh and the filter sit on the hero, not in a row's glass: a 0.14 white
+   fill leaves white text near 1.5:1 on the brightest mist, so they take smoke
+   glass like the rows (spec § 12). The active filter keeps its light pill. */
+.bar button:not(:global(.active)) {
+  background: var(--glass-smoke);
 }
 
 .age {
@@ -213,7 +222,9 @@
   font-size: 0.6875rem;
   text-transform: uppercase;
   letter-spacing: 0.06em;
-  color: var(--on-glass-2);
+  /* Full white: --on-glass-2 gives 3.9:1 on this chip over the brightest mist
+     at 375 px, white gives 4.8:1. */
+  color: var(--on-glass);
 }
 
 /* The answer, at the size of an answer. "Open way finder 2" is the whole point
