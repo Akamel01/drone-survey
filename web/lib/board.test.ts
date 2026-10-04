@@ -6,7 +6,9 @@ import assert from "node:assert/strict";
 
 import { answerFor, boardAddress, followLoad, missionLabel, readBoard, rowFor, startLoad } from "./board.ts";
 import type { BoardLoad, BoardMission } from "./board.ts";
-import { PENDING_KEY, reportLoaded, sendPending } from "./loadedMark.ts";
+import { reportLoaded } from "./loadedMark.ts";
+import { send } from "./missionClient.ts";
+import { OUTBOX_KEY, readOutbox, replay } from "./outbox.ts";
 import type { MissionRow } from "./missionRecords.ts";
 
 const realFetch = globalThis.fetch;
@@ -135,11 +137,12 @@ test("rowFor and missionLabel: the store's name when the Mission is in the list,
   assert.match(missionLabel({ ...MISSION, cards: null }, null).detail, /Cards unknown/);
 });
 
-test("reportLoaded: sent when the store answers; kept when it cannot be reached; sent later", async () => {
+test("reportLoaded: sent when the store answers; kept in the outbox when it cannot be reached; sent by the replay", async () => {
   const cards = LOADED.cards;
   answer = down;
   assert.equal(await reportLoaded("m1", cards), "waiting");
-  assert.equal(JSON.parse(store.get(PENDING_KEY)!).length, 1);
+  const kept = readOutbox(localStorage);
+  assert.deepEqual(kept.map((e) => [e.op, e.mission_id]), [["loaded", "m1"]]);
 
   answer = (_url, init) => {
     assert.deepEqual(JSON.parse(String(init?.body)), {
@@ -148,15 +151,22 @@ test("reportLoaded: sent when the store answers; kept when it cannot be reached;
     });
     return json({ id: "m1" });
   };
-  assert.equal(await sendPending(), 1);
-  assert.deepEqual(JSON.parse(store.get(PENDING_KEY)!), []);
+  const report = await replay(localStorage, send);
+  assert.deepEqual(report.sent.map((s) => s.id), ["m1"]);
+  assert.deepEqual(JSON.parse(store.get(OUTBOX_KEY)!), []);
+  assert.equal(await reportLoaded("m1", cards), "sent");
 });
 
-test("reportLoaded: a refusal the store will always give is dropped, not retried; a wrong passphrase waits", async () => {
+test("reportLoaded: a second report of one Mission replaces the first; a refusal the store will always give is not kept; a wrong passphrase waits", async () => {
+  answer = down;
+  await reportLoaded("m1", LOADED.cards);
+  await reportLoaded("m1", LOADED.cards);
+  assert.equal(readOutbox(localStorage).length, 1);
+  store.clear();
   answer = () => json({ error: "This Mission is withdrawn" }, 409);
   assert.equal(await reportLoaded("m1", LOADED.cards), "refused");
-  assert.equal(store.get(PENDING_KEY), undefined);
+  assert.equal(store.get(OUTBOX_KEY), undefined);
   answer = () => json({ error: "passphrase" }, 401);
   assert.equal(await reportLoaded("m1", LOADED.cards), "waiting");
-  assert.equal(JSON.parse(store.get(PENDING_KEY)!).length, 1);
+  assert.equal(readOutbox(localStorage).length, 1);
 });

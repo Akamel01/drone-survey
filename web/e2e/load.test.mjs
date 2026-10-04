@@ -283,13 +283,17 @@ test("with no way to the store, the Load stands and the Mission is marked Loaded
   assert.equal(store.records().find((r) => r.id === "m-ok").loaded_mark, undefined, "the store was not reached");
   await shot(page, "load-queued");
 
+  // The report waits in the offline outbox, and is counted with the other waiting edits.
+  await page.waitForFunction(() => document.querySelector("[data-waiting]")?.getAttribute("data-waiting") === "1");
+  const kept = await page.evaluate(() => JSON.parse(localStorage.getItem("drone-planner.outbox") ?? "[]"));
+  assert.deepEqual(kept.map((e) => [e.op, e.mission_id]), [["loaded", "m-ok"]]);
+
   state.storeUp = true;
   await page.evaluate(() => window.dispatchEvent(new Event("online")));
-  for (const deadline = Date.now() + 15_000; Date.now() < deadline; ) {
-    if (store.records().find((r) => r.id === "m-ok").loaded_mark) break;
-    await page.waitForTimeout(250);
-  }
+  // The replay is asynchronous: wait for the outbox to empty, then for the store to have the mark.
+  await page.waitForFunction(() => JSON.parse(localStorage.getItem("drone-planner.outbox") ?? "[]").length === 0, null, {
+    timeout: 20_000,
+  });
   assert.equal(store.records().find((r) => r.id === "m-ok").loaded_mark.cards[0].waypoints, 125);
-  assert.equal(await page.evaluate(() => localStorage.getItem("drone-planner.pending-loaded")), "[]");
   await context.close();
 });

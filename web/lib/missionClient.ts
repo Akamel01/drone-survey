@@ -10,6 +10,7 @@ import { readPassphrase, subscribePassphrase } from "./passphrase.ts";
 import { describeResult, noteMissionSaved, noteMissionsChanged } from "./actions.ts";
 import { describeSave } from "./missionView.ts";
 import type { ActionResult } from "./actions.ts";
+import type { BoardCard } from "./board.ts";
 import type { Entry, OutboxOp, Sent } from "./outbox.ts";
 import type { MissionRecord } from "./missionRecords.ts";
 import type { MissionListRead } from "./missionView.ts";
@@ -207,7 +208,25 @@ export async function save(draft: MissionDraft, how?: Parameters<typeof describe
   };
 }
 
-const ACTION_OF: Record<Exclude<OutboxOp, "save">, MissionAction> = {
+/** Tell the store the board Loaded a Mission (PWA-4, #318): the Cards it wrote,
+ *  as the Load view saw them. Repeats are harmless. */
+export async function markLoaded(id: string, cards: BoardCard[]): Promise<{ ok: true } | CallFailure> {
+  const reply = await attempt(() =>
+    post("/api/missions/loaded", {
+      id,
+      cards: cards.map((c) => ({ card: c.card, name: c.mission, waypoints: c.waypoints })),
+    }),
+  );
+  if (reply.ok) {
+    noteMissionsChanged();
+    return { ok: true };
+  }
+  if ("threw" in reply) return { ok: false, text: `Loaded report failed: ${reply.threw}` };
+  const { body, status } = reply;
+  return { ok: false, status, text: typeof body.error === "string" ? body.error : `Loaded report failed (HTTP ${status}).` };
+}
+
+const ACTION_OF: Record<Exclude<OutboxOp, "save" | "loaded">, MissionAction> = {
   withdraw: "Withdraw",
   flown: "Mark Flown",
   unflown: "Unmark Flown",
@@ -222,6 +241,10 @@ export async function send(entry: Entry): Promise<Sent> {
   if (entry.op === "save" && entry.draft) {
     const saved = await save(entry.draft);
     return saved.ok ? { ok: true, id: saved.mission.id, updated_at: saved.mission.updated_at } : unsent(saved);
+  }
+  if (entry.op === "loaded") {
+    const reported = await markLoaded(entry.mission_id, entry.cards ?? []);
+    return reported.ok ? { ok: true } : unsent(reported);
   }
   const done = await run(ACTION_OF[entry.op as keyof typeof ACTION_OF], entry.mission_id);
   return done.ok ? { ok: true } : unsent(done);

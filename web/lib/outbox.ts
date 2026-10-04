@@ -17,6 +17,7 @@
 // worker: the worker never sees /api (lib/serviceWorker.ts), and the credential
 // is the page's.
 
+import type { BoardCard } from "./board.ts";
 import { LOCAL_ID_PREFIX } from "./keys.ts";
 import { areaHectares, preview } from "./mission.ts";
 import type { MissionDraft } from "./missionClient.ts";
@@ -26,7 +27,7 @@ import type { MissionSpec } from "./spec.ts";
 
 export const OUTBOX_KEY = "drone-planner.outbox";
 
-export type OutboxOp = "save" | "withdraw" | "flown" | "unflown" | "remove";
+export type OutboxOp = "save" | "withdraw" | "flown" | "unflown" | "remove" | "loaded";
 
 /** Why an entry is not being sent: the store's own sentence, and for a changed
  *  Mission both versions. `conflict` is the store's record, `state` its state. */
@@ -43,6 +44,8 @@ export interface Entry {
   mission_id: string;
   /** A save's Mission, with `base_updated_at` when it edits a stored one. */
   draft?: MissionDraft;
+  /** A `loaded` entry's Cards: what the board wrote, as the Load view saw it (PWA-4). */
+  cards?: BoardCard[];
   problem?: Problem;
 }
 
@@ -131,6 +134,16 @@ export function enqueue(store: KeyValue, op: OutboxOp, mission_id: string, draft
   return write(store, entries) ? entry : null;
 }
 
+/** Keep the report that the board Loaded a Mission, made at the aircraft (PWA-4,
+ *  #318). A second report of the same Mission replaces the first. Null when it
+ *  could not be kept. */
+export function enqueueLoaded(store: KeyValue, mission_id: string, cards: BoardCard[]): Entry | null {
+  const entries = readOutbox(store).filter((e) => !(e.op === "loaded" && e.mission_id === mission_id));
+  const entry: Entry = { seq: Math.max(0, ...entries.map((e) => e.seq)) + 1, op: "loaded", mission_id, cards };
+  entries.push(entry);
+  return write(store, entries) ? entry : null;
+}
+
 /** Drop an entry: sent, or the operator took the store's version. */
 export function discard(store: KeyValue, seq: number): void {
   write(store, readOutbox(store).filter((e) => e.seq !== seq));
@@ -206,6 +219,7 @@ const WAITING: Record<OutboxOp, string> = {
   flown: "Mark Flown waiting to sync",
   unflown: "Unmark Flown waiting to sync",
   remove: "Remove waiting to sync",
+  loaded: "Loaded report waiting to sync",
 };
 
 /** One line for an entry, in the operator's words: what it is, and that it has

@@ -17,7 +17,7 @@ import {
   type BoardRead,
   type LoadAnswer,
 } from "@/lib/board";
-import { reportLoaded, sendPending, type MarkResult } from "@/lib/loadedMark";
+import { reportLoaded, type MarkResult } from "@/lib/loadedMark";
 import type { MissionRow } from "@/lib/missionRecords";
 import type { NoticePayload } from "./Notice";
 import Sheet from "./Sheet";
@@ -69,14 +69,6 @@ export default function LoadSheet({ open, onClose, missions, onNotice }: LoadShe
   useEffect(() => {
     latest.current = { missions, onNotice, phase };
   });
-
-  // Reports kept while offline go out when the connection is back.
-  useEffect(() => {
-    void sendPending();
-    const again = () => void sendPending();
-    addEventListener("online", again);
-    return () => removeEventListener("online", again);
-  }, []);
 
   useEffect(() => () => following.current?.abort(), []);
 
