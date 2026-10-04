@@ -1,0 +1,93 @@
+{
+  "contrast_rms_D1": {
+    "attr": "4b",
+    "note": "",
+    "region": "x0.70-0.98:y0.55-0.80",
+    "unit": "levels",
+    "value": 15.224258402565205
+  },
+  "contrast_rms_D2": {
+    "attr": "4b",
+    "note": "",
+    "region": "x0.02-0.35:y0.72-0.85",
+    "unit": "levels",
+    "value": 0.8519102199633345
+  },
+  "contrast_rms_D3": {
+    "attr": "4b",
+    "note": "",
+    "region": "x0.02-0.35:y0.62-0.72",
+    "unit": "levels",
+    "value": 0.5922798809053195
+  },
+  "falloff_rms_D2_D1": {
+    "attr": "4b",
+    "note": "",
+    "region": "x0.02-0.35:y0.72-0.85",
+    "unit": "ratio",
+    "value": 0.055957419891125355
+  },
+  "falloff_rms_D3_D1": {
+    "attr": "4b",
+    "note": "",
+    "region": "x0.02-0.35:y0.62-0.72",
+    "unit": "ratio",
+    "value": 0.03890369338486291
+  },
+  "falloff_sat_D2_D1": {
+    "attr": "4b",
+    "note": "",
+    "region": "x0.02-0.35:y0.72-0.85",
+    "unit": "ratio",
+    "value": 0.36884989773628124
+  },
+  "falloff_sat_D3_D1": {
+    "attr": "4b",
+    "note": "",
+    "region": "x0.02-0.35:y0.62-0.72",
+    "unit": "ratio",
+    "value": 0.255499722633727
+  },
+  "sat_S_D1": {
+    "attr": "4b",
+    "note": "",
+    "region": "x0.70-0.98:y0.55-0.80",
+    "unit": "S",
+    "value": 0.391762294403824
+  },
+  "sat_S_D2": {
+    "attr": "4b",
+    "note": "",
+    "region": "x0.02-0.35:y0.72-0.85",
+    "unit": "S",
+    "value": 0.1445014822277814
+  },
+  "sat_S_D3": {
+    "attr": "4b",
+    "note": "",
+    "region": "x0.02-0.35:y0.62-0.72",
+    "unit": "S",
+    "value": 0.10009515755852953
+  },
+  "value_V_D1": {
+    "attr": "4b",
+    "note": "",
+    "region": "x0.70-0.98:y0.55-0.80",
+    "unit": "levels",
+    "value": 62.013462465564736
+  },
+  "value_V_D2": {
+    "attr": "4b",
+    "note": "",
+    "region": "x0.02-0.35:y0.72-0.85",
+    "unit": "levels",
+    "value": 192.20165436061464
+  },
+  "value_V_D3": {
+    "attr": "4b",
+    "note": "",
+    "region": "x0.02-0.35:y0.62-0.72",
+    "unit": "levels",
+    "value": 206.74887871084618
+  }
+}
