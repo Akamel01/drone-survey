@@ -55,3 +55,9 @@ node_modules/
 
 # App icons: rendered from web/scripts/make-icons.mjs, and shipped
 !web/public/icons/*.png
+# Private keys and certificate bundles — never in git (the board CA's key: scripts/board/README.md)
+*.key
+*.pem
+*.p12
+*.pfx
+board-ca/

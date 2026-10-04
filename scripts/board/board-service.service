@@ -6,9 +6,11 @@ After=network-online.target
 
 [Service]
 Type=simple
-# BOARD_LOADER_DIR=<dir holding load.py> if the loader is not at ../mission
-# (the deployed host loader is ~/wayfinder/bin). Optional file, one KEY=value per line.
-EnvironmentFile=-%h/.config/board-service.env
+# BOARD_TLS_CERT and BOARD_TLS_KEY: the board's certificate and key from make_certs.py (required:
+# without them the service refuses to start; see README.md). BOARD_LOADER_DIR=<dir holding load.py>
+# if the loader is not at ../mission (the deployed host loader is ~/wayfinder/bin).
+# One KEY=value per line.
+EnvironmentFile=%h/.config/board-service.env
 Environment=PYTHONUNBUFFERED=1
 ExecStart=/usr/bin/python3 %h/drone-survey/scripts/board/board_service.py
 Restart=on-failure

@@ -1,5 +1,7 @@
 # Drone Survey
 
+<img width="2560" height="1440" alt="hero-wide-poster-1440" src="https://github.com/user-attachments/assets/25824b2b-cb16-4768-bc2c-56b8c6cd2f2a" />
+
 Turns drone footage of a Site into finished visual deliverables clients pay for:
 Orthomosaic maps and explorable 3D scenes (Gaussian Splatting). Phase 1 sells
 those two; a 3D Timelapse across repeat visits comes later.
