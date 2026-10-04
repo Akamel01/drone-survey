@@ -161,4 +161,6 @@ python3 scripts/board/board_service_test.py     # or: python3 scripts/board/boar
 python3 scripts/board/make_certs_test.py        # the certificates, the profile, the ignore rules
 ```
 
+`standin_board.py` is this same service over a fake loader, for the app's end-to-end tests (`web/e2e/load.test.mjs`, PWA-4, #318): the real routes, origin allowlist and CORS, three Missions that Load, are refused and break, and no Controller, B2 or network. `python3 scripts/board/standin_board.py --port 8788 --allow-origin http://localhost:3000` serves it on plain HTTP for trying the app's Load view by hand.
+
 The ledger, the USB check and the loader run are faked; nothing touches the network or a Controller. The TLS tests make a CA in a temp folder and start the server on a free port: a client that trusts that CA connects; one that does not (system store, another CA, another name) is refused.

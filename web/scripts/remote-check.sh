@@ -180,8 +180,9 @@ phase_prune() { remote bash "$(hostsh)" prune "$@"; }
 # ----------------------------------------------------------------- transport
 
 # (a) branch folder, (b) replace host.sh from this worktree, (c,d) tar-pipe
-# web/ (plus an outside-web PREVIEW_CSS member); the remote web/ is cleaned
-# depth-1 first (node_modules kept) so the extraction is exactly this tree.
+# web/ (plus the board service and the loader it imports, which test:e2e's
+# stand-in board runs, and an outside-web PREVIEW_CSS member); the remote web/
+# is cleaned depth-1 first (node_modules kept) so the extraction is exactly this tree.
 send_tree() {
   local root extra="" wt
   SLUG="${SLUG:-$(slug)}"
@@ -197,7 +198,8 @@ send_tree() {
   fi
   COPYFILE_DISABLE=1 tar --no-xattrs --no-mac-metadata -czf - -C "$root" \
     --exclude=web/node_modules --exclude=web/.next --exclude=web/.pglite --exclude=web/.e2e-mail \
-    web ${extra:+"$extra"} | \
+    --exclude=__pycache__ \
+    web scripts/board scripts/mission ${extra:+"$extra"} | \
     remote "mkdir -p \"$wt\" && find \"$wt/web\" -mindepth 1 -maxdepth 1 ! -name node_modules -exec rm -rf {} + 2>/dev/null || true; tar xzf - -C \"$wt\""
 }
 

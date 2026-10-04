@@ -76,6 +76,13 @@
   justify-content: space-between;
 }
 
+/* Opens the Load sheet. Sits beside the fold control, which keeps its place at the right edge. */
+.loadButton {
+  min-height: 44px;
+  margin: 0 8px 12px auto;
+  padding: 0 18px;
+}
+
 .map {
   flex: 1;
   min-width: 0;
