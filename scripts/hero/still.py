@@ -171,7 +171,11 @@ K2 = {
     "moss": dict(Saturation=1.3, Value=1.0),    # Value = the rim's
     "moss_top_value": 0.40,  # moss Value on the island top
     "moss_y": (-2.2, 0.3),   # world y ramp: front (low in frame) -> back
-    "tint_firs": (0.25, 0.32, 0.18),
+    # pass 47 (#223): x0.85 uniform (p21 falsification dose) — darken the
+    # existing crowns toward the hero's near-black green WITHOUT adding
+    # copies (p46 closed density-by-count: the wide 4h ceiling binds first).
+    # Hue preserved; count/geometry untouched.
+    "tint_firs": (0.2125, 0.272, 0.153),
     "fir_turns": (1.57,),
     "fir_fill_scale": 0.55,       # extra crown copies per fir (radians)   # the hero's spruces are darker
     # pass 7 (#223): 0.75 -> 0.55 targets wide 4h only — FirFill copies hide on
