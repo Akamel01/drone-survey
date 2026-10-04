@@ -112,7 +112,11 @@ export default function PlanPage() {
   // back (MapLibre does not always retry failed tiles on its own).
   const [offline, setOffline] = useState(false);
   const [mapFailed, setMapFailed] = useState(false);
-  const noNetwork = offline || mapFailed;
+  // The map shows the Site's offline map (PWA-2) instead of the basemap: it
+  // has a surface, so the fallback below stays away.
+  const [offlineMap, setOfflineMap] = useState(false);
+  const down = offline || mapFailed;
+  const noNetwork = down && !offlineMap;
   // The wide-screen fallback only: below 1000px it would be a hidden 0x0
   // surface, and its hero scene would still decode a video and animate.
   const [wide, setWide] = useState(false);
@@ -393,6 +397,8 @@ export default function PlanPage() {
           onSelectedCornerChange={setSelectedCorner}
           onBasemapError={handleBasemapError}
           onBasemapLoaded={handleBasemapLoaded}
+          noNetwork={down}
+          onOfflineMap={setOfflineMap}
           />
           <MapToolbar
             spec={spec}
@@ -440,6 +446,8 @@ export default function PlanPage() {
           preview={preview_}
           sites={sites}
           editing={editing}
+          missions={missions}
+          offline={down}
           onNameChange={(name) => setEditing((e) => ({ ...e, name }))}
           onNotice={showNotice}
           onPendingCount={setPendingCount}

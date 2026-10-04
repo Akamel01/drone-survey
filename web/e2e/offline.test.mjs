@@ -7,6 +7,11 @@
 // the server process is stopped and the context goes offline, so nothing
 // reaches the app by any route except the worker's cache.
 //
+// PWA-2 (#315) rides on the same server: a Site's street map is kept through
+// the real /api/site-map route, which reads a small PMTiles archive this file
+// serves itself (scripts/lib/pmtilesFixture.mjs), stored in the browser, and
+// drawn with the network cut.
+//
 // E2E_SHOTS=<dir>: the offline planner at 375 x 812, for the pull request.
 
 import assert from "node:assert/strict";
@@ -18,6 +23,8 @@ import { createMissionLifecycle } from "../lib/missionLifecycle.ts";
 import { memoryMissionStore } from "../lib/memoryMissionStore.ts";
 import { respond } from "../lib/missionRoute.ts";
 import { DEFAULT_SPEC } from "../lib/spec.ts";
+import { MAX_TILES, siteBounds, tilesFor } from "../lib/siteMap.ts";
+import { pmtilesArchive, serveArchive } from "../scripts/lib/pmtilesFixture.mjs";
 import { freePort, launchBrowser, run, spawnServer, stopServer, waitReady, webRoot } from "../scripts/lib/harness.mjs";
 
 // lib/passphrase.ts imports extensionless, which plain node cannot load, so
@@ -34,8 +41,10 @@ const AOI = [
 let base;
 let browser;
 let server;
+let archive;
 
 before(async () => {
+  archive = await serveArchive(pmtilesArchive(tilesFor(siteBounds(AOI)).tiles));
   const env = {
     ...process.env,
     B2_BUCKET: "ci",
@@ -44,6 +53,7 @@ before(async () => {
     B2_READ_KEY_ID: "ci",
     B2_READ_APP_KEY: "ci",
     DISPATCH_SECRET: "ci",
+    SITE_MAP_PMTILES_URL: archive.url,
   };
   delete env.DATABASE_URL;
   const port = await freePort();
@@ -62,6 +72,7 @@ before(async () => {
 });
 
 after(async () => {
+  await archive?.close();
   const current = server;
   server = undefined;
   await stopServer(current);
@@ -88,7 +99,7 @@ async function planner() {
   const lifecycle = createMissionLifecycle(memoryMissionStore(seed()));
   let down = false;
   const context = await browser.newContext({ viewport: { width: 375, height: 812 } });
-  await context.addInitScript((key) => localStorage.setItem(key, "e2e"), PASSPHRASE_KEY);
+  await context.addInitScript((key) => localStorage.setItem(key, "ci"), PASSPHRASE_KEY);
   await context.route(
     (url) => url.pathname === "/api/missions",
     async (route) => {
@@ -161,6 +172,51 @@ test("a new deployment's worker replaces the old cache", async () => {
   await context.close();
 });
 
+/** Edit the first Mission (its Site becomes the editor's), open Settings and keep
+ *  that Site's map. Resolves to the sentence the section reports. */
+async function keepSite(page) {
+  await rows(page).first().getByRole("button", { name: "Edit", exact: true }).click();
+  await page.locator('nav[aria-label="Show"]').getByRole("button", { name: "Settings" }).click();
+  await page.getByRole("button", { name: "Keep this Site's map offline" }).click();
+  const done = page.getByText(/^Kept Quarry Road offline: \d+ tiles, [\d.]+ (B|KB|MB)\.$/);
+  await done.waitFor({ timeout: 30_000 });
+  return done.innerText();
+}
+
+const siteCaches = (page) => page.evaluate(async () => (await caches.keys()).filter((k) => k.startsWith("site-map-")));
+
+test("a Site's map is kept bounded, its size and persistence are shown, removing frees it", async () => {
+  const { context } = await planner();
+  const page = await context.newPage();
+  await page.goto(`${base}/plan`, { waitUntil: "domcontentloaded" });
+  await rows(page).first().waitFor({ timeout: 30_000 });
+  const sentence = await keepSite(page);
+
+  const manifest = await page.evaluate(async () => (await (await (await caches.open("site-map-quarry-road-a1b2c3")).match("/site-map/manifest.json")).json()));
+  assert.ok(manifest.tiles > 0 && manifest.tiles <= MAX_TILES, `bounded: ${manifest.tiles} tiles`);
+  assert.equal(manifest.maxZoom, 15);
+  const held = await page.evaluate(async () => (await (await caches.open("site-map-quarry-road-a1b2c3")).keys()).length);
+  assert.equal(held, manifest.tiles + 1, "every tile and the manifest, nothing else");
+  assert.ok(manifest.bytes > 0);
+  assert.ok(sentence.includes(`${manifest.tiles} tiles`));
+
+  // The size is on the list beside the Site, and the browser's answer on persistent storage is shown.
+  const list = page.getByRole("list", { name: "Sites kept offline" });
+  assert.match(await list.innerText(), /Quarry Road[\s\S]*\d+ tiles/);
+  await page.getByText(/^Persistent storage: (granted|not granted|not supported)/).waitFor();
+  if (process.env.E2E_SHOTS) {
+    mkdirSync(process.env.E2E_SHOTS, { recursive: true });
+    await page.getByRole("heading", { name: "Offline map" }).scrollIntoViewIfNeeded();
+    await page.screenshot({ path: path.join(process.env.E2E_SHOTS, "offline-map-settings-375x812.png") });
+  }
+
+  await page.getByRole("button", { name: "Remove Quarry Road from offline" }).click();
+  await page.getByText(/^Removed Quarry Road: [\d.]+ (B|KB|MB) freed\.$/).waitFor();
+  assert.deepEqual(await siteCaches(page), [], "its cache is gone");
+  assert.equal(await list.count(), 0);
+  await context.close();
+});
+
 // Last: it stops the server, which no later test could do without.
 test("opened offline after one online visit: last-read Missions and an offline notice", async () => {
   const { context, cut } = await planner();
@@ -169,6 +225,7 @@ test("opened offline after one online visit: last-read Missions and an offline n
   await rows(online).first().waitFor({ timeout: 30_000 });
   await online.waitForLoadState("networkidle");
   await kept(online);
+  await keepSite(online);
   await online.close();
 
   await cut();
@@ -181,6 +238,16 @@ test("opened offline after one online visit: last-read Missions and an offline n
   const notice = page.getByText("You are offline.");
   await notice.waitFor({ timeout: 10_000 });
   assert.match(await page.locator("body").innerText(), /not live/);
+
+  // PWA-2: the Site's kept map is what the map shows, drawn from the browser's own storage.
+  await rows(page).first().getByRole("button", { name: "Edit", exact: true }).click();
+  await page.locator('[data-basemap="offline"]').waitFor({ timeout: 30_000 });
+  await page.waitForFunction(() => Number(document.querySelector("[data-basemap]")?.getAttribute("data-drawn")) > 0, null, { timeout: 30_000 });
+  if (process.env.E2E_SHOTS) {
+    mkdirSync(process.env.E2E_SHOTS, { recursive: true });
+    await page.screenshot({ path: path.join(process.env.E2E_SHOTS, "offline-site-map-375x812.png") });
+  }
+  await page.locator('nav[aria-label="Show"]').getByRole("button", { name: "Missions" }).click();
 
   // The app's other front door, "/", goes on to the planner rather than to an error.
   await page.goto(`${base}/`, { waitUntil: "domcontentloaded" });

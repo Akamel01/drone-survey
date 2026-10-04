@@ -1,0 +1,72 @@
+/* The Offline map section (PWA-2, #315), a Settings section on smoke glass: the
+   same padding, radius and heading as the Sidebar's own sections. */
+.section {
+  position: relative;
+  padding: 16px;
+  border-radius: 16px;
+}
+
+.section h2 {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--on-glass-2);
+  margin: 0 0 12px;
+}
+
+.quiet {
+  margin: 0 0 12px;
+  font-size: 0.8125rem;
+  color: var(--on-glass-2);
+}
+
+.status {
+  margin: 12px 0 0;
+  font-size: 0.8125rem;
+  color: var(--on-glass-2);
+}
+
+.list {
+  list-style: none;
+  margin: 12px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.row + .row {
+  padding-top: 12px;
+  border-top: 1px solid var(--glass-edge);
+}
+
+.who {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.name {
+  font-size: 0.9375rem;
+  font-weight: 600;
+  color: var(--on-glass);
+  overflow-wrap: anywhere;
+}
+
+.meta {
+  font-size: 0.75rem;
+  color: var(--on-glass-2);
+}
+
+/* 44 px targets (spec § 11). */
+.section button {
+  min-height: 44px;
+  padding: 0 20px;
+}

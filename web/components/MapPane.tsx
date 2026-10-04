@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import {
+  addProtocol,
   Map as MaplibreMap,
   Marker,
   ScaleControl,
@@ -12,6 +13,8 @@ import {
 } from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 import { BASEMAP, BASEMAP_OSM } from "@/lib/basemap";
+import { MAX_ZOOM } from "@/lib/siteMap";
+import { SITE_MAP_LAYERS, listSiteMaps, siteMapStyle, siteMapTile, subscribeSiteMaps, type SiteMap } from "@/lib/offlineMap";
 import {
   canFinish,
   canRemoveCorner,
@@ -60,6 +63,12 @@ interface MapPaneProps {
   onBasemapError?: () => void;
   /** The basemap's tiles are flowing again, so the page can drop its fallback. */
   onBasemapLoaded?: () => void;
+  /** The basemap cannot be reached (no signal, or its tiles are failing). When
+   *  the Site has a map kept for offline, the map shows that instead. */
+  noNetwork: boolean;
+  /** Whether the Site's offline map is what the map is showing, so the page
+   *  does not put its no-network fallback over it. */
+  onOfflineMap?: (shown: boolean) => void;
 }
 
 /** The source ids the basemaps in `lib/basemap.ts` carry. Error and sourcedata
@@ -336,6 +345,8 @@ export default function MapPane({
   onSelectedCornerChange,
   onBasemapError,
   onBasemapLoaded,
+  noNetwork,
+  onOfflineMap,
 }: MapPaneProps) {
   const wrapRef = useRef<HTMLDivElement>(null);
   const toggleRef = useRef<HTMLDivElement>(null);
@@ -346,6 +357,14 @@ export default function MapPane({
   const endMarkersRef = useRef<Marker[]>([]);
   const numberMarkersRef = useRef<Marker[]>([]);
   const [basemap, setBasemap] = useState<"esri" | "osm">("esri");
+  // The Site's map kept for offline (PWA-2), shown in place of the basemap
+  // while the basemap cannot be reached. `appliedStyle` is the style the map
+  // has now, so the effect below swaps only on a real change.
+  const [siteMaps, setSiteMaps] = useState<SiteMap[]>([]);
+  const [offlineDrawn, setOfflineDrawn] = useState(0);
+  const appliedStyle = useRef<string>("esri");
+  const kept = siteMaps.find((m) => m.siteId === spec.site_id) ?? null;
+  const showOffline = noNetwork && kept !== null;
   const [showFootprint, setShowFootprint] = useState(false);
   // The two map-control menus: one open at a time, closing dissolves (250ms,
   // spec §9.1) before unmount, so closingMenu keeps the leaving menu painted.
@@ -550,6 +569,7 @@ export default function MapPane({
     onSelectedCornerChange,
     onBasemapError,
     onBasemapLoaded,
+    onOfflineMap,
   };
   const stateRef = useRef(latest);
   useEffect(() => {
@@ -557,6 +577,31 @@ export default function MapPane({
   });
 
   useEffect(() => {
+    const read = () => void listSiteMaps().then(setSiteMaps);
+    read();
+    return subscribeSiteMaps(read);
+  }, []);
+
+  useEffect(() => {
+    const key = showOffline && kept ? `offline:${kept.siteId}:${kept.savedAt}` : basemap;
+    if (key !== appliedStyle.current) {
+      appliedStyle.current = key;
+      const map = mapRef.current;
+      map?.setStyle(showOffline && kept ? siteMapStyle(kept) : basemap === "esri" ? BASEMAP : BASEMAP_OSM);
+      // The map is only drawn where tiles were kept: bring the Site into view.
+      if (map && showOffline && kept) {
+        const { west, south, east, north } = kept.bounds;
+        const { lng, lat } = map.getCenter();
+        if (lng < west || lng > east || lat < south || lat > north) {
+          map.fitBounds([[west, south], [east, north]], { duration: 0, maxZoom: MAX_ZOOM });
+        }
+      }
+    }
+    stateRef.current.onOfflineMap?.(showOffline);
+  }, [showOffline, kept, basemap]);
+
+  useEffect(() => {
+    addProtocol("sitemap", siteMapTile);
     const map = new MaplibreMap({
       container: containerRef.current!,
       style: BASEMAP,
@@ -606,6 +651,13 @@ export default function MapPane({
     if (process.env.NODE_ENV !== "production") {
       (window as unknown as { __map?: MaplibreMap }).__map = map;
     }
+
+    // What the Site's offline map has drawn, for the wrapper's data-drawn.
+    map.on("idle", () => {
+      if (appliedStyle.current.startsWith("offline:") && map.getLayer("offline-roads")) {
+        setOfflineDrawn(map.queryRenderedFeatures({ layers: SITE_MAP_LAYERS }).length);
+      }
+    });
 
     map.on("load", () => addLayers(map));
     map.on("style.load", () => addLayers(map));
@@ -928,11 +980,6 @@ export default function MapPane({
     map.setPaintProperty("aoi-outline", "line-dasharray", drawing ? [2, 2] : undefined);
   }, [mode]);
 
-  function toggleBasemap(next: "esri" | "osm") {
-    setBasemap(next);
-    mapRef.current?.setStyle(next === "esri" ? BASEMAP : BASEMAP_OSM);
-  }
-
   // What a click on the map does while the panel is up: the live mode, or the
   // one it is leaving, so the exit never switches to idle copy. Not what
   // dragging a finished shape would do. The copy itself is the module's.
@@ -944,7 +991,7 @@ export default function MapPane({
   const overlaysOn = (showNumbers ? 1 : 0) + (showFootprint ? 1 : 0);
 
   return (
-    <div ref={wrapRef} className={styles.wrap}>
+    <div ref={wrapRef} className={styles.wrap} data-basemap={showOffline ? "offline" : basemap} data-drawn={showOffline ? offlineDrawn : 0}>
       {/* The draw step's focus anchor: MapLibre's canvas inside this host is
           the map's own focusable control surface (tabindex 0, role region,
           "Map" label), and where every draw gesture lands. */}
@@ -957,7 +1004,7 @@ export default function MapPane({
             className={styles.pill}
             aria-haspopup="menu"
             aria-expanded={openMenu === "base"}
-            aria-label={`Base map: ${BASEMAP_NAMES[basemap].button}`}
+            aria-label={`Base map: ${showOffline ? "Offline map" : BASEMAP_NAMES[basemap].button}`}
             onClick={() => (openMenu === "base" ? closeMapMenu("base") : openMapMenu("base"))}
             onKeyDown={(e) => menuBtnKeys(e, "base")}
           >
@@ -992,7 +1039,7 @@ export default function MapPane({
                   className={`${styles.menuItem} ${basemap === id ? styles.menuItemActive : ""}`}
                   style={{ animationDelay: `calc(var(--stagger) * ${i})` }}
                   onClick={() => {
-                    toggleBasemap(id);
+                    setBasemap(id);
                     closeMapMenu("base");
                   }}
                 >
