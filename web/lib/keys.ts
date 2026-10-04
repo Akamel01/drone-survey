@@ -54,6 +54,10 @@ export function missionKey(id: string): string {
   return `${MISSIONS_PREFIX}${id}.json`;
 }
 
+/** What a phone with no signal names a Mission it saves: the store's own ids
+ *  are uuids and can never start with this, so the two cannot meet (PWA-3). */
+export const LOCAL_ID_PREFIX = "local-";
+
 export function isSafeId(id: unknown): id is string {
   return typeof id === "string" && /^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$/.test(id);
 }

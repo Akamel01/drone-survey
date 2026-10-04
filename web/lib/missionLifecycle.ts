@@ -16,7 +16,7 @@
 
 import { randomUUID } from "node:crypto";
 
-import { dispatchStamp, isSafeId, makeSpecKey } from "./keys.ts";
+import { LOCAL_ID_PREFIX, dispatchStamp, isSafeId, makeSpecKey } from "./keys.ts";
 import { preview } from "./mission.ts";
 import { reserveCards, staleCards, withRelease, withReservation, type CardLedger, type CardHolding } from "./model.ts";
 import type { HostDrift, HostNotice, Manifest, SpecSummary } from "./missions.ts";
@@ -191,7 +191,9 @@ export function createMissionLifecycle(store: MissionStore): MissionLifecycle {
      * Save a Planned Mission. No `id`: a new one. With an `id`: Planned is
      * edited in place; Dispatched and later is saved as a NEW Mission with the
      * same Site, date and name (a Spec is never edited), carrying the new id
-     * and `forked_from`; Loaded is refused.
+     * and `forked_from`; Loaded is refused. An id with `LOCAL_ID_PREFIX` that
+     * the store has not seen creates under it, and a `base_updated_at` that is
+     * not the stored version is refused with both versions (PWA-3).
      */
     async save(_caller, input) {
       const body = (input ?? {}) as Record<string, unknown>;
@@ -248,9 +250,30 @@ export function createMissionLifecycle(store: MissionStore): MissionLifecycle {
         const existing = records.find((r) => r.id === body.id);
         const row = rows.find((m) => m.id === body.id);
         if (!existing || !row) {
+          // A phone with no signal names the Missions it creates itself; the
+          // first time that name reaches the store it is a create under it.
+          if (body.id.startsWith(LOCAL_ID_PREFIX)) {
+            const clash = nameClash(rows, { id: null, ...fields });
+            if (clash) return clash;
+            const record: MissionRecord = { id: body.id, created_at: now, updated_at: now, dispatched_key: null, ...fields };
+            await store.writeMission(record);
+            return { ok: true, body: { mission: record, forked_from: null } };
+          }
           return no(
             "not_found",
             "That Mission is no longer in the store. Reload the Mission list and save it again.",
+          );
+        }
+
+        // An edit made while the phone had no signal says which version it was
+        // made against; if the store has moved on, nothing is written and both
+        // versions go back, for the operator to choose (PWA-3).
+        if (typeof body.base_updated_at === "string" && body.base_updated_at !== existing.updated_at) {
+          return no(
+            "refused",
+            `“${existing.name}” changed in the store after you edited it here. Nothing was saved; ` +
+              "choose which version to keep.",
+            { conflict: existing, state: row.state },
           );
         }
 

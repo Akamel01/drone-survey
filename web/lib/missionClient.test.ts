@@ -374,3 +374,34 @@ test("a successful save reads back in its own window; a row action and a refusal
     assert.deepEqual(heard, ["read"], "after unsubscribing, the window is no longer told");
   });
 });
+
+test("send: an offline edit goes to its own route, guarded by the version it was made against", async () => {
+  install(() => answer({ mission: { id: "m1", updated_at: "t2" }, forked_from: null }, 200));
+  const sent = await missionClient.send({ seq: 1, op: "save", mission_id: "m1", draft: draft({ id: "m1", base_updated_at: "t1" }) });
+  assert.deepEqual(sent, { ok: true, id: "m1", updated_at: "t2" });
+  assert.equal(JSON.parse(String(calls[0].init?.body)).base_updated_at, "t1");
+
+  install(() => answer({ withdrawn_at: "x", cards_released: [] }, 200));
+  assert.deepEqual(await missionClient.send({ seq: 2, op: "withdraw", mission_id: "m1" }), { ok: true });
+  assert.equal(calls[0].input, "/api/missions/withdraw");
+});
+
+test("send: a changed Mission comes back with both versions; a dead network or a failing store waits; any other refusal is the store's sentence", async () => {
+  const record = { id: "m1", name: "Theirs", updated_at: "t2" };
+  install(() => answer({ error: "Changed.", conflict: record, state: "planned" }, 409));
+  assert.deepEqual(await missionClient.send({ seq: 1, op: "save", mission_id: "m1", draft: draft({ id: "m1", base_updated_at: "t1" }) }), {
+    ok: false,
+    problem: { text: "Changed.", conflict: record, state: "planned" },
+  });
+
+  install(failing(new Error("offline")));
+  assert.deepEqual(await missionClient.send({ seq: 2, op: "remove", mission_id: "m1" }), { ok: false, later: true });
+  install(() => answer({ error: "store" }, 503));
+  assert.deepEqual(await missionClient.send({ seq: 3, op: "flown", mission_id: "m1" }), { ok: false, later: true });
+
+  install(() => answer({ error: "It holds a Card." }, 409));
+  assert.deepEqual(await missionClient.send({ seq: 4, op: "remove", mission_id: "m1" }), {
+    ok: false,
+    problem: { text: "Remove failed: It holds a Card." },
+  });
+});
