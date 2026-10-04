@@ -189,10 +189,12 @@ async function eventually(read, expected, what, ms = 15_000) {
   }
 }
 
-// A phone, because that is where the planner is used with no signal: from 1000 px
-// up, with no network the planner hides its panels for the map's no-network
-// scene (PWA-1), and the Missions list with them.
-const showMissions = (page) => page.getByRole("navigation", { name: "Show" }).getByRole("button", { name: "Missions", exact: true }).click();
+// A phone by default, where the planner is used with no signal. The tab bar that
+// switches to the Missions is there only below 1000 px; wide screens show it always.
+async function showMissions(page) {
+  const tab = page.getByRole("navigation", { name: "Show" }).getByRole("button", { name: "Missions", exact: true });
+  if (await tab.isVisible()) await tab.click();
+}
 
 /** Edit a Planned Mission in the editor and save it under a new name. */
 async function renameVia(page, id, name) {
@@ -351,6 +353,26 @@ test("conflict: the compare shows both versions, and keep mine saves mine over t
     await waiting(page).waitFor({ state: "detached", timeout: 15_000 });
     assert.equal(byId(store, "m-planned").name, "Mine");
     assert.deepEqual(await outbox(page), []);
+  } finally {
+    await context.close();
+  }
+});
+
+test("wide screen: offline, the Missions list, Settings and Summary stay, and a saved edit shows as waiting to sync", async () => {
+  const { page, store, context, cut } = await planner({ width: 1280, height: 800 });
+  try {
+    await cut();
+    // The map area gives way to its no-network scene; the panels do not.
+    await page.locator('[data-network="offline"]').waitFor({ timeout: 10_000 });
+    for (const name of ["Missions", "Settings"]) assert.ok(await page.getByRole("region", { name, exact: true }).isVisible(), `${name} stays`);
+    assert.ok(await page.getByRole("button", { name: "Save Mission", exact: true }).first().isVisible(), "the Summary's Save stays");
+
+    await renameVia(page, "m-planned", "Orchard east");
+    assert.equal(byId(store, "m-planned").name, "Orchard", "nothing reached the store");
+    assert.match(await rowOf(page, "m-planned").innerText(), /Orchard east/);
+    assert.match(await rowOf(page, "m-planned").innerText(), /Edit waiting to sync\./);
+    assert.equal(await waiting(page).textContent(), "1 waiting to sync");
+    await shot(page, "offline-sync-waiting-1280x800");
   } finally {
     await context.close();
   }

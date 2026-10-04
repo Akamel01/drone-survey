@@ -508,15 +508,9 @@
       visibility 0s linear 0s;
   }
 
-  /* Without its basemap the map has no surface: the chrome gives way to the
-     hero scene and one line saying why. */
-  .page[data-network="offline"] .missions,
-  .page[data-network="offline"] .settings,
-  .page[data-network="offline"] .summary,
-  .page[data-network="offline"] .edgeTab {
-    display: none;
-  }
-
+  /* Without its basemap the map area shows the hero scene and one line saying
+     why. The panels and the Summary stay: offline is when edits wait to sync
+     (PWA-3), and the Missions list is where that shows. */
   .noNetwork {
     position: absolute;
     inset: 0;

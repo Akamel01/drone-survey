@@ -962,7 +962,7 @@ async function offlinePass(browser) {
       };
     });
     check("offline", "offline state engages", offline.network === "offline", offline.network);
-    check("offline", "panels and tabs are display:none while offline", offline.panels.every((d) => d === "none") && offline.tabs.every((d) => d === "none"), JSON.stringify(offline));
+    check("offline", "panels stay on screen while offline (edits wait to sync there)", offline.panels.every((d) => d !== "none"), JSON.stringify(offline));
     check("offline", "no fold motion runs while offline", offline.running === 0, `animations=${offline.running}`);
 
     const restored = await page.evaluate(async () => {
