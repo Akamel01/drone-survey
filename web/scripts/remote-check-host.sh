@@ -140,12 +140,18 @@ state_node_of() {
 disk_below_floor() { [ "$1" -lt "$2" ]; }
 
 # The checks resolve relative paths against their cwd (web/); absolute values
-# must already sit inside the worktree. Print the worktree-relative path, or
+# must already sit inside the worktree. Paths starting with "../" are treated as
+# worktree-relative (not web-relative). Print the worktree-relative path, or
 # return 1 for anything else. Used for E2E_SHOTS/SHOT_DIR clean + fetch.
 map_web_path() {
   case "${1:-}" in
     "") return 1 ;;
     /*) case "$1" in "$WORKTREE"/*) printf '%s\n' "${1#"$WORKTREE"/}"; return 0 ;; *) return 1 ;; esac ;;
+    ../*)
+      # Path starting with "../" is worktree-relative; strip the "../" prefix
+      printf '%s\n' "${1#../}"
+      return 0
+      ;;
     *) printf 'web/%s\n' "$1"; return 0 ;;
   esac
 }
@@ -740,7 +746,7 @@ phase_fetch() {
   fetch_add "$list" "$(map_web_path "${E2E_SHOTS:-}" 2>/dev/null || true)"
   fetch_add "$list" "$(map_web_path "${SHOT_DIR:-}" 2>/dev/null || true)"
   if [ -s "$list" ]; then
-    if ! tar -czf - $(tar_exclude_args) -C "$WORKTREE" -T "$list"; then
+    if ! tar --hard-dereference -czf - $(tar_exclude_args) -C "$WORKTREE" -T "$list"; then
       rm -f -- "$list"
       die 1 "artifact tar failed (paths listed above)"
     fi

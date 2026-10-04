@@ -250,10 +250,10 @@ run_and_fetch() {
 
 # ------------------------------------------------------------ path env setup
 
-# Absolute-inside-worktree values must name the copy on the host: rewrite to
-# $HOME/drone/webcheck/<slug>/worktree/<rel> (the "$HOME" stays literal so the
-# remote shell expands it at run time) and keep the local path as <NAME>_LOCAL.
-# Relative or empty values pass through untouched.
+# Absolute-inside-worktree values are converted to web-relative paths since the
+# npm script runs from the web/ directory on the host: paths inside web/ stay as-is,
+# paths outside web/ are prefixed with "../" to go up one level. Store the original
+# path as <NAME>_LOCAL. Relative or empty values pass through untouched.
 translate_path_envs() {
   local n v root rel
   root="$(repo_root)"
@@ -263,7 +263,11 @@ translate_path_envs() {
     case "$v" in "$root"/*) ;; *) continue ;; esac
     rel="${v#"$root"/}"
     export "${n}_LOCAL=$v"
-    export "$n=$HOST_ROOT/${SLUG:-$(slug)}/worktree/$rel"
+    # Convert to web-relative path: paths in web/ stay as-is, others get "../" prefix
+    case "$rel" in
+      web/*) export "$n=$rel" ;;
+      *) export "$n=../$rel" ;;
+    esac
   done
 }
 
@@ -344,12 +348,21 @@ selftest() {
 
   # e. translate_path_envs rewrites inside-worktree paths, keeps <NAME>_LOCAL
   n=$((n+1))
-  got="$(export PREVIEW_CSS="$PWD/web/app/globals.css"
+  root_test="$(repo_root)"
+  got="$(export PREVIEW_CSS="$root_test/web/app/globals.css"
          translate_path_envs
          printf '%s\n%s\n' "${PREVIEW_CSS:-}" "${PREVIEW_CSS_LOCAL:-}")"
-  case "$got" in *"/worktree/"*) ;; *) bad "translate_path_envs did not rewrite PREVIEW_CSS" ;; esac
+  case "$got" in *"web/app/globals.css"*) ;; *) bad "translate_path_envs did not rewrite PREVIEW_CSS" ;; esac
   n=$((n+1))
-  case "$got" in *"$PWD/web/app/globals.css"*) ;; *) bad "translate_path_envs lost PREVIEW_CSS_LOCAL" ;; esac
+  case "$got" in *"$root_test/web/app/globals.css"*) ;; *) bad "translate_path_envs lost PREVIEW_CSS_LOCAL" ;; esac
+  # Also test paths outside web/: e.g. E2E_SHOTS outside web/ should get ../ prefix
+  n=$((n+1))
+  got="$(export E2E_SHOTS="$root_test/.autoforge/shots"
+         translate_path_envs
+         printf '%s\n%s\n' "${E2E_SHOTS:-}" "${E2E_SHOTS_LOCAL:-}")"
+  case "$got" in *"../.autoforge/shots"*) ;; *) bad "translate_path_envs did not use ../ prefix for E2E_SHOTS outside web/" ;; esac
+  n=$((n+1))
+  case "$got" in *"$root_test/.autoforge/shots"*) ;; *) bad "translate_path_envs lost E2E_SHOTS_LOCAL" ;; esac
 
   printf 'remote selftest: %s checks, all pass\n' "$n"
   exit 0
