@@ -118,6 +118,8 @@ The certificate and key can also come from `BOARD_TLS_CERT` and `BOARD_TLS_KEY` 
 
 The service answers mDNS queries for `board.local` itself (UDP 5353, A records only), so no Avahi and no sudo are needed. It answers with the address the asker can reach, so it follows the hotspot's address. It joins the multicast group on the default interface only.
 
+The planner's **Load** button (PWA-4, #318) talks to the board straight from the browser. It uses `https://board.local:8787` until the operator types another address in the sheet (kept in that browser): on Android, the board's address. The app's own address must be in `BOARD_ALLOW_ORIGIN`, or the browser hides every reply and the app shows its fix checklist.
+
 If the board runs Avahi anyway, the alternative is one line: `sudo hostnamectl set-hostname board`, then start the service with `--no-mdns`. Android Chrome does not resolve `.local` (see #252): use the board's address there.
 
 ## Install (no sudo)
