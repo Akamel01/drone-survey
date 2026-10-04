@@ -479,7 +479,9 @@ async function firstLoadAndIdle(page) {
   const slot = transitionSubset(rest.slot);
   check("f6", "slot transition is in the allowed set", slot.ok && rest.slot.transitionProperty.includes("transform"), slot.detail);
   const press = transitionSubset(rest.press);
-  check("f6", "press is transform-only", press.ok && rest.press.transitionProperty.trim() === "transform", `${rest.press.transitionProperty} / ${rest.press.transitionDuration}`);
+  const pressProps = rest.press.transitionProperty.split(",").map((s) => s.trim());
+  const pressOk = press.ok && pressProps.length === 2 && pressProps.includes("transform") && pressProps.includes("filter");
+  check("f6", "press animates transform and filter per spec §9.3", pressOk, `${rest.press.transitionProperty} / ${rest.press.transitionDuration}`);
 
   const frames = await page.evaluate(
     async () => {
