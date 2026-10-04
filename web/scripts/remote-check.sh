@@ -189,10 +189,12 @@ send_tree() {
   wt="$HOST_ROOT/$SLUG/worktree"
   remote mkdir -p "$HOST_ROOT/$SLUG"
   remote "cat > \"$HOST_ROOT/$SLUG/host.sh\"" < "$root/web/scripts/remote-check-host.sh"
-  if [ -n "${PREVIEW_CSS:-}" ]; then
-    case "$PREVIEW_CSS" in
+  # translate_path_envs has already made PREVIEW_CSS host-relative; ship by the local path.
+  local css="${PREVIEW_CSS_LOCAL:-${PREVIEW_CSS:-}}"
+  if [ -n "$css" ]; then
+    case "$css" in
       "$root"/web/*) ;;                        # already in the web member
-      "$root"/*) extra="${PREVIEW_CSS#"$root"/}" ;;
+      "$root"/*) extra="${css#"$root"/}" ;;
     esac
   fi
   COPYFILE_DISABLE=1 tar --no-xattrs --no-mac-metadata -czf - -C "$root" \
@@ -251,7 +253,7 @@ run_and_fetch() {
 # ------------------------------------------------------------ path env setup
 
 # Absolute-inside-worktree values are converted to web-relative paths since the
-# npm script runs from the web/ directory on the host: paths inside web/ stay as-is,
+# npm script runs from the web/ directory on the host: paths inside web/ lose "web/",
 # paths outside web/ are prefixed with "../" to go up one level. Store the original
 # path as <NAME>_LOCAL. Relative or empty values pass through untouched.
 translate_path_envs() {
@@ -263,9 +265,9 @@ translate_path_envs() {
     case "$v" in "$root"/*) ;; *) continue ;; esac
     rel="${v#"$root"/}"
     export "${n}_LOCAL=$v"
-    # Convert to web-relative path: paths in web/ stay as-is, others get "../" prefix
+    # Web-relative: paths in web/ drop the "web/", others get a "../" prefix
     case "$rel" in
-      web/*) export "$n=$rel" ;;
+      web/*) export "$n=${rel#web/}" ;;
       *) export "$n=../$rel" ;;
     esac
   done
@@ -352,7 +354,7 @@ selftest() {
   got="$(export PREVIEW_CSS="$root_test/web/app/globals.css"
          translate_path_envs
          printf '%s\n%s\n' "${PREVIEW_CSS:-}" "${PREVIEW_CSS_LOCAL:-}")"
-  case "$got" in *"web/app/globals.css"*) ;; *) bad "translate_path_envs did not rewrite PREVIEW_CSS" ;; esac
+  case "$got" in "app/globals.css"*) ;; *) bad "translate_path_envs did not make PREVIEW_CSS web-relative" ;; esac
   n=$((n+1))
   case "$got" in *"$root_test/web/app/globals.css"*) ;; *) bad "translate_path_envs lost PREVIEW_CSS_LOCAL" ;; esac
   # Also test paths outside web/: e.g. E2E_SHOTS outside web/ should get ../ prefix
