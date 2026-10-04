@@ -11,6 +11,8 @@ import styles from "./Sidebar.module.css";
 import { authClient, signOutToHome } from "@/lib/authClient";
 import { accountLabel } from "@/lib/home";
 import AccountsSection from "./AccountsSection";
+import OfflineMaps from "./OfflineMaps";
+import type { MissionRow } from "@/lib/missionRecords";
 import type { NoticePayload } from "./Notice";
 
 interface SidebarProps {
@@ -24,6 +26,10 @@ interface SidebarProps {
   sites: SiteChoice[];
   /** The stored Mission the editor is working on, and its Mission Name. */
   editing: Editing;
+  /** The Missions in the store (the offline map covers every one at the Site),
+   *  and whether the browser is offline (it cannot be kept then). */
+  missions: MissionRow[];
+  offline: boolean;
   onNameChange: (name: string) => void;
   /** Where Settings reports an action's result (the Accounts section's). */
   onNotice?: (p: Omit<NoticePayload, "key">) => void;
@@ -173,6 +179,8 @@ export default function Sidebar({
   preview,
   sites,
   editing,
+  missions,
+  offline,
   onNameChange,
   onNotice,
   onPendingCount,
@@ -586,6 +594,8 @@ export default function Sidebar({
           <span className="mono">{preview.start_corner || "—"}</span>
         </div>
       </Section>
+
+      <OfflineMaps spec={spec} missions={missions} offline={offline} />
 
       <AccountsSection onNotice={onNotice} onPendingCount={onPendingCount} />
 

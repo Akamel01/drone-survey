@@ -101,6 +101,14 @@ node scripts/auth-evidence.mjs
   on the production URL.
 - The planner's Dispatch variables (`DISPATCH_SECRET`, `B2_KEY_ID`,
   `B2_APP_KEY`, `B2_BUCKET`) are listed in the root `README.md`.
+- `SITE_MAP_PMTILES_URL` (optional): where the offline street map reads
+  from, a Protomaps basemap PMTiles archive (OpenStreetMap data, ODbL) that
+  **we host** and that is readable by range request. Protomaps asks that its
+  public daily builds are not hotlinked, so cut a region from one and upload
+  it: `pmtiles extract <daily-build-url> region.pmtiles --bbox=W,S,E,N
+  --maxzoom=15`. Unset, "Keep this Site's map offline" says so and keeps
+  nothing; the planner works as before. Esri satellite and tile.openstreetmap.org tiles are
+  never kept offline: their providers' terms forbid it.
 
 ## Layout
 
