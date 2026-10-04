@@ -1,0 +1,200 @@
+/* The Load sheet (PWA-4): on the sheet's own smoke glass (spec § 8), the Missions
+   waiting as rows on clear glass, the result as two light panels in the
+   details sheet's own shape (MissionList.module.css). Direct children of the
+   sheet body, so its --stagger entrance and reduced motion apply and no motion
+   is declared here. Existing tokens only; controls are 44 tall (spec § 11). */
+
+.title {
+  margin: 0 0 8px;
+  font-size: 1.125rem;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.lead {
+  margin: 0 0 16px;
+  font-size: 0.875rem;
+  line-height: 1.5;
+  color: var(--on-glass-2);
+}
+
+.status {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.status:empty {
+  display: none;
+}
+
+.quiet,
+.hint {
+  margin: 0;
+  font-size: 0.8125rem;
+  line-height: 1.5;
+  color: var(--on-glass-2);
+}
+
+.progress {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 600;
+}
+
+/* Why nothing happened, in words, on the sheet's own glass: neutral text, no
+   colour of its own (the Notice carries a result's tone). */
+.failure {
+  margin: 0;
+  font-size: 0.875rem;
+  line-height: 1.5;
+  color: var(--on-glass);
+  overflow-wrap: anywhere;
+}
+
+.checklist {
+  margin: 0;
+  padding-left: 20px;
+  font-size: 0.8125rem;
+  line-height: 1.5;
+  color: var(--on-glass-2);
+}
+
+.checklist li + li {
+  margin-top: 6px;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.field label {
+  color: var(--on-glass-2);
+}
+
+.field input[type="text"] {
+  min-height: 44px;
+  padding: 8px 12px;
+  font-size: 1rem;
+}
+
+.list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.row {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 10px 10px 14px;
+  border: 1px solid var(--glass-edge);
+  border-radius: 12px;
+  background: var(--glass-clear);
+}
+
+.rowText {
+  min-width: 0;
+}
+
+.rowTitle {
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.rowDetail {
+  font-size: 0.8125rem;
+  line-height: 1.4;
+  color: var(--on-glass-2);
+  overflow-wrap: anywhere;
+}
+
+.row button {
+  flex: none;
+  min-height: 44px;
+  padding: 0 20px;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.actions button {
+  min-height: 44px;
+  padding: 0 20px;
+}
+
+/* The result: two light panels, ink text (spec § 8, light panel). */
+.result {
+  padding: 24px 24px 20px;
+  border-radius: 36px;
+  color: var(--ink-2);
+}
+
+.result + .result {
+  margin-top: 12px;
+}
+
+.chip {
+  display: inline-block;
+  margin-bottom: 8px;
+  padding: 4px 12px;
+  border-radius: 999px;
+  background: var(--chip);
+  font-size: 0.8125rem;
+  color: #272d2f;
+}
+
+.resultTitle {
+  margin: 0 0 4px;
+  font-size: 1.25rem;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  color: #000;
+}
+
+.resultSecondary {
+  margin: 0 0 12px;
+  font-size: 0.8125rem;
+  line-height: 1.5;
+}
+
+.resultLine {
+  margin: 0 0 8px;
+  font-size: 0.8125rem;
+  line-height: 1.5;
+}
+
+.fact {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  margin: 0 0 8px;
+  font-size: 0.8125rem;
+  line-height: 1.5;
+}
+
+.factLabel {
+  flex: none;
+  color: var(--ink-2);
+}
+
+.factValue {
+  text-align: right;
+  color: #000;
+  font-variant-numeric: tabular-nums;
+}
+
+.result ~ .actions {
+  margin-top: 12px;
+}

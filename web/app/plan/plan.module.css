@@ -76,6 +76,15 @@
   justify-content: space-between;
 }
 
+/* Opens the Load sheet. Sits beside the fold control, which keeps its place at
+   the right edge. 44 tall, inside the title's own height, so the list below
+   does not move. */
+.loadButton {
+  min-height: 44px;
+  margin: 0 8px 0 auto;
+  padding: 0 18px;
+}
+
 .map {
   flex: 1;
   min-width: 0;

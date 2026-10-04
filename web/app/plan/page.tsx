@@ -10,6 +10,7 @@ import MapPane, { type DrawMode } from "@/components/MapPane";
 import MapToolbar from "@/components/MapToolbar";
 import HeroScene from "@/components/HeroScene";
 import MissionList from "@/components/MissionList";
+import LoadSheet from "@/components/LoadSheet";
 import Notice, { type NoticePayload } from "@/components/Notice";
 import Sidebar from "@/components/Sidebar";
 import SummaryBar from "@/components/SummaryBar";
@@ -138,6 +139,9 @@ export default function PlanPage() {
   // from and the state of the Mission being edited both come from this read, so
   // one page load is one storage transaction rather than two.
   const [missions, setMissions] = useState<MissionRow[]>([]);
+  // The Load view (PWA-4): a sheet, so it opens from the app shell the worker keeps for offline starts.
+  const [loadOpen, setLoadOpen] = useState(false);
+  const closeLoad = useCallback(() => setLoadOpen(false), []);
   const sites = useMemo(() => sitesFrom(missions), [missions]);
   const edited = editing.id ? (missions.find((m) => m.id === editing.id) ?? null) : null;
   // The single reporting path for action results (M2 seam): one slot owned
@@ -375,6 +379,9 @@ export default function PlanPage() {
         <section id="missions-panel" className={`${styles.missions} glass-smoke`} aria-label="Missions" inert={wide ? !missionsOpen : view !== "missions"}>
           <div className={styles.panelHead}>
             <h2 className={styles.viewTitle}>Missions</h2>
+            <button type="button" className={`primary ${styles.loadButton}`} onClick={() => setLoadOpen(true)}>
+              Load
+            </button>
             <button
               ref={collapseMissions}
               type="button"
@@ -468,6 +475,7 @@ export default function PlanPage() {
       <p className={styles.srOnly} role="status">
         {noNetwork ? "The map needs a connection." : ""}
       </p>
+      <LoadSheet open={loadOpen} onClose={closeLoad} missions={missions} onNotice={showNotice} />
       <div ref={summaryRef} className={`glass-smoke ${styles.summary}`}>
         <SummaryBar
           spec={spec}

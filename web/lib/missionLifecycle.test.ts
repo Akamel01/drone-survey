@@ -801,3 +801,46 @@ test("state × action matrix matches actionsFor", async () => {
     }
   }
 });
+
+// ---------------------------------------------------------------------------
+// The app reports a Load (PWA-4, #318)
+// ---------------------------------------------------------------------------
+
+const CARDS = [{ card: "way finder 1", name: "GeorgeTown2 2026-09-24", waypoints: 125 }];
+
+test("setLoaded: a Collected Mission becomes Loaded, with the Cards the board wrote", async () => {
+  const { store, lc } = fresh();
+  const id = await saved(lc);
+  expectOk(await dispatch(lc, id));
+  hostCollects(store, (await rowOf(lc, id)).spec_key as string);
+  const r = expectOk(await lc.setLoaded(caller, { id, cards: CARDS }));
+  assert.equal(r.mission?.state, "loaded");
+  assert.deepEqual(r.mission?.loaded_cards, CARDS);
+  const row = await rowOf(lc, id);
+  assert.equal(row.state, "loaded");
+  assert.ok(row.loaded_at);
+});
+
+test("setLoaded: the host's own report wins once it speaks, and a repeat writes nothing", async () => {
+  const { store, lc } = fresh();
+  const id = await saved(lc);
+  expectOk(await dispatch(lc, id));
+  hostLoads(store, (await rowOf(lc, id)).spec_key as string, 184);
+  store.calls.length = 0;
+  const r = expectOk(await lc.setLoaded(caller, { id, cards: CARDS }));
+  assert.equal(r.mission?.loaded_cards[0].waypoints, 184);
+  assert.deepEqual(WRITE_SHAPE(store), []);
+});
+
+test("setLoaded: refuses a Planned or Withdrawn Mission, a bad id and bad Cards", async () => {
+  const { lc } = fresh();
+  const id = await saved(lc);
+  assert.match(expectRefusal(await lc.setLoaded(caller, { id, cards: CARDS })).message, /is planned/);
+  expectOk(await dispatch(lc, id));
+  expectOk(await withdraw(lc, id));
+  assert.match(expectRefusal(await lc.setLoaded(caller, { id, cards: CARDS })).message, /is withdrawn/);
+  assert.equal(expectRefusal(await lc.setLoaded(caller, { id: "../x", cards: CARDS })).kind, "invalid");
+  assert.equal(expectRefusal(await lc.setLoaded(caller, { id, cards: [] })).kind, "invalid");
+  assert.equal(expectRefusal(await lc.setLoaded(caller, { id, cards: [{ card: "a", name: "b" }] })).kind, "invalid");
+  assert.equal(expectRefusal(await lc.setLoaded(caller, { id: "gone", cards: CARDS })).kind, "not_found");
+});

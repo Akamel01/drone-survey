@@ -321,7 +321,7 @@ export function unreadableLine(keys: string[] | undefined): string | null {
 }
 
 /** What to check inside a Card before flying it (#155). */
-function countCheck(fs: Flight[]): string {
+export function countCheck(fs: { points: number | null }[]): string {
   const known = fs.filter((f) => f.points !== null);
   if (known.length === 0) return "Open that Card by name — the Card's own label describes whatever it held before.";
   const what =

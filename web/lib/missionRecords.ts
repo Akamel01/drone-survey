@@ -55,6 +55,10 @@ export interface MissionRecord {
   /** The operator's own answer about Flown, which is what decides it. Absent
    *  when they have not answered, which is not the same as "not flown". */
   flown_mark?: { flown: boolean; at: string };
+  /** The app's own report that the board Loaded this Mission, sent from the
+   *  aircraft when the host could not say so itself (PWA-4, #318). The host's
+   *  manifest, once it speaks, is what decides; this only fills the gap. */
+  loaded_mark?: { at: string; cards: LoadedCard[] };
 }
 
 /** What the store says about one Mission, with its state derived. */
@@ -241,7 +245,7 @@ function flownEvidence(
 function baseState(record: MissionRecord, entry: ManifestEntry | undefined, flown: boolean): MissionState {
   if (record.withdrawn_at) return "withdrawn";
   if (flown) return "flown";
-  if (entry?.loaded_at) return "loaded";
+  if (entry?.loaded_at || record.loaded_mark) return "loaded";
   if (entry?.collected_at) return "collected";
   if (record.dispatched_key) return "dispatched";
   return "planned";
@@ -286,13 +290,13 @@ export function deriveMissions(
             .filter((h) => h.spec_key === record.dispatched_key)
             .sort((a, b) => a.flight - b.flight)
         : [],
-      loaded_cards: entry?.cards ?? [],
+      loaded_cards: entry?.cards ?? record.loaded_mark?.cards ?? [],
       superseded_by: null,
       flown_marked: marked,
       flown_evidence_at: evidence,
       flown_disagreement: disagreement,
       collected_at: entry?.collected_at ?? null,
-      loaded_at: entry?.loaded_at ?? null,
+      loaded_at: entry?.loaded_at ?? record.loaded_mark?.at ?? null,
       created_at: record.created_at,
       updated_at: record.updated_at,
       edit: editBehaviour(state),

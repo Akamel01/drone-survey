@@ -118,6 +118,8 @@ The certificate and key can also come from `BOARD_TLS_CERT` and `BOARD_TLS_KEY` 
 
 The service answers mDNS queries for `board.local` itself (UDP 5353, A records only), so no Avahi and no sudo are needed. It answers with the address the asker can reach, so it follows the hotspot's address. It joins the multicast group on the default interface only.
 
+The planner's **Load** button (PWA-4, #318) talks to the board straight from the browser. It uses `https://board.local:8787` until the operator types another address in the sheet (kept in that browser): on Android, the board's address. The app's own address must be in `BOARD_ALLOW_ORIGIN`, or the browser hides every reply and the app shows its fix checklist.
+
 If the board runs Avahi anyway, the alternative is one line: `sudo hostnamectl set-hostname board`, then start the service with `--no-mdns`. Android Chrome does not resolve `.local` (see #252): use the board's address there.
 
 ## Install (no sudo)
@@ -160,5 +162,7 @@ rm -rf ~/drone-survey        # if it was cloned for this
 python3 scripts/board/board_service_test.py     # or: python3 scripts/board/board_service.py --selftest
 python3 scripts/board/make_certs_test.py        # the certificates, the profile, the ignore rules
 ```
+
+`standin_board.py` is this same service over a fake loader, for the app's end-to-end tests (`web/e2e/load.test.mjs`, PWA-4, #318): the real routes, origin allowlist and CORS, three Missions that Load, are refused and break, and no Controller, B2 or network. `python3 scripts/board/standin_board.py --port 8788 --allow-origin http://localhost:3000` serves it on plain HTTP for trying the app's Load view by hand.
 
 The ledger, the USB check and the loader run are faked; nothing touches the network or a Controller. The TLS tests make a CA in a temp folder and start the server on a free port: a client that trusts that CA connects; one that does not (system store, another CA, another name) is refused.

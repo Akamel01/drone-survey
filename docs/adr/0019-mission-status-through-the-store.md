@@ -54,3 +54,15 @@ for the host status key: allowed reads plus a byte-identical manifest
 round-trip succeed; out-of-prefix list and delivery-bucket read are refused
 (#48). If a key is ever suspected leaked, rotate first and investigate second —
 nothing caches credentials past one process run.
+
+## Amended 2026-10-04: the app can report a Load from the field
+
+**The host stays the manifest's only writer, and the app's report is stored
+beside it.** At the aircraft the phone Loads through the board (PWA-4, #318) and
+may have no way to the planner's server, and the board may have no signal to
+write the manifest either. The app's report that the board Loaded a Mission,
+with the Cards and points the board wrote, goes into the Mission's own record
+as `loaded_mark` (the way the operator's Flown answer is `flown_mark`), through
+`POST /api/missions/loaded`, from the offline outbox when there was no signal.
+A Mission's state is Loaded if either the manifest or the mark says so, and
+once the host's manifest reports the Load it is what the row shows.

@@ -19,7 +19,7 @@ import { randomUUID } from "node:crypto";
 import { LOCAL_ID_PREFIX, dispatchStamp, isSafeId, makeSpecKey } from "./keys.ts";
 import { preview } from "./mission.ts";
 import { reserveCards, staleCards, withRelease, withReservation, type CardLedger, type CardHolding } from "./model.ts";
-import type { HostDrift, HostNotice, Manifest, SpecSummary } from "./missions.ts";
+import type { HostDrift, HostNotice, LoadedCard, Manifest, SpecSummary } from "./missions.ts";
 import { hostReport } from "./missions.ts";
 import {
   actionProblem,
@@ -89,6 +89,10 @@ export interface FlownBody {
   mission: MissionRow | undefined;
   cards: CardHolding[];
 }
+export interface LoadedBody {
+  id: string;
+  mission: MissionRow | undefined;
+}
 export interface ListBody {
   unreadable: string[];
   missions: MissionRow[];
@@ -129,7 +133,20 @@ export interface MissionLifecycle {
   dispatch(caller: Caller, input: unknown): Promise<Outcome<DispatchBody>>;
   withdraw(caller: Caller, input: unknown): Promise<Outcome<WithdrawBody>>;
   setFlown(caller: Caller, input: unknown): Promise<Outcome<FlownBody>>;
+  setLoaded(caller: Caller, input: unknown): Promise<Outcome<LoadedBody>>;
   list(caller: Caller, input: { archived: boolean }): Promise<Outcome<ListBody>>;
+}
+
+/** The Cards a Load reported, cut down to what the manifest holds, or null
+ *  when the list is not one: one to six Cards, each named, with a point count. */
+function loadedCards(raw: unknown): LoadedCard[] | null {
+  if (!Array.isArray(raw) || raw.length < 1 || raw.length > 6) return null;
+  const out: LoadedCard[] = [];
+  for (const c of raw as Record<string, unknown>[]) {
+    if (!c || typeof c.card !== "string" || typeof c.name !== "string" || !Number.isInteger(c.waypoints)) return null;
+    out.push({ card: c.card.slice(0, 80), name: c.name.slice(0, 120), waypoints: c.waypoints as number });
+  }
+  return out;
 }
 
 /** The one shape a failed store call is reported in, HTTP removed from
@@ -650,6 +667,45 @@ export function createMissionLifecycle(store: MissionStore): MissionLifecycle {
           ledgerOrWhy.ledger,
         ).find((m) => m.id === id);
         return { ok: true, body: { id, mission: after, cards: after?.cards ?? [] } };
+      } catch (err) {
+        return failure(err);
+      }
+    },
+
+    /** The app reports a Load the board made, from the aircraft (PWA-4, #318).
+     *  The host's own manifest wins once it speaks; this fills the gap when the
+     *  board had no signal to say so. Repeats are accepted. */
+    async setLoaded(_caller, input) {
+      const { id, cards } = (input ?? {}) as { id?: unknown; cards?: unknown };
+      if (!isSafeId(id)) return no("invalid", "That is not a Mission id. Reload the Mission list.");
+      const written = loadedCards(cards);
+      if (!written) return no("invalid", "Send the Cards the board wrote: { id, cards: [{ card, name, waypoints }] }.");
+
+      try {
+        const { records, manifest, ledger } = await reads();
+        const record = records.find((r) => r.id === id);
+        const row = deriveMissions(records, manifest, ledger).find((m) => m.id === id);
+        if (!record || !row) {
+          return no("not_found", "That Mission is no longer in the store. Reload the Mission list.");
+        }
+        if (row.state === "loaded") return { ok: true, body: { id, mission: row } };
+        if (row.state !== "dispatched" && row.state !== "collected") {
+          return no(
+            "refused",
+            `This Mission is ${row.state}, so a Load of it cannot be recorded. Reload the Mission list.`,
+            { state: row.state },
+          );
+        }
+
+        const at = new Date().toISOString();
+        const marked: MissionRecord = { ...record, loaded_mark: { at, cards: written }, updated_at: at };
+        await store.writeMission(marked);
+        const after = deriveMissions(
+          records.map((r) => (r.id === id ? marked : r)),
+          manifest,
+          ledger,
+        ).find((m) => m.id === id);
+        return { ok: true, body: { id, mission: after } };
       } catch (err) {
         return failure(err);
       }
