@@ -1,0 +1,93 @@
+{
+  "contrast_rms_D1": {
+    "attr": "4b",
+    "note": "",
+    "region": "x0.70-0.95:y0.35-0.75",
+    "unit": "levels",
+    "value": 12.19143353153595
+  },
+  "contrast_rms_D2": {
+    "attr": "4b",
+    "note": "",
+    "region": "x0.02-0.40:y0.45-0.70",
+    "unit": "levels",
+    "value": 0.5300737013674134
+  },
+  "contrast_rms_D3": {
+    "attr": "4b",
+    "note": "",
+    "region": "x0.02-0.30:y0.50-0.60",
+    "unit": "levels",
+    "value": 0.46299707568414217
+  },
+  "falloff_rms_D2_D1": {
+    "attr": "4b",
+    "note": "",
+    "region": "x0.02-0.40:y0.45-0.70",
+    "unit": "ratio",
+    "value": 0.04347919381229908
+  },
+  "falloff_rms_D3_D1": {
+    "attr": "4b",
+    "note": "",
+    "region": "x0.02-0.30:y0.50-0.60",
+    "unit": "ratio",
+    "value": 0.03797724644001
+  },
+  "falloff_sat_D2_D1": {
+    "attr": "4b",
+    "note": "",
+    "region": "x0.02-0.40:y0.45-0.70",
+    "unit": "ratio",
+    "value": 0.38361884772483595
+  },
+  "falloff_sat_D3_D1": {
+    "attr": "4b",
+    "note": "",
+    "region": "x0.02-0.30:y0.50-0.60",
+    "unit": "ratio",
+    "value": 0.3520720019467041
+  },
+  "sat_S_D1": {
+    "attr": "4b",
+    "note": "",
+    "region": "x0.70-0.95:y0.35-0.75",
+    "unit": "S",
+    "value": 0.33355751855556404
+  },
+  "sat_S_D2": {
+    "attr": "4b",
+    "note": "",
+    "region": "x0.02-0.40:y0.45-0.70",
+    "unit": "S",
+    "value": 0.12795895091824105
+  },
+  "sat_S_D3": {
+    "attr": "4b",
+    "note": "",
+    "region": "x0.02-0.30:y0.50-0.60",
+    "unit": "S",
+    "value": 0.11743626332223234
+  },
+  "value_V_D1": {
+    "attr": "4b",
+    "note": "",
+    "region": "x0.70-0.95:y0.35-0.75",
+    "unit": "levels",
+    "value": 99.44487967785494
+  },
+  "value_V_D2": {
+    "attr": "4b",
+    "note": "",
+    "region": "x0.02-0.40:y0.45-0.70",
+    "unit": "levels",
+    "value": 206.484303048765
+  },
+  "value_V_D3": {
+    "attr": "4b",
+    "note": "",
+    "region": "x0.02-0.30:y0.50-0.60",
+    "unit": "levels",
+    "value": 210.43305770887167
+  }
+}
