@@ -94,3 +94,14 @@
   justify-content: flex-end;
   gap: 8px;
 }
+
+/* The Developer section's region picker shares this file: the select takes the
+   room the Add button leaves. */
+.actions select {
+  flex: 1;
+  min-width: 0;
+}
+
+.gap {
+  margin-top: 12px;
+}
