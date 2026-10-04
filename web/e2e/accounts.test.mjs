@@ -684,6 +684,73 @@ test("the operator approves and removes Accounts in Settings; nobody else can", 
 });
 
 // ---------------------------------------------------------------------------
+// PWA-2 (#315) -- the Developer section: offline map regions
+// ---------------------------------------------------------------------------
+
+test("the Developer section: the operator sees, adds and removes map regions; nobody else sees it", async () => {
+  // The regions API reaches B2, which this suite has none of, so the browser's
+  // calls to it are answered here by a stand-in with the real route's shape.
+  // What is real: the session, the admin role, and the section's visibility.
+  const state = {
+    regions: [
+      { id: "bc", name: "British Columbia", bbox: [-139.06, 48.3, -114.03, 60], maxzoom: 15, key: "specs/_maps/bc-20261003.pmtiles", bytes: 2_140_000_000, cut_at: "2026-10-03T08:00:00Z", build: "20261003" },
+    ],
+    requests: [],
+  };
+  const standinRoute = async (route) => {
+    const request = route.request();
+    if (request.method() === "POST") {
+      const { action, id } = request.postDataJSON();
+      if (action === "add") state.requests.push({ id, name: id === "ab" ? "Alberta" : id, bbox: [0, 0, 1, 1], maxzoom: 15, requested_at: "2026-10-04T00:00:00Z", requested_by: "owner", status: "queued" });
+      if (action === "remove") state.regions = state.regions.filter((r) => r.id !== id);
+    }
+    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(state) });
+  };
+  await ownerContext.route((url) => url.pathname === "/api/maps/regions", standinRoute);
+
+  const page = await ownerContext.newPage();
+  await page.goto(`${base}/plan`, { waitUntil: "domcontentloaded" });
+  const dev = page.locator("#settings-panel").getByRole("region", { name: "Developer" });
+  await shown(dev.locator("li").filter({ hasText: "British Columbia" }).getByText(/^2\.1 GB · cut /));
+
+  // Add: the catalogue offers what is not there yet, and the cut is queued for the host.
+  const choice = dev.getByRole("combobox", { name: "Region to add" });
+  assert.equal(await choice.locator('option[value="bc"]').count(), 0, "a region already cut is not offered again");
+  await choice.selectOption("ab");
+  await dev.getByRole("button", { name: "Add region", exact: true }).click();
+  await shown(dev.locator("li").filter({ hasText: "Alberta" }).getByText(/^Queued/));
+  assert.equal(await choice.locator('option[value="ab"]').count(), 0, "a queued region is not offered again");
+
+  if (process.env.E2E_SHOTS) {
+    mkdirSync(process.env.E2E_SHOTS, { recursive: true });
+    await dev.scrollIntoViewIfNeeded();
+    await page.screenshot({ path: path.join(process.env.E2E_SHOTS, "developer-1440.png") });
+  }
+
+  // Remove.
+  await dev.getByRole("button", { name: "Remove British Columbia", exact: true }).click();
+  await dev.locator("li").filter({ hasText: "British Columbia" }).waitFor({ state: "detached", timeout: 15_000 });
+  assert.equal(await choice.locator('option[value="bc"]').count(), 1, "removed, it can be added again");
+  await page.close();
+
+  // Nobody else: an approved ordinary Account has no Developer section, and
+  // the real route refuses it, and a visitor with no session, on the server.
+  const eq = captured.githubCookie.indexOf("=");
+  const member = await browser.newContext();
+  await member.addCookies([{ name: captured.githubCookie.slice(0, eq), value: captured.githubCookie.slice(eq + 1), domain: "localhost", path: "/", secure: true }]);
+  const memberPage = await member.newPage();
+  await memberPage.goto(`${base}/plan`, { waitUntil: "domcontentloaded" });
+  await memberPage.locator("#settings-panel").waitFor();
+  assert.equal(await memberPage.getByRole("region", { name: "Developer" }).count(), 0, "no Developer section for an ordinary Account");
+  assert.equal((await member.request.get(`${base}/api/maps/regions`)).status(), 403, "the route refuses an ordinary Account");
+  assert.equal((await member.request.post(`${base}/api/maps/regions`, { data: { action: "add", id: "ab" } })).status(), 403);
+  await member.close();
+  const visitor = await browser.newContext();
+  assert.equal((await visitor.request.get(`${base}/api/maps/regions`)).status(), 401, "no session, no regions");
+  await visitor.close();
+});
+
+// ---------------------------------------------------------------------------
 // T5 -- the account gate, after the app stops (PGlite single owner)
 // ---------------------------------------------------------------------------
 

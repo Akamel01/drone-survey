@@ -50,6 +50,7 @@ jobs:
           python3 scripts/mission/calibrate.py --selftest
           python3 scripts/mission/kmz.py --selftest
           python3 scripts/board/board_service_test.py
+          python3 scripts/maps/cut_region_test.py
       # ADR 0018: every Node carries a check, and the seam between Nodes runs
       # too. They are offline by construction, so they run here on every change.
       # check_head inspects image metadata with exiftool; Pillow builds its fixtures.

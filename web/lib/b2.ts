@@ -137,6 +137,26 @@ export async function downloadFile(s: B2Session, bucket: string, key: string): P
   return data;
 }
 
+/** `length` bytes of one object from `offset`, by range request: how a large
+ *  archive is read without being downloaded. Throws when the key is absent. */
+export async function downloadRange(
+  s: B2Session,
+  bucket: string,
+  key: string,
+  offset: number,
+  length: number,
+): Promise<{ data: ArrayBuffer; etag?: string }> {
+  const res = await b2Fetch(
+    s,
+    (t) => `${t.downloadUrl}/file/${bucket}/${encodeURIComponent(key).replace(/%2F/g, "/")}`,
+    (t) => ({ headers: { Authorization: t.token, Range: `bytes=${offset}-${offset + length - 1}` } }),
+  );
+  if (!res.ok) throw new Error(`range download failed: ${res.status}`);
+  const data = await res.arrayBuffer();
+  // A 200 is the whole object: a server that ignored the range.
+  return { data: res.status === 206 ? data : data.slice(offset, offset + length), etag: res.headers.get("etag") ?? undefined };
+}
+
 export async function uploadFile(s: B2Session, key: string, body: Buffer): Promise<void> {
   const up = await b2Fetch(s, (t) => `${t.apiUrl}/b2api/v2/b2_get_upload_url`, (t) => ({
     method: "POST",
