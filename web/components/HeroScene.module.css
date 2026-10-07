@@ -16,6 +16,14 @@
   object-position: 100% 60%;
 }
 
+.scene video::-webkit-media-controls-start-playback-button {
+  display: none !important;
+}
+
+.scene video::-webkit-media-controls {
+  display: none !important;
+}
+
 /* The phone's Missions view only: wide screens show the map instead. */
 @media (min-width: 1000px) {
   .scene {
