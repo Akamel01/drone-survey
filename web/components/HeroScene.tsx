@@ -25,6 +25,13 @@ const GLIDE = 16;
 
 const rnd = (a: number, b: number) => a + Math.random() * (b - a);
 
+// iOS ignores the React muted prop alone: property + attribute before play().
+function ensureMuted(video: HTMLVideoElement) {
+  video.muted = true;
+  video.defaultMuted = true;
+  video.setAttribute("muted", "");
+}
+
 interface Bird {
   el: HTMLDivElement;
   size: number;
@@ -208,6 +215,7 @@ export default function HeroScene({ playing, variant = "live", showOnWide = fals
       video.pause();
       return;
     }
+    ensureMuted(video);
     video.play().catch(() => {});
   }, [active, pick.src]);
 
@@ -216,7 +224,10 @@ export default function HeroScene({ playing, variant = "live", showOnWide = fals
       const video = videoRef.current;
       if (!video) return;
       if (document.hidden) video.pause();
-      else if (playing) video.play().catch(() => {});
+      else if (playing) {
+        ensureMuted(video);
+        video.play().catch(() => {});
+      }
     };
     document.addEventListener("visibilitychange", onHide);
     return () => document.removeEventListener("visibilitychange", onHide);
@@ -229,7 +240,10 @@ export default function HeroScene({ playing, variant = "live", showOnWide = fals
     const video = videoRef.current;
     if (!video) return;
     const resume = () => {
-      if (video.paused && !document.hidden) video.play().catch(() => {});
+      if (video.paused && !document.hidden) {
+        ensureMuted(video);
+        video.play().catch(() => {});
+      }
     };
     const done = () => {
       removeEventListener("pointerdown", resume);
@@ -271,9 +285,13 @@ export default function HeroScene({ playing, variant = "live", showOnWide = fals
       <video
         ref={videoRef}
         muted
+        // Spread: @types/react lacks defaultMuted; real guarantee is ensureMuted().
+        {...{ defaultMuted: true }}
         playsInline
         autoPlay
         loop
+        disablePictureInPicture
+        disableRemotePlayback
         preload={active ? "metadata" : "none"}
         poster={active ? pick.poster : undefined}
         src={active ? pick.src : undefined}
