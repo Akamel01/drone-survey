@@ -14,7 +14,7 @@ type Mode = "sign-in" | "sign-up" | "reset" | "check-verify" | "check-reset";
  * in. The reset form answers the same way whether or not the email has an
  * Account, so it never tells anyone who is registered.
  */
-export default function EmailSignIn({ onBack }: { onBack: () => void }) {
+export default function EmailSignIn({ onBack, callbackURL = "/" }: { onBack: () => void; callbackURL?: string }) {
   const router = useRouter();
   const [mode, setMode] = useState<Mode>("sign-in");
   const [name, setName] = useState("");
@@ -38,7 +38,7 @@ export default function EmailSignIn({ onBack }: { onBack: () => void }) {
     setBusy(true);
     try {
       if (mode === "sign-in") {
-        const { error } = await authClient.signIn.email({ email, password, callbackURL: "/" });
+        const { error } = await authClient.signIn.email({ email, password, callbackURL });
         if (error) setProblem(emailSignInProblem(error.code, error.message));
         else router.refresh(); // the home page re-reads the session and moves on
       } else if (mode === "sign-up") {
@@ -46,7 +46,7 @@ export default function EmailSignIn({ onBack }: { onBack: () => void }) {
           email,
           password,
           name: name.trim() || email.split("@")[0],
-          callbackURL: "/",
+          callbackURL,
         });
         if (error) setProblem(emailSignInProblem(error.code, error.message));
         else go("check-verify");
