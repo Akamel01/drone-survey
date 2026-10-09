@@ -18,6 +18,9 @@ const REQUIRED = [
   "GITHUB_CLIENT_ID",
   "GITHUB_CLIENT_SECRET",
   "OWNER_EMAIL",
+  "SUPABASE_URL",
+  "SUPABASE_OAUTH_CLIENT_ID",
+  "SUPABASE_OAUTH_CLIENT_SECRET",
 ] as const;
 
 const saved = new Map<string, string | undefined>();
@@ -40,7 +43,7 @@ function configure(): void {
   for (const name of REQUIRED) process.env[name] = `test-${name.toLowerCase()}`;
 }
 
-test("missing: all nine absent, named in the D4 order", () => {
+test("missing: all twelve absent, named in the D4 order", () => {
   const { values, missing } = accountEnv();
   assert.deepEqual(missing, [...REQUIRED]);
   assert.deepEqual(values, {});
@@ -71,7 +74,7 @@ test("503: unconfigured names every missing variable, in order", async () => {
   }
 });
 
-test("configured: all nine present -> null, values collected", () => {
+test("configured: all twelve present -> null, values collected", () => {
   configure();
   try {
     assert.equal(accountEnvProblem(), null);

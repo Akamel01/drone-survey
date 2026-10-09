@@ -80,6 +80,9 @@ if (!databaseUrl) {
   process.env.GITHUB_CLIENT_ID = "standin-github-client";
   process.env.GITHUB_CLIENT_SECRET = "standin-github-secret";
   process.env.OWNER_EMAIL = OWNER_EMAIL;
+  process.env.SUPABASE_URL = "https://test.supabase.co";
+  process.env.SUPABASE_OAUTH_CLIENT_ID = "standin-supabase-client";
+  process.env.SUPABASE_OAUTH_CLIENT_SECRET = "standin-supabase-secret";
   process.env.BETTER_AUTH_SECRET = "account-flow-test-secret-0123456789abcdef";
   process.env.BETTER_AUTH_URL = "http://localhost:3000";
   process.env.OAUTH_PROXY_SECRET = "account-flow-proxy-secret";

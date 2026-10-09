@@ -13,7 +13,10 @@ export type RequiredVar =
   | "GOOGLE_CLIENT_SECRET"
   | "GITHUB_CLIENT_ID"
   | "GITHUB_CLIENT_SECRET"
-  | "OWNER_EMAIL";
+  | "OWNER_EMAIL"
+  | "SUPABASE_URL"
+  | "SUPABASE_OAUTH_CLIENT_ID"
+  | "SUPABASE_OAUTH_CLIENT_SECRET";
 
 const REQUIRED_VARS: readonly RequiredVar[] = [
   "DATABASE_URL",
@@ -25,6 +28,9 @@ const REQUIRED_VARS: readonly RequiredVar[] = [
   "GITHUB_CLIENT_ID",
   "GITHUB_CLIENT_SECRET",
   "OWNER_EMAIL",
+  "SUPABASE_URL",
+  "SUPABASE_OAUTH_CLIENT_ID",
+  "SUPABASE_OAUTH_CLIENT_SECRET",
 ];
 
 // Optional, read where they are used and never part of the 503 set: the six

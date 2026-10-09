@@ -17,6 +17,9 @@ const CONFIGURED: Record<string, string> = {
   GITHUB_CLIENT_ID: "test-github-id",
   GITHUB_CLIENT_SECRET: "test-github-secret",
   OWNER_EMAIL: "owner@example.com",
+  SUPABASE_URL: "https://test.supabase.co",
+  SUPABASE_OAUTH_CLIENT_ID: "test-supabase-client-id",
+  SUPABASE_OAUTH_CLIENT_SECRET: "test-supabase-client-secret",
 };
 
 for (const name of Object.keys(CONFIGURED)) delete process.env[name];

@@ -69,7 +69,7 @@ const captured = {};
 // Environment and small helpers
 // ---------------------------------------------------------------------------
 
-/** The nine accountEnv variables (lib/accountEnv.ts:18-28) plus the trusted
+/** The twelve accountEnv variables (lib/accountEnv.ts:18-31) plus the trusted
  *  origin and the six stand-in URLs -- the proven auth-evidence arrangement
  *  (scripts/auth-evidence.mjs:89-107). BETTER_AUTH_URL must equal the origin
  *  so the oauth-proxy plugin skips its production redirect. */
@@ -85,6 +85,9 @@ function authEnvFor(origin, oauthStandin) {
     GITHUB_CLIENT_ID: "standin-github-client",
     GITHUB_CLIENT_SECRET: "standin-github-secret",
     OWNER_EMAIL,
+    SUPABASE_URL: "https://test.supabase.co",
+    SUPABASE_OAUTH_CLIENT_ID: "standin-supabase-client",
+    SUPABASE_OAUTH_CLIENT_SECRET: "standin-supabase-secret",
     AUTH_TRUSTED_ORIGINS: origin,
     AUTH_TEST_GOOGLE_AUTHORIZATION_URL: `${oauthStandin.baseUrl}/authorize`,
     AUTH_TEST_GOOGLE_TOKEN_URL: `${oauthStandin.baseUrl}/token`,

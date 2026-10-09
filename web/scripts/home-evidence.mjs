@@ -20,7 +20,7 @@
 //   before the next phase starts, so T2's owner/pending can never be starved
 //   by T1's probes.
 //
-// T3 starts a SECOND `next start` on another port with all nine accountEnv
+// T3 starts a SECOND `next start` on another port with all twelve accountEnv
 // variables absent and stops it before T4 (the heavy-command mutex's one
 // deliberate exception).
 //
@@ -674,6 +674,9 @@ async function main() {
     GITHUB_CLIENT_ID: "standin-github-client",
     GITHUB_CLIENT_SECRET: "standin-github-secret",
     OWNER_EMAIL,
+    SUPABASE_URL: "https://test.supabase.co",
+    SUPABASE_OAUTH_CLIENT_ID: "standin-supabase-client",
+    SUPABASE_OAUTH_CLIENT_SECRET: "standin-supabase-secret",
     AUTH_TRUSTED_ORIGINS: base,
     AUTH_TEST_GOOGLE_AUTHORIZATION_URL: `${standin.baseUrl}/authorize`,
     AUTH_TEST_GOOGLE_TOKEN_URL: `${standin.baseUrl}/token`,
@@ -696,7 +699,7 @@ async function main() {
     await phaseT1(browser, standin, base);
     await phaseT2(browser, standin, base);
 
-    // T3: the deliberate second next start, all nine accountEnv variables and
+    // T3: the deliberate second next start, all twelve accountEnv variables and
     // the stand-in/trusted-origin extras absent. Stopped before T4 reuses the
     // configured server.
     const port2 = await freePort();
@@ -712,6 +715,9 @@ async function main() {
       "GITHUB_CLIENT_ID",
       "GITHUB_CLIENT_SECRET",
       "OWNER_EMAIL",
+      "SUPABASE_URL",
+      "SUPABASE_OAUTH_CLIENT_ID",
+      "SUPABASE_OAUTH_CLIENT_SECRET",
       "AUTH_TRUSTED_ORIGINS",
       "AUTH_TRUSTED_HOSTS",
       "AUTH_TEST_GOOGLE_AUTHORIZATION_URL",
