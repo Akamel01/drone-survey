@@ -238,8 +238,12 @@ before(async () => {
   for (const name of ["SUPABASE_URL", "SUPABASE_OAUTH_CLIENT_ID", "SUPABASE_OAUTH_CLIENT_SECRET", "OWNER_EMAIL"]) {
     assert.ok(authEnv[name], `${name} is set for Supabase mode`);
   }
+  // Named, not by prefix: GitHub Actions sets its own GITHUB_* variables.
+  for (const name of ["GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET", "GITHUB_CLIENT_ID", "GITHUB_CLIENT_SECRET"]) {
+    assert.ok(!authEnv[name], `no legacy auth var leaks in: ${name}`);
+  }
   for (const name of Object.keys(authEnv)) {
-    assert.ok(!name.startsWith("GOOGLE_") && !name.startsWith("GITHUB_") && !name.startsWith("AUTH_TEST_"), `no legacy auth var leaks in: ${name}`);
+    assert.ok(!name.startsWith("AUTH_TEST_"), `no legacy auth var leaks in: ${name}`);
   }
 
   const migrate = await run(process.execPath, ["scripts/migrate.mjs"], authEnv);
