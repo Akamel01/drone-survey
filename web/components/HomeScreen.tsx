@@ -13,6 +13,8 @@ export interface HomeScreenProps {
   state: HomeState;
   /** Email and password is offered only where its mail can be sent (#247). */
   emailEnabled?: boolean;
+  /** Supabase mode: Papyrus-only sign-in, decided server-side (#336). */
+  supabaseOnly?: boolean;
   email?: string | null;
   name?: string | null;
 }
@@ -22,7 +24,9 @@ const OPTIONS = [
   { provider: "github" as const, label: "Continue with GitHub" },
 ];
 
-export default function HomeScreen({ state, email, emailEnabled = false }: HomeScreenProps) {
+const SUPABASE_OPTION = { provider: "supabase" as const, label: "Continue with your Papyrus account" };
+
+export default function HomeScreen({ state, email, emailEnabled = false, supabaseOnly = false }: HomeScreenProps) {
   const router = useRouter();
   const rootRef = useRef<HTMLElement>(null);
   const [busy, setBusy] = useState<string | null>(null);
@@ -44,7 +48,7 @@ export default function HomeScreen({ state, email, emailEnabled = false }: HomeS
     return () => clearTimeout(timer);
   }, [state, router]);
 
-  async function signIn(provider: "google" | "github") {
+  async function signIn(provider: "google" | "github" | "supabase") {
     setBusy(provider);
     setProblem(null);
     try {
@@ -57,6 +61,8 @@ export default function HomeScreen({ state, email, emailEnabled = false }: HomeS
     }
   }
 
+  const options = supabaseOnly ? [SUPABASE_OPTION] : OPTIONS;
+
   return (
     <main ref={rootRef} className={styles.root}>
       <HeroScene playing showOnWide />
@@ -65,7 +71,7 @@ export default function HomeScreen({ state, email, emailEnabled = false }: HomeS
         {state === "signedout" && withEmail && <EmailSignIn onBack={() => setWithEmail(false)} />}
         {state === "signedout" && !withEmail && (
           <div className={styles.options}>
-            {OPTIONS.map((option, index) => (
+            {options.map((option, index) => (
               <button
                 key={option.provider}
                 type="button"
@@ -81,7 +87,7 @@ export default function HomeScreen({ state, email, emailEnabled = false }: HomeS
               <button
                 type="button"
                 className="glass-clear-strong"
-                style={{ "--i": OPTIONS.length } as CSSProperties}
+                style={{ "--i": options.length } as CSSProperties}
                 disabled={busy !== null}
                 onClick={() => {
                   setProblem(null);

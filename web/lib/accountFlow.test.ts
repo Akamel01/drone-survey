@@ -1,6 +1,6 @@
 // The whole account flow, in-process (D12/D14): real Better Auth handler, real
-// migrations, real OAuth redirects -- only the far side (google/github) is the
-// stand-in in lib/oauthStandin.ts.
+// migrations, real OAuth redirects -- only the far side (google/github and,
+// via discovery, supabase) is the stand-in in lib/oauthStandin.ts.
 //
 // Covered, in this order: migrations are idempotent; an unverified OWNER_EMAIL
 // Account is created pending on its own u-<id> Workspace with no admin role and
@@ -60,6 +60,48 @@ if (!databaseUrl) {
     image: null,
     emailVerified: true,
   };
+  // Supabase (#336) pairings, consumed after the five above: an unverified
+  // owner email that must refuse (explicit false, R6), a verified owner email
+  // that links (E1 owner), a verified pending-non-owner email that links (E1
+  // non-owner), then the other Account's sub with a changed email proving the
+  // sub row wins (E3/R5 sub-stability). E2 consumes no pairing: email/password
+  // sign-up is refused by the gate in Supabase mode (F1), so there is no local
+  // Account for a pairing to meet.
+  const supabaseOwnerUnverified = {
+    id: "standin-supabase-owner-un",
+    name: "Owner Example",
+    email: "owner@example.com",
+    image: null,
+    emailVerified: false,
+  };
+  const supabaseOwnerVerified = {
+    id: "standin-supabase-owner",
+    name: "Owner Example",
+    email: "owner@example.com",
+    image: null,
+    emailVerified: true,
+  };
+  const supabaseOtherVerified = {
+    id: "standin-supabase-other",
+    name: "Other Example",
+    email: "other@example.com",
+    image: null,
+    emailVerified: true,
+  };
+  const supabaseLocalVerified = {
+    id: "standin-supabase-local",
+    name: "Local Only",
+    email: "local-only@example.com",
+    image: null,
+    emailVerified: true,
+  };
+  const supabaseOtherNewEmail = {
+    id: "standin-supabase-other",
+    name: "Other Example",
+    email: "other-moved@example.com",
+    image: null,
+    emailVerified: true,
+  };
 
   const standin = await startOAuthStandin([
     ownerUnverified,
@@ -67,6 +109,10 @@ if (!databaseUrl) {
     otherIdentity,
     ownerGithubUnverified,
     ownerGithubVerified,
+    supabaseOwnerUnverified,
+    supabaseOwnerVerified,
+    supabaseOtherVerified,
+    supabaseOtherNewEmail,
   ]);
 
   process.env.AUTH_TEST_GOOGLE_AUTHORIZATION_URL = `${standin.baseUrl}/authorize`;
@@ -79,12 +125,21 @@ if (!databaseUrl) {
   process.env.GOOGLE_CLIENT_SECRET = "standin-google-secret";
   process.env.GITHUB_CLIENT_ID = "standin-github-client";
   process.env.GITHUB_CLIENT_SECRET = "standin-github-secret";
+  // Supabase mode (#336) via discovery: SUPABASE_URL points at the stand-in,
+  // whose /auth/v1/.well-known/openid-configuration answers production
+  // URL-construction unmodified. google/github AUTH_TEST_* overrides stay, so
+  // all three genericOAuth entries coexist and pairings can be tested.
+  process.env.SUPABASE_URL = standin.baseUrl;
+  process.env.SUPABASE_OAUTH_CLIENT_ID = "standin-supabase-client";
+  process.env.SUPABASE_OAUTH_CLIENT_SECRET = "standin-supabase-secret";
+  // Email/password sign-up (#247) for the E2 case: mail lands in a temp dir.
+  process.env.AUTH_TEST_MAIL_DIR = `${process.env.TMPDIR ?? "/tmp"}/accountflow-mail-${process.pid}`;
   process.env.OWNER_EMAIL = OWNER_EMAIL;
   process.env.BETTER_AUTH_SECRET = "account-flow-test-secret-0123456789abcdef";
   process.env.BETTER_AUTH_URL = "http://localhost:3000";
   process.env.OAUTH_PROXY_SECRET = "account-flow-proxy-secret";
 
-  const { getAuth } = await import("./accountAuth.ts");
+  const { getAuth, emailPasswordEnabled } = await import("./accountAuth.ts");
   const { getPool, closeDb } = await import("./accountDb.ts");
   const { getMigrations } = await import("better-auth/db/migration");
 
@@ -145,7 +200,7 @@ if (!databaseUrl) {
    *  callback; better-auth/db state storage also checks it). No success
    *  assumption: the callback response and whatever session the jar holds are
    *  returned for the caller to judge. */
-  async function runSignIn(provider: "google" | "github", jar: CookieJar): Promise<SignInRun> {
+  async function runSignIn(provider: "google" | "github" | "supabase", jar: CookieJar): Promise<SignInRun> {
     await resetRateLimit(pool);
     const startResponse = await auth.handler(
       new Request(`${BASE}/api/auth/sign-in/social`, {
@@ -165,7 +220,7 @@ if (!databaseUrl) {
     assert.equal(authorize.status, 302, "the stand-in redirects back");
     const location = authorize.headers.get("location");
     assert.ok(location, "the stand-in sent a Location");
-    assert.match(location, /\/api\/auth\/callback\/(google|github)\?/);
+    assert.match(location, /\/api\/auth\/callback\/(google|github|supabase)\?/);
     assert.ok(location.includes(`state=${new URL(url).searchParams.get("state")}`), "state is echoed byte-for-byte");
 
     const callback = await auth.handler(new Request(location, { headers: { cookie: jar.header() } }));
@@ -176,7 +231,7 @@ if (!databaseUrl) {
 
   /** A run that must have succeeded: 302 callback and a session. */
   async function signIn(
-    provider: "google" | "github",
+    provider: "google" | "github" | "supabase",
     jar: CookieJar,
   ): Promise<{ session: SeenSession; setCookies: string[] }> {
     const { callback, session, setCookies } = await runSignIn(provider, jar);
@@ -188,6 +243,7 @@ if (!databaseUrl) {
   const ownerJar = new CookieJar();
   const otherJar = new CookieJar();
   let ownerId = "";
+  let otherId = "";
 
   test("migrations: the second has nothing to create or add", async () => {
     const first = await getMigrations(auth.options);
@@ -253,7 +309,7 @@ if (!databaseUrl) {
 
   test("other: github sign-in gets 'u-<id>', stays pending, and keeps its session", async () => {
     const { session } = await signIn("github", otherJar);
-    const otherId = session.user.id;
+    otherId = session.user.id;
     assert.ok(otherId, "the second account has a user id");
     assert.notEqual(otherId, ownerId);
     assert.equal(session.user.email, otherIdentity.email);
@@ -332,5 +388,156 @@ if (!databaseUrl) {
     );
     assert.equal(rows[0]?.role, "admin", "the link does not change the role");
     assert.equal(rows[0]?.approved, true, "the link does not change the approval");
+  });
+
+  test("linking: an unverified supabase email matching the owner's does not sign into the owner's Account", async () => {
+    const supabaseJar = new CookieJar();
+    const { callback, session } = await runSignIn("supabase", supabaseJar);
+    const observed = `callback ${callback.status} Location: ${callback.headers.get("location") ?? "(none)"}`;
+
+    assert.equal(session, null, "no session exists in the refused jar");
+    assert.equal(callback.status, 302, `the refusal redirects: ${observed}`);
+    assert.ok(
+      callback.headers.get("location")?.includes("error=account_not_linked"),
+      `the refusal redirect carries the error code: ${observed}`,
+    );
+
+    const accounts = await pool.query<{ id: string }>(
+      'SELECT id FROM "account" WHERE "providerId" = $1 AND "accountId" = $2',
+      ["supabase", supabaseOwnerUnverified.id],
+    );
+    assert.equal(accounts.rows.length, 0, "no supabase account row was created");
+    const ownerRows = await pool.query<{ id: string }>('SELECT id FROM "user" WHERE lower(email) = $1', [
+      "owner@example.com",
+    ]);
+    assert.equal(ownerRows.rows.length, 1, "still exactly one user with the owner email");
+    assert.equal(ownerRows.rows[0]?.id, ownerId, "and it is the original owner");
+  });
+
+  test("linking: a verified supabase email links to the owner's Account (E1 owner)", async () => {
+    const supabaseJar = new CookieJar();
+    const { session } = await signIn("supabase", supabaseJar);
+    assert.equal(session.user.id, ownerId, "the verified supabase sign-in is the owner's Account");
+
+    const accounts = await pool.query<{ providerId: string; accountId: string }>(
+      'SELECT "providerId", "accountId" FROM "account" WHERE "userId" = $1',
+      [ownerId],
+    );
+    assert.ok(
+      accounts.rows.some(
+        (row) => row.providerId === "supabase" && row.accountId === supabaseOwnerVerified.id,
+      ),
+      `the supabase account is linked: ${JSON.stringify(accounts.rows)}`,
+    );
+    assert.deepEqual(
+      accounts.rows.map((row) => row.providerId).sort(),
+      ["github", "google", "supabase"],
+      `exactly the three provider rows belong to the owner: ${JSON.stringify(accounts.rows)}`,
+    );
+
+    const ownerRows = await pool.query<{ id: string }>('SELECT id FROM "user" WHERE lower(email) = $1', [
+      "owner@example.com",
+    ]);
+    assert.equal(ownerRows.rows.length, 1, "still exactly one user with the owner email");
+  });
+
+  test("linking: a verified supabase email links to the pending non-owner Account (E1 non-owner)", async () => {
+    const supabaseJar = new CookieJar();
+    const { session } = await signIn("supabase", supabaseJar);
+    assert.equal(session.user.id, otherId, "the verified supabase sign-in is the other Account");
+
+    const accounts = await pool.query<{ providerId: string; accountId: string }>(
+      'SELECT "providerId", "accountId" FROM "account" WHERE "userId" = $1',
+      [otherId],
+    );
+    assert.ok(
+      accounts.rows.some(
+        (row) => row.providerId === "supabase" && row.accountId === supabaseOtherVerified.id,
+      ),
+      `the supabase account is linked: ${JSON.stringify(accounts.rows)}`,
+    );
+
+    const { rows } = await pool.query<{ role: string; approved: boolean }>(
+      'SELECT role, approved FROM "user" WHERE id = $1',
+      [otherId],
+    );
+    assert.equal(rows[0]?.role, "user", "the link does not promote the pending Account");
+    assert.equal(rows[0]?.approved, false, "the link does not approve the pending Account");
+  });
+
+  test("linking: email/password sign-up is refused in Supabase mode, allowed in legacy mode (E2)", async () => {
+    await resetRateLimit(pool);
+    const signup = await auth.handler(
+      new Request(`${BASE}/api/auth/sign-up/email`, {
+        method: "POST",
+        headers: { "content-type": "application/json", origin: BASE },
+        body: JSON.stringify({
+          name: supabaseLocalVerified.name,
+          email: supabaseLocalVerified.email,
+          password: "local-only-password-1",
+        }),
+      }),
+    );
+    const signupBody = (await signup.json()) as { code?: string; message?: string };
+    assert.equal(signup.status, 400, `sign-up/email refused in Supabase mode: ${JSON.stringify(signupBody)}`);
+    assert.equal(signupBody.code, "EMAIL_PASSWORD_SIGN_UP_DISABLED");
+
+    const locals = await pool.query<{ id: string }>('SELECT id FROM "user" WHERE lower(email) = $1', [
+      supabaseLocalVerified.email,
+    ]);
+    assert.equal(locals.rows.length, 0, "the refused sign-up created no Account");
+
+    // Legacy mode (trio unset) allows the same sign-up: the mail sink is
+    // present either way, so only the trio flips the gate (F1 proved the
+    // legacy HTTP 200). The built handler stays Supabase mode, so this half
+    // is a gate read, not a second HTTP call, and consumes no pairing.
+    const savedTrio = {
+      SUPABASE_URL: process.env.SUPABASE_URL,
+      SUPABASE_OAUTH_CLIENT_ID: process.env.SUPABASE_OAUTH_CLIENT_ID,
+      SUPABASE_OAUTH_CLIENT_SECRET: process.env.SUPABASE_OAUTH_CLIENT_SECRET,
+    };
+    try {
+      assert.equal(emailPasswordEnabled(), false, "gate off with the trio set (Supabase mode)");
+      delete process.env.SUPABASE_URL;
+      delete process.env.SUPABASE_OAUTH_CLIENT_ID;
+      delete process.env.SUPABASE_OAUTH_CLIENT_SECRET;
+      assert.equal(emailPasswordEnabled(), true, "gate on with the trio unset (legacy mode)");
+    } finally {
+      process.env.SUPABASE_URL = savedTrio.SUPABASE_URL;
+      process.env.SUPABASE_OAUTH_CLIENT_ID = savedTrio.SUPABASE_OAUTH_CLIENT_ID;
+      process.env.SUPABASE_OAUTH_CLIENT_SECRET = savedTrio.SUPABASE_OAUTH_CLIENT_SECRET;
+    }
+    assert.equal(emailPasswordEnabled(), false, "trio restored: gate off again");
+  });
+
+  test("linking: the same supabase sub with a changed email stays the same Account (E3/R5 sub-first)", async () => {
+    const supabaseJar = new CookieJar();
+    const { session } = await signIn("supabase", supabaseJar);
+    assert.equal(session.user.id, otherId, "the sub row wins over the changed email: no merge, no new Account");
+
+    const users = await pool.query<{ id: string }>(
+      'SELECT id FROM "user" WHERE lower(email) IN ($1, $2)',
+      [supabaseOtherVerified.email, supabaseOtherNewEmail.email],
+    );
+    assert.equal(users.rows.length, 1, "still exactly one user across the old and new email");
+    assert.equal(users.rows[0]?.id, otherId, "and it is the original other Account");
+  });
+
+  test("migration: the pre-existing google-linked owner keeps a valid session after the switch (R4/D4)", async () => {
+    const ownerSession = await getSession(ownerJar);
+    assert.equal(ownerSession?.user.id, ownerId, "the owner's pre-existing session is still valid: no forced sign-out");
+
+    const users = await pool.query<{ id: string }>('SELECT id FROM "user" WHERE id = $1', [ownerId]);
+    assert.equal(users.rows.length, 1, "the owner's user row was not deleted");
+
+    const accounts = await pool.query<{ providerId: string }>(
+      'SELECT "providerId" FROM "account" WHERE "userId" = $1',
+      [ownerId],
+    );
+    assert.deepEqual(
+      accounts.rows.map((row) => row.providerId).sort(),
+      ["github", "google", "supabase"],
+      `all linked provider rows survive: ${JSON.stringify(accounts.rows)}`,
+    );
   });
 }

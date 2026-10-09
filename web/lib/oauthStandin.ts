@@ -17,6 +17,13 @@
 //    emailVerified, absent meaning true); the plugin's default fetchUserInfo
 //    (generic-oauth/index.mjs:37) maps picture->image and email_verified, and
 //    the account subject falls back to `id` when there is no `sub`.
+//  - GET /.well-known/openid-configuration and
+//    /auth/v1/.well-known/openid-configuration (the Supabase discovery path)
+//    return { issuer, authorization_endpoint, token_endpoint,
+//    userinfo_endpoint, jwks_uri } addressed to the stand-in baseUrl, so
+//    production `discoveryUrl = <SUPABASE_URL>/auth/v1/.well-known/...` runs
+//    unmodified with SUPABASE_URL pointed at the stand-in. jwks_uri is a
+//    field only; no JWKS body is served (userinfo-only, no client-auth check).
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import type { AddressInfo } from "node:net";
 
@@ -108,6 +115,18 @@ export async function startOAuthStandin(identities: StandinIdentity[]): Promise<
         byToken.set(accessToken, identity);
         // code_verifier, if sent, is accepted and never checked.
         return json(response, 200, { access_token: accessToken, token_type: "Bearer", expires_in: 3600 });
+      }
+      if (request.method === "GET" &&
+        (path === "/.well-known/openid-configuration" || path === "/auth/v1/.well-known/openid-configuration")) {
+        const { port } = server.address() as AddressInfo;
+        const base = `http://127.0.0.1:${port}`;
+        return json(response, 200, {
+          issuer: base,
+          authorization_endpoint: `${base}/authorize`,
+          token_endpoint: `${base}/token`,
+          userinfo_endpoint: `${base}/userinfo`,
+          jwks_uri: `${base}/.well-known/jwks.json`,
+        });
       }
       if (request.method === "GET" && path === "/userinfo") {
         const token = (request.headers.authorization ?? "").replace(/^Bearer /i, "");

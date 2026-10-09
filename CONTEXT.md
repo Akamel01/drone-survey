@@ -22,7 +22,8 @@ _Avoid_: accurate, precise, professional-grade
 
 **Account**:
 one person's identity in the planner: an email address they sign in with
-through Google, GitHub, or email and password. An Account works inside a
+through whichever sign-in method the deployment configures. An Account works
+inside a
 Workspace.
 _Avoid_: user (in the product's own words), login, profile.
 
