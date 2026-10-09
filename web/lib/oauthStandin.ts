@@ -12,8 +12,17 @@
 //    { access_token, token_type, expires_in } -- getOAuth2Tokens
 //    (@better-auth/core/dist/oauth2/utils.mjs:17) reads token_type/expires_in,
 //    and the token's code_verifier is accepted but not checked.
+//  - GET /auth/v1/.well-known/openid-configuration mirrors the Supabase
+//    discovery path under the stand-in root (frozen #335 contract): issuer +
+//    the authorize/token/userinfo endpoints it already serves.
+//  - GET /oauth/authorization-details reports the client name/scopes without
+//    consuming the identity queue (read-only peek for the consent page, which
+//    renders client name/scopes ONLY from here, never query params).
+//  - POST /oauth/approve consumes one queued identity and issues a code the
+//    existing /token accepts (same byCode map); POST /oauth/deny consumes one
+//    and issues nothing. Running out is a 400 either way, like /authorize.
 //  - GET /userinfo (Authorization: Bearer <access_token>) returns
-//    { id, name, email, image, email_verified } (the last from the identity's
+//    { id, sub (= id), name, email, image, email_verified } (the last from the identity's
 //    emailVerified, absent meaning true); the plugin's default fetchUserInfo
 //    (generic-oauth/index.mjs:37) maps picture->image and email_verified, and
 //    the account subject falls back to `id` when there is no `sub`.
@@ -115,11 +124,54 @@ export async function startOAuthStandin(identities: StandinIdentity[]): Promise<
         if (!identity) return json(response, 401, { error: "standin: unknown access token" });
         return json(response, 200, {
           id: identity.id,
+          sub: identity.id,
           name: identity.name,
           email: identity.email,
           image: identity.image ?? null,
           email_verified: identity.emailVerified ?? true,
         });
+      }
+      if (request.method === "GET" && path === "/auth/v1/.well-known/openid-configuration") {
+        const issuer = `http://${request.headers.host ?? "127.0.0.1"}`;
+        return json(response, 200, {
+          issuer,
+          authorization_endpoint: `${issuer}/authorize`,
+          token_endpoint: `${issuer}/token`,
+          userinfo_endpoint: `${issuer}/userinfo`,
+          authorization_details_endpoint: `${issuer}/oauth/authorization-details`,
+          approve_endpoint: `${issuer}/oauth/approve`,
+          deny_endpoint: `${issuer}/oauth/deny`,
+          response_types_supported: ["code"],
+          subject_types_supported: ["public"],
+        });
+      }
+      if (request.method === "GET" && path === "/oauth/authorization-details") {
+        // Read-only: the queue is never touched here, so approve/deny still
+        // consume one identity per flow in declaration order.
+        return json(response, 200, {
+          client_id: "standin-supabase-client",
+          client_name: "Stand-in Supabase client",
+          scope: "openid email profile",
+          redirect_uri: "https://missions.papyrus-ai.net/api/auth/callback/supabase",
+        });
+      }
+      if (request.method === "POST" && (path === "/oauth/approve" || path === "/oauth/deny")) {
+        const identity = queue.shift();
+        if (!identity) {
+          return json(response, 400, { error: "standin: missing redirect_uri or no identity left" });
+        }
+        if (path === "/oauth/deny") return json(response, 200, { status: "denied" });
+        const code = `code-${identity.id}-${byCode.size}`;
+        byCode.set(code, identity);
+        const raw = await readBody(request);
+        let state: string | undefined;
+        try {
+          state = raw ? (JSON.parse(raw) as { state?: unknown }).state as string | undefined : undefined;
+        } catch {
+          const form = new URLSearchParams(raw);
+          state = form.get("state") ?? undefined;
+        }
+        return json(response, 200, state === undefined ? { code } : { code, state });
       }
       return json(response, 404, { error: `standin: nothing at ${path}` });
     })().catch((error) => json(response, 500, { error: `standin: ${(error as Error).message}` }));
