@@ -26,7 +26,7 @@ npm run start   # serve the production build
 
 ## Configuration
 
-Nine required variables, in this order (the 503 message lists them the same
+Twelve required variables, in this order (the 503 message lists them the same
 way):
 
 | Variable | What it is |
@@ -40,6 +40,9 @@ way):
 | `GITHUB_CLIENT_ID` | GitHub OAuth client id |
 | `GITHUB_CLIENT_SECRET` | GitHub OAuth client secret |
 | `OWNER_EMAIL` | The operator's email — that Account gets the operator Workspace and the admin role |
+| `SUPABASE_URL` | The Supabase project URL, e.g. `https://<ref>.supabase.co` — discovery is served at `<SUPABASE_URL>/auth/v1/.well-known/openid-configuration` |
+| `SUPABASE_OAUTH_CLIENT_ID` | The confidential OAuth client id registered on the Supabase OAuth server |
+| `SUPABASE_OAUTH_CLIENT_SECRET` | The confidential OAuth client secret — server-side only, never reaches the browser |
 
 Optional:
 
@@ -95,10 +98,15 @@ node scripts/auth-evidence.mjs
 
 - Root directory: `web`
 - Framework preset: Next.js
-- Set the nine variables in the project's environment (`vercel env pull` for
+- Set the twelve variables in the project's environment (`vercel env pull` for
   local dev), with the same `OAUTH_PROXY_SECRET` in production, previews and
   local; register `/api/auth/callback/google` and `/api/auth/callback/github`
-  on the production URL.
+  on the production URL. The Supabase confidential client registers exactly
+  `https://missions.papyrus-ai.net/api/auth/callback/supabase` (exact match, no
+  wildcards) — Supabase serves the OAuth consent page, and the Supabase Site URL
+  stays `https://missions.papyrus-ai.net` once the operator flips it.
+- The six `AUTH_TEST_*` stand-ins above are ignored whenever `VERCEL_ENV` is set
+  (production or preview), where the real credentials are used instead.
 - The planner's Dispatch variables (`DISPATCH_SECRET`, `B2_KEY_ID`,
   `B2_APP_KEY`, `B2_BUCKET`) are listed in the root `README.md`.
 - Offline map regions (PWA-2, #315). The street map a Site keeps for offline
