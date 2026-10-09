@@ -123,6 +123,13 @@ input[type="range"] { width: 100%; }
 input[type="number"], input[type="text"], input[type="date"], input[type="password"], input[type="email"], select {
   background: var(--glass-clear); border: 1px solid var(--glass-edge); border-radius: 12px; padding: 4px 6px; color: var(--on-glass); width: 100%; }
 
+/* iOS Safari zooms the page in when a field with text under 16px takes focus,
+   and does not zoom back out: the planner then scrolls sideways and down (#338).
+   Phones only (a touch screen under 500px); iPad and Android layouts are as before. */
+@media (pointer: coarse) and (max-width: 500px) {
+  input, select, textarea { font-size: 1rem; }
+}
+
 :focus-visible { outline: 2px solid #fff; outline-offset: 2px; box-shadow: 0 0 0 4px rgba(0,0,0,.35); }
 /* A date field's focus lands on its day, month and year segments inside the
    control, which :focus-visible on the field itself does not see (UI-12). */

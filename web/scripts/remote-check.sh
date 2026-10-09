@@ -17,7 +17,7 @@ LOCK_PATH=""
 # Classification from the frozen table in .autoforge/requirements/grilling.md.
 script_mode() {
   case "$1" in
-    check:look|check:motion|check:map-chrome|check:scrollbar|check:chrome-motion|check:mission-rows|check:fold|check:area-edit) printf 'serve\n' ;;
+    check:look|check:motion|check:map-chrome|check:scrollbar|check:chrome-motion|check:mission-rows|check:fold|check:area-edit|check:phone-fit) printf 'serve\n' ;;
     test:e2e) printf 'self\n' ;;
     check:showcase-player) printf 'refused\n' ;;
     *) printf 'unknown\n' ;;
