@@ -273,6 +273,33 @@ after(async () => {
   await stopApp();
   if (browser) await browser.close();
   if (standin) await standin.stop();
+  // A shared Postgres (CI) outlives this suite, and accounts.test.mjs runs
+  // next against the same store: leave nothing it would trip over (the owner
+  // Account and Workspace, and the sign-in rate-limit rows that would 429 its
+  // first sign-ins). PGlite is a private store, removed below.
+  if (!pgliteDir) {
+    try {
+      const pool = await openDb();
+      const emails = IDENTITIES.map((identity) => identity.email.toLowerCase());
+      const users = (await pool.query('SELECT id FROM "user" WHERE lower(email) = ANY($1)', [emails])).rows.map(
+        (row) => row.id,
+      );
+      const slugs = ["operator", ...users.map((id) => `u-${id}`)];
+      const orgs = (await pool.query('SELECT id FROM "organization" WHERE slug = ANY($1)', [slugs])).rows.map(
+        (row) => row.id,
+      );
+      await pool.query('DELETE FROM "member" WHERE "organizationId" = ANY($1) OR "userId" = ANY($2)', [orgs, users]);
+      await pool.query('DELETE FROM "invitation" WHERE "organizationId" = ANY($1)', [orgs]);
+      await pool.query('DELETE FROM "organization" WHERE id = ANY($1)', [orgs]);
+      await pool.query('DELETE FROM "session" WHERE "userId" = ANY($1)', [users]);
+      await pool.query('DELETE FROM "account" WHERE "userId" = ANY($1)', [users]);
+      await pool.query('DELETE FROM "verification" WHERE identifier = ANY($1)', [emails]);
+      await pool.query('DELETE FROM "user" WHERE id = ANY($1)', [users]);
+      await pool.query('DELETE FROM "rateLimit"');
+    } catch (error) {
+      console.log(`store cleanup failed: ${error.message}`);
+    }
+  }
   await closeDb();
   if (pgliteDir) rmSync(pgliteDir, { recursive: true, force: true });
 });
