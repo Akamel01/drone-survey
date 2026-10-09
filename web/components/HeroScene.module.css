@@ -16,6 +16,23 @@
   object-position: 100% 60%;
 }
 
+/* Invisible until it plays (spec 9: 350 ms, ease-out), so a refused autoplay
+   never shows the system play button; the poster img underneath carries it. */
+.scene video {
+  opacity: 0;
+  transition: opacity 350ms var(--ease-out);
+}
+
+.scene video[data-shown="true"] {
+  opacity: 1;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .scene video {
+    transition: none;
+  }
+}
+
 .scene video::-webkit-media-controls-start-playback-button {
   display: none !important;
 }
