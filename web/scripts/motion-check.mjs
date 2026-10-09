@@ -807,6 +807,21 @@ async function checkView(page, activeLabel, motion) {
   }
 }
 
+// #332: a video that never played (autoplay refused) must stay invisible.
+async function heroRefusedMotion(browser) {
+  const { context, page } = await pageFor(browser, { width: 375, height: 812, mobile: true });
+  try {
+    // autoplay attribute bypasses play(); an aborted file never reaches `playing`.
+    await page.route("**/*.mp4", (r) => r.abort());
+    await page.reload({ waitUntil: "domcontentloaded" });
+    await page.waitForTimeout(2000);
+    const v = page.locator('[class*="heroLayer"] video').first();
+    check("hero-refused", "never-played video is invisible", (await v.evaluate((el) => getComputedStyle(el).opacity)) === "0");
+  } finally {
+    await context.close();
+  }
+}
+
 async function heroCrossfadeMotion(browser) {
   const { context, page } = await pageFor(browser, { width: 375, height: 812, mobile: true, video: true });
   const video = page.video();
@@ -822,6 +837,7 @@ async function heroCrossfadeMotion(browser) {
     // not merely absent from the Settings panel's subtree.
     const heroVideo = page.locator('[class*="heroLayer"] video').first();
     check("hero-crossfade", "Settings pauses the live hero video", (await heroVideo.evaluate((v) => v.paused)) === true);
+    check("hero-crossfade", "paused hero video is invisible", (await heroVideo.evaluate((v) => getComputedStyle(v).opacity)) === "0");
 
     await nav.getByRole("button", { name: "Missions" }).click();
     await page.waitForTimeout(500);
@@ -2638,6 +2654,7 @@ try {
   if (want("countup")) await countUpMotion(browser);
   if (want("viewpush")) await viewPushMotion(browser);
   if (want("hero")) await heroCrossfadeMotion(browser);
+  if (want("hero")) await heroRefusedMotion(browser);
   if (want("sheet-legacy")) await sheetMotion(browser);
   if (want("reduced-legacy")) await reducedMotionRecording(browser);
   if (want("stills")) await stills(browser);
