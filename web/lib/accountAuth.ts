@@ -13,6 +13,7 @@ import { oAuthProxy } from "better-auth/plugins/oauth-proxy";
 import { organization } from "better-auth/plugins/organization";
 import type { Pool } from "pg";
 import { getPool } from "./accountDb.ts";
+import { supabaseOAuthEnabled } from "./accountEnv.ts";
 import { emailSignInEnabled, resetMail, sendMail, verificationMail } from "./accountMail.ts";
 import { PASSWORD_MIN } from "./emailSignIn.ts";
 
@@ -50,7 +51,12 @@ async function createAuth() {
   const appUrl = process.env.BETTER_AUTH_URL ?? "http://localhost:3000";
   const googleTest = testOverride("AUTH_TEST_GOOGLE", "google");
   const githubTest = testOverride("AUTH_TEST_GITHUB", "github");
-  const testConfigs = [googleTest, githubTest].filter((config): config is GenericOAuthConfig => config !== null);
+  // Supabase mode (#336): the one genericOAuth entry; null in legacy mode so
+  // the construction below is exactly today's.
+  const supabase = supabaseConfig();
+  const testConfigs = [googleTest, githubTest, ...(supabase ? [supabase] : [])].filter(
+    (config): config is GenericOAuthConfig => config !== null,
+  );
 
   const pool = await getPool();
   // Vercel sets VERCEL_ENV=production|preview on every deployment; localhost
@@ -88,11 +94,13 @@ async function createAuth() {
       },
     },
     // Email and password (#247): on only where its mail can be sent
-    // (lib/accountMail.ts). A new Account must confirm its email before its
+    // (lib/accountMail.ts), and never in Supabase mode (#336: Mission
+    // Control's own providers are switched off there, Papyrus-only). A new
+    // Account must confirm its email before its
     // first sign-in; the confirming link signs it in. A password reset signs
     // the Account out everywhere else.
     emailAndPassword: {
-      enabled: emailSignInEnabled(),
+      enabled: emailPasswordEnabled(),
       requireEmailVerification: true,
       minPasswordLength: PASSWORD_MIN,
       maxPasswordLength: 128,
@@ -110,8 +118,10 @@ async function createAuth() {
     ],
     // Exactly one definition of providerId "google"/"github" exists: the
     // stand-in entry when its AUTH_TEST_* trio is set, else the built-in (D12).
+    // Supabase mode serves the Papyrus-only flow, so the built-ins are off
+    // while the `supabase` entry above is present.
     socialProviders: {
-      ...(googleTest
+      ...(googleTest ?? supabase
         ? {}
         : {
             google: {
@@ -119,7 +129,7 @@ async function createAuth() {
               clientSecret: process.env.GOOGLE_CLIENT_SECRET ?? "",
             },
           }),
-      ...(githubTest
+      ...(githubTest ?? supabase
         ? {}
         : {
             github: {
@@ -179,6 +189,37 @@ function warnIgnoredAuthTestOverrides(): void {
     `accountAuth: AUTH_TEST_* variables (${AUTH_TEST_PREFIXES.join(", ")}) are ignored when VERCEL_ENV is set; ` +
       "GOOGLE_*/GITHUB_* credentials are used instead.",
   );
+}
+
+/** Email+password enablement (#336 F1): on only where its mail can be sent
+ *  (lib/accountMail.ts) and never in Supabase mode, where Mission Control's
+ *  own Google, GitHub and email/password providers are switched off. Legacy
+ *  mode is byte-identical to before: the trio being unset keeps the second
+ *  clause true. Read at call time, like everything else here. */
+export function emailPasswordEnabled(): boolean {
+  return emailSignInEnabled() && !supabaseOAuthEnabled();
+}
+
+/** The Papyrus sign-in entry (#336): one genericOAuth adapter with
+ *  providerId "supabase", discovered from
+ *  `<SUPABASE_URL>/auth/v1/.well-known/openid-configuration`, as a
+ *  confidential client (SUPABASE_OAUTH_CLIENT_SECRET is read here, on the
+ *  server: this module is never imported by client components) with PKCE and
+ *  the `openid email profile` scopes. Null unless the locked trio is fully
+ *  set (accountEnv.supabaseOAuthEnabled), so legacy construction is
+ *  byte-identical when Supabase mode is off. Read at call time, like
+ *  everything else here. */
+export function supabaseConfig(): GenericOAuthConfig | null {
+  if (!supabaseOAuthEnabled()) return null;
+  const base = (process.env.SUPABASE_URL ?? "").replace(/\/+$/, "");
+  return {
+    providerId: "supabase",
+    clientId: process.env.SUPABASE_OAUTH_CLIENT_ID ?? "",
+    clientSecret: process.env.SUPABASE_OAUTH_CLIENT_SECRET ?? "",
+    discoveryUrl: `${base}/auth/v1/.well-known/openid-configuration`,
+    scopes: ["openid", "email", "profile"],
+    pkce: true,
+  };
 }
 
 /** The genericOAuth entry for one provider when its three AUTH_TEST_* URLs are
