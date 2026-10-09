@@ -55,6 +55,13 @@ Optional:
 - `AUTH_TRUSTED_HOSTS` — comma-separated extra hosts allowed in `baseURL`.
 - `AUTH_TRUSTED_ORIGINS` — comma-separated extra trusted origins.
 - `OWNER_WORKSPACE_SLUG` — the operator Workspace's slug (default `operator`).
+- `SUPABASE_URL`, `SUPABASE_OAUTH_CLIENT_ID`, `SUPABASE_OAUTH_CLIENT_SECRET` —
+  optional alternate sign-in: when all three are set, the app offers only the
+  Papyrus sign-in button and the nine-variable Google/GitHub/email mode is off;
+  with any unset, sign-in stays in that mode. No `AUTH_TEST_*` stand-in trio
+  exists for Supabase — local runs point `SUPABASE_URL` at the stand-in base
+  directly, and the stand-in answers the discovery document the production
+  configuration builds from that URL. Recovery is unset-the-trio plus redeploy.
 - `PGLITE_PORT` — fixed port for the local PGlite socket (default: one is
   picked).
 
@@ -97,8 +104,9 @@ node scripts/auth-evidence.mjs
 - Framework preset: Next.js
 - Set the nine variables in the project's environment (`vercel env pull` for
   local dev), with the same `OAUTH_PROXY_SECRET` in production, previews and
-  local; register `/api/auth/callback/google` and `/api/auth/callback/github`
-  on the production URL.
+   local; register `/api/auth/callback/google` and `/api/auth/callback/github`
+   on the production URL. A deployment with the Supabase trio set registers
+   `/api/auth/callback/supabase` instead (the only callback live in that mode).
 - The planner's Dispatch variables (`DISPATCH_SECRET`, `B2_KEY_ID`,
   `B2_APP_KEY`, `B2_BUCKET`) are listed in the root `README.md`.
 - Offline map regions (PWA-2, #315). The street map a Site keeps for offline
