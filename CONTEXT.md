@@ -37,6 +37,21 @@ and the machines behind them. Until then the Account can sign in but reaches
 nothing. It stands in for billing until billing exists.
 _Avoid_: verification (that is the email check), activation, whitelist.
 
+**Supabase Site URL**:
+a setting on the Supabase dashboard naming the host Supabase redirects
+authentication returns to. Not a Site: a Site is the physical location being
+surveyed, while the Supabase Site URL is a host name in someone else's
+dashboard. Always written in full, never bare "Site".
+
+**OAuth consent**:
+the signed-in person's decision to let one registered OAuth client act with
+their identity and the scopes it asked for. Not operator Approval: Approval
+gates an Account's reach inside the planner, while OAuth consent authorizes a
+client at sign-in time. The Supabase OAuth server renders the OAuth consent
+page; Mission Control registers its confidential client there with the exact
+redirect URI `https://missions.papyrus-ai.net/api/auth/callback/supabase`.
+Always written in full, never bare "approval".
+
 ### Capture
 
 **Site**:
