@@ -285,8 +285,6 @@ export default function HeroScene({ playing, variant = "live", showOnWide = fals
       <video
         ref={videoRef}
         muted
-        // Spread: @types/react lacks defaultMuted; real guarantee is ensureMuted().
-        {...{ defaultMuted: true }}
         playsInline
         autoPlay
         loop
