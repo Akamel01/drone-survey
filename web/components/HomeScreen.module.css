@@ -195,3 +195,12 @@
     transition: opacity var(--dur-fast) var(--ease-out) !important;
   }
 }
+
+/* Papyrus AI wordmark, top left, over the hero (#342). */
+.brand {
+  position: absolute;
+  z-index: 2;
+  top: calc(12px + env(safe-area-inset-top));
+  left: 16px;
+  text-shadow: 0 1px 8px rgb(0 0 0 / 0.5);
+}

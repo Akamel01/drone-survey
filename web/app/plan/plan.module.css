@@ -4,6 +4,13 @@
   flex-direction: column;
 }
 
+/* Papyrus AI wordmark strip above the columns: covers no control (#342). */
+.brand {
+  flex: none;
+  padding: env(safe-area-inset-top) 12px 0;
+  background: var(--canopy-900);
+}
+
 .top {
   flex: 1;
   min-height: 0;
