@@ -35,7 +35,9 @@ _Avoid_: organization, team, tenant.
 **Approval**:
 the operator's decision that lets a new Account reach its Workspace's Missions
 and the machines behind them. Until then the Account can sign in but reaches
-nothing. It stands in for billing until billing exists.
+nothing. It stands in for billing until billing exists. In Papyrus deployments
+a verified provider email is its own Approval; everywhere else it is the
+operator's decision.
 _Avoid_: verification (that is the email check), activation, whitelist.
 
 ### Capture
