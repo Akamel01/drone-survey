@@ -1,11 +1,12 @@
 import type { Metadata, Viewport } from "next";
 import { Manrope } from 'next/font/google';
+import "./brand/tokens.css";
 import "./globals.css";
 import ServiceWorker from "@/components/ServiceWorker";
 
 const manrope = Manrope({
   subsets: ['latin'],
-  weight: ['500', '700'],
+  weight: ['500', '600', '700'],
   // Expose a CSS variable for potential future styling usage
   variable: '--display',
 });

@@ -11,7 +11,7 @@
   --glass-smoke:rgb(40 44 46 / 0.68);
   --glass-clear:rgb(255 255 255 / 0.14);
   --glass-clear-strong:rgb(255 255 255 / 0.22);
-  --glass-edge:rgb(255 255 255 / 0.14);
+  --glass-edge:var(--pa-edge);
   --scrim-bottom:linear-gradient(transparent,#0A0908);
   --panel-light:#E7EDEF;
   --panel-light-alt:#E0E2E4;
@@ -25,8 +25,8 @@
   --on-glass-4:rgb(255 255 255 / 0.80);
   --black:#000000;
   --badge-blue:#1C618A;
-  --warn:#E0A94F;
-  --danger:#E0704F;
+  --warn:var(--pa-warn);
+  --danger:var(--pa-danger);
   --dur-press:120ms;
   --dur-fast:150ms;
   --dur-base:250ms;

@@ -8,6 +8,7 @@ import { copyOf, localDate, sitesFrom, type MissionListRead } from "@/lib/missio
 import { firstRunDestination, type FirstRunStep } from "@/lib/firstRun";
 import MapPane, { type DrawMode } from "@/components/MapPane";
 import MapToolbar from "@/components/MapToolbar";
+import Wordmark from "@/components/Wordmark";
 import HeroScene from "@/components/HeroScene";
 import MissionList from "@/components/MissionList";
 import LoadSheet from "@/components/LoadSheet";
@@ -369,6 +370,7 @@ export default function PlanPage() {
       {/* The page's one top-level heading; the panels carry the h2s (UI-12 audit). */}
       <h1 className="visually-hidden">Mission Control</h1>
       <Notice key={notice?.key ?? "empty"} payload={notice} onDismiss={dismissNotice} />
+      <div className={styles.brand}><Wordmark /></div>
       <div className={styles.top}>
         <div className={styles.heroLayer} aria-hidden="true">
           <HeroScene playing={view === "missions"} />

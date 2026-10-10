@@ -1,0 +1,24 @@
+.wordmark {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 32px;
+  padding: 0 4px;
+  color: var(--pa-ink);
+  font-family: var(--display), var(--pa-font-display);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  text-decoration: none;
+  white-space: nowrap;
+  opacity: 0.86;
+  transition: opacity var(--pa-fast) var(--pa-ease);
+}
+.wordmark:hover { opacity: 1; }
+.wordmark:focus-visible { opacity: 1; outline: none; box-shadow: var(--pa-ring); border-radius: var(--pa-radius-input); }
+.mark { width: 18px; height: 18px; color: var(--pa-accent); flex: none; }
+.ai { color: var(--pa-accent); }
+.divider { width: 1px; height: 14px; background: var(--pa-edge-strong); }
+.product { font-weight: 500; color: var(--pa-mute); }
+/* Phone: the mark and name carry the brand; the product name is the page's h1. */
+@media (max-width: 340px) { .divider, .product { display: none; } }

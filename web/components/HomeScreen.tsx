@@ -6,6 +6,7 @@ import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { authClient, signOutToHome } from "@/lib/authClient";
 import { markHomeEntrancePlayed, shouldPlayHomeEntrance, type HomeState } from "@/lib/home";
 import EmailSignIn from "./EmailSignIn";
+import Wordmark from "./Wordmark";
 import HeroScene from "./HeroScene";
 import styles from "./HomeScreen.module.css";
 
@@ -70,6 +71,7 @@ export default function HomeScreen({ state, email, emailEnabled = false, supabas
   return (
     <main ref={rootRef} className={styles.root}>
       <HeroScene playing showOnWide />
+      <div className={styles.brand}><Wordmark /></div>
       <div className={styles.content}>
         <h1 className={styles.title}>Mission Control</h1>
         {state === "signedout" && withEmail && <EmailSignIn onBack={() => setWithEmail(false)} />}
