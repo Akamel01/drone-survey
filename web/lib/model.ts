@@ -187,24 +187,3 @@ export function staleCards(ledger: CardLedger, liveSpecKeys: Set<string>): CardH
     (h) => h.written_at && !h.flown_at && !liveSpecKeys.has(h.spec_key),
   );
 }
-
-/** Where the Ledger and the Controller disagree. Reported, never quietly
- *  corrected: a difference here is the only evidence that a Card holds
- *  something other than what was planned (ADR 0022). */
-export interface LedgerDrift {
-  card: string;
-  expected: string | null;
-  found: string | null;
-}
-
-export function ledgerDrift(ledger: CardLedger, onDevice: Record<string, string | null>): LedgerDrift[] {
-  const drift: LedgerDrift[] = [];
-  for (const card of ledger.pool) {
-    const expected = ledger.holdings[card]?.spec_key ?? null;
-    // A Card the device was not asked about is not evidence of anything.
-    if (!(card in onDevice)) continue;
-    const found = onDevice[card];
-    if (expected !== found) drift.push({ card, expected, found });
-  }
-  return drift;
-}

@@ -137,94 +137,19 @@ def clear_notice(manifest: dict) -> dict:
 # ---------------------------------------------------------------------------
 # The Card Ledger (ADR 0022)
 #
-# The Python twin of web/lib/model.ts. Same rules, same names, same shapes, and
-# both sides assert against fixtures/card-ledger.json so they cannot drift.
-# Pure functions over plain data: no mount, no network, no Controller.
+# The host never reserves, releases, marks Flown or judges stale: those are the
+# planner's, in web/lib/model.ts. Here live only the host's own rules, plus
+# cards_for and change_survived, which both sides assert against
+# fixtures/card-ledger.json. Pure functions over plain data.
 # ---------------------------------------------------------------------------
 
 EMPTY_LEDGER: dict = {"pool": [], "holdings": {}}
-
-
-def card_unavailable(ledger: dict, card: str) -> str | None:
-    """Why a Card cannot be reused, or None when it can.
-
-    A Card is occupied by a Mission that has not been Flown. Withdrawing or
-    superseding that Mission releases it, because what it holds is no longer
-    current. The pool is what is calibrated, never what is hoped for.
-    """
-    if card not in ledger.get("pool", []):
-        return "not calibrated"
-    held = ledger.get("holdings", {}).get(card)
-    if not held or held.get("flown_at"):
-        return None
-    return (f"holds an unflown Mission ({held['spec_key']}, "
-            f"flight {held['flight']} of {held['flights']})")
-
-
-def available_cards(ledger: dict) -> list[str]:
-    return [c for c in ledger.get("pool", []) if card_unavailable(ledger, c) is None]
-
-
-def reserve_cards(ledger: dict, needed: int) -> dict:
-    """The outcome of asking for Cards at Dispatch: {"ok": True, "cards": [...]}
-    or a refusal naming what is in the way. The planner does the reserving; the
-    host holds this so both languages assert the same rule."""
-    free = available_cards(ledger)
-    if needed > len(free):
-        blocking = [(c, card_unavailable(ledger, c)) for c in ledger.get("pool", [])]
-        blocking = [(c, why) for c, why in blocking if why is not None]
-        reason = (f"no Cards are calibrated; {needed} needed" if not blocking else
-                  f"{needed} Cards needed, {len(free)} free. " +
-                  "; ".join(f"{c}: {why}" for c, why in blocking))
-        return {"ok": False, "reason": reason, "available": len(free), "needed": needed}
-    return {"ok": True, "cards": free[:needed]}
-
-
-def with_reservation(ledger: dict, cards: list[str], spec_key: str, reserved_at: str) -> dict:
-    """Claim Cards for a Spec's flights. Returns a new Ledger; never mutates."""
-    holdings = dict(ledger.get("holdings", {}))
-    for i, card in enumerate(cards):
-        holdings[card] = {"card": card, "spec_key": spec_key,
-                          "flight": i + 1, "flights": len(cards), "reserved_at": reserved_at}
-    return {**ledger, "holdings": holdings}
-
-
-def with_release(ledger: dict, spec_key: str) -> dict:
-    """Give back every Card held for a Spec — what Withdrawn and Superseded do.
-    A Flown holding is the record of what was flown and is left alone."""
-    holdings = {c: h for c, h in ledger.get("holdings", {}).items()
-                if not (h["spec_key"] == spec_key and not h.get("flown_at"))}
-    return {**ledger, "holdings": holdings}
-
-
-def with_flown_mark(ledger: dict, spec_key: str, at: str | None) -> dict:
-    """Mark every holding of a Spec Flown, or take the mark back when `at` is
-    None. The planner makes the mark and the host holds the rule so both
-    languages assert the same one. Unmarking deletes `flown_at` rather than
-    falsifying it: absent is "not answered", not the same claim as "did not
-    fly". Returns a new Ledger; never mutates. (Contract-only: no call site.)
-    """
-    holdings = {}
-    for card, held in ledger.get("holdings", {}).items():
-        if held["spec_key"] != spec_key:
-            holdings[card] = held
-            continue
-        rest = {k: v for k, v in held.items() if k != "flown_at"}
-        holdings[card] = {**rest, "flown_at": at} if at is not None else rest
-    return {**ledger, "holdings": holdings}
 
 
 def cards_for(ledger: dict, spec_key: str) -> list[dict]:
     """The Cards a Spec holds, in flight order. Empty means no Reservation."""
     return sorted((h for h in ledger.get("holdings", {}).values() if h["spec_key"] == spec_key),
                   key=lambda h: h["flight"])
-
-
-def stale_cards(ledger: dict, live_spec_keys: set[str]) -> list[dict]:
-    """A Card holding a Mission that is no longer current. The Controller cannot
-    report this — its own labels are frozen at creation (ADR 0016)."""
-    return [h for h in ledger.get("holdings", {}).values()
-            if h.get("written_at") and not h.get("flown_at") and h["spec_key"] not in live_spec_keys]
 
 
 def ledger_drift(ledger: dict, on_device: dict) -> list[dict]:
@@ -368,7 +293,8 @@ def _selftest() -> None:
 
     # 7. written_at is only ever stamped on a Card the Ledger already holds, and
     #    carries the md5 the read-back proved, so the next plug-in can check it.
-    led = with_reservation({"pool": ["A", "B"], "holdings": {}}, ["A"], "specs/s/d/k.json", "t0")
+    led = {"pool": ["A", "B"], "holdings": {"A": {"card": "A", "spec_key": "specs/s/d/k.json",
+                                                  "flight": 1, "flights": 1, "reserved_at": "t0"}}}
     led = merge_written(led, {"A": "abc", "B": "def"}, "t7")
     assert led["holdings"]["A"]["written_at"] == "t7" and led["holdings"]["A"]["written_md5"] == "abc"
     assert "B" not in led["holdings"], "a Card with no holding is never invented by a write report"
@@ -379,6 +305,11 @@ def _selftest() -> None:
     assert merge_written(tagged, {"A": "abc"}, "t9")["holdings"]["A"]["mission_id"] == "m-1"
     assert merge_verified(led, "t8")["verified_at"] == "t8"
 
+    # 8. Drift: Ledger and Controller disagree. A Card the device was not asked about is not evidence.
+    pooled = {"pool": ["A", "B", "C"], "holdings": {"A": {"spec_key": "a"}, "B": {"spec_key": "b"}}}
+    assert ledger_drift(pooled, {"A": "a", "B": "x", "C": None}) == [{"card": "B", "expected": "b", "found": "x"}]
+    assert ledger_drift(pooled, {}) == []
+
     _fixture_check()
     _change_survived_check()
     print("b2_status self-check: ok")
@@ -386,9 +317,11 @@ def _selftest() -> None:
 
 def _change_survived_check() -> None:
     base = {"pool": ["A", "B"], "holdings": {}}
-    ours = with_reservation(base, ["A"], "ours.json", "t")
-    theirs = with_reservation(base, ["B"], "theirs.json", "t")
-    both = with_reservation(ours, ["B"], "theirs.json", "t")
+    def hold(on, card, key):
+        return {**on, "holdings": {**on["holdings"], card: {"card": card, "spec_key": key}}}
+    ours = hold(base, "A", "ours.json")
+    theirs = hold(base, "B", "theirs.json")
+    both = hold(ours, "B", "theirs.json")
     assert not change_survived(base, ours, theirs), "an overwrite from before ours landed erased ours"
     assert change_survived(base, ours, both), "a later writer who kept ours is not a conflict"
     assert not change_survived(base, {**base, "pool": ["A"]}, base), "a pool change undone is lost"

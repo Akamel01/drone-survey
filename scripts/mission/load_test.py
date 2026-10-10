@@ -84,10 +84,20 @@ def make_part(tmp: Path, name: str = "mission A", waypoints: int = 3, data: byte
     return load_core.Part(name=name, waypoints=waypoints, source=source)
 
 
+def with_reservation(ledger: dict, cards, spec_key: str, reserved_at: str) -> dict:
+    """Test data builder: a Ledger holding these Cards for a Spec in flight order.
+    The host never reserves (ADR 0022); the planner does, in web/lib/model.ts."""
+    holdings = dict(ledger.get("holdings", {}))
+    for i, card in enumerate(cards):
+        holdings[card] = {"card": card, "spec_key": spec_key, "flight": i + 1,
+                          "flights": len(cards), "reserved_at": reserved_at}
+    return {**ledger, "holdings": holdings}
+
+
 def reservation(specs_root: Path, spec: Path, cards, pool=None) -> dict:
     """A Ledger holding exactly these Cards for spec, in flight order."""
     pool = list(pool) if pool is not None else list(cards)
-    return b2_status.with_reservation({"pool": pool, "holdings": {}}, list(cards),
+    return with_reservation({"pool": pool, "holdings": {}}, list(cards),
                                       load_core.spec_key(spec, specs_root), "2026-09-23T00:00:00Z")
 
 
@@ -733,7 +743,6 @@ class CardLedgerContractTest(unittest.TestCase):
 
         OP_KEYS = {
             "reserve": ["op", "cards", "spec_key", "at"],
-            "release": ["op", "spec_key"],
             "pool": ["op", "pool"],
             "verify": ["op", "at"],
         }
@@ -743,15 +752,13 @@ class CardLedgerContractTest(unittest.TestCase):
                 fail(name, f"{side} must be an op object")
             kind = required(name, raw, "op")
             if not isinstance(kind, str) or kind not in OP_KEYS:
-                fail(name, f'{side}.op must be "reserve", "release", "pool" or "verify"')
+                fail(name, f'{side}.op must be "reserve", "pool" or "verify"')
             check_keys(name, raw, OP_KEYS[kind] + (["apply_to"] if side == "after" else []))
             if kind == "reserve":
                 if not isinstance(raw.get("cards"), list):
                     fail(name, f"{side}.cards must be an array on a reserve op")
                 required(name, raw, "spec_key")
                 required(name, raw, "at")
-            elif kind == "release":
-                required(name, raw, "spec_key")
             elif kind == "pool":
                 if not isinstance(raw.get("pool"), list):
                     fail(name, f"{side}.pool must be an array on a pool op")
@@ -765,131 +772,21 @@ class CardLedgerContractTest(unittest.TestCase):
             return raw
 
         def apply_op(op: dict, on: dict) -> dict:
-            # ponytail: four ops, one apply_to; reserve/release are the planner's,
-            # pool/verify mirror the host's writers; anything beyond these belongs
-            # in a per-side adapter harness, not here.
+            # ponytail: three ops, one apply_to; reserve is the planner's, pool/
+            # verify mirror the host's writers.
             if op["op"] == "reserve":
-                return b2_status.with_reservation(on, op["cards"], op["spec_key"], op["at"])
-            if op["op"] == "release":
-                return b2_status.with_release(on, op["spec_key"])
+                return with_reservation(on, op["cards"], op["spec_key"], op["at"])
             if op["op"] == "pool":
                 return {**on, "pool": op["pool"]}
             return b2_status.merge_verified(on, op["at"])
 
-        def case_available(name: str, c: dict) -> None:
-            check_keys(name, c, ["rule", "ledger", "expect", "card", "expect_reason"])
-            ledger = ledger_of(name, c)
-            has_expect, has_card = "expect" in c, "card" in c
-            if not has_expect and not has_card:
-                fail(name, 'missing required field "expect" (or "card" with "expect_reason")')
-            if has_expect:
-                self.assertEqual(b2_status.available_cards(ledger), c["expect"],
-                                 f'card ledger case "{name}": available')
-            if has_card:
-                card = required(name, c, "card")
-                self.assertEqual(b2_status.card_unavailable(ledger, card),
-                                 required(name, c, "expect_reason"),
-                                 f'card ledger case "{name}": {card}')
-
-        def case_reserve(name: str, c: dict) -> None:
-            check_keys(name, c, ["rule", "ledger", "needed", "expect_ok", "expect_cards",
-                                 "expect_available", "expect_reason_mentions"])
-            r = b2_status.reserve_cards(ledger_of(name, c), required(name, c, "needed"))
-            self.assertEqual(r["ok"], required(name, c, "expect_ok"),
-                             f'card ledger case "{name}": reserve_cards(...).ok')
-            if r["ok"]:
-                self.assertEqual(r["cards"], required(name, c, "expect_cards"),
-                                 f'card ledger case "{name}": cards')
-            else:
-                self.assertEqual(r["available"], required(name, c, "expect_available"),
-                                 f'card ledger case "{name}": available count')
-                for fragment in required(name, c, "expect_reason_mentions"):
-                    self.assertIn(fragment, r["reason"],
-                                  f'card ledger case "{name}": refusal should mention {fragment}')
-
-        def case_release(name: str, c: dict) -> None:
-            check_keys(name, c, ["rule", "ledger", "spec_key", "expect_available_after",
-                                 "expect_holding_kept"])
-            after = b2_status.with_release(ledger_of(name, c), required(name, c, "spec_key"))
-            has_available, has_kept = "expect_available_after" in c, "expect_holding_kept" in c
-            if not has_available and not has_kept:
-                fail(name, 'missing required field "expect_available_after" '
-                           '(or "expect_holding_kept")')
-            if has_available:
-                self.assertEqual(b2_status.available_cards(after), c["expect_available_after"],
-                                 f'card ledger case "{name}": available after release')
-            if has_kept:
-                card = required(name, c, "expect_holding_kept")
-                self.assertIn(card, after["holdings"],
-                              f'card ledger case "{name}": Flown holding {card} must survive release')
-
-        def case_flown_mark(name: str, c: dict) -> None:
-            check_keys(name, c, ["rule", "spec_key", "card", "at",
-                                 "expect_available_when_marked", "expect_reason_mentions",
-                                 "expect_flown_at_absent_when_unmarked"])
+        def case_cards_for(name: str, c: dict) -> None:
+            check_keys(name, c, ["rule", "ledger", "spec_key", "expect_cards_for"])
             spec_key = required(name, c, "spec_key")
-            card = required(name, c, "card")
-            at = required(name, c, "at")
-            # The runner builds the mark with the function under test itself.
-            marked = b2_status.with_flown_mark(fixture["ledger"], spec_key, at)
-            held = marked["holdings"].get(card)
-            self.assertTrue(held, f'card ledger case "{name}": marking Flown must leave '
-                                  f"{card} holding the Mission")
-            self.assertEqual(held.get("flown_at"), at,
-                             f'card ledger case "{name}": the holding carries the mark')
-            self.assertEqual(b2_status.available_cards(marked),
-                             required(name, c, "expect_available_when_marked"),
-                             f'card ledger case "{name}": available when marked')
-            unmarked = b2_status.with_flown_mark(marked, spec_key, None)
-            back = unmarked["holdings"].get(card)
-            self.assertTrue(back, f'card ledger case "{name}": unmarking must keep the holding')
-            if required(name, c, "expect_flown_at_absent_when_unmarked"):
-                self.assertNotIn("flown_at", back,
-                                 f'card ledger case "{name}": the mark is removed, not falsified')
-            reason = b2_status.card_unavailable(unmarked, card)
-            self.assertIsNotNone(reason,
-                                 f'card ledger case "{name}": unmarking takes {card} back')
-            for fragment in required(name, c, "expect_reason_mentions"):
-                self.assertIn(fragment, reason,
-                              f'card ledger case "{name}": refusal should mention {fragment}')
-
-        def case_drift(name: str, c: dict) -> None:
-            check_keys(name, c, ["rule", "ledger", "on_device", "expect_drift"])
-            self.assertEqual(b2_status.ledger_drift(ledger_of(name, c),
-                                                    required(name, c, "on_device")),
-                             required(name, c, "expect_drift"),
-                             f'card ledger case "{name}": drift')
-
-        def case_stale(name: str, c: dict) -> None:
-            check_keys(name, c, ["rule", "ledger", "cards", "spec_key", "at", "live_spec_keys",
-                                 "expect_stale"])
-            if "cards" in c:
-                current = b2_status.with_reservation(ledger_of(name, c), required(name, c, "cards"),
-                                                     required(name, c, "spec_key"),
-                                                     required(name, c, "at"))
-            else:
-                current = ledger_of(name, c)
-            live = set(c.get("live_spec_keys", []))
-            self.assertEqual([h["card"] for h in b2_status.stale_cards(current, live)],
-                             required(name, c, "expect_stale"),
-                             f'card ledger case "{name}": stale Cards')
-
-        def case_reservation(name: str, c: dict) -> None:
-            check_keys(name, c, ["rule", "ledger", "cards", "spec_key", "at",
-                                 "expect_cards_for", "expect_available_after"])
-            spec_key = required(name, c, "spec_key")
-            if "cards" in c:
-                current = b2_status.with_reservation(ledger_of(name, c), required(name, c, "cards"),
-                                                     spec_key, required(name, c, "at"))
-            else:
-                current = ledger_of(name, c)
             self.assertEqual([f'{h["flight"]} of {h["flights"]} in {h["card"]}'
-                              for h in b2_status.cards_for(current, spec_key)],
+                              for h in b2_status.cards_for(ledger_of(name, c), spec_key)],
                              required(name, c, "expect_cards_for"),
                              f'card ledger case "{name}": cards for {spec_key}')
-            if "expect_available_after" in c:
-                self.assertEqual(b2_status.available_cards(current), c["expect_available_after"],
-                                 f'card ledger case "{name}": available after reservation')
 
         def case_change_survived(name: str, c: dict) -> None:
             check_keys(name, c, ["rule", "base", "ours", "after", "expect_survived"])
@@ -902,9 +799,7 @@ class CardLedgerContractTest(unittest.TestCase):
                              required(name, c, "expect_survived"),
                              f'card ledger case "{name}": change survived')
 
-        handlers = {"available": case_available, "reserve": case_reserve, "release": case_release,
-                    "flown_mark": case_flown_mark, "drift": case_drift, "stale": case_stale,
-                    "reservation": case_reservation, "change_survived": case_change_survived}
+        handlers = {"cards_for": case_cards_for, "change_survived": case_change_survived}
 
         for name, case in fixture["cases"].items():
             with self.subTest(case=name):
@@ -961,9 +856,9 @@ class UpdateTest(unittest.TestCase):
     def test_planner_write_seen_and_made_again(self):
         # #152: a planner write lands on top of ours; the read-back sees it and
         # ours is made again against it rather than silently lost.
-        during = b2_status.with_reservation({"pool": ["way finder 1", "way finder 2"], "holdings": {}},
+        during = with_reservation({"pool": ["way finder 1", "way finder 2"], "holdings": {}},
                                             ["way finder 1"], "a.json", "t0")
-        dispatched = b2_status.with_reservation(during, ["way finder 2"], "b.json", "t1")
+        dispatched = with_reservation(during, ["way finder 2"], "b.json", "t1")
         store = FakeStore(during)
         state = {"once": True}
 
