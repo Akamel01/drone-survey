@@ -97,7 +97,6 @@ function buildEnvFor() {
     B2_APP_KEY: "ci",
     B2_READ_KEY_ID: "ci",
     B2_READ_APP_KEY: "ci",
-    DISPATCH_SECRET: "ci",
   };
 }
 

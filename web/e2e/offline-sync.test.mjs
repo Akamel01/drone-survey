@@ -4,7 +4,7 @@
 //
 // Arrangement as save-mission.test.mjs: build -> `next start` on a free port ->
 // a browser context whose /api/missions* calls are answered in this process by
-// `createMissionLifecycle(memoryMissionStore(seed))`. "No signal" is the
+// `createMissionLifecycle(memoryMissionStore(seed), memoryMissionOwners())`. "No signal" is the
 // context offline and those calls refused on the wire; "another browser" is a
 // save made straight on the lifecycle. The page, the service worker and the
 // outbox are the real ones.
@@ -18,16 +18,15 @@ import path from "node:path";
 import { after, before, test } from "node:test";
 
 import { createMissionLifecycle } from "../lib/missionLifecycle.ts";
+import { memoryMissionOwners } from "../lib/missionOwners.ts";
 import { memoryMissionStore } from "../lib/memoryMissionStore.ts";
 import { respond } from "../lib/missionRoute.ts";
 import { DEFAULT_SPEC } from "../lib/spec.ts";
 import { freePort, launchBrowser, run, spawnServer, stopServer, waitReady, webRoot } from "../scripts/lib/harness.mjs";
 
-// lib/passphrase.ts imports extensionless, which plain node cannot load, so
-// the key is written out here as it is in scripts/look-check.mjs.
-const PASSPHRASE_KEY = "drone-planner.wayfinder-key";
 const OUTBOX_KEY = "drone-planner.outbox";
-const CALLER = { kind: "passphrase" };
+// The operator's Workspace: every seeded Mission has no ownership row.
+const CALLER = { workspaceId: "w-operator", ownsUnclaimed: true };
 const DATE = "2026-09-26";
 const AOI = [
   [37.8, -122.4],
@@ -49,7 +48,6 @@ before(async () => {
     B2_APP_KEY: "ci",
     B2_READ_KEY_ID: "ci",
     B2_READ_APP_KEY: "ci",
-    DISPATCH_SECRET: "ci",
   };
   delete env.DATABASE_URL;
   const port = await freePort();
@@ -98,12 +96,11 @@ function seed() {
  *  Mission request that reached the wire, whatever became of it. */
 async function planner(viewport = { width: 375, height: 812 }) {
   const store = memoryMissionStore(seed());
-  const lifecycle = createMissionLifecycle(store);
+  const lifecycle = createMissionLifecycle(store, memoryMissionOwners());
   const log = [];
   const seen = [];
   let down = false;
   const context = await browser.newContext({ viewport });
-  await context.addInitScript((key) => localStorage.setItem(key, "e2e"), PASSPHRASE_KEY);
   await context.route(
     (url) => url.pathname.startsWith("/api/missions"),
     async (route) => {

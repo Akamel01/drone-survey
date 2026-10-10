@@ -27,7 +27,6 @@ const browser = await chromium.launch(chromiumLaunchOptions());
 for (const [width, height] of [[375, 812], [375, 635]]) {
   const context = await browser.newContext({ viewport: { width, height }, deviceScaleFactor: 3, isMobile: true, hasTouch: true, userAgent: UA });
   await context.addInitScript((payload) => {
-    localStorage.setItem("drone-planner.wayfinder-key", "evidence");
     const orig = window.fetch.bind(window);
     window.fetch = (input, init) => {
       const url = typeof input === "string" ? input : input?.url ?? String(input);

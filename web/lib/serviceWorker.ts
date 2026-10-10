@@ -3,7 +3,7 @@
 // It keeps the app shell (the /plan page and the versioned files it loads) and
 // nothing else. The Missions themselves are the browser's own last read
 // (`cachedRead` in missionView.ts), so the worker never sees data: it does not
-// touch /api (which carries the sign-in and the passphrase-checked Mission
+// touch /api (which carries the sign-in and the session-checked Mission
 // routes), /d, other pages or anything cross-origin, and it only answers GET.
 //
 // A deploy ships a new worker (the version below changes with every build), the

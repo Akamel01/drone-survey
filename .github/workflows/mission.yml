@@ -104,7 +104,6 @@ jobs:
           B2_APP_KEY: ci
           B2_READ_KEY_ID: ci
           B2_READ_APP_KEY: ci
-          DISPATCH_SECRET: ci
 
   # D15: the auth work needs a real Postgres, so it runs as its own job and
   # only this job pays for the service. The web job above stays DB-free.

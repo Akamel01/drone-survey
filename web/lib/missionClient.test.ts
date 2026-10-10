@@ -7,7 +7,6 @@ import { test, beforeEach, afterEach } from "node:test";
 import assert from "node:assert/strict";
 
 import { MISSIONS_CHANGED_KEY, subscribeMissionsChanged } from "./actions.ts";
-import { writePassphrase } from "./passphrase.ts";
 import { DEFAULT_SPEC } from "./spec.ts";
 import * as missionClient from "./missionClient.ts";
 import type { MissionAction, MissionDraft } from "./missionClient.ts";
@@ -33,9 +32,6 @@ beforeEach(() => {
     calls.push({ input: String(input), init });
     return handler(String(input), init);
   }) as typeof fetch;
-  // The overlay is per process, so writing "" is what neutralises it between
-  // tests: storage where it works, the subscription where it does not.
-  writePassphrase("");
 });
 
 afterEach(() => {
@@ -87,19 +83,19 @@ async function withStorage(storage: Storage | undefined, fn: () => Promise<void>
   }
 }
 
-test("list reads the whole list with only the key on the wire", async () => {
+test("list reads the whole list and attaches no credential: the session cookie goes by itself", async () => {
   install(() => answer({ missions: [], archived_count: 0, stale_cards: [], now: 1 }, 200));
   const got = await missionClient.list();
   assert.deepEqual(got, { ok: true, read: { missions: [], archived_count: 0, stale_cards: [], now: 1 } });
   assert.equal(calls.length, 1);
   assert.equal(calls[0].input, "/api/missions?archived=1");
   assert.equal(calls[0].init?.method, undefined, "GET is the default; no method is set");
-  assert.deepEqual(calls[0].init?.headers, { "x-wayfinder-key": "" }, "list sends the key and nothing else");
+  assert.equal(calls[0].init, undefined, "list sends no headers and no options");
 });
 
 test("list: the server's sentence, the store failure, and a 200 that is not a list", async () => {
   const unauthorised =
-    "That passphrase is not the one this deployment expects. Retype it; it is kept only in this browser.";
+    "Sign in to continue: this request carried no session.";
   install(() => answer({ error: unauthorised }, 401));
   assert.deepEqual(await missionClient.list(), { ok: false, status: 401, text: unauthorised });
 
@@ -172,7 +168,7 @@ test("run: refusals keep the action's name and the status; a throw carries none"
   assert.ok(!("status" in threw), "no route was reached, so there is no status");
 
   const unauthorised =
-    "That passphrase is not the one this deployment expects. Retype it; it is kept only in this browser.";
+    "Sign in to continue: this request carried no session.";
   install(() => answer({ error: unauthorised }, 401));
   assert.deepEqual(await missionClient.run("Withdraw", "m1"), {
     ok: false,
@@ -195,7 +191,7 @@ test("save: success carries the written Mission and the describeSave sentence", 
 
 test("save: refusals pass through; a 200 without a Mission and a throw refuse in their own words", async () => {
   const unauthorised =
-    "That passphrase is not the one this deployment expects. Retype it; it is kept only in this browser.";
+    "Sign in to continue: this request carried no session.";
   install(() => answer({ error: unauthorised }, 401));
   assert.deepEqual(await missionClient.save(draft()), { ok: false, status: 401, text: unauthorised });
 
@@ -223,14 +219,12 @@ test("save: refusals pass through; a 200 without a Mission and a throw refuse in
 });
 
 test("the wire contract: paths, methods, headers and bodies", async () => {
-  writePassphrase("pass-1");
   install((input) => {
     if (input === "/api/missions?archived=1") return answer({ missions: [], archived_count: 0, stale_cards: [], now: 1 }, 200);
     if (input === "/api/missions") return answer({ mission: { name: "North" }, forked_from: null }, 200);
     return answer({ cards: ["way finder 1"], cards_released: ["way finder 1"], archived: "m1" }, 200);
   });
-  const keyed = { "x-wayfinder-key": "pass-1" };
-  const json = { "Content-Type": "application/json", "x-wayfinder-key": "pass-1" };
+  const json = { "Content-Type": "application/json" };
   const sent = (i: number) => JSON.parse(String(calls[i].init?.body)) as Record<string, unknown>;
 
   await missionClient.run("Dispatch", "m1");
@@ -255,12 +249,12 @@ test("the wire contract: paths, methods, headers and bodies", async () => {
   await missionClient.run("Remove", "m 1/x");
   assert.equal(calls[4].input, "/api/missions?id=m%201%2Fx", "the id is percent-encoded");
   assert.equal(calls[4].init?.method, "DELETE");
-  assert.deepEqual(calls[4].init?.headers, keyed, "DELETE has no Content-Type");
+  assert.equal(calls[4].init?.headers, undefined, "DELETE has no headers");
   assert.equal(calls[4].init?.body, undefined, "DELETE has no body");
 
   await missionClient.list();
   assert.equal(calls[5].input, "/api/missions?archived=1");
-  assert.deepEqual(calls[5].init?.headers, keyed, "list has no Content-Type");
+  assert.equal(calls[5].init, undefined, "list has no headers");
 
   await missionClient.save({
     id: "m1",
@@ -282,33 +276,19 @@ test("the wire contract: paths, methods, headers and bodies", async () => {
   });
 });
 
-test("signedOut() follows the credential, and an empty key still goes on the wire", async () => {
-  writePassphrase("");
+test("signedOut() is the last answer: a 401 signs out, any other answer signs back in", async () => {
+  install(() => answer({ error: "Sign in to continue: this request carried no session." }, 401));
+  await missionClient.list();
   assert.equal(missionClient.signedOut(), true);
   install(() => answer({ mission: { name: "North" }, forked_from: null }, 200));
   await missionClient.save(draft());
-  assert.deepEqual(calls[0].init?.headers, {
-    "Content-Type": "application/json",
-    "x-wayfinder-key": "",
-  });
+  assert.deepEqual(calls[0].init?.headers, { "Content-Type": "application/json" });
   const body = JSON.parse(String(calls[0].init?.body)) as Record<string, unknown>;
   assert.ok(!("id" in body), "an absent id saves a new Mission, and JSON leaves the key out");
-  writePassphrase("k");
   assert.equal(missionClient.signedOut(), false);
-  writePassphrase("");
-  assert.equal(missionClient.signedOut(), true);
-});
-
-test("a value typed while storage is blocked still reaches the wire", async () => {
-  await withStorage(undefined, async () => {
-    writePassphrase("typed");
-    install(() => answer({ mission: { name: "North" }, forked_from: null }, 200));
-    await missionClient.save(draft());
-    assert.deepEqual(calls[0].init?.headers, {
-      "Content-Type": "application/json",
-      "x-wayfinder-key": "typed",
-    });
-  });
+  install(() => answer({ error: "waiting for approval" }, 403));
+  await missionClient.list();
+  assert.equal(missionClient.signedOut(), false, "a pending Account is signed in");
 });
 
 test("a successful run or save signals the other window; a refusal signals nothing", async () => {
@@ -318,7 +298,7 @@ test("a successful run or save signals the other window; a refusal signals nothi
     assert.equal(localStorage.getItem(MISSIONS_CHANGED_KEY), null, "a refusal writes nothing");
 
     const unauthorised =
-      "That passphrase is not the one this deployment expects. Retype it; it is kept only in this browser.";
+      "Sign in to continue: this request carried no session.";
     install(() => answer({ error: unauthorised }, 401));
     await missionClient.save(draft());
     assert.equal(localStorage.getItem(MISSIONS_CHANGED_KEY), null, "a refused save writes nothing");
@@ -348,7 +328,7 @@ test("a successful save reads back in its own window; a row action and a refusal
       assert.deepEqual(heard, [], "a row action never signals a same-window read");
 
       const unauthorised =
-        "That passphrase is not the one this deployment expects. Retype it; it is kept only in this browser.";
+        "Sign in to continue: this request carried no session.";
       install(() => answer({ error: unauthorised }, 401));
       await missionClient.save(draft());
       assert.deepEqual(heard, [], "a refused save signals nothing");
@@ -386,7 +366,7 @@ test("send: an offline edit goes to its own route, guarded by the version it was
   assert.equal(calls[0].input, "/api/missions/withdraw");
 });
 
-test("send: a changed Mission comes back with both versions; a dead network or a failing store waits; any other refusal is the store's sentence", async () => {
+test("send: a changed Mission comes back with both versions; a dead network, a failing store or an ended session waits; any other refusal is the store's sentence", async () => {
   const record = { id: "m1", name: "Theirs", updated_at: "t2" };
   install(() => answer({ error: "Changed.", conflict: record, state: "planned" }, 409));
   assert.deepEqual(await missionClient.send({ seq: 1, op: "save", mission_id: "m1", draft: draft({ id: "m1", base_updated_at: "t1" }) }), {
@@ -397,6 +377,9 @@ test("send: a changed Mission comes back with both versions; a dead network or a
   install(failing(new Error("offline")));
   assert.deepEqual(await missionClient.send({ seq: 2, op: "remove", mission_id: "m1" }), { ok: false, later: true });
   install(() => answer({ error: "store" }, 503));
+  assert.deepEqual(await missionClient.send({ seq: 3, op: "flown", mission_id: "m1" }), { ok: false, later: true });
+  // A session that ended is not the edit being wrong: it waits for sign-in.
+  install(() => answer({ error: "Sign in to continue: this request carried no session." }, 401));
   assert.deepEqual(await missionClient.send({ seq: 3, op: "flown", mission_id: "m1" }), { ok: false, later: true });
 
   install(() => answer({ error: "It holds a Card." }, 409));

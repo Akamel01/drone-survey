@@ -29,7 +29,8 @@ _Avoid_: user (in the product's own words), login, profile.
 
 **Workspace**:
 the unit that owns Missions and, later, pays for them: every Account works
-inside one, and every Mission belongs to exactly one.
+inside one, and every Mission belongs to exactly one. A Mission made before
+Accounts, with no record of its Workspace, is the operator's.
 _Avoid_: organization, team, tenant.
 
 **Approval**:

@@ -257,6 +257,12 @@ function testOverride(
   return { providerId, clientId, clientSecret, authorizationUrl, tokenUrl, userInfoUrl };
 }
 
+/** The operator's Workspace: the verified OWNER_EMAIL Account's, and the
+ *  owner of every Mission with no ownership row (#244). */
+export function ownerWorkspaceSlug(): string {
+  return process.env.OWNER_WORKSPACE_SLUG ?? "operator";
+}
+
 /** What the user.create/update.after hooks hand `ensureWorkspace` and
  *  `promoteOwnerIfVerified`, and what tests may pass: id plus the identity
  *  fields the decision needs. */
@@ -282,7 +288,7 @@ export async function ensureWorkspace(user: WorkspaceUser): Promise<void> {
   // unverified provider email, or the email/password sign-up in #247) must
   // not become admin. user.update.after promotes the moment it verifies.
   const isOwner = ownerEmail !== "" && email === ownerEmail && user.emailVerified === true;
-  const slug = isOwner ? process.env.OWNER_WORKSPACE_SLUG ?? "operator" : `u-${user.id}`;
+  const slug = isOwner ? ownerWorkspaceSlug() : `u-${user.id}`;
   const name = isOwner ? "Operator" : user.name || "Workspace";
 
   await ensureWorkspaceRows(pool, { userId: user.id, name, slug });
@@ -360,7 +366,7 @@ export async function promoteOwnerIfVerified(user: WorkspaceUser): Promise<void>
   const ownerEmail = (process.env.OWNER_EMAIL ?? "").toLowerCase();
   if (ownerEmail === "" || email !== ownerEmail || user.emailVerified !== true) return;
 
-  const slug = process.env.OWNER_WORKSPACE_SLUG ?? "operator";
+  const slug = ownerWorkspaceSlug();
   const organizationId = await ensureWorkspaceRows(pool, { userId: user.id, name: "Operator", slug });
 
   // createOrganization already makes the creator the owner member, but the

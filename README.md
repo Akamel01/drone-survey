@@ -124,7 +124,7 @@ shell history:
 bash scripts/save_b2_credentials.sh b2-read
 ```
 
-The web app needs `DISPATCH_SECRET`, `B2_KEY_ID`, `B2_APP_KEY`, `B2_BUCKET`
+The web app needs `B2_KEY_ID`, `B2_APP_KEY`, `B2_BUCKET`
 (Vercel env on deployed, `vercel env pull` for local dev).
 
 Accounts add nine required variables, also in the Vercel environment. They are

@@ -3,10 +3,11 @@
 Drone survey mission planner. One screen (`/plan`): draw the survey area on a
 satellite map, tune flight and camera settings, and download a mission spec.
 
-The planning screen is still static and passphrase-gated; the app now also
-carries the accounts backend — a Better Auth surface at `/api/auth/[...all]`
-with its schema and migrations — which later tickets wire into the planner.
-Nothing on `/plan` needs an account yet.
+Every planner route needs an approved Account (#244): the session cookie is
+the only credential, and each Account sees only its Workspace's Missions
+(`lib/accountAccess.requireCaller`, scoped in `lib/missionLifecycle.ts`).
+Which Workspace owns a Mission is the `mission_workspace` table, created by
+`npm run db:migrate`; a Mission with no row is the operator's.
 
 ## Run locally
 
@@ -107,8 +108,8 @@ node scripts/auth-evidence.mjs
    local; register `/api/auth/callback/google` and `/api/auth/callback/github`
    on the production URL. A deployment with the Supabase trio set registers
    `/api/auth/callback/supabase` instead (the only callback live in that mode).
-- The planner's Dispatch variables (`DISPATCH_SECRET`, `B2_KEY_ID`,
-  `B2_APP_KEY`, `B2_BUCKET`) are listed in the root `README.md`.
+- The planner's storage variables (`B2_KEY_ID`, `B2_APP_KEY`, `B2_BUCKET`)
+  are listed in the root `README.md`.
 - Offline map regions (PWA-2, #315). The street map a Site keeps for offline
   is read from region archives (Protomaps basemap PMTiles, OpenStreetMap data,
   ODbL) in the private B2 bucket under `specs/_maps/`, listed in

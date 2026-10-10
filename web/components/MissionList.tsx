@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import { areaHectares, preview } from "@/lib/mission";
 import type { MissionRecord, MissionRow } from "@/lib/missionRecords";
 import Sheet from "./Sheet";
@@ -33,7 +34,6 @@ import {
   type Entry,
   type OutboxOp,
 } from "@/lib/outbox";
-import { readPassphrase, subscribePassphrase, writePassphrase } from "@/lib/passphrase";
 import {
   asOfStamp,
   cacheRead,
@@ -141,11 +141,9 @@ const WAITING_FIRST =
   "Dispatch waits until this Mission's changes have synced, so the store Dispatches what you see.";
 
 export default function MissionList({ onEdit, onCopy, editingId = null, onRead, onSent, onNotice, onFirstRunNavigate }: MissionListProps) {
-  const [passphrase, setPassphrase] = useState<string | null>(null);
-  // True until the first good read, whatever is typed meanwhile: the field
-  // asking for the passphrase must not vanish mid-keystroke just because the
-  // value it is bound to briefly went from empty to something (plan decision
-  // 17). It only steps aside once the store has actually answered.
+  const router = useRouter();
+  // True until the first good read (or a cached one to fall back on): until
+  // then there is nothing to list, only the first read or why it failed.
   const [gate, setGate] = useState(true);
   const [read, setRead] = useState<MissionListRead | null>(null);
   const [readAt, setReadAt] = useState<number | null>(null);
@@ -154,7 +152,6 @@ export default function MissionList({ onEdit, onCopy, editingId = null, onRead, 
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [showArchived, setShowArchived] = useState(false);
-  const [blocked, setBlocked] = useState(false);
   const [action, setAction] = useState<ActionState>(IDLE);
   // The row a sheet is open about, and whether it is open, held apart: the
   // row is kept through the close animation so the sheet has something to
@@ -492,6 +489,17 @@ export default function MissionList({ onEdit, onCopy, editingId = null, onRead, 
         syncRef.current();
         return fresh;
       }
+      // No session, or an Account still waiting: the cached list may be
+      // another Account's, so it is never shown in their place. Signed out
+      // goes to the home page, which is the sign-in (#244); waiting stays here
+      // and says so (the home page would send an approved Account straight
+      // back, and a pending one is told the same thing there).
+      if (outcome.status === 401 || outcome.status === 403) {
+        setError(outcome.text);
+        setGate(true);
+        if (outcome.status === 401) router.replace("/");
+        return null;
+      }
       fallBackToCache(outcome.text);
     } catch (err) {
       fallBackToCache(
@@ -520,7 +528,7 @@ export default function MissionList({ onEdit, onCopy, editingId = null, onRead, 
         setLive(true);
       }
     }
-  }, [applyRead]);
+  }, [applyRead, router]);
 
   // Send what waited offline, in order, and say what happened (PWA-3). Called
   // after every good read; a pass that finds nothing to send does nothing.
@@ -643,36 +651,9 @@ export default function MissionList({ onEdit, onCopy, editingId = null, onRead, 
     };
   }, []);
 
-  // True only for the passphrase already on file when this mounted, so that
-  // one loads at once, the way it always did. Consumed by the first pass of
-  // the effect below, whichever value that turns out to be -- so a passphrase
-  // that arrives by typing, with nothing stored before it, still waits out the
-  // debounce like any later edit rather than firing on its first keystroke.
-  const instant = useRef(false);
-
-  // Resolved once: what is already on file, and -- from here on -- whatever
-  // any field showing the passphrase writes, wherever it was typed (shared
-  // with the Summary's own field; `lib/passphrase.ts` is the mechanism).
+  // Loads at once and keeps the list fresh.
   useEffect(() => {
-    const initial = readPassphrase();
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- one-time client-only read of localStorage
-    setPassphrase(initial ?? "");
-    setBlocked(initial === null);
-    setGate(!initial);
-    instant.current = !!initial;
-    return subscribePassphrase(setPassphrase);
-  }, []);
-
-  // Loads with the current passphrase and keeps the list fresh while one is
-  // known. Firing this on every keystroke -- typed here or in the Summary's
-  // field, now that the two agree live -- would spend a store transaction per
-  // character, so a value that changes after the page has settled waits half
-  // a second before it is used.
-  useEffect(() => {
-    if (!passphrase) return;
-    const wait = instant.current ? 0 : 500;
-    instant.current = false;
-    const debounce = setTimeout(() => void load(), wait);
+    const first = setTimeout(() => void load(), 0);
 
     // Every poll costs a Class C transaction on the storage account, and this
     // page is left open for hours. Five minutes is fresh enough for a pipeline
@@ -704,14 +685,14 @@ export default function MissionList({ onEdit, onCopy, editingId = null, onRead, 
     setNow(Date.now());
     const clock = setInterval(() => setNow(Date.now()), 30000);
     return () => {
-      clearTimeout(debounce);
+      clearTimeout(first);
       clearInterval(poll);
       clearInterval(clock);
       document.removeEventListener("visibilitychange", refresh);
       window.removeEventListener("storage", onWrite);
       unsubscribe();
     };
-  }, [passphrase, load]);
+  }, [load]);
 
   // The five-minute poll is far too slow to be an action's feedback, so every
   // action reports its own outcome through the page-owned Notice and re-reads
@@ -856,43 +837,11 @@ export default function MissionList({ onEdit, onCopy, editingId = null, onRead, 
       : areaHectares(detailsRow.spec.aoi)
     : 0;
 
-  if (passphrase === null) return <p className={styles.quiet}>Reading the Mission list…</p>;
-  if (blocked) {
-    return (
-      <p className={styles.stop}>
-        This browser is blocking storage for this page, so the Wayfinder passphrase cannot be kept and
-        the Mission list cannot be read. Allow site data for this page (it is off in some private
-        windows and strict privacy settings), then reload.
-      </p>
-    );
-  }
   if (gate) {
-    return (
-      <form
-        className={styles.gate}
-        onSubmit={(e) => {
-          e.preventDefault();
-          if (passphrase) void load();
-        }}
-      >
-        <p className={styles.gateText}>
-          Type the Wayfinder passphrase to read the Missions in the store. It is typed once per browser
-          and kept only here.
-        </p>
-        <input
-          type="password"
-          className={styles.gateInput}
-          placeholder="Wayfinder passphrase"
-          aria-label="Wayfinder passphrase"
-          value={passphrase}
-          onChange={(e) => writePassphrase(e.target.value)}
-          autoFocus
-        />
-        <button type="submit" className="primary" disabled={!passphrase || loading}>
-          {loading ? "Checking…" : "Show Missions"}
-        </button>
-        {error && <p className={styles.stop}>{error.replace(/\.?$/, ".")}</p>}
-      </form>
+    return error ? (
+      <p className={styles.stop}>{error.replace(/\.?$/, ".")}</p>
+    ) : (
+      <p className={styles.quiet}>Reading the Mission list…</p>
     );
   }
 

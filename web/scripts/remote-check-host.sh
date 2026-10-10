@@ -557,7 +557,7 @@ start_and_wait() {
 build_web() {
   disk_guard
   say "next build (B2/DISPATCH placeholders, no DATABASE_URL)"
-  export B2_BUCKET=ci B2_KEY_ID=ci B2_APP_KEY=ci B2_READ_KEY_ID=ci B2_READ_APP_KEY=ci DISPATCH_SECRET=ci
+  export B2_BUCKET=ci B2_KEY_ID=ci B2_APP_KEY=ci B2_READ_KEY_ID=ci B2_READ_APP_KEY=ci
   export NEXT_TELEMETRY_DISABLED=1
   if ! ( cd "$WEB" && "$NPM_BIN" run build ); then
     die 1 "npm run build failed"

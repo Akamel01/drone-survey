@@ -26,7 +26,7 @@ export async function reportLoaded(id: string, cards: BoardCard[]): Promise<Mark
   if (noSignal()) return wait();
   const done = await markLoaded(id, cards);
   if (done.ok) return "sent";
-  // No route reached, the store failing, or a passphrase still to type: the
+  // No route reached, the store failing, or a session that ended (401): the
   // report can mend. Any other answer is the store saying no.
   return done.status === undefined || done.status >= 500 || done.status === 401 ? wait() : "refused";
 }

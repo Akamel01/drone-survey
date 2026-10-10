@@ -8,9 +8,10 @@
 // reaches the app by any route except the worker's cache.
 //
 // PWA-2 (#315) rides on the same server: a Site's street map is kept through
-// the real /api/site-map route, which reads a small PMTiles archive this file
-// serves itself (scripts/lib/pmtilesFixture.mjs), stored in the browser, and
-// drawn with the network cut.
+// /api/site-map, answered in this process from a small PMTiles archive this
+// file serves itself (scripts/lib/pmtilesFixture.mjs) -- the route itself needs
+// an approved Account (#244), and is driven for real in workspaces.test.mjs --
+// stored in the browser, and drawn with the network cut.
 //
 // E2E_SHOTS=<dir>: the offline planner at 375 x 812, for the pull request.
 
@@ -20,17 +21,17 @@ import path from "node:path";
 import { after, before, test } from "node:test";
 
 import { createMissionLifecycle } from "../lib/missionLifecycle.ts";
+import { memoryMissionOwners } from "../lib/missionOwners.ts";
 import { memoryMissionStore } from "../lib/memoryMissionStore.ts";
 import { respond } from "../lib/missionRoute.ts";
+import { FetchSource, PMTiles } from "pmtiles";
 import { DEFAULT_SPEC } from "../lib/spec.ts";
 import { MAX_TILES, siteBounds, tilesFor } from "../lib/siteMap.ts";
 import { pmtilesArchive, serveArchive } from "../scripts/lib/pmtilesFixture.mjs";
 import { freePort, launchBrowser, run, spawnServer, stopServer, waitReady, webRoot } from "../scripts/lib/harness.mjs";
 
-// lib/passphrase.ts imports extensionless, which plain node cannot load, so
-// the key is written out here as it is in scripts/look-check.mjs.
-const PASSPHRASE_KEY = "drone-planner.wayfinder-key";
-const CALLER = { kind: "passphrase" };
+// The operator's Workspace: every seeded Mission has no ownership row.
+const CALLER = { workspaceId: "w-operator", ownsUnclaimed: true };
 const AOI = [
   [37.8, -122.4],
   [37.8, -122.39],
@@ -52,8 +53,6 @@ before(async () => {
     B2_APP_KEY: "ci",
     B2_READ_KEY_ID: "ci",
     B2_READ_APP_KEY: "ci",
-    DISPATCH_SECRET: "ci",
-    SITE_MAP_PMTILES_URL: archive.url,
   };
   delete env.DATABASE_URL;
   const port = await freePort();
@@ -96,16 +95,27 @@ function seed() {
 
 /** A context with the planner's Mission list answered in-process, until `cut()`. */
 async function planner() {
-  const lifecycle = createMissionLifecycle(memoryMissionStore(seed()));
+  const lifecycle = createMissionLifecycle(memoryMissionStore(seed()), memoryMissionOwners());
   let down = false;
   const context = await browser.newContext({ viewport: { width: 375, height: 812 } });
-  await context.addInitScript((key) => localStorage.setItem(key, "ci"), PASSPHRASE_KEY);
   await context.route(
     (url) => url.pathname === "/api/missions",
     async (route) => {
       if (down) return route.abort("internetdisconnected");
       const response = respond(await lifecycle.list(CALLER, { archived: true }));
       await route.fulfill({ status: response.status, contentType: "application/json", body: await response.text() });
+    },
+  );
+  // The tile as lib/mapArchive.readTile reads it: the same library call.
+  const tiles = new PMTiles(new FetchSource(archive.url));
+  await context.route(
+    (url) => url.pathname.startsWith("/api/site-map/"),
+    async (route) => {
+      if (down) return route.abort("internetdisconnected");
+      const [z, x, y] = new URL(route.request().url()).pathname.split("/").slice(3).map(Number);
+      const tile = await tiles.getZxy(z, x, y);
+      if (!tile) return route.fulfill({ status: 204 });
+      await route.fulfill({ status: 200, contentType: "application/x-protobuf", body: Buffer.from(tile.data) });
     },
   );
   return {

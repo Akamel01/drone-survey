@@ -58,7 +58,6 @@ const SHOT_DIR = path.resolve(
 );
 fs.mkdirSync(SHOT_DIR, { recursive: true });
 const VIDEO_DIR = fs.mkdtempSync(path.join(os.tmpdir(), "ui260-video-"));
-const PASSPHRASE_KEY = "drone-planner.wayfinder-key";
 const TIMEOUT = 15_000;
 
 let failed = false;
@@ -81,7 +80,7 @@ async function gate(motion, name, run, okDetail = "") {
 }
 
 // ---------------------------------------------------------------------------
-// Page setup. The passphrase key and the /api/missions stub are duplicated
+// Page setup. The /api/missions stub is duplicated
 // from chrome-motion-check.mjs, which imports the app's own libs; this harness
 // is plain node and must not. The stub answers with an empty Mission list.
 // ---------------------------------------------------------------------------
@@ -90,8 +89,7 @@ async function open(browser, { width, height, mobile = false, video = null }) {
   if (video) contextOptions.recordVideo = { dir: VIDEO_DIR, size: { width, height } };
   const context = await browser.newContext(contextOptions);
   await context.addInitScript(
-    ({ key, value }) => {
-      localStorage.setItem(key, value);
+    () => {
       const orig = window.fetch.bind(window);
       window.fetch = (input, init) => {
         const url = typeof input === "string" ? input : input && input.url ? input.url : String(input);
@@ -113,12 +111,12 @@ async function open(browser, { width, height, mobile = false, video = null }) {
         return orig(input, init);
       };
     },
-    { key: PASSPHRASE_KEY, value: "evidence" },
+    { value: "evidence" },
   );
   const page = await context.newPage();
   await page.goto(`${BASE}/plan`, { waitUntil: "domcontentloaded" });
   // The empty-list line only renders once the stub has answered and the
-  // passphrase gate has stepped aside. The map canvas is attached on every
+  // first read has landed. The map canvas is attached on every
   // viewport; on a phone the map section is hidden behind Missions until the
   // Map tab is tapped.
   await page.getByText(/No Missions in the store yet/).waitFor({ timeout: TIMEOUT });

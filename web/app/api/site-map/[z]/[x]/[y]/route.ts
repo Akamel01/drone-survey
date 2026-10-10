@@ -1,4 +1,4 @@
-import { authProblem } from "@/lib/auth";
+import { requireCaller } from "@/lib/accountAccess";
 import { readTile } from "@/lib/mapArchive";
 import { validTile } from "@/lib/siteMap";
 
@@ -18,8 +18,8 @@ export const runtime = "nodejs";
 export const preferredRegion = "yyz1";
 
 export async function GET(request: Request, { params }: { params: Promise<{ z: string; x: string; y: string }> }) {
-  const denied = authProblem(request);
-  if (denied) return denied;
+  const gate = await requireCaller(request);
+  if (!gate.ok) return gate.response;
   const { z, x, y } = await params;
   const [zn, xn, yn] = [z, x, y].map((s) => (/^\d{1,8}$/.test(s) ? Number(s) : NaN));
   if (!validTile(zn, xn, yn)) return Response.json({ error: "Not a tile this map keeps" }, { status: 404 });

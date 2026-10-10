@@ -11,9 +11,9 @@ export const preferredRegion = "yyz1";
 // credential and proxies reads instead, so the Bundle stays unlisted-but-open
 // exactly as the design intended, without the bucket being world-readable.
 //
-// Deliberately NOT behind authProblem(): every planner route is gated by the
-// operator's passphrase, and this is the one route a client must reach without
-// it. What stands in for a login is the same thing the public-bucket design
+// Deliberately NOT behind requireCaller(): every planner route is gated by an
+// approved Account's session, and this is the one route a client must reach
+// without one. What stands in for a login is the same thing the public-bucket design
 // relied on -- the opaque per-Bundle id.
 //
 // Range requests pass through untouched. The Orthomosaic is a COG that the
