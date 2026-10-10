@@ -78,13 +78,20 @@ class Controller(Protocol):
 # --- the store seam ---------------------------------------------------------
 
 class Store(Protocol):
-    """The Card Ledger and the cloud manifest, over B2."""
+    """The Card Ledger and the cloud manifest. host_store.HostStore is the real
+    one; the reports are bookkeeping and never raise."""
 
     def fetch_ledger(self) -> dict:
-        """The Card Ledger; raises LedgerUnreadable. load.py:1099-1116."""
+        """The Card Ledger; raises LedgerUnreadable."""
 
     def publish_ledger(self, ledger: dict) -> None:
-        """Write it back. Prints its own notices, never raises. load.py:1150-1163."""
+        """Write it back; raises LedgerUnreadable when it cannot."""
+
+    def update_ledger(self, change: Callable[[dict], dict], *, settle_s: float,
+                      sleep: Callable[[float], None]) -> dict:
+        """Re-read, apply change, write if it changed, confirm it survived (the
+        loop is host_store.update_ledger); raises LedgerUnreadable. Core only
+        says what to change."""
 
     def report_drift(self, drift: list[dict]) -> None:
         """load.py:1206-1222 (prints the agree/reported line)."""
@@ -438,35 +445,6 @@ def verify(ledger: dict, slots: Mapping[str, str], controller: Controller, now: 
     return b2_status.merge_verified(ledger, now), drift
 
 
-def update(store: Store, change: Callable[[dict], dict], *, settle_s: float,
-           sleep: Callable[[float], None], tries: int = 3) -> dict:
-    """Apply change to the Ledger as it is now, write it only if it changed, and
-    check the write survived.
-
-    Re-read immediately before writing, as the planner does: a Load takes long
-    enough for the operator to Dispatch in the middle of it, and writing back
-    the copy read at the start would erase that Reservation. Then read back
-    after a moment, because the store has no compare-and-swap: a planner write
-    in flight when ours landed can overwrite it, and ours can overwrite theirs
-    -- the planner checks its side the same way (#152, load.py:1122-1147).
-    """
-    # ponytail: narrows the race to the settle window; only a store with
-    # compare-and-swap, or one writer, closes it.
-    for _ in range(tries):
-        base = store.fetch_ledger()
-        changed = change(base)
-        if changed == base:
-            return changed
-        store.publish_ledger(changed)
-        if settle_s:
-            sleep(settle_s)
-        after = store.fetch_ledger()
-        if b2_status.change_survived(base, changed, after):
-            return after
-    raise LedgerUnreadable("the Card Ledger kept changing while the host was writing it, "
-                           "so its change could not be confirmed")
-
-
 def publish_pool(store: Store, pool: Sequence[str], notify: Callable[[str], None], *,
                  settle_s: float, sleep: Callable[[float], None]) -> dict:
     """Put the calibrated Card names into the Ledger, so the planner can reserve.
@@ -482,7 +460,7 @@ def publish_pool(store: Store, pool: Sequence[str], notify: Callable[[str], None
         was[:] = ledger.get("pool") or []
         return ledger if ledger.get("pool") == names else {**ledger, "pool": names}
 
-    ledger = update(store, with_pool, settle_s=settle_s, sleep=sleep)
+    ledger = store.update_ledger(with_pool, settle_s=settle_s, sleep=sleep)
     if was != names:
         notify(f"published the Card pool to the Ledger: {len(names)} Cards (was {len(was)})")
     return ledger
@@ -492,7 +470,7 @@ def stamp_verified(store: Store, verified: dict, notify: Callable[[str], None], 
                    settle_s: float, sleep: Callable[[float], None]) -> None:
     """Carry this run's verified_at onto the Ledger as it is now (load.py:1166-1172)."""
     try:
-        update(store, lambda fresh: {**fresh, "verified_at": verified["verified_at"]}
+        store.update_ledger(lambda fresh: {**fresh, "verified_at": verified["verified_at"]}
                if "verified_at" in verified else fresh, settle_s=settle_s, sleep=sleep)
     except LedgerUnreadable as e:
         notify(f"{e}; verified_at was not recorded")
@@ -509,7 +487,7 @@ def record_written(store: Store, verified: dict, written: Mapping[str, str], now
     (load.py:1175-1189).
     """
     try:
-        update(store, lambda fresh: b2_status.merge_written(
+        store.update_ledger(lambda fresh: b2_status.merge_written(
             {**fresh, **({"verified_at": verified["verified_at"]} if "verified_at" in verified else {})},
             dict(written), now), settle_s=settle_s, sleep=sleep)
     except LedgerUnreadable as e:

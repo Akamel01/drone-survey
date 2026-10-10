@@ -366,7 +366,7 @@ def main() -> int:
                 log(f"cut {process_queue(auth, env)} queued region(s)")
             else:
                 ap.print_help()
-        except Stop as e:
+        except (Stop, b2.StoreError) as e:
             log(f"stopped: {e}")
             return 1
     return 0

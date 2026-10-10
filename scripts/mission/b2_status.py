@@ -16,14 +16,10 @@ from __future__ import annotations
 
 import datetime
 import json
-import sys
 
 import keys  # noqa: E402
-import b2  # noqa: E402  (one home for storage access)
 from pathlib import Path
 
-STATUS_KEY = keys.STATUS_KEY
-LEDGER_KEY = keys.LEDGER_KEY
 # Underscore-prefixed inside specs/ on purpose: store keys are confined to the
 # specs/ prefix, and collect.py's Spec pattern only matches three-segment
 # site/date/file keys, so the manifest is invisible to Collect.
@@ -197,38 +193,6 @@ def change_survived(base: dict, new: dict, after: dict) -> bool:
 def merge_verified(ledger: dict, at: str) -> dict:
     """Stamp when the host last checked the Ledger against the Controller."""
     return {**ledger, "verified_at": at}
-
-
-def download_ledger(download_url: str, bucket: str, token: str) -> dict:
-    """The Ledger so far; an empty one when the host has never written it.
-
-    An empty Ledger is not a licence to choose Cards: every Spec then has no
-    Reservation and is refused by name, which is the point (ADR 0022).
-    """
-    try:
-        found = json.loads(b2.download(download_url, bucket, LEDGER_KEY, token))
-    except FileNotFoundError:
-        return dict(EMPTY_LEDGER)
-    return {"pool": found.get("pool", []), "holdings": found.get("holdings", {}),
-            **({"verified_at": found["verified_at"]} if "verified_at" in found else {})}
-
-
-def upload_ledger(api_url: str, token: str, bucket_id: str, ledger: dict) -> None:
-    b2.upload(api_url, token, bucket_id, LEDGER_KEY,
-              json.dumps(ledger, indent=1, sort_keys=True).encode())
-
-
-def download_manifest(api_url: str, download_url: str, bucket: str, token: str) -> dict:
-    """The manifest so far; {} when the host has never reported (not an error)."""
-    try:
-        return json.loads(b2.download(download_url, bucket, STATUS_KEY, token))
-    except FileNotFoundError:
-        return {}
-
-
-def upload_manifest(api_url: str, token: str, bucket_id: str, manifest: dict) -> None:
-    body = json.dumps(manifest, indent=1, sort_keys=True).encode()
-    b2.upload(api_url, token, bucket_id, STATUS_KEY, body)
 
 
 def _selftest() -> None:
