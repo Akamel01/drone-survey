@@ -1,4 +1,4 @@
-# A verified Papyrus email is its own Approval; every other Account waits for the operator
+# A verified email is its own Approval; only an unverified one waits for the operator
 
 ADR 0023 made Supabase genericOAuth the sign-in surface. It left Approval alone:
 every Account that reached a Workspace's Missions had the operator's decision
@@ -19,15 +19,27 @@ no JWT validation, no id_token). `email_verified` from that endpoint is what
 auto-approves; nothing else in the deployment is consulted, and no second
 provider is trusted to assert it.
 
-**One writer.** A single private predicate,
-`papyrusAutoApprove(userId, emailVerified)`
-(`web/lib/accountAuth.ts:303`), is the only automatic path to `approved = true`.
-It fires only when all three hold: the deployment runs the Papyrus entry
-(`supabaseOAuthEnabled()`), the local row's email is strictly `emailVerified ===
-true`, and the Account owns a `supabase` provider row. Nothing else UPDATEs
+**One writer.** A single predicate, `autoApprove(userId, emailVerified)`
+(`web/lib/accountAuth.ts`), is the only automatic path to `approved = true`.
+Amended after the operator's follow-up ("no need for me to approve every single
+account creation; we need email verification"): it fires when the email is
+strictly `emailVerified === true`, the Account owns a `supabase`, `google` or
+`github` provider row, and the user is not `banned`, in every mode. Google's
+`email_verified` and GitHub's verified primary email arrive through the same
+`userInfo.emailVerified`. Email/password Accounts have no provider row and are
+not matched. It only ever sets `approved = true`: role is never touched, so an
+owner stays `admin` and nothing is downgraded. The model has no "revoked" state
+(`approved = false` is both pending and the only other value; Remove deletes the
+Account), so `banned` is the one block honoured.
+
+It runs from three places: `user.create.after` (first sign-in), `account.create.after`
+(a verified provider linking to an existing Account), and the
+`user.validateUserInfo` gate on every returning provider sign-in
+(`action: "sign-in"`), which is the one hook that sees the fresh provider claim.
+That third path is what lets a pending Account, such as the operator's own
+stuck Gmail one, self-heal on its next verified sign-in. Nothing else UPDATEs
 `approved` except the operator's `setAccountApproval`
-(`web/lib/accountAccess.ts:96`). The owner branch is untouched — an owner is
-`admin` and approved by the existing bootstrap, not by this predicate.
+(`web/lib/accountAccess.ts:96`).
 
 ## Hook ordering (M1, better-auth 1.7.6 exact-pinned)
 
@@ -80,10 +92,9 @@ itself is unchanged.
   Refusal copy ("Confirm your email first; check your inbox.") keys off that callback code (`email_not_verified`, or `account_not_linked` for the existing-Account case), never off `approved`, so a
   fresh refusal and a pre-341 pending Account stay distinguishable.
 - **O3 — a verified Papyrus link to an existing pending non-owner approves.**
-- **O4 — pre-341 Supabase rows with `approved = false` stay pending.** No
-  migration and no retroactive approval in this ticket: one manual approval by
-  the operator each. Rows written before this ADR keep the meaning ADR 0023
-  gave them.
+- **O4 — pre-341 pending rows self-heal.** No migration: a pending Account with
+  a verified provider email is approved by its next sign-in (see One writer).
+  Superseded the first draft, which left them for manual approval.
 - **O5 — open registration with no per-email throttle is accepted.** Anyone with
   a Papyrus account and a verified email reaches a Workspace. The ceiling is
   recorded, not built: at the point that matters, a per-email or per-Workspace
@@ -110,15 +121,14 @@ The client `signOut` deletes only the current session
 
 ## Consequences
 
-**Legacy stays byte-identical.** With any of `SUPABASE_URL`,
-`SUPABASE_OAUTH_CLIENT_ID`, `SUPABASE_OAUTH_CLIENT_SECRET` unset, construction
-is unchanged (ADR 0023), the predicate returns `false` before it touches the
-database, and sign-out targets `/`. A verified Google or GitHub Account is
-still pending. No legacy assertion was edited to make this hold; the Supabase e2e file's
-first test changed from "pending" to "approved" because that is the new behaviour.
+**Legacy changes in one way only.** With the Supabase trio unset, construction
+and sign-out (`/`) are unchanged (ADR 0023), but a verified Google or GitHub
+Account is now approved rather than pending, per the amendment above. Legacy
+e2e identities that must stay pending are marked `emailVerified: false`; the
+Supabase e2e's first test changed from "pending" to "approved".
 
-**The `CONTEXT.md` Approval entry is now mode-qualifying.** "The operator's
-decision" is exact for every deployment but the Papyrus one; the entry says so
+**The `CONTEXT.md` Approval entry is now qualified.** "The operator's
+decision" is exact only for an unverified email; the entry says so
 in one sentence rather than the glossary being wrong for one mode. The term
 itself, and its _Avoid_ list, are unchanged — an automatic approval is still
 not "verification", not "activation", not a "whitelist".

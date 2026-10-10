@@ -123,6 +123,7 @@ if (!databaseUrl) {
     emailVerified: true,
   };
 
+  const googleVerifiedAgain = { ...googleVerifiedOnly };
   const supabaseNewUnverified = {
     id: "standin-supabase-new-unverified",
     name: "Unconfirmed Example",
@@ -144,6 +145,7 @@ if (!databaseUrl) {
     supabaseFreshVerified,
     supabaseFreshVerifiedAgain,
     googleVerifiedOnly,
+    googleVerifiedAgain,
     supabaseNewUnverified,
   ]);
 
@@ -171,7 +173,7 @@ if (!databaseUrl) {
   process.env.BETTER_AUTH_URL = "http://localhost:3000";
   process.env.OAUTH_PROXY_SECRET = "account-flow-proxy-secret";
 
-  const { getAuth, emailPasswordEnabled, papyrusAutoApprove } = await import("./accountAuth.ts");
+  const { getAuth, emailPasswordEnabled, autoApprove } = await import("./accountAuth.ts");
   const { getPool, closeDb } = await import("./accountDb.ts");
   const { getMigrations } = await import("better-auth/db/migration");
 
@@ -340,13 +342,13 @@ if (!databaseUrl) {
     assert.equal(placeholder.rows.length, 1, "the placeholder u-<id> Workspace is kept on promotion");
   });
 
-  test("other: github sign-in gets 'u-<id>', stays pending, and keeps its session", async () => {
+  test("other: github sign-in gets 'u-<id>', is approved (verified email), and keeps its session", async () => {
     const { session } = await signIn("github", otherJar);
     otherId = session.user.id;
     assert.ok(otherId, "the second account has a user id");
     assert.notEqual(otherId, ownerId);
     assert.equal(session.user.email, otherIdentity.email);
-    assert.ok(session.user.approved !== true, `a new account is not approved: ${JSON.stringify(session.user)}`);
+    assert.equal(session.user.approved, true, "a verified github email is approved with no operator step");
 
     const orgs = await pool.query<{ slug: string }>('SELECT slug FROM "organization" WHERE slug = $1', [`u-${otherId}`]);
     assert.equal(orgs.rows.length, 1, "the second account's Workspace is slug u-<id>");
@@ -355,9 +357,9 @@ if (!databaseUrl) {
       [otherId],
     );
     assert.equal(rows[0]?.role, "user");
-    assert.equal(rows[0]?.approved, false);
+    assert.equal(rows[0]?.approved, true);
 
-    // The pending account can still sign in: its session survived the flow.
+    // The account can still sign in: its session survived the flow.
     const again = await getSession(otherJar);
     assert.equal(again?.user.id, otherId);
     assert.equal(again?.session.id, session.session.id);
@@ -584,27 +586,28 @@ if (!databaseUrl) {
     assert.deepEqual(all.rows.map((row) => row.slug), [`u-${freshId}`], "no second Workspace");
   });
 
-  test("auto-approve: a verified google email with no supabase provider row stays pending (E17/E11)", async () => {
+  test("auto-approve: a verified google email is approved too; a pending Account self-heals on its next sign-in", async () => {
     const jar = new CookieJar();
     const { session } = await signIn("google", jar);
     const googleOnlyId = session.user.id;
-    assert.ok(googleOnlyId, "the verified google Account has a user id");
     assert.notEqual(googleOnlyId, freshId, "a distinct Account from the supabase one");
+    assert.equal(session.user.approved, true, "verified google email: approved, role unchanged");
+    assert.equal(session.user.role, "user");
 
-    const { rows } = await pool.query<{ role: string; approved: boolean }>(
-      'SELECT role, approved FROM "user" WHERE id = $1',
-      [googleOnlyId],
-    );
-    assert.equal(rows[0]?.role, "user");
-    assert.equal(rows[0]?.approved, false, "no provider row means no auto-approval");
+    // A stuck pending Account (e.g. created before this rule) ...
+    await pool.query('UPDATE "user" SET approved = false WHERE id = $1', [googleOnlyId]);
+    const again = await signIn("google", new CookieJar());
+    assert.equal(again.session.user.id, googleOnlyId, "same Account");
+    assert.equal(again.session.user.approved, true, "... is approved by its next verified sign-in");
 
-    // The predicate itself, asked directly about the same provenance-negative
-    // Account: it declines and writes nothing.
-    assert.equal(await papyrusAutoApprove(googleOnlyId, true), false, "the predicate declines a verified user with no supabase row");
-    const unchanged = await pool.query<{ approved: boolean }>('SELECT approved FROM "user" WHERE id = $1', [
-      googleOnlyId,
-    ]);
-    assert.equal(unchanged.rows[0]?.approved, false, "and left the row untouched");
+    // The decision itself: unverified claim, banned user and unknown user decline.
+    await pool.query('UPDATE "user" SET approved = false WHERE id = $1', [googleOnlyId]);
+    assert.equal(await autoApprove(googleOnlyId, false), false, "unverified claim declines");
+    await pool.query('UPDATE "user" SET banned = true WHERE id = $1', [googleOnlyId]);
+    assert.equal(await autoApprove(googleOnlyId, true), false, "a banned Account is not approved");
+    assert.equal(await autoApprove("no-such-user", true), false);
+    const { rows } = await pool.query<{ approved: boolean }>('SELECT approved FROM "user" WHERE id = $1', [googleOnlyId]);
+    assert.equal(rows[0]?.approved, false, "and nothing was written");
   });
 
   test("refuse: a brand-new unverified supabase email gets no Account and no session (#341)", async () => {

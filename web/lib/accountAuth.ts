@@ -292,60 +292,59 @@ export async function ensureWorkspace(user: WorkspaceUser): Promise<void> {
     // admin, so the owner's role and approval are written server-side.
     await pool.query('UPDATE "user" SET role = $1, approved = true WHERE id = $2', ["admin", user.id]);
   } else {
-    await papyrusAutoApprove(user.id, user.emailVerified);
+    await autoApprove(user.id, user.emailVerified);
   }
 }
 
-/** The user.validateUserInfo gate: the Papyrus callback may not create, link
- *  or sign in an identity whose email is not verified. Other providers
- *  (google/github stand-ins) and legacy email/password are untouched. */
-export function refuseUnverifiedPapyrus(data: {
-  user: { emailVerified?: boolean | null };
-  source: { oauth?: { providerId?: string } };
-}): { error: string; errorDescription: string } | void {
-  if (supabaseOAuthEnabled() && data.source.oauth?.providerId === "supabase" && data.user.emailVerified !== true) {
+/** The user.validateUserInfo gate. Two jobs, both keyed on the fresh provider
+ *  claim this hook is the only place to see on a returning sign-in:
+ *  the Papyrus callback may not create, link or sign in an unverified email;
+ *  and an existing Account signing in again with a verified OAuth email is
+ *  approved on the spot (#341), so a pending Account self-heals. */
+export async function refuseUnverifiedPapyrus(data: {
+  user: { id?: string; emailVerified?: boolean | null };
+  source: { action?: string; oauth?: { providerId?: string } };
+}): Promise<{ error: string; errorDescription: string } | void> {
+  const provider = data.source.oauth?.providerId;
+  if (supabaseOAuthEnabled() && provider === "supabase" && data.user.emailVerified !== true) {
     return { error: "email_not_verified", errorDescription: "Confirm your email first; check your inbox." };
   }
+  if (data.source.action === "sign-in" && data.user.id) await autoApprove(data.user.id, data.user.emailVerified);
 }
 
-/** The one auto-approval decision (#341, O1/O3). True only where all three
- *  hold: the deployment runs the Papyrus entry, the local row's email is
- *  strictly `emailVerified === true`, and the Account owns a `supabase`
- *  provider row. Anything else -- legacy mode, an unverified email, a verified
- *  google/github Account -- is refused, so the operator keeps the manual
- *  approval in lib/accountAccess.setAccountApproval. Raw SQL, for the same
- *  no-reentry reason as the owner bootstrap. Returns whether it approved. */
-export async function papyrusAutoApprove(
-  userId: string,
-  emailVerified?: boolean | null,
-): Promise<boolean> {
-  if (!supabaseOAuthEnabled() || emailVerified !== true) return false;
+/** The one auto-approval decision (#341): a strictly verified email
+ *  (`emailVerified === true`) on an Account that owns an OAuth provider row
+ *  (supabase, google or github) and is not banned. No manual approval for a
+ *  verified email, in any mode. Email/password Accounts never match: they have
+ *  no provider row. Raw SQL, for the same no-reentry reason as the owner
+ *  bootstrap. Returns whether the Account is (now) approved by this rule. */
+export async function autoApprove(userId: string, emailVerified?: boolean | null): Promise<boolean> {
+  if (emailVerified !== true) return false;
   const pool = await getPool();
   if (!pool) return false;
-  const provider = await pool.query<{ id: string }>(
-    'SELECT id FROM "account" WHERE "userId" = $1 AND "providerId" = $2',
-    [userId, "supabase"],
+  const eligible = await pool.query(
+    `SELECT 1 FROM "user" u WHERE u.id = $1 AND u.banned IS NOT TRUE
+       AND EXISTS (SELECT 1 FROM "account" a WHERE a."userId" = u.id AND a."providerId" = ANY($2))`,
+    [userId, ["supabase", "google", "github"]],
   );
-  if (provider.rows.length === 0) return false;
-  // The AND approved IS NOT TRUE keeps the repeat sign-in from rewriting the
-  // row (and its timestamps) for nothing.
+  if (eligible.rows.length === 0) return false;
+  // approved IS NOT TRUE keeps a repeat sign-in from rewriting the row.
   await pool.query('UPDATE "user" SET approved = true WHERE id = $1 AND approved IS NOT TRUE', [userId]);
   return true;
 }
 
-/** The account.create.after hook: only the `supabase` row carries a Papyrus
- *  proof, and the user row is read for the verified claim the predicate
- *  insists on. Fires after the provider row is committed (installed 1.7.6
+/** The account.create.after hook: the user row is read for the verified claim
+ *  the predicate insists on. Fires after the provider row is committed (installed 1.7.6
  *  db/internal-adapter.mjs:594). */
 async function approveOnProviderLink(account: { providerId?: string; userId?: string }): Promise<void> {
-  if (account.providerId !== "supabase" || !account.userId) return;
+  if (!account.userId) return;
   const pool = await getPool();
   if (!pool) return;
   const { rows } = await pool.query<{ emailVerified: boolean | null }>(
     'SELECT "emailVerified" FROM "user" WHERE id = $1',
     [account.userId],
   );
-  await papyrusAutoApprove(account.userId, rows[0]?.emailVerified);
+  await autoApprove(account.userId, rows[0]?.emailVerified);
 }
 
 /** Grants the owner's Workspace and admin role the moment an owner email
@@ -383,7 +382,7 @@ export async function promoteOwnerIfVerified(user: WorkspaceUser): Promise<void>
   // The owner's Papyrus provenance goes through the one predicate too, so the
   // two approval paths cannot drift apart; the UPDATE above has already
   // granted the approval, so this only confirms it.
-  await papyrusAutoApprove(user.id, user.emailVerified);
+  await autoApprove(user.id, user.emailVerified);
   // The placeholder u-<id> Workspace from the unverified creation is left in
   // place on promotion: #241 has no data in it yet, and deleting it would be
   // deletion logic for nothing.
