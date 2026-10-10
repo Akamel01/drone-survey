@@ -67,7 +67,8 @@ itself is unchanged.
   `account` row, no Workspace row, and no Approval — owner email included; the
   owner bootstraps on a later verified sign-in. The refusal is a distinct
   `email_not_verified` code produced by a custom `user.validateUserInfo`
-  returning `{ error }`, which runs at `db/internal-adapter.mjs:147-167` —
+  returning `{ error }` for the `supabase` provider only (`refuseUnverifiedPapyrus`
+  in `lib/accountAuth.ts`), which runs at `db/internal-adapter.mjs:147-167` —
   **before** the user insert, inside the transaction opened at
   `link-account.mjs:274`, so the rollback leaves zero rows. The built-in
   `requireEmailVerification` route was rejected for exactly that reason: it
@@ -76,7 +77,7 @@ itself is unchanged.
   survives the redirect because `callback.mjs:191-193` forwards
   `APIError.body.code` verbatim into `?error=`. `account_not_linked` is a
   different site (`link-account.mjs:139-145`) and is untouched. M1 findings:88-124.
-  Refusal copy keys off that callback code, never off `approved`, so a
+  Refusal copy ("Confirm your email first; check your inbox.") keys off that callback code (`email_not_verified`, or `account_not_linked` for the existing-Account case), never off `approved`, so a
   fresh refusal and a pre-341 pending Account stay distinguishable.
 - **O3 — a verified Papyrus link to an existing pending non-owner approves.**
 - **O4 — pre-341 Supabase rows with `approved = false` stay pending.** No
@@ -92,23 +93,20 @@ itself is unchanged.
 ## Sign-out reaches Papyrus in Papyrus mode
 
 `signOutToHome()` stays a zero-argument seam: `signOut({disableRedirect:true})`
-in the `try`, navigation in the `finally`, so the departure still happens if
-`signOut` throws. The mode is carried by a server-rendered constant
-(`<meta name="mc-signout-target">`) and mapped through an allowlist of exactly
-two literals:
+and then the mode is read from `GET /api/papyrus-sign-out` (`{enabled}`, true
+only when the Supabase trio is set; the client cannot know the server env).
+Navigation is in the `finally`, so the departure still happens if either call
+throws. `lib/papyrusSignOut.signOutDestination` is the whole mapping:
 
 | Deployment | Target |
 |---|---|
-| Supabase trio set | `https://papyrus-ai.net/sign-out?next=https://missions.papyrus-ai.net/` |
+| Supabase trio set | `https://papyrus-ai.net/sign-out?next=<origin>/` (production: `https://missions.papyrus-ai.net/`) |
 | anything else | `/` |
 
-No arguments are read and no query parameter on our own URL is honoured — the
-allowlist is the whole mechanism, so an unexpected value lands on `/` rather
-than on a computed URL. A plain `location.assign` after the session is gone is
-the whole mechanism: the client `signOut` deletes only the current session
+The client `signOut` deletes only the current session
 (`api/routes/sign-out.mjs:44-54`) and offers no genericOAuth logout URL
-(`sign-out.mjs:56-60`), so the provider has to be visited in the browser.
-M1 findings:195-199.
+(`sign-out.mjs:56-60`), so the provider has to be visited in the browser. The
+`papyrus-ai.net/sign-out` route is provided by papyrus-home in a separate ticket.
 
 ## Consequences
 
@@ -116,7 +114,8 @@ M1 findings:195-199.
 `SUPABASE_OAUTH_CLIENT_ID`, `SUPABASE_OAUTH_CLIENT_SECRET` unset, construction
 is unchanged (ADR 0023), the predicate returns `false` before it touches the
 database, and sign-out targets `/`. A verified Google or GitHub Account is
-still pending. No legacy assertion or e2e file was edited to make this hold.
+still pending. No legacy assertion was edited to make this hold; the Supabase e2e file's
+first test changed from "pending" to "approved" because that is the new behaviour.
 
 **The `CONTEXT.md` Approval entry is now mode-qualifying.** "The operator's
 decision" is exact for every deployment but the Papyrus one; the entry says so

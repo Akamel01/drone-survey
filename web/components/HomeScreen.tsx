@@ -15,6 +15,8 @@ export interface HomeScreenProps {
   emailEnabled?: boolean;
   /** Supabase mode: Papyrus-only sign-in, decided server-side (#336). */
   supabaseOnly?: boolean;
+  /** Papyrus mode: the callback refused this sign-in (?error=...), so the email is not verified. */
+  refused?: boolean;
   email?: string | null;
   name?: string | null;
 }
@@ -26,11 +28,13 @@ const OPTIONS = [
 
 const SUPABASE_OPTION = { provider: "supabase" as const, label: "Continue with your Papyrus account" };
 
-export default function HomeScreen({ state, email, emailEnabled = false, supabaseOnly = false }: HomeScreenProps) {
+export const UNVERIFIED_MESSAGE = "Confirm your email first; check your inbox.";
+
+export default function HomeScreen({ state, email, emailEnabled = false, supabaseOnly = false, refused = false }: HomeScreenProps) {
   const router = useRouter();
   const rootRef = useRef<HTMLElement>(null);
   const [busy, setBusy] = useState<string | null>(null);
-  const [problem, setProblem] = useState<string | null>(null);
+  const [problem, setProblem] = useState<string | null>(refused ? UNVERIFIED_MESSAGE : null);
   const [withEmail, setWithEmail] = useState(false);
 
   useEffect(() => {
@@ -52,7 +56,7 @@ export default function HomeScreen({ state, email, emailEnabled = false, supabas
     setBusy(provider);
     setProblem(null);
     try {
-      const { error } = await authClient.signIn.social({ provider, callbackURL: "/" });
+      const { error } = await authClient.signIn.social({ provider, callbackURL: "/", errorCallbackURL: "/" });
       if (error) setProblem(error.message || "Sign-in could not start. Try again.");
     } catch {
       setProblem("Sign-in could not start. Try again.");

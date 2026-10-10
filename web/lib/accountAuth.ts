@@ -145,6 +145,9 @@ async function createAuth() {
       oAuthProxy({ productionURL: appUrl, secret: process.env.OAUTH_PROXY_SECRET }),
     ],
     user: {
+      // Papyrus mode refuses an unverified provider email before any row is
+      // written (#341); the callback redirects with ?error=email_not_verified.
+      validateUserInfo: refuseUnverifiedPapyrus,
       additionalFields: {
         approved: { type: "boolean", required: false, defaultValue: false, input: false },
       },
@@ -290,6 +293,18 @@ export async function ensureWorkspace(user: WorkspaceUser): Promise<void> {
     await pool.query('UPDATE "user" SET role = $1, approved = true WHERE id = $2', ["admin", user.id]);
   } else {
     await papyrusAutoApprove(user.id, user.emailVerified);
+  }
+}
+
+/** The user.validateUserInfo gate: the Papyrus callback may not create, link
+ *  or sign in an identity whose email is not verified. Other providers
+ *  (google/github stand-ins) and legacy email/password are untouched. */
+export function refuseUnverifiedPapyrus(data: {
+  user: { emailVerified?: boolean | null };
+  source: { oauth?: { providerId?: string } };
+}): { error: string; errorDescription: string } | void {
+  if (supabaseOAuthEnabled() && data.source.oauth?.providerId === "supabase" && data.user.emailVerified !== true) {
+    return { error: "email_not_verified", errorDescription: "Confirm your email first; check your inbox." };
   }
 }
 

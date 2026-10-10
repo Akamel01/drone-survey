@@ -123,6 +123,14 @@ if (!databaseUrl) {
     emailVerified: true,
   };
 
+  const supabaseNewUnverified = {
+    id: "standin-supabase-new-unverified",
+    name: "Unconfirmed Example",
+    email: "unconfirmed@example.com",
+    image: null,
+    emailVerified: false,
+  };
+
   const standin = await startOAuthStandin([
     ownerUnverified,
     ownerVerified,
@@ -136,6 +144,7 @@ if (!databaseUrl) {
     supabaseFreshVerified,
     supabaseFreshVerifiedAgain,
     googleVerifiedOnly,
+    supabaseNewUnverified,
   ]);
 
   process.env.AUTH_TEST_GOOGLE_AUTHORIZATION_URL = `${standin.baseUrl}/authorize`;
@@ -596,6 +605,17 @@ if (!databaseUrl) {
       googleOnlyId,
     ]);
     assert.equal(unchanged.rows[0]?.approved, false, "and left the row untouched");
+  });
+
+  test("refuse: a brand-new unverified supabase email gets no Account and no session (#341)", async () => {
+    const { callback, session } = await runSignIn("supabase", new CookieJar());
+    assert.equal(session, null, "no session");
+    assert.ok(
+      callback.headers.get("location")?.includes("error=email_not_verified"),
+      `the refusal redirects with the email_not_verified code: ${callback.headers.get("location")}`,
+    );
+    const users = await pool.query('SELECT id FROM "user" WHERE lower(email) = $1', [supabaseNewUnverified.email]);
+    assert.equal(users.rows.length, 0, "no user row was created");
   });
 
   test("migration: the pre-existing google-linked owner keeps a valid session after the switch (R4/D4)", async () => {
