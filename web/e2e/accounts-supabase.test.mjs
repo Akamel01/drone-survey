@@ -8,7 +8,7 @@
 // exercises the M1 env gate (legacy vars must not be required).
 //
 // Identity queue (consumed one per GET /authorize, in declaration order):
-//   1  e2e-sb-pending    T1 first sign-up -> pending copy, approved=false
+//   1  e2e-sb-pending    T1 first verified sign-up -> auto-approved, /plan, role user
 //   2  e2e-sb-owner      T2 OWNER_EMAIL (verified) -> /plan as admin
 //   3  e2e-sb-intruder   T3 same email as owner, UNVERIFIED -> refused, no session
 //   4  e2e-sb-owner-link T4 same email as owner, verified, other sub -> links
@@ -112,13 +112,6 @@ async function getSession(context) {
   const response = await context.request.get(`${base}/api/auth/get-session`);
   assert.equal(response.status(), 200, "get-session answers even when signed out");
   return response.json();
-}
-
-/** The pending landing screen: copy + the email the identity reported. Waiting
- *  for it proves the identity queue advanced. */
-async function waitForPending(page, email) {
-  await page.getByText("Your account is waiting for approval").waitFor({ timeout: 45_000 });
-  await shown(page.getByText(email, { exact: true }));
 }
 
 // better-auth's default special rule is 3 POSTs per 10 s on paths starting
@@ -308,7 +301,7 @@ after(async () => {
 // T1 -- Papyrus button alone; first sign-up waits for approval
 // ---------------------------------------------------------------------------
 
-test("Papyrus button alone: first sign-up waits for approval as a pending Account", async () => {
+test("Papyrus button alone: a first verified sign-up is approved without waiting", async () => {
   const context = await browser.newContext();
   const page = await context.newPage();
   await page.goto(`${base}/`, { waitUntil: "domcontentloaded" });
@@ -321,11 +314,13 @@ test("Papyrus button alone: first sign-up waits for approval as a pending Accoun
   assert.equal(await page.getByRole("button", { name: "Continue with email", exact: true }).count(), 0);
 
   await clickPill(page, standin, PAPYRUS_LABEL);
-  await waitForPending(page, PENDING_EMAIL);
+  await page.waitForURL((url) => url.pathname === "/plan", { timeout: 45_000 });
+  assert.equal(await page.getByText("Your account is waiting for approval").count(), 0, "no pending screen");
 
   const session = await getSession(context);
   assert.equal(session.user.email, PENDING_EMAIL);
-  assert.equal(session.user.approved, false, "a new Account starts pending");
+  assert.equal(session.user.approved, true, "a verified Papyrus Account is approved (#341)");
+  assert.equal(session.user.role, "user", "approval grants no role");
   captured.pendingUserId = session.user.id;
   captured.pendingSessionId = session.session.id;
 
@@ -359,6 +354,11 @@ test("the OWNER_EMAIL Account lands in the planner as admin", async () => {
   await context.close();
 });
 
+test("Sign out is told to continue through the Papyrus account (#341)", async () => {
+  const response = await fetch(`${base}/api/papyrus-sign-out`);
+  assert.deepEqual(await response.json(), { enabled: true });
+});
+
 // ---------------------------------------------------------------------------
 // T3 -- an unverified same-email sign-in is refused, with no session
 // ---------------------------------------------------------------------------
@@ -375,6 +375,7 @@ test("an unverified same-email sign-in is refused with no session", async () => 
     0,
     "the refused sign-in never reaches the pending screen",
   );
+  await shown(page.getByText("Confirm your email first; check your inbox.", { exact: true }));
   assert.equal(await getSession(context), null, "the refused sign-in leaves no session");
 
   await context.close();
@@ -413,7 +414,7 @@ test("the database rows match every flow", async () => {
   assert.equal(pending.rows.length, 1, "exactly one user for the pending email");
   assert.equal(pending.rows[0].id, captured.pendingUserId);
   assert.equal(pending.rows[0].role, "user");
-  assert.equal(pending.rows[0].approved, false);
+  assert.equal(pending.rows[0].approved, true);
   const pendingAccounts = await pool.query('SELECT "providerId", "accountId" FROM "account" WHERE "userId" = $1', [
     captured.pendingUserId,
   ]);

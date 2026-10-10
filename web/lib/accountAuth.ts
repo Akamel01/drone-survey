@@ -145,6 +145,9 @@ async function createAuth() {
       oAuthProxy({ productionURL: appUrl, secret: process.env.OAUTH_PROXY_SECRET }),
     ],
     user: {
+      // Papyrus mode refuses an unverified provider email before any row is
+      // written (#341); the callback redirects with ?error=email_not_verified.
+      validateUserInfo: refuseUnverifiedPapyrus,
       additionalFields: {
         approved: { type: "boolean", required: false, defaultValue: false, input: false },
       },
@@ -156,6 +159,12 @@ async function createAuth() {
         // it no-ops for everyone but a newly verified owner email.
         update: { after: promoteOwnerIfVerified },
       },
+      // A verified provider email that links to an *existing* Account whose
+      // local email is already verified fires no user hook at all (installed
+      // 1.7.6 oauth2/link-account.mjs:188 suppresses the update), so the
+      // account row just written is the only signal that a proven Papyrus
+      // identity now owns this Account (#341).
+      account: { create: { after: approveOnProviderLink } },
     },
     rateLimit: { enabled: true, storage: "database" },
     advanced: {
@@ -282,7 +291,60 @@ export async function ensureWorkspace(user: WorkspaceUser): Promise<void> {
     // Bootstrap (D7/D8): approved is input:false and setRole needs an existing
     // admin, so the owner's role and approval are written server-side.
     await pool.query('UPDATE "user" SET role = $1, approved = true WHERE id = $2', ["admin", user.id]);
+  } else {
+    await autoApprove(user.id, user.emailVerified);
   }
+}
+
+/** The user.validateUserInfo gate. Two jobs, both keyed on the fresh provider
+ *  claim this hook is the only place to see on a returning sign-in:
+ *  the Papyrus callback may not create, link or sign in an unverified email;
+ *  and an existing Account signing in again with a verified OAuth email is
+ *  approved on the spot (#341), so a pending Account self-heals. */
+export async function refuseUnverifiedPapyrus(data: {
+  user: { id?: string; emailVerified?: boolean | null };
+  source: { action?: string; oauth?: { providerId?: string } };
+}): Promise<{ error: string; errorDescription: string } | void> {
+  const provider = data.source.oauth?.providerId;
+  if (supabaseOAuthEnabled() && provider === "supabase" && data.user.emailVerified !== true) {
+    return { error: "email_not_verified", errorDescription: "Confirm your email first; check your inbox." };
+  }
+  if (data.source.action === "sign-in" && data.user.id) await autoApprove(data.user.id, data.user.emailVerified);
+}
+
+/** The one auto-approval decision (#341): a strictly verified email
+ *  (`emailVerified === true`) on an Account that owns an OAuth provider row
+ *  (supabase, google or github) and is not banned. No manual approval for a
+ *  verified email, in any mode. Email/password Accounts never match: they have
+ *  no provider row. Raw SQL, for the same no-reentry reason as the owner
+ *  bootstrap. Returns whether the Account is (now) approved by this rule. */
+export async function autoApprove(userId: string, emailVerified?: boolean | null): Promise<boolean> {
+  if (emailVerified !== true) return false;
+  const pool = await getPool();
+  if (!pool) return false;
+  const eligible = await pool.query(
+    `SELECT 1 FROM "user" u WHERE u.id = $1 AND u.banned IS NOT TRUE
+       AND EXISTS (SELECT 1 FROM "account" a WHERE a."userId" = u.id AND a."providerId" = ANY($2))`,
+    [userId, ["supabase", "google", "github"]],
+  );
+  if (eligible.rows.length === 0) return false;
+  // approved IS NOT TRUE keeps a repeat sign-in from rewriting the row.
+  await pool.query('UPDATE "user" SET approved = true WHERE id = $1 AND approved IS NOT TRUE', [userId]);
+  return true;
+}
+
+/** The account.create.after hook: the user row is read for the verified claim
+ *  the predicate insists on. Fires after the provider row is committed (installed 1.7.6
+ *  db/internal-adapter.mjs:594). */
+async function approveOnProviderLink(account: { providerId?: string; userId?: string }): Promise<void> {
+  if (!account.userId) return;
+  const pool = await getPool();
+  if (!pool) return;
+  const { rows } = await pool.query<{ emailVerified: boolean | null }>(
+    'SELECT "emailVerified" FROM "user" WHERE id = $1',
+    [account.userId],
+  );
+  await autoApprove(account.userId, rows[0]?.emailVerified);
 }
 
 /** Grants the owner's Workspace and admin role the moment an owner email
@@ -317,6 +379,10 @@ export async function promoteOwnerIfVerified(user: WorkspaceUser): Promise<void>
   // rule as ensureWorkspace's). The SELECTs above are the guard for the cheap
   // repeat case.
   await pool.query('UPDATE "user" SET role = $1, approved = true WHERE id = $2', ["admin", user.id]);
+  // The owner's Papyrus provenance goes through the one predicate too, so the
+  // two approval paths cannot drift apart; the UPDATE above has already
+  // granted the approval, so this only confirms it.
+  await autoApprove(user.id, user.emailVerified);
   // The placeholder u-<id> Workspace from the unverified creation is left in
   // place on promotion: #241 has no data in it yet, and deleting it would be
   // deletion logic for nothing.

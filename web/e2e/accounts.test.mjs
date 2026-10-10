@@ -44,14 +44,16 @@ import {
 } from "../scripts/lib/harness.mjs";
 
 const OWNER_EMAIL = "owner@example.com";
+// Unverified provider emails stay pending (#341: a verified one is approved
+// with no operator step), so the pending/approve/remove flows below use them.
 const IDENTITIES = [
-  { id: "e2e-google", name: "E2E Google", email: "e2e-google@example.com" }, // T1 first sign-up
-  { id: "e2e-google", name: "E2E Google", email: "e2e-google@example.com" }, // T1 re-sign-in (same account id)
-  { id: "e2e-github", name: "E2E GitHub", email: "e2e-github@example.com" }, // T2
+  { id: "e2e-google", name: "E2E Google", email: "e2e-google@example.com", emailVerified: false }, // T1 first sign-up
+  { id: "e2e-google", name: "E2E Google", email: "e2e-google@example.com", emailVerified: false }, // T1 re-sign-in (same account id)
+  { id: "e2e-github", name: "E2E GitHub", email: "e2e-github@example.com", emailVerified: false }, // T2
   { id: "e2e-owner", name: "Owner Example", email: OWNER_EMAIL }, // T3 owner -> /plan
-  { id: "e2e-other", name: "Other Example", email: "e2e-other@example.com" }, // T3 other -> pending
+  { id: "e2e-other", name: "Other Example", email: "e2e-other@example.com", emailVerified: false }, // T3 other -> pending
   { id: "e2e-owner", name: "Owner Example", email: OWNER_EMAIL }, // T3.5 planner sign-out
-  { id: "e2e-remove", name: "Remove Me", email: "e2e-remove@example.com" }, // T4.5 the Account the operator removes
+  { id: "e2e-remove", name: "Remove Me", email: "e2e-remove@example.com", emailVerified: false }, // T4.5 the Account the operator removes
 ];
 
 let standin;
