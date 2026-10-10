@@ -102,6 +102,26 @@ if (!databaseUrl) {
     image: null,
     emailVerified: true,
   };
+  // Auto-approve pairings (#341), consumed after the nine above: a fresh
+  // verified supabase email signed in twice (first sign-in, then the
+  // idempotent re-sign-in of the same sub), and a verified *google* email
+  // that must stay pending -- the only way to prove the approval is gated on
+  // the provider row and not just on emailVerified.
+  const supabaseFreshVerified = {
+    id: "standin-supabase-fresh",
+    name: "Fresh Example",
+    email: "fresh@example.com",
+    image: null,
+    emailVerified: true,
+  };
+  const supabaseFreshVerifiedAgain = { ...supabaseFreshVerified };
+  const googleVerifiedOnly = {
+    id: "standin-google-verified-only",
+    name: "Google Only",
+    email: "google-only@example.com",
+    image: null,
+    emailVerified: true,
+  };
 
   const standin = await startOAuthStandin([
     ownerUnverified,
@@ -113,6 +133,9 @@ if (!databaseUrl) {
     supabaseOwnerVerified,
     supabaseOtherVerified,
     supabaseOtherNewEmail,
+    supabaseFreshVerified,
+    supabaseFreshVerifiedAgain,
+    googleVerifiedOnly,
   ]);
 
   process.env.AUTH_TEST_GOOGLE_AUTHORIZATION_URL = `${standin.baseUrl}/authorize`;
@@ -139,7 +162,7 @@ if (!databaseUrl) {
   process.env.BETTER_AUTH_URL = "http://localhost:3000";
   process.env.OAUTH_PROXY_SECRET = "account-flow-proxy-secret";
 
-  const { getAuth, emailPasswordEnabled } = await import("./accountAuth.ts");
+  const { getAuth, emailPasswordEnabled, papyrusAutoApprove } = await import("./accountAuth.ts");
   const { getPool, closeDb } = await import("./accountDb.ts");
   const { getMigrations } = await import("better-auth/db/migration");
 
@@ -244,6 +267,7 @@ if (!databaseUrl) {
   const otherJar = new CookieJar();
   let ownerId = "";
   let otherId = "";
+  let freshId = "";
 
   test("migrations: the second has nothing to create or add", async () => {
     const first = await getMigrations(auth.options);
@@ -462,7 +486,7 @@ if (!databaseUrl) {
       [otherId],
     );
     assert.equal(rows[0]?.role, "user", "the link does not promote the pending Account");
-    assert.equal(rows[0]?.approved, false, "the link does not approve the pending Account");
+    assert.equal(rows[0]?.approved, true, "the verified supabase link auto-approves the pending Account (E8/O3)");
   });
 
   test("linking: email/password sign-up is refused in Supabase mode, allowed in legacy mode (E2)", async () => {
@@ -521,6 +545,57 @@ if (!databaseUrl) {
     );
     assert.equal(users.rows.length, 1, "still exactly one user across the old and new email");
     assert.equal(users.rows[0]?.id, otherId, "and it is the original other Account");
+  });
+
+  test("auto-approve: a fresh verified supabase email is approved on its FIRST sign-in (E1)", async () => {
+    const jar = new CookieJar();
+    const { session } = await signIn("supabase", jar);
+    freshId = session.user.id;
+    assert.ok(freshId, "the fresh verified supabase Account has a user id");
+
+    assert.equal(session.user.role, "user", "auto-approve does not grant a role");
+    assert.equal(session.user.approved, true, "the fresh verified Account is approved");
+
+    const orgs = await pool.query<{ slug: string }>('SELECT slug FROM "organization" WHERE slug = $1', [`u-${freshId}`]);
+    assert.equal(orgs.rows.length, 1, "the fresh Account owns exactly one u-<id> Workspace");
+    const accounts = await pool.query<{ providerId: string }>(
+      'SELECT "providerId" FROM "account" WHERE "userId" = $1',
+      [freshId],
+    );
+    assert.deepEqual(accounts.rows.map((row) => row.providerId), ["supabase"]);
+
+    // Idempotent re-sign-in of the same sub: same Account, same Workspace,
+    // still approved -- and no second Workspace appears from the second hook run.
+    const again = await signIn("supabase", jar);
+    assert.equal(again.session.user.id, freshId, "the re-sign-in is the same Account");
+    const all = await pool.query<{ slug: string }>(
+      'SELECT o.slug FROM "member" m JOIN "organization" o ON o.id = m."organizationId" WHERE m."userId" = $1',
+      [freshId],
+    );
+    assert.deepEqual(all.rows.map((row) => row.slug), [`u-${freshId}`], "no second Workspace");
+  });
+
+  test("auto-approve: a verified google email with no supabase provider row stays pending (E17/E11)", async () => {
+    const jar = new CookieJar();
+    const { session } = await signIn("google", jar);
+    const googleOnlyId = session.user.id;
+    assert.ok(googleOnlyId, "the verified google Account has a user id");
+    assert.notEqual(googleOnlyId, freshId, "a distinct Account from the supabase one");
+
+    const { rows } = await pool.query<{ role: string; approved: boolean }>(
+      'SELECT role, approved FROM "user" WHERE id = $1',
+      [googleOnlyId],
+    );
+    assert.equal(rows[0]?.role, "user");
+    assert.equal(rows[0]?.approved, false, "no provider row means no auto-approval");
+
+    // The predicate itself, asked directly about the same provenance-negative
+    // Account: it declines and writes nothing.
+    assert.equal(await papyrusAutoApprove(googleOnlyId, true), false, "the predicate declines a verified user with no supabase row");
+    const unchanged = await pool.query<{ approved: boolean }>('SELECT approved FROM "user" WHERE id = $1', [
+      googleOnlyId,
+    ]);
+    assert.equal(unchanged.rows[0]?.approved, false, "and left the row untouched");
   });
 
   test("migration: the pre-existing google-linked owner keeps a valid session after the switch (R4/D4)", async () => {
