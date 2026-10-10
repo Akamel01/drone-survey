@@ -338,6 +338,20 @@
     --settings-delay: var(--dur-base);
   }
 
+  /* The panels float on the map, so the wordmark floats too: over the top of
+     the Missions panel, which makes room for it. */
+  .brand {
+    position: absolute;
+    z-index: 3;
+    top: 12px;
+    left: 28px;
+    padding: 0;
+    background: none;
+    text-shadow: 0 1px 8px rgb(0 0 0 / 0.5);
+  }
+
+  .missions { padding-top: 48px; }
+
   .top {
     position: absolute;
     inset: 0;
