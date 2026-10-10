@@ -37,7 +37,7 @@ store; this records what else lives in it and the one behaviour it changed.
   The host's status key carries `listFiles`, `readFiles`, `writeFiles` on the
   Specs bucket. B2 allows one name prefix per key, so its write scope covers
   `specs/` rather than just the manifest path — accepted because exactly one
-  call site ever writes (`b2_status.upload_manifest`), and it writes exactly
+  call site ever writes (`host_store.HostStore`'s manifest reports), and it writes exactly
   `STATUS_KEY`. Reports are bookkeeping, never the operation: without status
   credentials Collect and Load still succeed and say so loudly.
 - **Freshness is cron-bound.** The host reports on Collect/Load runs (every

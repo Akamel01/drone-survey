@@ -18,6 +18,7 @@ import sys
 import tempfile
 import unittest
 import urllib.error
+import urllib.parse
 import urllib.request
 from contextlib import redirect_stdout
 from pathlib import Path
