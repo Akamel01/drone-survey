@@ -5,13 +5,13 @@ import {
   deriveMissions,
   liveSpecKeys,
   changeSurvived,
-  missionNameProblem,
   missionNameTaken,
   missionProblem,
   siteNameTaken,
   supersessionGroup,
   type MissionRecord,
 } from "./missionRecords.ts";
+import { missionNameProblem } from "./missionIdentity.ts";
 import { withReservation, type CardLedger } from "./model.ts";
 import type { Manifest } from "./missions.ts";
 import { DEFAULT_SPEC } from "./spec.ts";

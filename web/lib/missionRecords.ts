@@ -19,6 +19,7 @@ import {
   type MissionState,
 } from "./model.ts";
 import type { LoadedCard, ManifestEntry, Manifest } from "./missions.ts";
+import { missionNameProblem, nameKey, sameName, siteLabelProblem } from "./missionIdentity.ts";
 import { isValidSiteId, siteNameProblem, type MissionSpec } from "./spec.ts";
 
 /** One Mission, as stored at specs/_missions/<id>.json.
@@ -106,13 +107,7 @@ export function supersessionGroup(r: {
   date: string;
   name: string;
 }): string {
-  return `${r.site_id}\u0000${r.date}\u0000${r.name.trim().toLowerCase()}`;
-}
-
-/** A name as an operator reads it: case and spacing are not a difference. */
-export function sameName(a: string, b: string): boolean {
-  const norm = (x: string) => x.trim().replace(/\s+/g, " ").toLowerCase();
-  return norm(a) === norm(b);
+  return `${r.site_id}\u0000${r.date}\u0000${nameKey(r.name)}`;
 }
 
 /**
@@ -421,36 +416,6 @@ export function isMissionRecord(x: unknown): x is MissionRecord {
 // What a Mission must carry before the store will hold it
 // ---------------------------------------------------------------------------
 
-/** The longest a Mission Name may be. It is read on a phone, beside a Site
- *  name and a date, and it exists to tell two Missions apart -- not to hold a
- *  description. */
-export const MISSION_NAME_MAX = 40;
-
-/** The longest a Site name may be. It is written into every Mission file for
- *  the Site and read on the Controller's screen; five hundred characters is
- *  a paste accident, not a name. */
-export const SITE_NAME_MAX = 60;
-
-/** The one rule for a Mission Name, so the browser refuses exactly what the
- *  server would. Null when the name is usable. */
-/** Characters a name may not carry. Control characters make the Mission file
- *  the Controller reads invalid XML (the Site's name is written into it), and
- *  bidirectional overrides make one name display as another. */
-export const UNPRINTABLE = /[\u0000-\u001f\u007f\u202a-\u202e\u2066-\u2069]/;
-
-export function missionNameProblem(name: unknown): string | null {
-  if (typeof name === "string" && UNPRINTABLE.test(name)) {
-    return "A Mission Name cannot contain invisible control characters; retype it.";
-  }
-  if (typeof name !== "string" || !name.trim()) {
-    return "Give this Mission a short name -- \"north half\", \"orbit\" -- so it can be told apart from another for the same Site on the same day.";
-  }
-  if (name.trim().length > MISSION_NAME_MAX) {
-    return `A Mission Name is at most ${MISSION_NAME_MAX} characters; shorten it.`;
-  }
-  return null;
-}
-
 /** Everything that must hold before a Mission record is written, in the
  *  operator's words. The browser enforces the same rules; this is the copy
  *  that counts, because the client is not a trust boundary. */
@@ -459,12 +424,8 @@ export function missionProblem(body: unknown): string | null {
   const m = body as Partial<MissionRecord>;
   const unnamedSite = siteNameProblem(m.site);
   if (unnamedSite) return "Choose the Site this Mission belongs to.";
-  if (typeof m.site === "string" && UNPRINTABLE.test(m.site)) {
-    return "A Site name cannot contain invisible control characters; retype it.";
-  }
-  if (typeof m.site === "string" && m.site.trim().length > SITE_NAME_MAX) {
-    return `A Site name is at most ${SITE_NAME_MAX} characters; shorten it.`;
-  }
+  const badSite = siteLabelProblem(m.site as string);
+  if (badSite) return badSite;
   if (!isValidSiteId(m.site_id)) {
     return "Choose an existing Site for this Mission. A Site is identified once at onboarding and reused; typing a new name here creates a Site by accident and breaks Capture accumulation.";
   }

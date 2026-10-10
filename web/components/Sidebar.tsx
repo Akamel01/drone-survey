@@ -3,7 +3,7 @@
 import { Children, cloneElement, Fragment, isValidElement, useEffect, useId, useRef, useState, type ReactElement, type ReactNode } from "react";
 import type { MissionSpec, MissionType, TurnMode } from "@/lib/spec";
 import { orbitTilt, type Preview } from "@/lib/mission";
-import { MISSION_NAME_MAX, missionNameProblem } from "@/lib/missionRecords";
+import { MISSION_NAME_MAX, missionNameProblem } from "@/lib/missionIdentity";
 import { coord, type SiteChoice } from "@/lib/missionView";
 import type { Editing } from "@/app/plan/page";
 import SiteCombobox from "./SiteCombobox";
