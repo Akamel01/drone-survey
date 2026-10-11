@@ -205,24 +205,24 @@ test("save: behind this Mission's waiting changes it is kept and coalesced, neve
   const outcome: SaveOutcome = await repo.save(draft({ name: "Second" }), undefined, "t9");
 
   assert.deepEqual(transport.saved, [], "nothing went to the store");
-  assert.equal(outcome.ok, undefined);
+  assert.ok("kept" in outcome, "it is on this device, not in the store");
   assert.equal(
-    outcome.kept && outcome.text,
+    outcome.text,
     "Kept on this device, waiting to sync. “Second” is sent to the store when the network is back.",
   );
   const entries = readOutbox(store);
   assert.equal(entries.length, 1, "two saves of one Mission are one");
   assert.equal(entries[0].draft?.name, "Second");
   assert.equal(entries[0].draft?.base_updated_at, "t1", "made against the first one's version");
-  assert.equal(outcome.kept && outcome.mission.name, "Second");
+  assert.equal(outcome.mission.name, "Second");
 });
 
 test("save: with nothing waiting it is sent, and the store's own sentence is passed through", async () => {
   const store = storage();
   const transport = recorder();
   const sent = await createRepository({ store, online: () => true, transport }).save(draft());
-  assert.equal(sent.ok, true);
-  assert.equal(sent.ok && sent.mission.id, "m1");
+  assert.ok("ok" in sent && sent.ok);
+  assert.equal(sent.mission.id, "m1");
   assert.deepEqual(transport.saved.map((d) => d.name), ["north half"]);
 });
 
