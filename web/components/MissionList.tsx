@@ -474,7 +474,8 @@ export default function MissionList({ onEdit, onCopy, editingId = null, onRead, 
       if (view.read) {
         applyRead(view.read, gen);
         setReadAt(view.readAt);
-        setNow(view.readAt ?? Date.now());
+        // `now` is left alone: on a cached read it would stamp the last store
+        // answer as "checked just now". The clock ages the label from `readAt`.
         setLive(view.live);
         setError(view.error);
         setGate(false);
