@@ -18,14 +18,15 @@ import path from "node:path";
 import { after, before, test } from "node:test";
 
 import { createMissionLifecycle } from "../lib/missionLifecycle.ts";
+import { memoryMissionOwners } from "../lib/missionOwners.ts";
 import { memoryMissionStore } from "../lib/memoryMissionStore.ts";
 import { respond } from "../lib/missionRoute.ts";
 import { DEFAULT_SPEC } from "../lib/spec.ts";
 import { freePort, launchBrowser, run, spawnServer, stopServer, waitReady, webRoot } from "../scripts/lib/harness.mjs";
 
-const PASSPHRASE_KEY = "drone-planner.wayfinder-key";
 const BOARD_KEY = "drone-planner.board-address";
-const CALLER = { kind: "passphrase" };
+// The operator's Workspace: every seeded Mission has no ownership row.
+const CALLER = { workspaceId: "w-operator", ownsUnclaimed: true };
 const AOI = [
   [37.8, -122.4],
   [37.8, -122.39],
@@ -52,7 +53,6 @@ before(async () => {
     B2_APP_KEY: "ci",
     B2_READ_KEY_ID: "ci",
     B2_READ_APP_KEY: "ci",
-    DISPATCH_SECRET: "ci",
   };
   delete env.DATABASE_URL;
   const port = await freePort();
@@ -125,15 +125,14 @@ function seed() {
 /** A phone at the aircraft: the planner's Mission routes answered in-process, the board's address set. */
 async function phone(boardUrl, viewport = { width: 375, height: 812 }) {
   const store = memoryMissionStore(seed());
-  const lifecycle = createMissionLifecycle(store);
+  const lifecycle = createMissionLifecycle(store, memoryMissionOwners());
   const state = { storeUp: true };
   const context = await browser.newContext({ viewport });
   await context.addInitScript(
-    ([key, boardKey, address]) => {
-      localStorage.setItem(key, "e2e");
+    ([boardKey, address]) => {
       if (address) localStorage.setItem(boardKey, address);
     },
-    [PASSPHRASE_KEY, BOARD_KEY, boardUrl],
+    [BOARD_KEY, boardUrl],
   );
   await context.route(
     (url) => url.pathname === "/api/missions" || url.pathname === "/api/missions/loaded",
@@ -191,7 +190,7 @@ test("a Collected Mission is Loaded through the board: progress, the Card and it
   const record = store.records().find((r) => r.id === "m-ok");
   assert.equal(record.loaded_mark.cards[0].card, "way finder 4");
   assert.equal(record.loaded_mark.cards[0].waypoints, 125);
-  const list = await createMissionLifecycle(store).list(CALLER, { archived: true });
+  const list = await createMissionLifecycle(store, memoryMissionOwners()).list(CALLER, { archived: true });
   assert.equal(list.body.missions.find((m) => m.id === "m-ok").state, "loaded");
   await context.close();
 });

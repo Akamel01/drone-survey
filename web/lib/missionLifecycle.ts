@@ -8,11 +8,13 @@
 // The store sits behind `MissionStore`: eight operations, no HTTP. The B2
 // adapter lives in `missionStore.ts`; the in-memory one in
 // `memoryMissionStore.ts`. The module never sees fetch, a Response or an env
-// var, which is what lets it be driven whole from a test (and what lets #244
-// add Workspace scoping in one place).
+// var, which is what lets it be driven whole from a test.
 //
-// `Caller` is opaque: today the route builds the passphrase caller, later it
-// is an Account in a Workspace, and nothing in here changes.
+// Workspace scoping lives here and only here (#244): every action sees only
+// the Missions the Caller's Workspace owns, so a Mission of another Workspace
+// is "not in the store" (404, never 403, so its existence does not leak).
+// Ownership sits behind `MissionOwners` (the account database); a Mission
+// with no ownership row belongs to the operator's Workspace.
 
 import { randomUUID } from "node:crypto";
 
@@ -35,9 +37,20 @@ import {
 } from "./missionRecords.ts";
 import { dispatchProblem, draftProblem, type MissionSpec } from "./spec.ts";
 
-/** Who is asking. Opaque to the module: nothing here inspects it, and #244
- *  replaces the one value with an Account in a Workspace. */
-export type Caller = { readonly kind: "passphrase" };
+/** Who is asking: an approved Account, as its Workspace. Built by the one
+ *  access gate (`accountAccess.requireCaller`), never from anything the page
+ *  sends. `ownsUnclaimed` is true for the operator's Workspace, which owns
+ *  every Mission that has no ownership row (the Missions from before #244). */
+export type Caller = { readonly workspaceId: string; readonly ownsUnclaimed: boolean };
+
+/** Which Workspace owns which Mission (#244). Adapters: `missionOwners.ts`. */
+export interface MissionOwners {
+  /** Mission id -> Workspace id, for every Mission with an ownership row. */
+  read(): Promise<Map<string, string>>;
+  /** Record a new Mission as this Workspace's. False when another Workspace
+   *  already owns the id; true when it is (now) this Workspace's. */
+  claim(missionId: string, workspaceId: string): Promise<boolean>;
+}
 
 /** Why an action was refused, in the only vocabulary the route needs to map
  *  to a status (`missionRoute.ts`). */
@@ -173,16 +186,43 @@ function no(kind: RefusalKind, message: string, extras?: Record<string, unknown>
   return extras ? { ok: false, kind, message, extras } : { ok: false, kind, message };
 }
 
-export function createMissionLifecycle(store: MissionStore): MissionLifecycle {
-  /** The three reads every action answers from: the whole set, so names and
-   *  supersession can be decided, and the Ledger, so Cards can. */
-  async function reads(): Promise<{ records: MissionRecord[]; manifest: Manifest; ledger: CardLedger }> {
-    const [missions, manifest, ledger] = await Promise.all([
+export function createMissionLifecycle(store: MissionStore, owners: MissionOwners): MissionLifecycle {
+  /** The reads every action answers from, cut to the Caller's Workspace.
+   *  States are derived over the whole store first -- the Ledger and the
+   *  manifest are the Controller's, shared by every Workspace -- and only then
+   *  narrowed, so a row's state never depends on who is asking. `taken` is
+   *  every id in the store, so a phone-named create can never land on another
+   *  Workspace's Mission. */
+  async function reads(caller: Caller) {
+    const [missions, manifest, ledger, owned] = await Promise.all([
       store.readMissions(),
       store.readManifest(),
       store.readLedger(),
+      owners.read(),
     ]);
-    return { records: missions.records, manifest, ledger };
+    // ponytail: the whole ownership table per call; read only this Workspace's rows plus the claimed ids if it grows large.
+    const mine = (id: string | undefined) => {
+      const owner = id === undefined ? undefined : owned.get(id);
+      return owner === undefined ? caller.ownsUnclaimed : owner === caller.workspaceId;
+    };
+    const all = deriveMissions(missions.records, manifest, ledger);
+    return {
+      records: missions.records.filter((r) => mine(r.id)),
+      rows: all.filter((m) => mine(m.id)),
+      all,
+      taken: new Set(missions.records.map((r) => r.id)),
+      unreadable: missions.unreadable,
+      manifest,
+      ledger,
+      mine,
+    };
+  }
+
+  /** A new Mission's ownership row, written before the Mission itself: a
+   *  Mission that landed with no row would fall to the operator's Workspace. */
+  async function claim(caller: Caller, id: string): Promise<Refusal | null> {
+    if (await owners.claim(id, caller.workspaceId)) return null;
+    return no("not_found", "That Mission is no longer in the store. Reload the Mission list and save it again.");
   }
 
   /** The refusal for a name another live Mission already has at this Site and
@@ -212,7 +252,7 @@ export function createMissionLifecycle(store: MissionStore): MissionLifecycle {
      * the store has not seen creates under it, and a `base_updated_at` that is
      * not the stored version is refused with both versions (PWA-3).
      */
-    async save(_caller, input) {
+    async save(caller, input) {
       const body = (input ?? {}) as Record<string, unknown>;
       // The client enforces these too; this is the copy that counts.
       const bad = missionProblem(body);
@@ -234,8 +274,7 @@ export function createMissionLifecycle(store: MissionStore): MissionLifecycle {
         // relative to the other Missions and Sites, and the state comes from
         // the shared derivation, which needs the whole set because
         // supersession does.
-        const { records, manifest, ledger } = await reads();
-        const rows = deriveMissions(records, manifest, ledger);
+        const { records, rows, taken } = await reads(caller);
 
         const otherSite = siteNameTaken(records, fields.site_id, fields.site);
         if (otherSite) {
@@ -257,6 +296,8 @@ export function createMissionLifecycle(store: MissionStore): MissionLifecycle {
             dispatched_key: null,
             ...fields,
           };
+          const unclaimed = await claim(caller, record.id);
+          if (unclaimed) return unclaimed;
           await store.writeMission(record);
           return { ok: true, body: { mission: record, forked_from: null } };
         }
@@ -269,10 +310,13 @@ export function createMissionLifecycle(store: MissionStore): MissionLifecycle {
         if (!existing || !row) {
           // A phone with no signal names the Missions it creates itself; the
           // first time that name reaches the store it is a create under it.
-          if (body.id.startsWith(LOCAL_ID_PREFIX)) {
+          // An id the store holds for another Workspace is never written over.
+          if (body.id.startsWith(LOCAL_ID_PREFIX) && !taken.has(body.id)) {
             const clash = nameClash(rows, { id: null, ...fields });
             if (clash) return clash;
             const record: MissionRecord = { id: body.id, created_at: now, updated_at: now, dispatched_key: null, ...fields };
+            const unclaimed = await claim(caller, record.id);
+            if (unclaimed) return unclaimed;
             await store.writeMission(record);
             return { ok: true, body: { mission: record, forked_from: null } };
           }
@@ -308,6 +352,8 @@ export function createMissionLifecycle(store: MissionStore): MissionLifecycle {
             dispatched_key: null,
             ...fields,
           };
+          const unclaimed = await claim(caller, forked.id);
+          if (unclaimed) return unclaimed;
           await store.writeMission(forked);
           return {
             ok: true,
@@ -329,13 +375,13 @@ export function createMissionLifecycle(store: MissionStore): MissionLifecycle {
 
     /** Remove archives; nothing is ever deleted (ADR 0021). A Mission that
      *  still holds a Card is refused: withdraw it first. */
-    async remove(_caller, input) {
+    async remove(caller, input) {
       const id = (input as { id?: unknown })?.id;
       if (!isSafeId(id)) return no("invalid", "That is not a Mission id. Reload the Mission list.");
 
       try {
-        const { records, manifest, ledger } = await reads();
-        const row = deriveMissions(records, manifest, ledger).find((m) => m.id === id);
+        const { records, rows } = await reads(caller);
+        const row = rows.find((m) => m.id === id);
         const record = records.find((r) => r.id === id);
         if (!row || !record) return no("not_found", "That Mission is not in the store.");
         const notNow = actionProblem("Remove", row);
@@ -356,14 +402,13 @@ export function createMissionLifecycle(store: MissionStore): MissionLifecycle {
      *  occupy. Reservation happens here, not at Load, so a Dispatch that
      *  cannot be satisfied is refused while the operator is still at the
      *  planner (ADR 0022). */
-    async dispatch(_caller, input) {
+    async dispatch(caller, input) {
       const id = (input as { id?: unknown })?.id;
       if (!isSafeId(id)) return no("invalid", "That is not a Mission id. Reload the Mission list.");
 
       try {
-        const { records, manifest, ledger: ledgerNow } = await reads();
+        const { records, rows } = await reads(caller);
         const record = records.find((r) => r.id === id);
-        const rows = deriveMissions(records, manifest, ledgerNow);
         const row = rows.find((m) => m.id === id);
         if (!record || !row) {
           return no("not_found", "That Mission is no longer in the store. Reload the Mission list.");
@@ -524,14 +569,14 @@ export function createMissionLifecycle(store: MissionStore): MissionLifecycle {
     /** Withdraw: cancel a Dispatched Mission before it is Collected, and give
      *  its Cards back. A Loaded one is refused -- its file is already in the
      *  field (CONTEXT.md, Withdrawn). */
-    async withdraw(_caller, input) {
+    async withdraw(caller, input) {
       const id = (input as { id?: unknown })?.id;
       if (!isSafeId(id)) return no("invalid", "That is not a Mission id. Reload the Mission list.");
 
       try {
-        const { records, manifest, ledger } = await reads();
+        const { records, rows } = await reads(caller);
         const record = records.find((r) => r.id === id);
-        const row = deriveMissions(records, manifest, ledger).find((m) => m.id === id);
+        const row = rows.find((m) => m.id === id);
         if (!record || !row) {
           return no("not_found", "That Mission is no longer in the store. Reload the Mission list.");
         }
@@ -585,7 +630,7 @@ export function createMissionLifecycle(store: MissionStore): MissionLifecycle {
 
     /** Flown is asserted, not observed; the operator's answer decides it in
      *  both directions (ADR 0021). Repeats are accepted. */
-    async setFlown(_caller, input) {
+    async setFlown(caller, input) {
       const { id, flown } = (input ?? {}) as { id?: unknown; flown?: unknown };
       if (!isSafeId(id)) return no("invalid", "That is not a Mission id. Reload the Mission list.");
       if (typeof flown !== "boolean") {
@@ -593,9 +638,9 @@ export function createMissionLifecycle(store: MissionStore): MissionLifecycle {
       }
 
       try {
-        const { records, manifest, ledger } = await reads();
+        const { records, rows, manifest, ledger } = await reads(caller);
         const record = records.find((r) => r.id === id);
-        const row = deriveMissions(records, manifest, ledger).find((m) => m.id === id);
+        const row = rows.find((m) => m.id === id);
         if (!record || !row) {
           return no("not_found", "That Mission is no longer in the store. Reload the Mission list.");
         }
@@ -675,16 +720,16 @@ export function createMissionLifecycle(store: MissionStore): MissionLifecycle {
     /** The app reports a Load the board made, from the aircraft (PWA-4, #318).
      *  The host's own manifest wins once it speaks; this fills the gap when the
      *  board had no signal to say so. Repeats are accepted. */
-    async setLoaded(_caller, input) {
+    async setLoaded(caller, input) {
       const { id, cards } = (input ?? {}) as { id?: unknown; cards?: unknown };
       if (!isSafeId(id)) return no("invalid", "That is not a Mission id. Reload the Mission list.");
       const written = loadedCards(cards);
       if (!written) return no("invalid", "Send the Cards the board wrote: { id, cards: [{ card, name, waypoints }] }.");
 
       try {
-        const { records, manifest, ledger } = await reads();
+        const { records, rows, manifest, ledger } = await reads(caller);
         const record = records.find((r) => r.id === id);
-        const row = deriveMissions(records, manifest, ledger).find((m) => m.id === id);
+        const row = rows.find((m) => m.id === id);
         if (!record || !row) {
           return no("not_found", "That Mission is no longer in the store. Reload the Mission list.");
         }
@@ -711,27 +756,26 @@ export function createMissionLifecycle(store: MissionStore): MissionLifecycle {
       }
     },
 
-    /** GET list: every Mission, newest first, behind the archived filter. */
-    async list(_caller, input) {
+    /** GET list: every Mission of the Caller's Workspace, newest first,
+     *  behind the archived filter. The Ledger and the host's word are the
+     *  Controller's: a Card holding is shown only to the Workspace whose
+     *  Mission holds it, and the host's report only to the operator's. */
+    async list(caller, input) {
       try {
-        const [missions, manifest, ledger] = await Promise.all([
-          store.readMissions(),
-          store.readManifest(),
-          store.readLedger(),
-        ]);
-        const all = deriveMissions(missions.records, manifest, ledger);
+        const { rows, all, unreadable, manifest, ledger, mine } = await reads(caller);
+        const holdings = Object.fromEntries(Object.entries(ledger.holdings).filter(([, h]) => mine(h.mission_id)));
         return {
           ok: true,
           body: {
-            unreadable: missions.unreadable,
-            missions: input.archived ? all : all.filter((m) => !m.archived),
-            archived_count: all.filter((m) => m.archived).length,
-            ledger,
+            unreadable: caller.ownsUnclaimed ? unreadable : [],
+            missions: input.archived ? rows : rows.filter((m) => !m.archived),
+            archived_count: rows.filter((m) => m.archived).length,
+            ledger: { ...ledger, holdings },
             // A Card holding a Mission that is no longer current: the
             // Controller's own labels are frozen at creation, so the planner is
             // the only thing that can say do not fly this (ADR 0022).
-            stale_cards: staleCards(ledger, liveSpecKeys(all)),
-            host: hostReport(manifest),
+            stale_cards: staleCards({ ...ledger, holdings }, liveSpecKeys(all)),
+            host: caller.ownsUnclaimed ? hostReport(manifest) : { notice: null, drift: null },
             now: Date.now(),
           },
         };

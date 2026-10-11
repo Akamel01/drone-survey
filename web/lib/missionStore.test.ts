@@ -26,8 +26,9 @@ after(() => store.restore());
 
 const { b2MissionStore } = await import("./missionStore.ts");
 const { createMissionLifecycle } = await import("./missionLifecycle.ts");
+const { memoryMissionOwners } = await import("./missionOwners.ts");
 
-const caller = { kind: "passphrase" } as const;
+const caller = { workspaceId: "w-operator", ownsUnclaimed: true } as const;
 
 /** A small rectangle that plans as one flight on one battery. */
 const ONE_FLIGHT: [number, number][] = [
@@ -49,7 +50,7 @@ function spec(): MissionSpec {
 }
 
 function fresh(): MissionLifecycle {
-  return createMissionLifecycle(b2MissionStore());
+  return createMissionLifecycle(b2MissionStore(), memoryMissionOwners());
 }
 
 async function saved(lc: MissionLifecycle, name: string): Promise<string> {

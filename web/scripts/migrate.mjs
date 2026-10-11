@@ -15,7 +15,8 @@ if (!process.env.DATABASE_URL) {
 // passes to betterAuth() is what getMigrations reads back in auth.options.
 const { getAuth } = await import("../lib/accountAuth.ts");
 const { getMigrations } = await import("better-auth/db/migration");
-const { closeDb } = await import("../lib/accountDb.ts");
+const { closeDb, getPool } = await import("../lib/accountDb.ts");
+const { migrateMissionOwners } = await import("../lib/missionOwners.ts");
 
 const auth = await getAuth();
 const { toBeCreated, toBeAdded, runMigrations } = await getMigrations(auth.options);
@@ -28,4 +29,7 @@ for (const { table, fields } of toBeAdded) {
 if (toBeCreated.length === 0 && toBeAdded.length === 0) console.log("schema is up to date");
 
 await runMigrations();
+// Which Workspace owns each Mission (#244): ours, not Better Auth's schema.
+await migrateMissionOwners(await getPool());
+console.log("mission_workspace is in place");
 await closeDb();

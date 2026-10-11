@@ -7,8 +7,7 @@
 //
 // It imports the app's own Spec and record code so the seeded Mission list is
 // the real thing, not a hand-copied shape. There is no live B2 store, so a
-// fetch wrapper answers /api/missions from memory and a localStorage key
-// stands in for the planner's passphrase. OUT is ui-16, so every recording —
+// fetch wrapper answers /api/missions from memory. OUT is ui-16, so every recording —
 // the notice set plus the pre-existing press/count-up/view-push/
 // hero-crossfade/sheet/reduced-motion media — lands there (CR5).
 import fs from "node:fs";
@@ -40,7 +39,6 @@ fs.mkdirSync(SHEET_OUT, { recursive: true });
 // UI-25 (#294) acceptance media; gitignored, never committed from this branch.
 const EVIDENCE_DIR = path.resolve(HERE, "../../.autoforge/evidence/ui-25");
 const VIDEO_DIR = fs.mkdtempSync(path.join(os.tmpdir(), "ui16-video-"));
-const PASSPHRASE_KEY = "drone-planner.wayfinder-key";
 
 // `ONLY=sheet` runs only the new ui-19 gesture cases; the legacy ui-11
 // motions keep their own groups (`sheet-legacy`, `reduced-legacy`), so a
@@ -439,8 +437,7 @@ async function pageFor(browser, { width, height, mobile = false, reduced = false
   if (video) contextOptions.recordVideo = { dir: VIDEO_DIR, size: { width, height } };
   const context = await browser.newContext(contextOptions);
   await context.addInitScript(
-    ({ payload, key, value }) => {
-      localStorage.setItem(key, value);
+    ({ payload }) => {
       const orig = window.fetch.bind(window);
       window.fetch = (input, init) => {
         const url = typeof input === "string" ? input : input && input.url ? input.url : String(input);
@@ -455,12 +452,12 @@ async function pageFor(browser, { width, height, mobile = false, reduced = false
         return orig(input, init);
       };
     },
-    { payload: PAYLOAD, key: PASSPHRASE_KEY, value: "evidence" },
+    { payload: PAYLOAD },
   );
   await context.addInitScript(NOTICE_SAMPLER);
   const page = await context.newPage();
   await page.goto(`${BASE}/plan`, { waitUntil: "domcontentloaded" });
-  // The seeded row is present once the passphrase gate has stepped aside.
+  // The seeded row is present once the first read has landed.
   // 60s, not 15s: this machine runs several agent sessions at once and a
   // starved renderer can take that long to paint the row.
   await page.getByRole("button", { name: "Edit", exact: true }).first().waitFor({ timeout: 60000 });
@@ -1859,8 +1856,7 @@ async function settlePage(browser, { width, height, mobile = false, reduced = fa
   if (video) contextOptions.recordVideo = { dir: VIDEO_DIR, size: { width, height } };
   const context = await browser.newContext(contextOptions);
   await context.addInitScript(
-    ({ loaded, flown, key }) => {
-      localStorage.setItem(key, "evidence");
+    ({ loaded, flown }) => {
       let marked = false;
       const answer = (body) =>
         Promise.resolve(new Response(JSON.stringify(body), { status: 200, headers: { "Content-Type": "application/json" } }));
@@ -1875,7 +1871,7 @@ async function settlePage(browser, { width, height, mobile = false, reduced = fa
         return orig(input, init);
       };
     },
-    { loaded: SETTLE_LOADED_PAYLOAD, flown: SETTLE_FLOWN_PAYLOAD, key: PASSPHRASE_KEY },
+    { loaded: SETTLE_LOADED_PAYLOAD, flown: SETTLE_FLOWN_PAYLOAD },
   );
   const page = await context.newPage();
   await page.goto(`${BASE}/plan`, { waitUntil: "domcontentloaded" });
@@ -2584,8 +2580,7 @@ async function saveVideo(video, name, dir = OUT) {
 async function stills(browser) {
   const desktop = await browser.newContext({ viewport: { width: 1440, height: 900 } });
   await desktop.addInitScript(
-    ({ payload, key, value }) => {
-      localStorage.setItem(key, value);
+    ({ payload }) => {
       const orig = window.fetch.bind(window);
       window.fetch = (input, init) => {
         const url = typeof input === "string" ? input : input && input.url ? input.url : String(input);
@@ -2597,7 +2592,7 @@ async function stills(browser) {
         return orig(input, init);
       };
     },
-    { payload: PAYLOAD, key: PASSPHRASE_KEY, value: "evidence" },
+    { payload: PAYLOAD },
   );
   let page = await desktop.newPage();
   await page.goto(`${BASE}/plan`, { waitUntil: "domcontentloaded" });
@@ -2615,8 +2610,7 @@ async function stills(browser) {
 
   const mobile = await browser.newContext({ viewport: { width: 375, height: 812 }, hasTouch: true, isMobile: true });
   await mobile.addInitScript(
-    ({ payload, key, value }) => {
-      localStorage.setItem(key, value);
+    ({ payload }) => {
       const orig = window.fetch.bind(window);
       window.fetch = (input, init) => {
         const url = typeof input === "string" ? input : input && input.url ? input.url : String(input);
@@ -2628,7 +2622,7 @@ async function stills(browser) {
         return orig(input, init);
       };
     },
-    { payload: PAYLOAD, key: PASSPHRASE_KEY, value: "evidence" },
+    { payload: PAYLOAD },
   );
   page = await mobile.newPage();
   await page.goto(`${BASE}/plan`, { waitUntil: "domcontentloaded" });

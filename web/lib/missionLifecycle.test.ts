@@ -20,12 +20,13 @@ import {
   type Refusal,
 } from "./missionLifecycle.ts";
 import { refusalStatus } from "./missionRoute.ts";
+import { memoryMissionOwners } from "./missionOwners.ts";
 import type { CardLedger } from "./model.ts";
 import type { MissionRow } from "./missionRecords.ts";
 import { actionsFor } from "./missionView.ts";
 import { DEFAULT_SPEC, type MissionSpec } from "./spec.ts";
 
-const caller = { kind: "passphrase" } as const;
+const caller = { workspaceId: "w-operator", ownsUnclaimed: true } as const;
 
 /** A small rectangle that plans as one flight on one battery. */
 const ONE_FLIGHT: [number, number][] = [
@@ -62,7 +63,7 @@ interface Harness {
 
 function fresh(seed: MemorySeed = {}): Harness {
   const store = memoryMissionStore({ ledger: POOL3, ...seed });
-  return { store, lc: createMissionLifecycle(store) };
+  return { store, lc: createMissionLifecycle(store, memoryMissionOwners()) };
 }
 
 function expectOk<T>(r: Outcome<T>): T {
@@ -843,4 +844,83 @@ test("setLoaded: refuses a Planned or Withdrawn Mission, a bad id and bad Cards"
   assert.equal(expectRefusal(await lc.setLoaded(caller, { id, cards: [] })).kind, "invalid");
   assert.equal(expectRefusal(await lc.setLoaded(caller, { id, cards: [{ card: "a", name: "b" }] })).kind, "invalid");
   assert.equal(expectRefusal(await lc.setLoaded(caller, { id: "gone", cards: CARDS })).kind, "not_found");
+});
+
+// ---------------------------------------------------------------------------
+// Workspaces (#244): every action sees only the Caller's Workspace's Missions
+// ---------------------------------------------------------------------------
+
+const operator = caller;
+const alpha = { workspaceId: "w-alpha", ownsUnclaimed: false } as const;
+const beta = { workspaceId: "w-beta", ownsUnclaimed: false } as const;
+
+function workspaces(seed: MemorySeed = {}) {
+  const store = memoryMissionStore({ ledger: POOL3, ...seed });
+  const owners = memoryMissionOwners();
+  return { store, owners, lc: createMissionLifecycle(store, owners) };
+}
+
+const draft = (name = "Ortho") => {
+  const s = spec();
+  return { site_id: s.site_id, site: s.site, name, date: s.date, spec: s };
+};
+
+test("workspaces: a new Mission is its Workspace's, and no other Workspace can list, save, dispatch, withdraw, mark or remove it", async () => {
+  const { store, owners, lc } = workspaces();
+  const id = expectOk(await lc.save(alpha, draft())).mission.id;
+  assert.equal(owners.rows.get(id), "w-alpha");
+
+  assert.deepEqual(expectOk(await lc.list(alpha, { archived: true })).missions.map((m) => m.id), [id]);
+  assert.deepEqual(expectOk(await lc.list(beta, { archived: true })).missions, []);
+  assert.deepEqual(expectOk(await lc.list(operator, { archived: true })).missions, [], "the operator sees no Workspace's Missions but its own");
+
+  const writes = (from: number) => store.calls.slice(from).filter((c) => !c.startsWith("read"));
+  let before = store.calls.length;
+  assert.equal(expectRefusal(await lc.save(beta, { ...draft(), id })).kind, "not_found");
+  assert.equal(expectRefusal(await lc.dispatch(beta, { id })).kind, "not_found");
+  assert.equal(expectRefusal(await lc.remove(beta, { id })).kind, "not_found");
+  assert.equal(expectRefusal(await lc.setFlown(beta, { id, flown: true })).kind, "not_found");
+  assert.equal(expectRefusal(await lc.setLoaded(beta, { id, cards: CARDS })).kind, "not_found");
+  assert.deepEqual(writes(before), [], "beta's refusals wrote nothing");
+  expectOk(await lc.dispatch(alpha, { id }));
+  before = store.calls.length;
+  assert.equal(expectRefusal(await lc.withdraw(beta, { id })).kind, "not_found");
+  assert.deepEqual(writes(before), [], "beta's withdraw wrote nothing");
+  const row = expectOk(await lc.list(alpha, { archived: true })).missions[0];
+  assert.equal(row.state, "dispatched", "beta's refusals changed nothing");
+});
+
+test("workspaces: a Mission with no ownership row is the operator's alone", async () => {
+  const { store, lc } = workspaces();
+  // A Mission from before Accounts: written straight to the store, no row.
+  const legacy = expectOk(await createMissionLifecycle(store, memoryMissionOwners()).save(operator, draft("Legacy"))).mission.id;
+  assert.deepEqual(expectOk(await lc.list(operator, { archived: true })).missions.map((m) => m.id), [legacy]);
+  assert.deepEqual(expectOk(await lc.list(alpha, { archived: true })).missions, []);
+  assert.equal(expectRefusal(await lc.withdraw(alpha, { id: legacy })).kind, "not_found");
+  expectOk(await lc.save(operator, { ...draft("Legacy, edited"), id: legacy }));
+});
+
+test("workspaces: names, Sites and Card holdings of another Workspace neither clash nor show", async () => {
+  const { lc } = workspaces();
+  const a = expectOk(await lc.save(alpha, draft())).mission.id;
+  expectOk(await lc.dispatch(alpha, { id: a }));
+  // The same Site, date and name in another Workspace is a different Mission.
+  const b = expectOk(await lc.save(beta, draft())).mission.id;
+  const betaRead = expectOk(await lc.list(beta, { archived: true }));
+  assert.deepEqual(betaRead.missions.map((m) => m.id), [b]);
+  assert.deepEqual(betaRead.ledger.holdings, {}, "alpha's Card holding is not beta's to see");
+  assert.deepEqual(betaRead.host, { notice: null, drift: null });
+  // Dispatching beta's does not supersede alpha's, and takes a free Card.
+  const dispatched = expectOk(await lc.dispatch(beta, { id: b }));
+  assert.deepEqual(dispatched.superseded, []);
+  assert.equal(expectOk(await lc.list(alpha, { archived: true })).missions[0].state, "dispatched");
+});
+
+test("workspaces: a phone-named create never lands on another Workspace's id", async () => {
+  const { store, lc } = workspaces();
+  const local = "local-abc123";
+  expectOk(await lc.save(alpha, { ...draft(), id: local }));
+  const before = JSON.stringify(store.records());
+  assert.equal(expectRefusal(await lc.save(beta, { ...draft("Mine"), id: local })).kind, "not_found");
+  assert.equal(JSON.stringify(store.records()), before, "alpha's Mission was not overwritten");
 });

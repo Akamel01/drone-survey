@@ -48,7 +48,6 @@ const dbDir = path.join(webRoot, ".pglite", "home-evidence");
 const DATABASE_URL = `pglite://${dbDir}`;
 const OWNER_EMAIL = "owner@example.com";
 const PENDING_EMAIL = "waiting@example.com";
-const PASSPHRASE_KEY = "drone-planner.wayfinder-key";
 
 const IDENTITIES = [
   { id: "t1-probe-google", name: "T1 Google Probe", email: "t1-google@example.com", image: null },
@@ -412,7 +411,7 @@ async function phaseT2(browser, standin, base) {
 
 // ---------------------------------------------------------------------------
 // T3 — second server with NO auth env: quiet line + /plan link, GET /plan 200
-// with the passphrase gate, the seeded Missions list, planner files untouched
+// naming the missing account setup, the seeded Missions list, planner files untouched
 // ---------------------------------------------------------------------------
 
 async function phaseT3(browser, base2) {
@@ -436,26 +435,20 @@ async function phaseT3(browser, base2) {
     await context.close();
   }
 
-  // /plan renders and MissionList asks for the passphrase in place.
+  // /plan renders, and MissionList says why it has no Missions: with no
+  // accounts configured the Mission routes answer 503 (#244).
   const gateContext = await browser.newContext({ viewport: { width: 1440, height: 900 } });
   try {
     const page = await gateContext.newPage();
     const response = await page.goto(`${base2}/plan`, { waitUntil: "domcontentloaded" });
-    const gateInput = page.locator('input[aria-label="Wayfinder passphrase"]');
-    await gateInput.waitFor({ timeout: 15_000 });
-    const prompt = await page
-      .getByText(/Type the Wayfinder passphrase to read the Missions in the store/)
-      .isVisible();
-    row(
-      "T3",
-      response.status() === 200 && prompt,
-      `GET /plan → ${response.status()}; passphrase gate present: input[aria-label="Wayfinder passphrase"] + typed-in-place prompt`,
-    );
+    const refusal = page.getByText(/This deployment is not configured for accounts/);
+    await refusal.waitFor({ timeout: 15_000 });
+    row("T3", response.status() === 200, `GET /plan → ${response.status()}; the Missions view names the missing account setup`);
   } finally {
     await gateContext.close();
   }
 
-  // The seeded Missions list still renders once the passphrase is on file,
+  // The seeded Missions list renders
   // with /api/missions answered from memory (motion-check.mjs's pattern).
   const { DEFAULT_SPEC } = await import("../lib/spec.ts");
   const { deriveMissions } = await import("../lib/missionRecords.ts");
@@ -482,8 +475,7 @@ async function phaseT3(browser, base2) {
   const seedContext = await browser.newContext({ viewport: { width: 1440, height: 900 } });
   try {
     await seedContext.addInitScript(
-      ({ body, key, value }) => {
-        localStorage.setItem(key, value);
+      ({ body }) => {
         const original = window.fetch.bind(window);
         window.fetch = (input, init) => {
           const url = typeof input === "string" ? input : input && input.url ? input.url : String(input);
@@ -495,13 +487,12 @@ async function phaseT3(browser, base2) {
           return original(input, init);
         };
       },
-      { body: payload, key: PASSPHRASE_KEY, value: "evidence" },
+      { body: payload },
     );
     const page = await seedContext.newPage();
     await page.goto(`${base2}/plan`, { waitUntil: "domcontentloaded" });
     await page.getByRole("button", { name: "Edit", exact: true }).first().waitFor({ timeout: 20_000 });
-    const gateGone = (await page.locator('input[aria-label="Wayfinder passphrase"]').count()) === 0;
-    row("T3", gateGone, "seeded Missions list renders on the no-env server (row Edit button found; gate stepped aside)");
+    row("T3", true, "seeded Missions list renders on the no-env server (row Edit button found)");
   } finally {
     await seedContext.close();
   }

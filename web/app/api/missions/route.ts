@@ -1,6 +1,7 @@
-import { authProblem } from "@/lib/auth";
+import { requireCaller } from "@/lib/accountAccess";
 import { createMissionLifecycle } from "@/lib/missionLifecycle";
 import { respond } from "@/lib/missionRoute";
+import { pgMissionOwners } from "@/lib/missionOwners";
 import { b2MissionStore } from "@/lib/missionStore";
 
 // The Mission list, and saving one. Missions live in the shared store rather
@@ -18,16 +19,16 @@ export const preferredRegion = "yyz1";
 /**
  * GET /api/missions
  *
- * Every Mission, newest first, each with the one derived state, the Cards it
+ * Every Mission of the caller's Workspace, newest first, each with the one derived state, the Cards it
  * holds, and both answers about Flown. `?archived=1` includes Missions that
  * are Flown, Withdrawn, Superseded or removed -- nothing is deleted, so they
  * are behind a filter rather than absent.
  */
 export async function GET(request: Request) {
-  const denied = authProblem(request);
-  if (denied) return denied;
+  const gate = await requireCaller(request);
+  if (!gate.ok) return gate.response;
   const archived = new URL(request.url).searchParams.get("archived") === "1";
-  return respond(await createMissionLifecycle(b2MissionStore()).list({ kind: "passphrase" }, { archived }));
+  return respond(await createMissionLifecycle(b2MissionStore(), pgMissionOwners()).list(gate.caller, { archived }));
 }
 
 /**
@@ -42,8 +43,8 @@ export async function GET(request: Request) {
  *  - Loaded           refused: a file is already in the field.
  */
 export async function POST(request: Request) {
-  const denied = authProblem(request);
-  if (denied) return denied;
+  const gate = await requireCaller(request);
+  if (!gate.ok) return gate.response;
 
   let raw: unknown;
   try {
@@ -51,7 +52,7 @@ export async function POST(request: Request) {
   } catch {
     return Response.json({ error: "Body is not JSON. Send the Mission as JSON." }, { status: 400 });
   }
-  return respond(await createMissionLifecycle(b2MissionStore()).save({ kind: "passphrase" }, raw));
+  return respond(await createMissionLifecycle(b2MissionStore(), pgMissionOwners()).save(gate.caller, raw));
 }
 
 /**
@@ -62,9 +63,9 @@ export async function POST(request: Request) {
  * holds a Card is refused: withdraw it first, so the Card comes back.
  */
 export async function DELETE(request: Request) {
-  const denied = authProblem(request);
-  if (denied) return denied;
+  const gate = await requireCaller(request);
+  if (!gate.ok) return gate.response;
   // The id is plumbing, not validation: the module checks it.
   const id = new URL(request.url).searchParams.get("id");
-  return respond(await createMissionLifecycle(b2MissionStore()).remove({ kind: "passphrase" }, { id }));
+  return respond(await createMissionLifecycle(b2MissionStore(), pgMissionOwners()).remove(gate.caller, { id }));
 }

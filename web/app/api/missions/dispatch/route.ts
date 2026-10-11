@@ -1,6 +1,7 @@
-import { authProblem } from "@/lib/auth";
+import { requireCaller } from "@/lib/accountAccess";
 import { createMissionLifecycle } from "@/lib/missionLifecycle";
 import { respond } from "@/lib/missionRoute";
+import { pgMissionOwners } from "@/lib/missionOwners";
 import { b2MissionStore } from "@/lib/missionStore";
 
 // Dispatch: put this Mission's Spec into the store, and reserve the Cards it
@@ -21,8 +22,8 @@ export const preferredRegion = "yyz1";
  * owns the ordered writes and every refusal.
  */
 export async function POST(request: Request) {
-  const denied = authProblem(request);
-  if (denied) return denied;
+  const gate = await requireCaller(request);
+  if (!gate.ok) return gate.response;
 
   let raw: unknown;
   try {
@@ -30,5 +31,5 @@ export async function POST(request: Request) {
   } catch {
     return Response.json({ error: "Body is not JSON. Send { id }." }, { status: 400 });
   }
-  return respond(await createMissionLifecycle(b2MissionStore()).dispatch({ kind: "passphrase" }, raw));
+  return respond(await createMissionLifecycle(b2MissionStore(), pgMissionOwners()).dispatch(gate.caller, raw));
 }

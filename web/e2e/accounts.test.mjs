@@ -128,7 +128,6 @@ function buildEnvFor() {
     B2_APP_KEY: "ci",
     B2_READ_KEY_ID: "ci",
     B2_READ_APP_KEY: "ci",
-    DISPATCH_SECRET: "ci",
   };
 }
 
@@ -1128,6 +1127,5 @@ test("the database rows match every flow", async (t) => {
   assert.equal(tokenCount, IDENTITIES.length, "one POST /token per identity");
 });
 
-// Flow 4's page half is #244's cutover: today a signed-out /plan still shows
-// the passphrase gate, so only the gate helper's 401/403 is asserted (T5).
-test.todo("signed out, /plan goes to / (lands with #244)");
+// Flow 4's page half -- signed out, /plan goes to / -- landed with #244 and is
+// asserted in workspaces.test.mjs, beside the routes' 401/403.

@@ -2,11 +2,10 @@
 //
 // The components' own fetch calls, their status handling and their operator
 // wording live here so the wire contract and the sentences have one home
-// (#263). The credential overlay keeps the passphrase from either field --
-// they are one value -- without touching storage at import: a browser set to
-// block site data must not take the module down (#152).
+// (#263). The credential is the Account's session cookie, which the browser
+// sends on every same-origin call by itself (#244): nothing here reads,
+// stores or attaches a secret, and offlineMap.ts relies on the same.
 
-import { readPassphrase, subscribePassphrase } from "./passphrase.ts";
 import { describeResult, noteMissionSaved, noteMissionsChanged } from "./actions.ts";
 import { describeSave } from "./missionView.ts";
 import type { ActionResult } from "./actions.ts";
@@ -57,26 +56,15 @@ export interface MissionDraft {
   base_updated_at?: string;
 }
 
-// The credential, seeded lazily from storage and kept current by the shared
-// passphrase signal. Module scope because both fields and every call cross
-// here; registering a listener is not storage access, so import stays safe.
-let credential: string | null = null;
+// Whether the last answer from a Mission route was "no session" (401). False
+// until a route says so: the page cannot know the cookie's state any sooner,
+// and the first read is what asks.
+let noSession = false;
 
-subscribePassphrase((value) => {
-  credential = value;
-});
-
-/** The passphrase to put on the wire. #244 replaces this one function with
- *  the Account's session; nothing else here changes. */
-function key(): string {
-  if (credential === null) credential = readPassphrase() ?? "";
-  return credential;
-}
-
-/** The single definition of the signed-out state: the credential resolves to
- *  "". Synchronous, for callers' pre-call guards. */
+/** The single definition of the signed-out state: the last call came back
+ *  401. Synchronous, for callers' pre-call guards. */
 export function signedOut(): boolean {
-  return key() === "";
+  return noSession;
 }
 
 /** What came back from a call, or why nothing did. */
@@ -91,6 +79,7 @@ type Reply =
 async function attempt(call: () => Promise<Response>, unknownThrow = "unknown"): Promise<Reply> {
   try {
     const res = await call();
+    noSession = res.status === 401;
     const body = (await res.json().catch(() => ({}))) as Record<string, unknown>;
     return res.ok ? { ok: true, status: res.status, body } : { ok: false, status: res.status, body };
   } catch (err) {
@@ -101,7 +90,7 @@ async function attempt(call: () => Promise<Response>, unknownThrow = "unknown"):
 function post(path: string, body: unknown): Promise<Response> {
   return globalThis.fetch(path, {
     method: "POST",
-    headers: { "Content-Type": "application/json", "x-wayfinder-key": key() },
+    headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
   });
 }
@@ -110,9 +99,7 @@ function post(path: string, body: unknown): Promise<Response> {
  *  rows come in one call, so the filter costs nothing and the count cannot
  *  disagree with what the filter reveals. */
 export async function list(): Promise<ListResult> {
-  const reply = await attempt(() =>
-    globalThis.fetch("/api/missions?archived=1", { headers: { "x-wayfinder-key": key() } }),
-  );
+  const reply = await attempt(() => globalThis.fetch("/api/missions?archived=1"));
   if (reply.ok && Array.isArray(reply.body.missions)) {
     return { ok: true, read: reply.body as unknown as MissionListRead };
   }
@@ -138,10 +125,7 @@ export async function run(action: MissionAction, id: string): Promise<RunResult>
       case "Unmark Flown":
         return post("/api/missions/flown", { id, flown: false });
       case "Remove":
-        return globalThis.fetch(`/api/missions?id=${encodeURIComponent(id)}`, {
-          method: "DELETE",
-          headers: { "x-wayfinder-key": key() },
-        });
+        return globalThis.fetch(`/api/missions?id=${encodeURIComponent(id)}`, { method: "DELETE" });
     }
   });
 
@@ -167,7 +151,7 @@ export async function save(draft: MissionDraft, how?: Parameters<typeof describe
     () =>
       globalThis.fetch("/api/missions", {
         method: "POST",
-        headers: { "Content-Type": "application/json", "x-wayfinder-key": key() },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           id: draft.id,
           site_id: draft.site_id,
@@ -235,8 +219,8 @@ const ACTION_OF: Record<Exclude<OutboxOp, "save" | "loaded">, MissionAction> = {
 
 /** One waiting edit, to the route that owns it, for `replay`: sent, refused
  *  with the store's own sentence, or the store could not be reached. A 5xx is
- *  the store failing, not the edit being wrong, so the edit waits for the next
- *  try. */
+ *  the store failing and a 401 a session that ended, not the edit being wrong,
+ *  so the edit waits for the next try. */
 export async function send(entry: Entry): Promise<Sent> {
   if (entry.op === "save" && entry.draft) {
     const saved = await save(entry.draft);
@@ -251,7 +235,7 @@ export async function send(entry: Entry): Promise<Sent> {
 }
 
 function unsent(failure: CallFailure): Sent {
-  if (failure.status === undefined || failure.status >= 500) return { ok: false, later: true };
+  if (failure.status === undefined || failure.status >= 500 || failure.status === 401) return { ok: false, later: true };
   const { conflict } = failure;
   return { ok: false, problem: { text: failure.text, ...(conflict ? { conflict: conflict.record, state: conflict.state } : {}) } };
 }

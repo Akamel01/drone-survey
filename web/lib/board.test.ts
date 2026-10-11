@@ -157,7 +157,7 @@ test("reportLoaded: sent when the store answers; kept in the outbox when it cann
   assert.equal(await reportLoaded("m1", cards), "sent");
 });
 
-test("reportLoaded: a second report of one Mission replaces the first; a refusal the store will always give is not kept; a wrong passphrase waits", async () => {
+test("reportLoaded: a second report of one Mission replaces the first; a refusal the store will always give is not kept; a session that ended waits", async () => {
   answer = down;
   await reportLoaded("m1", LOADED.cards);
   await reportLoaded("m1", LOADED.cards);
@@ -166,7 +166,7 @@ test("reportLoaded: a second report of one Mission replaces the first; a refusal
   answer = () => json({ error: "This Mission is withdrawn" }, 409);
   assert.equal(await reportLoaded("m1", LOADED.cards), "refused");
   assert.equal(store.get(OUTBOX_KEY), undefined);
-  answer = () => json({ error: "passphrase" }, 401);
+  answer = () => json({ error: "Sign in to continue" }, 401);
   assert.equal(await reportLoaded("m1", LOADED.cards), "waiting");
   assert.equal(readOutbox(localStorage).length, 1);
 });

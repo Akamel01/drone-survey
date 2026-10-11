@@ -17,8 +17,8 @@
 // operator decides on (the phone Map tab, a long Missions list over the hero).
 // The map toolbar (UI-29) has its own section: the drawing and map-editing
 // tools sit on the map in both layouts and Settings holds none of them.
-// Like motion-check, a fetch wrapper answers /api/missions from memory and a
-// localStorage key stands in for the passphrase. Exits non-zero on a failure.
+// Like motion-check, a fetch wrapper answers /api/missions from memory.
+// Exits non-zero on a failure.
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -33,7 +33,6 @@ const HERE = path.dirname(fileURLToPath(import.meta.url));
 const BASE = process.argv[2] ?? "http://127.0.0.1:3000";
 const OUT = path.resolve(HERE, "../../docs/ui-theme/screenshots/ui-12");
 fs.mkdirSync(OUT, { recursive: true });
-const PASSPHRASE_KEY = "drone-planner.wayfinder-key";
 
 // ---------------------------------------------------------------------------
 // Seeded Missions
@@ -135,8 +134,7 @@ async function pageFor(browser, { width, height, mobile = false, missions = 1, m
     reducedMotion: media.reducedMotion ?? "no-preference",
   });
   await context.addInitScript(
-    ({ body, key, failDispatch }) => {
-      localStorage.setItem(key, "evidence");
+    ({ body, failDispatch }) => {
       const orig = window.fetch.bind(window);
       window.fetch = (input, init) => {
         const url = typeof input === "string" ? input : input && input.url ? input.url : String(input);
@@ -155,7 +153,7 @@ async function pageFor(browser, { width, height, mobile = false, missions = 1, m
         return orig(input, init);
       };
     },
-    { body: payload(missions), key: PASSPHRASE_KEY, failDispatch },
+    { body: payload(missions), failDispatch },
   );
   const page = await context.newPage();
   if (media.features) {
@@ -874,8 +872,7 @@ async function ui25ShotsSection(browser) {
       recordVideo: { dir: UI25_VIDEO_DIR, size: { width: vp.width, height: vp.height } },
     });
     await context.addInitScript(
-      ({ body, key }) => {
-        localStorage.setItem(key, "evidence");
+      ({ body }) => {
         window.__ui25Payload = body;
         window.__ui25Samples = [];
         window.__ui25Sampling = false;
@@ -906,7 +903,7 @@ async function ui25ShotsSection(browser) {
           requestAnimationFrame(sample);
         };
       },
-      { body: payload(0), key: PASSPHRASE_KEY },
+      { body: payload(0) },
     );
     const page = await context.newPage();
     const video = page.video();

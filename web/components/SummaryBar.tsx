@@ -43,8 +43,8 @@ interface SummaryBarProps {
 // one Mission's controls in two places under two names, and a Dispatch button
 // beside an editor cannot say which Mission it means (ADR 0021).
 
-// Per-browser memory for the collapse, beside the passphrase key convention
-// (`lib/passphrase.ts:14`). Read once after mount, written on every toggle.
+// Per-browser memory for the collapse, under the planner's `drone-planner.`
+// key convention. Read once after mount, written on every toggle.
 // Where storage itself is blocked both no-op and the Summary stays collapsed.
 const SUMMARY_OPEN_KEY = "drone-planner.summary-open";
 
@@ -63,8 +63,7 @@ export default function SummaryBar({ spec, preview, editing, onSaved, sites = []
 
   // Collapsed on the server (no localStorage there) and on first paint, so
   // the server-rendered and first client-rendered HTML match; the stored
-  // choice applies after mount. The Summary's own passphrase field is gone
-  // (UI-27, #304) — the Missions view keeps its field until #244.
+  // choice applies after mount.
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- one-time client-only read of localStorage
     if (safeStorage()?.getItem(SUMMARY_OPEN_KEY) === "1") setOpen(true);

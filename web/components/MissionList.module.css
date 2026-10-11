@@ -128,28 +128,13 @@
   color: var(--on-glass-3);
 }
 
-/* The passphrase in place (plan decision 17): the field itself, wherever the
-   list would otherwise be, at every width — never a message pointing at the
-   Summary's box. */
+/* A column of 44px buttons where the list would otherwise be (the first-run
+   steps). */
 .gate {
   display: flex;
   flex-direction: column;
   gap: 10px;
   align-items: flex-start;
-}
-
-.gateText {
-  margin: 0;
-  font-size: 0.8125rem;
-  line-height: 1.5;
-  color: var(--on-glass-3);
-}
-
-.gateInput {
-  width: 100%;
-  min-height: 44px;
-  padding: 8px 12px;
-  font-size: 0.9375rem;
 }
 
 .gate button {
