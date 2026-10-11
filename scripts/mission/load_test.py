@@ -33,6 +33,7 @@ sys.path.insert(0, str(HERE))
 import b2_status  # noqa: E402
 import kmz  # noqa: E402
 import load  # noqa: E402  (the CLI, build, and the two real adapters)
+import host_store  # noqa: E402  (the update-and-confirm loop)
 import load_core  # noqa: E402  (every decision; every test drives this interface)
 
 FIXTURE = HERE.parents[1] / "fixtures" / "card-ledger.json"
@@ -192,6 +193,9 @@ class FakeStore:
         self.ledger = copy.deepcopy(ledger)
         if self.publish_hook is not None:
             self.publish_hook(ledger)
+
+    def update_ledger(self, change, *, settle_s, sleep):
+        return host_store.update_ledger(self, change, settle_s=settle_s, sleep=sleep)
 
     def report_drift(self, drift: list[dict]) -> None:
         self.reports.append(("drift", copy.deepcopy(drift)))
@@ -847,7 +851,7 @@ class UpdateTest(unittest.TestCase):
 
     def test_change_applied_and_survives(self):
         store = FakeStore({"pool": ["way finder 1"], "holdings": {}})
-        out = load_core.update(store, lambda fresh: {**fresh, "verified_at": "t"},
+        out = host_store.update_ledger(store, lambda fresh: {**fresh, "verified_at": "t"},
                                settle_s=0, sleep=lambda s: None)
         self.assertEqual(out["verified_at"], "t")
         self.assertEqual(len(store.published), 1)
@@ -883,7 +887,7 @@ class UpdateTest(unittest.TestCase):
         store.publish_hook = lambda ledger: setattr(store, "ledger", copy.deepcopy(original))
         sleeps = []
         with self.assertRaises(load_core.LedgerUnreadable) as cm:
-            load_core.update(store, lambda fresh: {**fresh, "verified_at": "t"},
+            host_store.update_ledger(store, lambda fresh: {**fresh, "verified_at": "t"},
                              settle_s=1, sleep=sleeps.append)
         self.assertEqual(str(cm.exception),
                          "the Card Ledger kept changing while the host was writing it, "

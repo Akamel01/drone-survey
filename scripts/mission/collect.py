@@ -18,17 +18,12 @@ import hashlib
 import json
 import os
 import sys
-import urllib.error
-import urllib.parse
-import urllib.request
 from pathlib import Path
-
-from keys import SKIPPED_KEY, spec_key_pattern  # noqa: E402  (one home for the store key layout)
-import b2  # noqa: E402  (one home for storage access)
 
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
-import b2_status  # noqa: E402  (network to B2 only; no mount, no Controller)
+from keys import spec_key_pattern  # noqa: E402  (one home for the store key layout)
+from host_store import HostStore, Session, StoreError  # noqa: E402  (the one door to the store)
 
 
 
@@ -43,53 +38,20 @@ DEFAULT_RECORD = _xdg("XDG_DATA_HOME", ".local/share") / "wayfinder" / "collecte
 DEFAULT_DEST = Path.home() / "wayfinder" / "specs"
 
 
-def load_env(path: Path) -> dict[str, str]:
-    """Parse KEY=VALUE lines from the credentials file. Never logs a value."""
-    if not path.exists():
-        sys.exit(f"no credentials at {path}")
-    env: dict[str, str] = {}
-    for line in path.read_text().splitlines():
-        line = line.strip()
-        if not line or line.startswith("#") or "=" not in line:
-            continue
-        key, _, value = line.partition("=")
-        env[key.strip()] = value.strip()
-    missing = [k for k in ("B2_KEY_ID", "B2_APP_KEY", "B2_BUCKET", "B2_PREFIX") if k not in env]
-    if missing:
-        sys.exit(f"{path} is missing {', '.join(missing)}")
-    return env
+REQUIRED = ("B2_KEY_ID", "B2_APP_KEY", "B2_BUCKET", "B2_PREFIX")
 
 
-def load_skipped(status_config: Path) -> set[str]:
-    """Fetch the per-run skip-list for Specs from specs/_status/skipped.json in the
-    B2 bucket, using credentials provided by status_config.
+def load_skipped(status_config: Path) -> dict | None:
+    """The per-run skip-list for Specs from specs/_status/skipped.json in the
+    store: specKey -> {withdrawn_at}, the one shape the withdraw route writes.
 
-    This fetch is best-effort: if the status config is missing or the remote fetch
-    fails, we fall back to an empty skip-set so Collect behaves conservatively
-    (no skipped items).
+    Best-effort: None when it could not be fetched (no status credentials, store
+    unreachable), so Collect skips nothing and the local copy is left as it was.
     """
     try:
-        if not status_config.exists():
-            return set()
-        senv = load_env(status_config)
-        sauth = authorize(senv["B2_KEY_ID"], senv["B2_APP_KEY"])
-        sallowed = sauth["allowed"]
-        data = download(
-            sauth["downloadUrl"], sallowed["bucketName"], SKIPPED_KEY,
-            sauth["authorizationToken"],
-        )
-        text = data.decode() if isinstance(data, (bytes, bytearray)) else str(data)
-        if not text:
-            return set()
-        obj = json.loads(text)
-        # One shape, the one the withdraw route writes: specKey -> {withdrawn_at}.
-        # The list and {"skipped": ...} forms had no writer and are gone.
-        if isinstance(obj, dict):
-            return {str(k): v for k, v in obj.items()}
-        return {}
-    except (Exception, SystemExit):
-        # download()/load_env() sys.exit on 404/bad creds; the skip-list is best-effort
-        return set()
+        return HostStore(status_config).fetch_skipped()
+    except StoreError:
+        return None
 
 
 def verify_sha1(data: bytes, expected_hex: str) -> None:
@@ -97,19 +59,6 @@ def verify_sha1(data: bytes, expected_hex: str) -> None:
     actual = hashlib.sha1(data).hexdigest()
     if actual != expected_hex:
         raise ValueError(f"sha1 mismatch: got {actual}, B2 said {expected_hex!r}")
-
-
-def authorize(key_id: str, app_key: str) -> dict:
-    """One adapter for every storage call this script makes (see b2.py)."""
-    return b2.authorize(key_id, app_key)
-
-
-def download(download_url: str, bucket_name: str, file_name: str, token: str) -> bytes:
-    """Fetch one Spec; the adapter verifies B2's own checksum before returning it."""
-    try:
-        return b2.download(download_url, bucket_name, file_name, token)
-    except FileNotFoundError:
-        sys.exit(f"download of {file_name} failed: not found")
 
 
 def load_record(path: Path) -> set[str]:
@@ -121,27 +70,6 @@ def load_record(path: Path) -> set[str]:
 def save_record(path: Path, collected: set[str]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(sorted(collected), indent=2))
-
-
-def report_collected(status_config: Path, keys: list[str]) -> None:
-    """Stamp the cloud manifest so the planner shows Collected. Bookkeeping,
-    not the Collect: without status credentials the Specs are still Collected
-    and the run still succeeds — it just says so loudly."""
-    if not status_config.exists():
-        print(f"no status credentials at {status_config}; manifest not updated")
-        return
-    try:
-        senv = load_env(status_config)
-        sauth = authorize(senv["B2_KEY_ID"], senv["B2_APP_KEY"])
-        sallowed = sauth["allowed"]
-        manifest = b2_status.download_manifest(
-            sauth["apiUrl"], sauth["downloadUrl"], sallowed["bucketName"], sauth["authorizationToken"])
-        b2_status.merge_collected(manifest, keys, b2_status.utcnow())
-        b2_status.upload_manifest(sauth["apiUrl"], sauth["authorizationToken"], sallowed["bucketId"], manifest)
-    except SystemExit as e:
-        print(f"manifest update failed ({e}); the Collect itself succeeded")
-        return
-    print(f"Reported {len(keys)} Collected to the manifest")
 
 
 def _selftest() -> None:
@@ -187,26 +115,34 @@ def main() -> None:
         _selftest()
         return
 
-    env = load_env(args.config)
-    auth = authorize(env["B2_KEY_ID"], env["B2_APP_KEY"])
-    allowed = auth["allowed"]
-    pattern = spec_key_pattern(env["B2_PREFIX"])
+    try:
+        collect(args)
+    except StoreError as e:  # the script's edge: the library raises, this exits
+        sys.exit(str(e))
 
-    all_names = b2.list_names(auth["apiUrl"], auth["authorizationToken"], allowed["bucketId"], env["B2_PREFIX"])
+
+def collect(args: argparse.Namespace) -> None:
+    prefix = load_env(args.config, REQUIRED)["B2_PREFIX"]
+    session = Session.open(args.config, REQUIRED)
+    pattern = spec_key_pattern(prefix)
+
+    all_names = session.list_names(prefix)
     specs = [n for n in all_names if pattern.match(n)]
     collected = load_record(args.record)
     # Apply the host-specific skip-list if available, after computing new candidates
     new = [n for n in specs if n not in collected]
-    skipped = load_skipped(args.status_config)
+    fetched = load_skipped(args.status_config)
+    skipped = fetched or {}
     # Persist the locally-fetched skip-list to SPECS/_status/skipped.json on every run
     # so the Load-side can observe withdrawals even if the remote source is missing
     # or delayed. This is a best-effort write and does not affect the Collected set.
-    try:
-        local_skip_path = DEFAULT_DEST / "_status" / "skipped.json"
-        local_skip_path.parent.mkdir(parents=True, exist_ok=True)
-        local_skip_path.write_text(json.dumps(skipped, indent=2, sort_keys=True))
-    except Exception:
-        pass
+    if fetched is not None:
+        try:
+            local_skip_path = DEFAULT_DEST / "_status" / "skipped.json"
+            local_skip_path.parent.mkdir(parents=True, exist_ok=True)
+            local_skip_path.write_text(json.dumps(fetched, indent=2, sort_keys=True))
+        except OSError:
+            pass
     if skipped:
         # Skip any specs listed in the status-based skip list; this must not be
         # reflected in the collected record. See M-57-HOST contract.
@@ -229,8 +165,11 @@ def main() -> None:
         if args.dry_run:
             print(f"would Collect {site} {date}: {name}")
             continue
-        data = download(auth["downloadUrl"], allowed["bucketName"], name, auth["authorizationToken"])
-        out = args.dest / Path(name).relative_to(env["B2_PREFIX"].rstrip("/"))
+        try:
+            data = session.download(name)
+        except FileNotFoundError:
+            raise StoreError(f"download of {name} failed: not found") from None
+        out = args.dest / Path(name).relative_to(prefix.rstrip("/"))
         out.parent.mkdir(parents=True, exist_ok=True)
         out.write_bytes(data)
         # Record after each write, not at the end: a crash mid-run must not
@@ -240,7 +179,7 @@ def main() -> None:
         print(f"Collected {site} {date}: {name}")
 
     if not args.dry_run and new:
-        report_collected(args.status_config, sorted(new))
+        HostStore(args.status_config).report_collected(sorted(new))
 
 
 if __name__ == "__main__":

@@ -13,9 +13,10 @@ The credentials names are one contract too: B2_KEY_ID / B2_APP_KEY / B2_BUCKET.
 from __future__ import annotations
 
 import base64
+import contextlib
 import hashlib
+import http.client
 import json
-import sys
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -23,17 +24,32 @@ import urllib.request
 AUTHORIZE_URL = "https://api.backblazeb2.com/b2api/v2/b2_authorize_account"
 
 
+class StoreError(Exception):
+    """The store could not do what was asked: refused, unreachable, timed out, or
+    returned something that failed verification. The one error library code
+    raises; deciding whether it is fatal belongs to the script that called."""
+
+
+@contextlib.contextmanager
+def _transport(what: str):
+    """Every way a call can fail in transit becomes a StoreError naming `what`.
+    FileNotFoundError passes through: a missing object is an answer, not a fault."""
+    try:
+        yield
+    except FileNotFoundError:
+        raise
+    except urllib.error.HTTPError as e:
+        raise StoreError(f"{what} failed: {e.code} {e.reason}") from e
+    except (OSError, http.client.HTTPException, ValueError) as e:  # URLError, timeouts, bad JSON
+        raise StoreError(f"{what} failed: {getattr(e, 'reason', e)}") from e
+
+
 def authorize(key_id: str, app_key: str) -> dict:
     """v2 only: v3 nests this same data under apiInfo and breaks every field access."""
     token = base64.b64encode(f"{key_id}:{app_key}".encode()).decode()
     req = urllib.request.Request(AUTHORIZE_URL, headers={"Authorization": f"Basic {token}"})
-    try:
-        with urllib.request.urlopen(req, timeout=30) as resp:
-            return json.load(resp)
-    except urllib.error.HTTPError as e:
-        sys.exit(f"authorize failed: {e.code} {e.reason}")
-    except urllib.error.URLError as e:
-        sys.exit(f"could not reach B2: {e.reason}")
+    with _transport("authorize"), urllib.request.urlopen(req, timeout=30) as resp:
+        return json.load(resp)
 
 
 def list_names(api_url: str, token: str, bucket_id: str, prefix: str) -> list[str]:
@@ -49,11 +65,8 @@ def list_names(api_url: str, token: str, bucket_id: str, prefix: str) -> list[st
             data=json.dumps(body).encode(),
             headers={"Authorization": token, "Content-Type": "application/json"},
         )
-        try:
-            with urllib.request.urlopen(req, timeout=30) as resp:
-                page = json.load(resp)
-        except urllib.error.HTTPError as e:
-            sys.exit(f"list failed: {e.code} {e.reason}")
+        with _transport("list"), urllib.request.urlopen(req, timeout=30) as resp:
+            page = json.load(resp)
         names.extend(f["fileName"] for f in page["files"])
         start = page.get("nextFileName")
         if not start:
@@ -64,21 +77,22 @@ def download(download_url: str, bucket: str, key: str, token: str) -> bytes:
     """Fetch one object and verify it against the provider's own checksum.
 
     A truncated or corrupted body must never be parsed as if it were real, so a
-    mismatch is fatal here rather than a caller's problem.
+    mismatch raises StoreError here rather than being a caller's problem.
     """
     url = f"{download_url}/file/{bucket}/{urllib.parse.quote(key, safe='/')}"
     req = urllib.request.Request(url, headers={"Authorization": token})
-    try:
-        with urllib.request.urlopen(req, timeout=60) as resp:
-            data = resp.read()
-            expected = resp.headers.get("X-Bz-Content-Sha1", "")
-    except urllib.error.HTTPError as e:
-        if e.code == 404:
-            raise FileNotFoundError(key) from e
-        sys.exit(f"download of {key} failed: {e.code} {e.reason}")
+    with _transport(f"download of {key}"):
+        try:
+            with urllib.request.urlopen(req, timeout=60) as resp:
+                data = resp.read()
+                expected = resp.headers.get("X-Bz-Content-Sha1", "")
+        except urllib.error.HTTPError as e:
+            if e.code == 404:
+                raise FileNotFoundError(key) from e
+            raise
     actual = hashlib.sha1(data).hexdigest()
     if actual != expected:
-        sys.exit(f"download of {key} failed its checksum: got {actual}, provider said {expected!r}")
+        raise StoreError(f"download of {key} failed its checksum: got {actual}, provider said {expected!r}")
     return data
 
 
@@ -96,11 +110,8 @@ def upload(api_url: str, token: str, bucket_id: str, key: str, body: bytes) -> N
         data=json.dumps({"bucketId": bucket_id}).encode(),
         headers={"Authorization": token, "Content-Type": "application/json"},
     )
-    try:
-        with urllib.request.urlopen(req, timeout=30) as resp:
-            up = json.load(resp)
-    except urllib.error.HTTPError as e:
-        sys.exit(f"upload url for {key} failed: {e.code} {e.reason}")
+    with _transport(f"upload url for {key}"), urllib.request.urlopen(req, timeout=30) as resp:
+        up = json.load(resp)
     req = urllib.request.Request(
         up["uploadUrl"],
         data=body,
@@ -111,7 +122,7 @@ def upload(api_url: str, token: str, bucket_id: str, key: str, body: bytes) -> N
             "X-Bz-Content-Sha1": hashlib.sha1(body).hexdigest(),
         },
     )
-    try:
+    with _transport(f"upload of {key}"):
         with urllib.request.urlopen(req, timeout=60) as resp:
             # The body from the upload response (First response) may contain
             # a contentSha1 value that should be used as the source of truth.
@@ -135,18 +146,14 @@ def upload(api_url: str, token: str, bucket_id: str, key: str, body: bytes) -> N
 
             if body_sha1_from_body:
                 if body_sha1_from_body != local_sha1:
-                    sys.exit(
+                    raise StoreError(
                         f"upload verification failed: body sha1 {body_sha1_from_body!r} != computed {local_sha1}"
                     )
             else:
                 # Fallback through provider header is disabled: the body sha1
                 # is the single source of truth for content integrity.
                 # If it's missing, fail loudly instead of masking with a header.
-                sys.exit(
-                    f"upload verification failed: missing body sha1; no header fallback"
-                )
-    except urllib.error.HTTPError as e:
-        sys.exit(f"upload of {key} failed: {e.code} {e.reason}")
+                raise StoreError("upload verification failed: missing body sha1; no header fallback")
 
 
 class _FakeResponse:
@@ -242,9 +249,8 @@ def _selftest() -> None:
         urllib.request.urlopen = _fake_urlopen_mismatch
         try:
             upload("https://api/upload", "tok", "bucket", "k", body_for_upload)
-            print("F2: body-path mismatch did not raise (unexpected)")
-            sys.exit(1)
-        except SystemExit:
+            raise AssertionError("F2: body-path mismatch did not raise")
+        except StoreError:
             print("F2: body-path mismatch raised as expected")
 
         # --- New F3: missing provider sha1 triggers failure ---
@@ -275,9 +281,8 @@ def _selftest() -> None:
         urllib.request.urlopen = _fake_urlopen_missing
         try:
             upload("https://api/upload", "tok", "bucket", "k", body_for_upload)
-            print("F3: body-path missing did not raise (unexpected)")
-            sys.exit(1)
-        except SystemExit:
+            raise AssertionError("F3: body-path missing did not raise")
+        except StoreError:
             print("F3: body-path missing raised as expected (no body sha1)")
     finally:
         urllib.request.urlopen = real
