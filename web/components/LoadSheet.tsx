@@ -48,10 +48,13 @@ interface LoadSheetProps {
   onNotice: (p: Omit<NoticePayload, "key">) => void;
 }
 
-/** What the store was told, for the result's last line. */
+/** What the store was told, for the result's last line. A Load that is kept says
+ *  two different things: the store could not be reached, or one of this
+ *  Mission's own earlier changes has to go first (#348, H1(b)). */
 function storedLine(result: MarkResult | "unknown"): string {
   if (result === "sent") return "Marked Loaded in the store.";
   if (result === "waiting") return "The store could not be reached. It will be marked Loaded when this phone is back online.";
+  if (result === "queued") return "This phone's earlier changes for this Mission are sent first. The Load is reported with them.";
   if (result === "refused") return "The store did not take the Load. Refresh the Mission list.";
   return "This Mission is not in the list on this phone, so the store was not told. The board reports it when it has signal.";
 }

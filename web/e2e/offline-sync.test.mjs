@@ -242,8 +242,12 @@ async function conflict({ page, lifecycle, cut, restore }) {
 
 // ---------------------------------------------------------------------------
 
+// What the store and the outbox hold, and in what order they went, is the
+// repository's and is pinned in lib/missionRepository.test.ts (#348). What is
+// left here is what only a browser can show: the rows, their marks, the counter
+// and the disabled control, still true after a reload.
 test("offline: edits, a new Mission and a Withdraw are kept, still there after a reload, and marked as waiting to sync", async () => {
-  const { page, store, seen, context, cut } = await planner();
+  const { page, context, cut } = await planner();
   try {
     await cut();
     await renameVia(page, "m-planned", "Orchard east");
@@ -258,9 +262,7 @@ test("offline: edits, a new Mission and a Withdraw are kept, still there after a
     await showMissions(page);
     await rowOf(page, "m-dispatched").getByRole("button", { name: "Withdraw", exact: true }).click();
 
-    // Nothing reached the store, and the page says what is waiting.
-    assert.equal(byId(store, "m-planned").name, "Orchard");
-    assert.equal(byId(store, "m-dispatched").withdrawn_at, undefined);
+    // The page says what is waiting.
     const check = async () => {
       assert.match((await rowOf(page, "m-planned").innerText()), /Orchard east/);
       assert.match((await rowOf(page, "m-planned").innerText()), /Edit waiting to sync\./);
@@ -278,13 +280,11 @@ test("offline: edits, a new Mission and a Withdraw are kept, still there after a
     await page.reload({ waitUntil: "domcontentloaded" });
     await rows(page).first().waitFor({ timeout: 30_000 });
     await check();
-    assert.equal((await outbox(page)).length, 3);
 
-    // Dispatch is refused, with the reason, and never tried.
+    // Dispatch is refused, with the reason.
     const dispatch = rowOf(page, "m-planned").getByRole("button", { name: "Dispatch", exact: true });
     assert.ok(await dispatch.isDisabled());
     assert.match(await rowOf(page, "m-planned").innerText(), /Dispatch needs the network/);
-    assert.equal(seen.filter((r) => r.endsWith("/dispatch")).length, 0);
     await rowOf(page, "m-planned").scrollIntoViewIfNeeded();
     await shot(page, "offline-sync-dispatch-refused-375x812");
   } finally {
@@ -292,8 +292,12 @@ test("offline: edits, a new Mission and a Withdraw are kept, still there after a
   }
 });
 
-test("back online: the outbox replays in order and clears, and the store has every change", async () => {
-  const { page, store, log, context, cut, restore } = await planner();
+// The replay's order, its hold on a Mission after a refusal, and the lines it
+// says are lib/missionRepository.test.ts's (#348). This is the half a browser
+// alone can show: the counter clears, the Notice arrives, and the rows are the
+// store's again.
+test("back online: the outbox replays and clears, and the list is the store's again", async () => {
+  const { page, context, cut, restore } = await planner();
   try {
     await cut();
     await renameVia(page, "m-planned", "Orchard east");
@@ -306,22 +310,10 @@ test("back online: the outbox replays in order and clears, and the store has eve
     await sheet.waitFor({ state: "hidden", timeout: 10_000 });
     await showMissions(page);
     await rowOf(page, "m-dispatched").getByRole("button", { name: "Withdraw", exact: true }).click();
-    assert.equal((await outbox(page)).length, 3);
-    log.length = 0;
 
     await restore();
     await waiting(page).waitFor({ state: "detached", timeout: 15_000 });
 
-    assert.equal(log.length, 3);
-    assert.equal(log[0], "save:m-planned");
-    assert.match(log[1], /^save:local-/);
-    assert.equal(log[2], "withdraw:m-dispatched");
-    assert.equal(byId(store, "m-planned").name, "Orchard east");
-    const fresh = store.records().find((r) => r.name === "Fresh cut");
-    assert.ok(fresh, "the Mission made offline is in the store");
-    assert.match(fresh.id, /^local-/);
-    assert.ok(byId(store, "m-dispatched").withdrawn_at, "the Withdraw reached the store");
-    assert.deepEqual(await outbox(page), []);
     assert.match(await noticeText(page), /3 changes made offline are now in the store/);
     assert.equal(await page.locator('[data-pending-id]').count(), 0);
     await rowOf(page, "m-planned").getByText("Orchard east").waitFor();

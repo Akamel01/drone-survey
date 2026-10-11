@@ -4,8 +4,8 @@ import { useEffect, useId, useRef, useState, type KeyboardEvent } from "react";
 import type { MissionSpec } from "@/lib/spec";
 import type { Preview } from "@/lib/mission";
 import type { MissionRecord } from "@/lib/missionRecords";
-import { noteMissionSaved, safeStorage } from "@/lib/actions";
-import { enqueue, forMission, localId, noSignal, readOutbox } from "@/lib/outbox";
+import { safeStorage } from "@/lib/actions";
+import { createRepository } from "@/lib/missionRepository";
 import { flightTimeDelta, specBlocker, type SiteChoice } from "@/lib/missionView";
 import * as missionClient from "@/lib/missionClient";
 import { firstSentence } from "@/lib/notice";
@@ -124,33 +124,12 @@ export default function SummaryBar({ spec, preview, editing, onSaved, sites = []
         // The Spec carries the Site it is saved under, as the store reads it.
         spec: { ...spec, site: site.site, site_id: site.site_id },
       };
-      // With no signal the save is kept on this device and sent when the
-      // network is back (PWA-3). Edits already waiting for this Mission go
-      // first, so a newer one never overtakes them.
-      const ls = safeStorage();
-      const waiting = !!ls && !!draft.id && forMission(readOutbox(ls), draft.id).length > 0;
-      if (!waiting && !noSignal()) {
-        const outcome = await missionClient.save(draft, editedMission ? { choice, from: editedMission.name } : undefined);
-        if (outcome.ok) onSaved(outcome.mission);
-        return report(outcome.text, !outcome.ok);
-      }
-      const id = draft.id ?? localId();
-      const entry = ls && enqueue(ls, "save", id, { ...draft, id, base_updated_at: draft.id ? editing.base : undefined });
-      if (!entry) return report("Not saved: this browser has no room to keep it for later. Nothing changed.", true);
-      onSaved({
-        id,
-        site_id: site.site_id,
-        site: site.site,
-        name,
-        date: spec.date,
-        spec: entry.draft!.spec,
-        created_at: "",
-        updated_at: entry.draft?.base_updated_at ?? "",
-        dispatched_key: null,
-      });
-      // Not "saved": it is on this device and not in the store yet.
-      noteMissionSaved();
-      return report(`Kept on this device, waiting to sync. “${name}” is sent to the store when the network is back.`, false);
+      // Sent, refused or kept on this device is the repository's call (#348):
+      // with no signal, and behind anything already waiting for this Mission,
+      // the save waits rather than overtaking it.
+      const outcome = await createRepository().save(draft, editedMission ? { choice, from: editedMission.name } : undefined, editing.base);
+      if ("mission" in outcome) onSaved(outcome.mission);
+      return report(outcome.text, "ok" in outcome && !outcome.ok);
     } catch (err) {
       return report(
         `Not saved: ${err instanceof Error ? err.message : "the store could not be reached"}. Nothing changed.`,
