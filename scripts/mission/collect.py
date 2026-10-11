@@ -23,7 +23,7 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 from keys import spec_key_pattern  # noqa: E402  (one home for the store key layout)
-from host_store import HostStore, Session, StoreError  # noqa: E402  (the one door to the store)
+from host_store import HostStore, Session, StoreError, load_env  # noqa: E402  (the one door to the store)
 
 
 
