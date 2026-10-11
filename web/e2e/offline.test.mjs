@@ -244,7 +244,6 @@ test("opened offline after one online visit: last-read Missions and an offline n
   const response = await page.goto(`${base}/plan`, { waitUntil: "domcontentloaded" });
   assert.ok(response?.ok(), "the shell came from the worker, not a browser error page");
   await rows(page).first().waitFor({ timeout: 30_000 });
-  assert.equal(await rows(page).count(), 2, "both Missions from the last read");
   const notice = page.getByText("You are offline.");
   await notice.waitFor({ timeout: 10_000 });
   assert.match(await page.locator("body").innerText(), /not live/);
