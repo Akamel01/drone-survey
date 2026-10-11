@@ -28,6 +28,7 @@ HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 import b2  # noqa: E402
 import b2_status  # noqa: E402
+import host_push  # noqa: E402
 import host_store  # noqa: E402
 import keys  # noqa: E402
 import load_core  # noqa: E402
@@ -217,6 +218,23 @@ class StoreTest(unittest.TestCase):
                 load_core.record_written(self.store, {"verified_at": "t"}, {"way finder 1": "md5"}, "t",
                                          notes.append, settle_s=0, sleep=lambda s: None)
                 self.assertTrue(notes and "Ledger" in notes[0], notes)
+
+    def test_each_report_tells_the_phone_beside_the_status_credentials(self):
+        # host_push's own selftest proves the POST and that it never raises (#319).
+        with mock.patch.object(host_push, "tell") as tell:
+            self.say(self.store.report_loaded, [("specs/a", [("way finder 2", {"name": "F", "waypoints": 3})])])
+            self.say(self.store.report_collected, ["specs/b"])
+            self.say(self.store.report_collected, [])
+            self.say(self.store.report_refusal, "controller", ["specs/a"], "The Controller is locked.")
+            self.say(self.store.report_overflow, ["specs/a"], 3, 2)
+        self.assertTrue(all(c.args[0] == self.config.parent for c in tell.call_args_list))
+        events = [c.args[1] for c in tell.call_args_list]
+        self.assertEqual(events[0], {"event": "loaded", "loads": [{"key": "specs/a", "cards": ["way finder 2"]}]})
+        self.assertEqual(events[1], {"event": "collected", "keys": ["specs/b"]})
+        self.assertEqual(events[2], {"event": "refused", "keys": ["specs/a"], "reason": "The Controller is locked."})
+        self.assertEqual(events[3]["event"], "refused")
+        self.assertIn("3 parts do not fit 2 Cards", events[3]["reason"])
+        self.assertEqual(len(events), 4, "an empty Collect tells nobody")
 
     def test_a_fault_in_the_middle_of_the_merge_write_is_reported_not_raised(self):
         self.put(keys.STATUS_KEY, {})

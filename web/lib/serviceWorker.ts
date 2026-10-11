@@ -1,7 +1,8 @@
 // The service worker that lets the planner open with no signal (PWA-1, #313).
 //
 // It keeps the app shell (the /plan page and the versioned files it loads) and
-// nothing else. The Missions themselves are the browser's own last read
+// nothing else, and shows the notifications a Mission change sends (#319).
+// The Missions themselves are the browser's own last read
 // (`cachedRead` in missionView.ts), so the worker never sees data: it does not
 // touch /api (which carries the sign-in and the session-checked Mission
 // routes), /d, other pages or anything cross-origin, and it only answers GET.
@@ -78,6 +79,31 @@ self.addEventListener("fetch", (event) => {
   } else if (kept(url)) {
     event.respondWith(fromCache(request));
   }
+});
+
+// A Mission changed (PWA-5, #319). Always shown: Safari takes the permission
+// away from an app that receives a push and shows nothing. No action buttons:
+// iOS does not show them, so the tap alone opens the planner.
+self.addEventListener("push", (event) => {
+  let data = {};
+  try {
+    data = event.data ? event.data.json() : {};
+  } catch {}
+  event.waitUntil(self.registration.showNotification(data.title || "Mission Control", {
+    body: data.body || "A Mission changed. Open Mission Control to see it.",
+    tag: data.tag || undefined,
+    icon: "/icons/icon-192.png",
+    data: { url: data.url || SHELL },
+  }));
+});
+
+self.addEventListener("notificationclick", (event) => {
+  event.notification.close();
+  event.waitUntil((async () => {
+    const windows = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
+    if (windows.length) return windows[0].focus();
+    return self.clients.openWindow(new URL((event.notification.data && event.notification.data.url) || SHELL, self.location.origin).href);
+  })());
 });
 
 // "/" is the sign-in page online (dynamic, per person: never cached); with no

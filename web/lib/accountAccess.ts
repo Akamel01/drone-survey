@@ -60,7 +60,7 @@ export async function requireApprovedAccount(request: Request): Promise<AccountG
  *  lifecycle's 404, not a refusal here. */
 export async function requireCaller(
   request: Request,
-): Promise<{ ok: true; caller: Caller } | { ok: false; response: Response }> {
+): Promise<{ ok: true; caller: Caller; accountId: string } | { ok: false; response: Response }> {
   const gate = await requireApprovedAccount(request);
   if (!gate.ok) return gate;
   const { user } = gate.session;
@@ -81,7 +81,13 @@ export async function requireCaller(
       ),
     };
   }
-  return { ok: true, caller: { workspaceId: workspace.id, ownsUnclaimed: workspace.slug === ownerWorkspaceSlug() } };
+  return {
+    ok: true,
+    caller: { workspaceId: workspace.id, ownsUnclaimed: workspace.slug === ownerWorkspaceSlug() },
+    // The Account itself, for what belongs to it rather than its Workspace:
+    // its notification subscriptions (#319).
+    accountId: user.id,
+  };
 }
 
 function isOwnerEmail(user: { email?: string | null; emailVerified?: boolean | null }): boolean {

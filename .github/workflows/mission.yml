@@ -47,6 +47,7 @@ jobs:
           python3 scripts/mission/b2_status.py --selftest
           python3 scripts/mission/collect.py --selftest
           python3 scripts/mission/host_store_test.py
+          python3 scripts/mission/host_push.py --selftest
           python3 scripts/mission/load_test.py
           python3 scripts/mission/calibrate.py --selftest
           python3 scripts/mission/kmz.py --selftest

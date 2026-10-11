@@ -5,6 +5,7 @@
 // its status). Extras carry the exact non-`error` fields the operator saw
 // before this module existed.
 
+import { after } from "next/server.js";
 import type { Outcome, RefusalKind } from "./missionLifecycle.ts";
 
 const STATUS: Record<RefusalKind, number> = {
@@ -28,4 +29,15 @@ export function respond<T>(outcome: Outcome<T>): Response {
     { error: outcome.message, ...outcome.extras },
     { status: refusalStatus(outcome.kind) },
   );
+}
+
+/** Work that must not hold up the answer -- telling the phones (#319): after
+ *  the response under Next, which keeps the function alive for it; straight
+ *  away anywhere else (the route tests call handlers with no request scope). */
+export function afterResponse(task: () => Promise<void>): void {
+  try {
+    after(task);
+  } catch {
+    void task();
+  }
 }

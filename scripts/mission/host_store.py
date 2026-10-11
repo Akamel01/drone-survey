@@ -21,6 +21,7 @@ from typing import Callable
 
 import b2
 import b2_status
+import host_push
 import keys
 from b2 import StoreError
 from load_core import LedgerUnreadable  # the Load module's error; raised here, handled there
@@ -112,11 +113,18 @@ def update_ledger(store, change: Callable[[dict], dict], *, settle_s: float,
 
 
 class HostStore:
-    """The store as the host uses it, over the status key's credentials file."""
+    """The store as the host uses it, over the status key's credentials file.
+
+    Each report also tells the operator's phone (host_push, #319) when a
+    push.env sits beside the status credentials; without one, nothing is sent.
+    """
 
     def __init__(self, status_config: Path, *, connect: Callable[[Path], Session] | None = None):
         self.status_config = status_config
         self._connect = connect or Session.open
+
+    def _tell(self, event: dict) -> None:
+        host_push.tell(self.status_config.parent, event)
 
     def _session(self) -> Session:
         return self._connect(self.status_config)
@@ -196,12 +204,14 @@ class HostStore:
         self._bookkeep(lambda m: b2_status.merge_refusal(m, kind, spec_keys, reason, b2_status.utcnow()),
                        missing="the refusal was not reported", failed="the refusal was not reported ({})",
                        done="Reported the refusal to the manifest")
+        self._tell({"event": "refused", "keys": spec_keys[:50], "reason": reason})
 
     def report_overflow(self, spec_keys: list[str], needed: int, have: int) -> None:
         """The atomic refusal, shown against the waiting missions on the Status tab."""
         self._bookkeep(lambda m: b2_status.merge_overflow(m, spec_keys, needed, have, b2_status.utcnow()),
                        missing="overflow not reported", failed="overflow report failed ({})",
                        done="Reported the overflow refusal to the manifest")
+        self._tell({"event": "refused", "keys": spec_keys[:50], "reason": host_push.overflow_reason(needed, have)})
 
     def report_loaded(self, entries: list[tuple[str, list[tuple[str, dict]]]]) -> None:
         """Stamp the manifest so the planner shows Loaded with card names. The cards
@@ -212,8 +222,14 @@ class HostStore:
         self._bookkeep(change, missing="manifest not updated",
                        failed="manifest update failed ({}); the Load itself succeeded",
                        done=f"Reported {len(entries)} Loaded to the manifest")
+        # The notice that matters: which Card to open.
+        if entries:
+            self._tell({"event": "loaded", "loads": [{"key": key, "cards": [card for card, _ in loaded]}
+                                                     for key, loaded in entries][:50]})
 
     def report_collected(self, spec_keys: list[str]) -> None:
         self._bookkeep(lambda m: b2_status.merge_collected(m, spec_keys, b2_status.utcnow()),
                        missing="manifest not updated", failed="manifest update failed ({}); the Collect itself succeeded",
                        done=f"Reported {len(spec_keys)} Collected to the manifest")
+        if spec_keys:
+            self._tell({"event": "collected", "keys": spec_keys[:50]})
