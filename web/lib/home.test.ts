@@ -5,6 +5,7 @@ import {
   HOME_ENTRANCE_KEY,
   accountLabel,
   homeState,
+  initialOf,
   markHomeEntrancePlayed,
   shouldPlayHomeEntrance,
   type HomeState,
@@ -27,6 +28,16 @@ test("accountLabel: trimmed name, then email, then empty", () => {
   assert.equal(accountLabel(undefined, "owner@example.com"), "owner@example.com");
   assert.equal(accountLabel("Owner", null), "Owner");
   assert.equal(accountLabel(null, null), "");
+});
+
+test("initialOf: first char of trimmed name, else email, uppercased", () => {
+  assert.equal(initialOf("Owner Example", "owner@example.com"), "O");
+  assert.equal(initialOf("owner", "owner@example.com"), "O");
+  assert.equal(initialOf("  Owner  ", "owner@example.com"), "O");
+  assert.equal(initialOf("   ", "owner@example.com"), "O");
+  assert.equal(initialOf(null, "owner@example.com"), "O");
+  assert.equal(initialOf(undefined, "owner@example.com"), "O");
+  assert.equal(initialOf(null, null), "?");
 });
 
 function fakeStorage() {
