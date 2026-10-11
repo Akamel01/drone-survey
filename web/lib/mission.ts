@@ -1,11 +1,11 @@
-// Grid geometry for the planner's preview.
+// A Mission's geometry and how it is split into parts: the one implementation.
 //
-// This mirrors scripts/mission/make_mission.py line for line, deliberately.
-// The Python writer stays the single authority on the KMZ the aircraft reads;
-// this exists only so the map and the figures respond to a slider without a
-// round trip. The two are pinned together by scripts/mission/e2e_test.py, which
-// fails the moment they disagree — a preview that lies about photo count or
-// flight time is worse than no preview.
+// The planner draws from this, Dispatch reserves one Card per part it makes,
+// and Dispatch records those parts in the Spec (`plan`), so the host's writer
+// (scripts/mission/make_mission.py) serialises exactly the waypoints the Cards
+// were reserved for and computes no geometry of its own (#346, ADR 0017). The
+// writer keeps only the KMZ dialect and its gate; scripts/mission/e2e_test.py
+// checks the file it writes holds the waypoints recorded here.
 
 import type { MissionSpec } from "./spec";
 
@@ -33,6 +33,19 @@ const STOP_ACCEL_MS2 = 2.5;
 const ORBIT_MIN_RADIUS_M = 5;
 const ORBIT_MIN_PHOTOS = 6;
 
+/** One waypoint as the writer serialises it: [lat, lon, altitude m, gimbal pitch deg]. */
+export type Waypoint = [number, number, number, number];
+
+/**
+ * What Dispatch records in the Spec: the Missions its Cards were reserved for,
+ * waypoint by waypoint, and the speed they fly at. Consecutive parts share their
+ * seam waypoint.
+ */
+export interface DispatchedPlan {
+  speed_ms: number;
+  parts: Waypoint[][];
+}
+
 export interface Preview {
   points: [number, number][];
   lines: [number, number][][];
@@ -45,6 +58,8 @@ export interface Preview {
   path_length_m: number;
   flight_time_min: number;
   parts: number;
+  /** The parts themselves, as Dispatch records them; `parts` is their count. */
+  plan: DispatchedPlan;
   /** How long each part flies, so the operator can see what a battery buys. */
   part_minutes: number[];
   /** Ground covered by one photograph, for judging altitude against the view. */
@@ -58,7 +73,7 @@ export interface Preview {
 const EMPTY: Preview = {
   points: [], lines: [], gsd_cm: 0, fwd_spacing_m: 0, side_spacing_m: 0,
   line_count: 0, photo_count: 0, capped_speed_ms: 0, path_length_m: 0,
-  flight_time_min: 0, parts: 0, part_minutes: [], footprint_across_m: 0,
+  flight_time_min: 0, parts: 0, plan: { speed_ms: 0, parts: [] }, part_minutes: [], footprint_across_m: 0,
   footprint_along_m: 0, start_corner: "", home_distance_m: 0, problems: [],
 };
 
@@ -79,7 +94,7 @@ function localFrame(points: LL[]) {
 }
 
 /** Haversine distance in metres, for verifying what we produced. */
-export function geodesicM(a: LL, b: LL): number {
+export function geodesicM(a: readonly number[], b: readonly number[]): number {
   const r = Math.PI / 180;
   const [lat1, lon1, lat2, lon2] = [a[0] * r, a[1] * r, b[0] * r, b[1] * r];
   const h =
@@ -136,7 +151,7 @@ function polyDistance(pt: XY, poly: XY[]): number {
 }
 
 /**
- * How the writer cuts this into parts, and how long each one flies.
+ * How a Mission is cut into parts, and how long each one flies.
  *
  * The battery decides this before the 200-waypoint ceiling does. Each part
  * finishes by returning home so the battery can be swapped, and the next part
@@ -144,12 +159,12 @@ function polyDistance(pt: XY, poly: XY[]): number {
  * seam. Cuts land at the end of a flight line, never mid-line.
  */
 function splitPlan(
-  rows: LL[][],
+  rows: Waypoint[][],
   speed: number,
   stopPerPoint: number,
   batterySeconds: number,
   ceiling: number,
-): { parts: number; minutes: number[] } {
+): { parts: Waypoint[][]; minutes: number[] } {
   const cost = (i: number) => {
     const row = rows[i];
     let d = 0;
@@ -160,23 +175,25 @@ function splitPlan(
     return d / speed + row.length * stopPerPoint;
   };
 
+  if (!rows.length) return { parts: [], minutes: [] };
+  const parts: Waypoint[][] = [];
   const minutes: number[] = [];
-  let parts = 1;
-  let cur = 0;
+  let cur: Waypoint[] = [];
   let curSeconds = 0;
   for (let i = 0; i < rows.length; i++) {
     const c = cost(i);
-    const tooMany = cur > 0 && cur + rows[i].length > ceiling;
-    const tooLong = cur > 0 && batterySeconds > 0 && curSeconds + c > batterySeconds;
+    const tooMany = cur.length > 0 && cur.length + rows[i].length > ceiling;
+    const tooLong = cur.length > 0 && batterySeconds > 0 && curSeconds + c > batterySeconds;
     if (tooMany || tooLong) {
+      parts.push(cur);
       minutes.push(curSeconds / 60);
-      parts++;
-      cur = 1; // the seam waypoint the next part starts on
+      cur = [cur[cur.length - 1]]; // the seam waypoint the next part starts on
       curSeconds = 0;
     }
-    cur += rows[i].length;
+    cur = cur.concat(rows[i]);
     curSeconds += c;
   }
+  parts.push(cur);
   minutes.push(curSeconds / 60);
   return { parts, minutes };
 }
@@ -211,8 +228,8 @@ export function circlePolygon(center: LL, radiusM: number, segments = 64): LL[] 
   return pts;
 }
 
-// Looking down at the subject from this ring: negative is below horizontal.
-// Mirrors make_mission.py:313-314, including the gimbal clamp.
+// Looking down at the subject from this ring: negative is below horizontal,
+// clamped to the gimbal's range.
 export function orbitTilt(
   ringM: number,
   targetM: number,
@@ -291,8 +308,12 @@ function orbitPreview(spec: MissionSpec): Preview {
 
   const stopPenalty = spec.flight.turn === "stop" ? (points.length * speed) / STOP_ACCEL_MS2 : 0;
   const stopPerPoint = spec.flight.turn === "stop" ? speed / STOP_ACCEL_MS2 : 0;
+  const flown: Waypoint[][] = rings.map((ring, r) => {
+    const pitch = orbitTilt(sorted[r], o.target_height_m, o.radius_m).deg;
+    return ring.map(([lat, lon]): Waypoint => [lat, lon, sorted[r], pitch]);
+  });
   const orbitSplit = splitPlan(
-    rings, speed, stopPerPoint, spec.flight.battery_minutes * 60, MAX_WAYPOINTS,
+    flown, speed, stopPerPoint, spec.flight.battery_minutes * 60, MAX_WAYPOINTS,
   );
 
   return {
@@ -306,7 +327,8 @@ function orbitPreview(spec: MissionSpec): Preview {
     capped_speed_ms: speed,
     path_length_m: pathLength,
     flight_time_min: (pathLength / speed + stopPenalty) / 60,
-    parts: orbitSplit.parts,
+    parts: orbitSplit.parts.length,
+    plan: { speed_ms: speed, parts: orbitSplit.parts },
     part_minutes: orbitSplit.minutes,
     footprint_across_m: across,
     footprint_along_m: (SENSOR_H_MM / FOCAL_MM) * slant,
@@ -423,12 +445,11 @@ function gridPreview(spec: MissionSpec): Preview {
     f.turn === "stop" ? (points.length * speed) / STOP_ACCEL_MS2 : 0;
   const flightTime = (pathLength / speed + stopPenalty) / 60;
 
-  // Mirrors the writer's own splitting: the battery decides this before the
-  // waypoint ceiling does.
   const stopPerPoint = f.turn === "stop" ? speed / STOP_ACCEL_MS2 : 0;
-  const split = rows.length
-    ? splitPlan(rows, speed, stopPerPoint, f.battery_minutes * 60, MAX_WAYPOINTS)
-    : { parts: 0, minutes: [] as number[] };
+  const split = splitPlan(
+    rows.map((row) => row.map(([lat, lon]): Waypoint => [lat, lon, f.altitude_m, f.gimbal_pitch_deg])),
+    speed, stopPerPoint, f.battery_minutes * 60, MAX_WAYPOINTS,
+  );
 
   let homeDistance = 0;
   if (spec.home) for (const p of points) homeDistance = Math.max(homeDistance, geodesicM(spec.home, p));
@@ -444,7 +465,8 @@ function gridPreview(spec: MissionSpec): Preview {
     capped_speed_ms: speed,
     path_length_m: pathLength,
     flight_time_min: flightTime,
-    parts: split.parts,
+    parts: split.parts.length,
+    plan: { speed_ms: speed, parts: split.parts },
     part_minutes: split.minutes,
     footprint_across_m: across,
     footprint_along_m: along,

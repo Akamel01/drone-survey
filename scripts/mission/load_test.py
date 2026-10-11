@@ -218,18 +218,9 @@ class TempMountedController(load.MountedController):
         self.mounts += 1
 
 
-SELFTEST_SPEC = {
-    "version": 1, "mission_type": "grid", "site": "Selftest Field", "date": "2026-09-13",
-    "aoi": [[49.1902, -122.8409], [49.191, -122.8409], [49.191, -122.8395], [49.1902, -122.8395]],
-    "shape": None, "home": [49.1902, -122.8409],
-    "flight": {"altitude_m": 90, "forward_overlap_pct": 85, "side_overlap_pct": 75,
-               "gimbal_pitch_deg": -80, "speed_ms": 5, "turn": "through",
-               "margin_passes": 1, "battery_minutes": 16},
-    "orbit": {"center": None, "target_height_m": 0, "radius_m": 40, "altitudes_m": [40],
-              "photos_per_ring": 24, "clockwise": True},
-    "camera": {"interval_s": 5, "shutter": "1/1000", "iso": "100", "white_balance": "Sunny",
-               "white_balance_k": None, "exposure_lock": True, "format": "JPEG"},
-}
+# A Spec as Dispatch writes it, its parts recorded by web/lib/mission.ts; the
+# web tests pin this fixture to that module, so no node is needed here (#346).
+SELFTEST_SPEC = json.loads((HERE.parent.parent / "fixtures" / "dispatched-spec.json").read_text())
 
 
 class FakeSetupTest(unittest.TestCase):

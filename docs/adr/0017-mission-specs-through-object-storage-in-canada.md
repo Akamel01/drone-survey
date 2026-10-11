@@ -98,3 +98,37 @@ transport one, as ADR 0016 already records.
 
 The provider comparison this rests on, with prices and policy quotations checked
 on 13 September 2026, is recorded on #18.
+
+## Amended 2026-10-10: Dispatch decides the parts, and the writer cuts nothing (#346)
+
+**This reverses "the writer splits it into parts when it builds" above.** The
+reason that bullet gave still stands, the seam must not be decided twice, and
+[ADR 0022](0022-cards-are-reserved-at-dispatch.md) made it decided twice: the
+planner's geometry counted the parts to reserve Cards at Dispatch, and the
+host's Python writer split the Spec again at Load. Two implementations of one
+split, in two languages, kept in step by a parity test, and when they disagreed
+Load refused at the Controller in the field, the failure ADR 0022 exists to
+prevent.
+
+**Dispatch records the parts in the Spec it writes**, as `plan`: the speed and,
+for each part, every waypoint with its altitude and gimbal angle, computed by
+`web/lib/mission.ts`, the one place a Mission is laid out and split. The Cards
+reserved and the Missions written are the same data, so the reserved-versus-made
+refusal can no longer fire from a geometry mismatch, nor from the planner and the
+host running different versions. `make_mission.py` keeps only the KMZ dialect and
+its gate, which checks the recorded waypoints against the request and the
+aircraft's limits rather than trusting the planner's figures. Parts still do not
+appear in the key, and a Spec is still never rewritten: `plan` is written once,
+with the Spec, at Dispatch.
+
+**Running the TypeScript geometry on the host was considered and not taken.**
+The Linux host has no Node (measured 2026-10-10: no `node` on the path; only
+Node images in Docker), the deployed loader is a flat copy of
+`scripts/mission/`, and the loader is meant to move to a small board cabled to
+the Controller unchanged as stdlib Python over `jmtpfs` (ADR 0016). It would also
+have left a version-skew gap: a planner deployed ahead of the host could reserve
+for one split while the host made another.
+
+**A Spec Dispatched before this has no `plan`, and the writer refuses it by
+name**: Withdraw it and Dispatch it again. Deploy the planner first; the earlier
+writer ignores the extra field.

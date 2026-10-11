@@ -1,6 +1,6 @@
-// Runs the planner's own preview maths from the command line, so the end-to-end
-// test can compare what the operator was shown on the map with what the writer
-// actually put in the KMZ. Node strips the types; there is no build step.
+// Runs the planner's own geometry from the command line, so the end-to-end test
+// can hand the writer a Spec exactly as Dispatch records it (`plan`) and compare
+// the KMZ with it. Node strips the types; there is no build step.
 //
 //   node scripts/mission/preview_cli.ts spec.json
 import { readFileSync } from "node:fs";

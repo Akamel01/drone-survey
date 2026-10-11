@@ -1,9 +1,9 @@
 name: Mission planning
 
-# The planner's preview maths is a deliberate mirror of the writer's. Mirrors
-# drift, and a preview that lies about photo count or flight time is worse than
-# no preview — so the end-to-end test runs on every push that touches either
-# side, not only when someone remembers.
+# Dispatch records the Missions it reserved Cards for, computed by the one
+# geometry module (web/lib/mission.ts); the host's writer serialises them. The
+# end-to-end test checks the KMZ holds exactly those waypoints, on every push
+# that touches either side, not only when someone remembers.
 
 on:
   push:

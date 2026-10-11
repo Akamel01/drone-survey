@@ -442,8 +442,11 @@ export function createMissionLifecycle(store: MissionStore, owners: MissionOwner
           );
         }
         // A Site larger than one battery is flown as several Missions, and each
-        // Mission occupies one Card (CONTEXT.md, Card).
-        const needed = Math.max(1, summary.parts);
+        // Mission occupies one Card (CONTEXT.md, Card). The parts are recorded
+        // in the Spec, so the host writes exactly the Missions these Cards were
+        // reserved for and never splits again (#346).
+        const needed = Math.max(1, summary.plan.parts.length);
+        const dispatchedSpec: MissionSpec = { ...spec, plan: summary.plan };
 
         const group = supersessionGroup(record);
         const replaced = rows.filter(
@@ -510,7 +513,7 @@ export function createMissionLifecycle(store: MissionStore, owners: MissionOwner
         if (!ledgerOrWhy.ok) return no("refused", ledgerOrWhy.reason, { needed });
 
         try {
-          await store.writeSpec(key, spec);
+          await store.writeSpec(key, dispatchedSpec);
         } catch (err) {
           // The Spec never landed, so the Cards must not stay held.
           await store.updateLedger((started) => withRelease(started, key)).catch(() => {});

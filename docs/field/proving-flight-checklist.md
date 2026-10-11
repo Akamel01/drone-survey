@@ -69,7 +69,7 @@ Fly-through starts the **north-west** corner; stop-at-point starts the
 | Photo count | 98 per flight. Short means the camera's shutter interval is slower than assumed and photos were dropped — the fly-through variant is the one at risk. |
 | `GimbalPitchDegree` in every photo's XMP | ≈ −80° (±2°) |
 | GPS in EXIF | present and non-zero on every photo |
-| Ground spacing, measured geodesically between consecutive photo positions | within ~2% of the planned spacing (same check `make_mission.py`'s `verify()` runs before Load) |
+| Ground spacing, measured geodesically between consecutive photo positions | within ~2% of the planned spacing (same check `make_mission.py`'s `gate()` runs before Load) |
 | Coverage per battery | whole 1.2 ha area completed within one battery, no low-battery RTH cut the mission short |
 | Aircraft executed `takePhoto`, held the gimbal tilt, and followed the planned path | confirmed by eye against the flight log / DJI Fly's own playback |
 | No unplanned RTH or suspension | mission ran start to finish as loaded |

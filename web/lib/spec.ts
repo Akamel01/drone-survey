@@ -3,9 +3,12 @@
 // ADR 0016 settles this — the KMZ is build output, never hand-edited, and flying
 // a Site again regenerates it from the same inputs so repeat visits produce
 // identical waypoints. This file is that input. It is written by the planner in
-// the browser, carried to the Linux host, and turned into a KMZ by
-// scripts/mission/make_mission.py, which stays the single authority on the file
-// the aircraft actually reads.
+// the browser; at Dispatch the server adds `plan`, the Missions it reserved Cards
+// for, computed by web/lib/mission.ts; the Linux host's
+// scripts/mission/make_mission.py serialises that plan into the KMZ the aircraft
+// reads, and computes no geometry of its own (#346).
+
+import type { DispatchedPlan } from "./mission";
 
 export type TurnMode = "through" | "stop";
 
@@ -94,6 +97,12 @@ export interface MissionSpec {
     exposure_lock: boolean;
     format: string;
   };
+  /**
+   * Written by Dispatch, never by the planner: the parts its Cards were reserved
+   * for, so the host writes exactly those (#346, ADR 0017). Absent from a draft
+   * and from a Spec Dispatched before it existed, which the writer refuses.
+   */
+  plan?: DispatchedPlan;
 }
 
 /** One description of the Mission Spec envelope, in two stages. A draft may be

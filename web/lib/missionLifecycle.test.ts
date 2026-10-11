@@ -438,6 +438,15 @@ test("offline: a Mission made with no signal is created under the id the phone g
 // Time and keys
 // ---------------------------------------------------------------------------
 
+test("dispatch records in the Spec the parts its Cards were reserved for (#346)", async () => {
+  const { lc, store } = fresh();
+  const r = expectOk(await dispatch(lc, await saved(lc)));
+  const written = store.specs().get(r.key);
+  assert.ok(written?.plan, "the Spec carries the plan the host writes");
+  assert.ok(written.plan.parts.length >= 1);
+  assert.equal(r.cards.length, written.plan.parts.length, "one Card per recorded part");
+});
+
 test("dispatch key shape", async () => {
   const { lc } = fresh();
   const safe = await saved(lc, { site: "../../etc/passwd", spec: { ...spec(), site: "../../etc/passwd" } });
