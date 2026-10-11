@@ -108,10 +108,10 @@ _Avoid_: KML, flight plan file, route
 
 **Mission Spec**:
 The planner's record of one Capture's flying, in our own format, from which the
-files the Controller reads are generated. A Spec covers the whole Site; the
-writer decides how many Missions that takes, because a Site larger than one
-battery is flown as several. A Spec is never edited: a change is a new Spec
-that supersedes the earlier one.
+files the Controller reads are generated. A Spec covers the whole Site; Dispatch
+decides how many Missions that takes, because a Site larger than one battery is
+flown as several, and records them in the Spec so the writer only writes them.
+A Spec is never edited: a change is a new Spec that supersedes the earlier one.
 _Avoid_: JSON, plan, config, mission file
 
 **Mission Name**:
