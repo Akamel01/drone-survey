@@ -13,7 +13,8 @@ import { LEDGER_KEY, MISSIONS_PREFIX, SKIPPED_KEY, STATUS_KEY, SUMMARIES_KEY, mi
 import { StoreNotConfigured, type LedgerResult, type MissionStore, type SkippedResult } from "./missionLifecycle.ts";
 import { EMPTY_LEDGER, type CardLedger } from "./model.ts";
 import type { Manifest, SpecSummary } from "./missions.ts";
-import { changeSurvived, isMissionRecord, sameLedger, type MissionRecord } from "./missionRecords.ts";
+import { changeSurvived, isMissionRecord, type MissionRecord } from "./missionRecords.ts";
+import { mapSurvived, readRecord, updateRecord, type RecordSpec } from "./storeRecord.ts";
 
 /** The read session, the write session and the bucket, or a 503 response
  *  saying so. The write key cannot list, so reads go through the read pair --
@@ -34,27 +35,52 @@ export async function sessions(): Promise<
   return { read, write, bucket: env.bucket };
 }
 
-function parseOr<T>(raw: Buffer | null, fallback: T, what: string): T {
-  if (!raw) return fallback;
-  try {
-    return JSON.parse(raw.toString()) as T;
-  } catch {
-    // Reading a corrupt shared file as empty would let the next write erase
-    // it. A Mission list that cannot be read is a failure, not an empty list.
-    throw new Error(`the stored ${what} is not valid JSON`);
-  }
+const LEDGER: RecordSpec<CardLedger> = {
+  key: LEDGER_KEY,
+  what: "Card Ledger",
+  empty: () => EMPTY_LEDGER,
+  normalize: (led) => ({ pool: led.pool ?? [], holdings: led.holdings ?? {}, verified_at: led.verified_at }),
+  survived: changeSurvived,
+};
+
+// A corrupt skip list is not an empty one: overwriting it would silently
+// un-withdraw every Spec already in it. Same for summaries.
+const SKIPPED: RecordSpec<Record<string, unknown>> = {
+  key: SKIPPED_KEY,
+  what: "skip list",
+  empty: () => ({}),
+  normalize: (p) => (p && typeof p === "object" ? p : {}),
+  survived: mapSurvived,
+};
+
+export const SUMMARIES_SPEC: RecordSpec<Record<string, SpecSummary>> = {
+  key: SUMMARIES_KEY,
+  what: "Spec summaries",
+  empty: () => ({}),
+  normalize: (p) => (p && typeof p === "object" ? p : {}),
+  survived: mapSurvived,
+};
+
+/** Fold summaries into the store without dropping a concurrent writer's.
+ *  `take` says whether an entry may replace the one stored (default: always). */
+export function updateSummaries(
+  read: B2Session,
+  write: B2Session,
+  bucket: string,
+  add: Record<string, SpecSummary>,
+  take: (stored: Record<string, SpecSummary>, key: string) => boolean = () => true,
+): Promise<Record<string, SpecSummary> | string> {
+  return updateRecord(read, write, bucket, SUMMARIES_SPEC, (cur) => ({
+    ...cur,
+    ...Object.fromEntries(Object.entries(add).filter(([k]) => take(cur, k))),
+  }));
 }
 
-export async function readLedger(read: B2Session, bucket: string): Promise<CardLedger> {
-  const raw = await downloadFile(read, bucket, LEDGER_KEY);
-  const led = parseOr<CardLedger>(raw, EMPTY_LEDGER, "Card Ledger");
-  return { pool: led.pool ?? [], holdings: led.holdings ?? {}, verified_at: led.verified_at };
-}
+export const readLedger = (read: B2Session, bucket: string) => readRecord(read, bucket, LEDGER);
 
 export async function readManifest(read: B2Session, bucket: string): Promise<Manifest> {
-  const raw = await downloadFile(read, bucket, STATUS_KEY);
   try {
-    return parseOr<Manifest>(raw, {}, "host manifest");
+    return await readRecord<Manifest>(read, bucket, { key: STATUS_KEY, what: "host manifest", empty: () => ({}), survived: () => true });
   } catch {
     // Unlike the Ledger, nothing here is ever written back, so a corrupt
     // manifest costs only the host's own reporting: every Spec reads as
@@ -101,52 +127,17 @@ export async function writeMission(write: B2Session, record: MissionRecord): Pro
   await uploadFile(write, missionKey(record.id), Buffer.from(JSON.stringify(record, null, 2)));
 }
 
-/** How long a Ledger write waits before checking it survived. Long enough for
- *  another writer's upload, already in flight when ours landed, to land too. */
-const SETTLE_MS = Number(process.env.LEDGER_SETTLE_MS ?? 1000);
-
 /**
- * Change the Ledger without losing a write that landed while we were thinking.
- *
- * The Ledger is one file and B2 has no compare-and-swap. So: read, decide,
- * re-read just before writing -- and if anyone wrote meanwhile, decide again
- * on what is there now -- then write, wait, and read back to check the change
- * survived. Two Dispatches racing were both told they held a Card while one
- * Reservation was silently overwritten (#152); now the loser decides again,
- * against a Ledger that shows the winner.
- *
- * `change` must be pure: it is re-run on each fresh read.
- *
- * Returns the Ledger as read back, or a string saying what to do next.
+ * Change the Ledger without losing a write that landed while we were thinking
+ * (#152; the rule is `storeRecord.ts`'s). Returns the Ledger as read back, or a
+ * string saying what to do next.
  */
-export async function updateLedger(
+export const updateLedger = (
   read: B2Session,
   write: B2Session,
   bucket: string,
   change: (started: CardLedger) => CardLedger | string,
-): Promise<CardLedger | string> {
-  // ponytail: this narrows the race to the settle window; only a store with
-  // compare-and-swap, or one writer, closes it.
-  for (let attempt = 0; attempt < 3; attempt++) {
-    let base = await readLedger(read, bucket);
-    let next = change(base);
-    if (typeof next === "string") return next;
-    const latest = await readLedger(read, bucket);
-    if (!sameLedger(latest, base)) {
-      base = latest;
-      next = change(base);
-      if (typeof next === "string") return next;
-    }
-    await uploadFile(write, LEDGER_KEY, Buffer.from(JSON.stringify(next, null, 2)));
-    if (SETTLE_MS > 0) await new Promise((r) => setTimeout(r, SETTLE_MS));
-    const after = await readLedger(read, bucket);
-    if (changeSurvived(base, next, after)) return after;
-  }
-  return (
-    "The Card Ledger kept changing while this was being written, so it could not be confirmed. " +
-    "Nothing is certain to have been kept: reload the Mission list and try again."
-  );
-}
+) => updateRecord(read, write, bucket, LEDGER, change);
 
 /**
  * Tell the host not to Load these Specs.
@@ -154,11 +145,7 @@ export async function updateLedger(
  * Releasing the Card is not by itself a cancellation: the Spec is immutable
  * and stays in the store, so without this the host would still Collect it and
  * Load it into whichever Card it was handed next. The skip list is what
- * `collect.py` already reads.
- *
- * Whole-file, so the same rule as the Ledger: re-read immediately before
- * writing, and refuse rather than silently un-withdraw a Spec someone else
- * added while this ran. Returns null on success, or what to do next.
+ * `collect.py` already reads. Returns null on success, or what to do next.
  */
 export async function addSkipped(
   read: B2Session,
@@ -168,26 +155,11 @@ export async function addSkipped(
   at: string,
 ): Promise<string | null> {
   if (keys.length === 0) return null;
-  const started = await readSkipList(read, bucket);
-  const latest = await readSkipList(read, bucket);
-  const lost = Object.keys(started).filter((k) => !(k in latest));
-  if (lost.length) {
-    return (
-      `The skip list changed while this was being prepared -- ${lost[0]} is no longer in it. ` +
-      "Nothing was written. Reload the Mission list and try again."
-    );
-  }
-  for (const key of keys) latest[key] = { withdrawn_at: at };
-  await uploadFile(write, SKIPPED_KEY, Buffer.from(JSON.stringify(latest, null, 2)));
-  return null;
-}
-
-async function readSkipList(read: B2Session, bucket: string): Promise<Record<string, unknown>> {
-  const raw = await downloadFile(read, bucket, SKIPPED_KEY);
-  // A corrupt skip list is not an empty one: overwriting it would silently
-  // un-withdraw every Spec already in it.
-  const parsed = parseOr<Record<string, unknown>>(raw, {}, "skip list");
-  return parsed && typeof parsed === "object" ? parsed : {};
+  const r = await updateRecord(read, write, bucket, SKIPPED, (cur) => ({
+    ...cur,
+    ...Object.fromEntries(keys.map((k) => [k, { withdrawn_at: at }])),
+  }));
+  return typeof r === "string" ? r : null;
 }
 
 /** The one shape a failed store call is reported in. No refusal is silent and
@@ -265,16 +237,9 @@ export function b2MissionStore(): MissionStore {
     },
     async updateSummaries(key, summary) {
       const s = await session();
-      const existing = await downloadFile(s.read, s.bucket, SUMMARIES_KEY);
-      const summaries: Record<string, SpecSummary> = existing
-        ? (JSON.parse(existing.toString()) as Record<string, SpecSummary>)
-        : {};
-      summaries[key] = {
-        photo_count: summary.photo_count,
-        path_length_m: summary.path_length_m,
-        parts: summary.parts,
-      };
-      await uploadFile(s.write, SUMMARIES_KEY, Buffer.from(JSON.stringify(summaries, null, 2)));
+      const entry = { photo_count: summary.photo_count, path_length_m: summary.path_length_m, parts: summary.parts };
+      const result = await updateSummaries(s.read, s.write, s.bucket, { [key]: entry });
+      if (typeof result === "string") throw new Error(result);
     },
   };
 }

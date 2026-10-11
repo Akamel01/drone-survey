@@ -191,3 +191,89 @@ test("list failed: 403 → 503 cap message", async () => {
   assert.match(r.message, /free transaction limit/);
   assert.match(r.message, /00:00 UTC/);
 });
+
+// ---------------------------------------------------------------------------
+// One rule for every shared record (#350): the same concurrency and corrupt-file
+// tests, run for the skip list and the summaries as for the Ledger.
+// ---------------------------------------------------------------------------
+
+const SKIPPED = "specs/_status/skipped.json";
+const SUMMARIES = "specs/_status/summaries.json";
+const sum = (n: number) => ({ photo_count: n, path_length_m: n, parts: 1 });
+
+const records = [
+  {
+    name: "skip list",
+    key: SKIPPED,
+    rival: { "specs/s/rival.json": { withdrawn_at: "t0" } },
+    change: async () => {
+      const m = await import("./missionStore.ts");
+      const s = (await m.sessions()) as Exclude<Awaited<ReturnType<typeof m.sessions>>, Response>;
+      return m.addSkipped(s.read, s.write, s.bucket, ["specs/s/mine.json"], "t1");
+    },
+    mine: "specs/s/mine.json",
+  },
+  {
+    name: "summaries",
+    key: SUMMARIES,
+    rival: { "specs/s/rival.json": sum(9) },
+    change: async () => {
+      const m = await import("./missionStore.ts");
+      const s = (await m.sessions()) as Exclude<Awaited<ReturnType<typeof m.sessions>>, Response>;
+      return m.updateSummaries(s.read, s.write, s.bucket, { "specs/s/mine.json": sum(1) });
+    },
+    mine: "specs/s/mine.json",
+  },
+];
+
+for (const r of records) {
+  test(`${r.name}: a write that lands while we decide is kept, not overwritten`, async () => {
+    store.put(r.key, {});
+    let reads = 0;
+    store.beforeDownload = (key) => {
+      // The rival lands between our first read and our re-read.
+      if (key === r.key && ++reads === 2) store.put(r.key, r.rival);
+    };
+    const out = await r.change();
+    assert.ok(typeof out !== "string", String(out));
+    const stored = store.json(r.key) as Record<string, unknown>;
+    assert.ok(r.mine in stored, "ours is there");
+    assert.ok(Object.keys(r.rival)[0] in stored, "the rival's is there");
+  });
+
+  test(`${r.name}: a write that lands while we settle is detected and retried`, async () => {
+    store.put(r.key, {});
+    let uploaded = false;
+    store.beforeDownload = (key) => {
+      // The first read-back finds our change overwritten by a rival's stale copy.
+      if (key === r.key && reads(key) === 3 && !uploaded) {
+        uploaded = true;
+        store.put(r.key, r.rival);
+      }
+    };
+    const counts = new Map<string, number>();
+    const reads = (k: string) => {
+      counts.set(k, (counts.get(k) ?? 0) + 1);
+      return counts.get(k)!;
+    };
+    const out = await r.change();
+    assert.ok(typeof out !== "string", String(out));
+    assert.ok(r.mine in (store.json(r.key) as Record<string, unknown>), "ours survived the retry");
+  });
+
+  test(`${r.name}: a corrupt file is a failure, never an empty record`, async () => {
+    store.put(r.key, "{ not json");
+    await assert.rejects(r.change(), /not valid JSON/);
+    assert.equal(String(store.files.get(r.key)), "{ not json", "it is not overwritten");
+  });
+}
+
+test("two Dispatches racing never lose a summary", async () => {
+  const lc = fresh();
+  const a = await saved(lc, "A");
+  const b = await saved(lc, "B");
+  const both = await Promise.all([lc.dispatch(caller, { id: a }), lc.dispatch(caller, { id: b })]);
+  for (const r of both) if (!r.ok) assert.match(r.message, /changed|try again/i);
+  const stored = (store.json(SUMMARIES) ?? {}) as Record<string, unknown>;
+  for (const r of both) if (r.ok) assert.ok(r.body.key in stored, `summary for ${r.body.key} kept`);
+});
