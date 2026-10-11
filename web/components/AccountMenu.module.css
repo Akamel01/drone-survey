@@ -1,0 +1,184 @@
+/* The Account menu (#358): an avatar button and the glass popover it opens,
+   restyled to the planner's own tokens (radius 18 menu / 12 items, spec §7).
+   Motion is the MapPane menu precedent (spec §9.1): 500 ms --ease-emphasised
+   morph in, 250 ms --ease-in dissolve out, items staggered by --stagger,
+   reduced motion a 150 ms crossfade. */
+
+.wrap {
+  position: relative;
+  z-index: 4; /* above the map pills (z-index 3), below the Notice (10) */
+}
+
+.avatar {
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  border: 1px solid var(--glass-edge);
+  background: var(--glass-clear);
+  color: var(--on-glass);
+  font-weight: 600;
+}
+
+.initial {
+  font-size: 1rem;
+  line-height: 1;
+  user-select: none;
+}
+
+.menu {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: 4;
+  width: max-content;
+  max-width: calc(100vw - 48px);
+  padding: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  border-radius: 18px;
+  transform-origin: top right;
+  animation: menuIn 500ms var(--ease-emphasised);
+}
+
+.menuClosing {
+  animation: menuOut 250ms var(--ease-in) forwards;
+}
+
+@keyframes menuIn {
+  from {
+    opacity: 0;
+    transform: scale(0.6);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes menuOut {
+  from {
+    opacity: 1;
+    filter: blur(0);
+  }
+  to {
+    opacity: 0;
+    filter: blur(4px);
+  }
+}
+
+/* Identity above the items: name over the address, both cut with an ellipsis
+   (the full value stays in title and in the accessible name). */
+.identity {
+  display: flex;
+  flex-direction: column;
+  padding: 6px 12px 8px;
+  min-width: 180px;
+  max-width: 260px;
+}
+
+.name {
+  font-weight: 600;
+  color: var(--on-glass);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.email {
+  font-size: 0.75rem;
+  color: var(--on-glass-2);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Items: the anchors and the Sign-out button share one row shape, every one at
+   least 44px tall (spec §11). */
+.item {
+  min-height: 44px;
+  width: 100%;
+  padding: 0 12px;
+  display: flex;
+  align-items: center;
+  border: none;
+  border-radius: 12px;
+  background: transparent;
+  box-shadow: none;
+  color: var(--on-glass);
+  font-weight: 500;
+  text-align: left;
+  text-decoration: none;
+  white-space: nowrap;
+  cursor: pointer;
+  animation: menuItemIn 150ms var(--ease-out) backwards;
+}
+
+@keyframes menuItemIn {
+  from {
+    opacity: 0;
+    filter: blur(4px);
+  }
+  to {
+    opacity: 1;
+    filter: blur(0);
+  }
+}
+
+.divider {
+  height: 1px;
+  margin: 4px 12px;
+  background: rgb(255 255 255 / 0.2);
+}
+
+/* Sign out keeps --danger, which on glass alone does not reach 4.5:1 over the
+   brightest backdrop the map can put behind it; the same scrim the warn hint
+   uses (Sidebar.module.css) carries the colour instead of a new one. */
+.danger {
+  background: rgb(0 0 0 / 0.28);
+  border: 1px solid rgb(240 122 106 / 0.4);
+  color: var(--danger);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .item:hover {
+    background: rgb(255 255 255 / 0.12);
+  }
+}
+
+/* Reduced motion: the opacity-only crossfade the spec wants, outranking the
+   global kill-all in globals.css. */
+@media (prefers-reduced-motion: reduce) {
+  .menu {
+    animation: menuFade 150ms ease-out !important;
+    transform: none;
+  }
+  .menuClosing {
+    animation: menuFadeOut 150ms ease-out forwards !important;
+  }
+  .item {
+    animation: menuFade 150ms ease-out !important;
+  }
+}
+
+@keyframes menuFade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes menuFadeOut {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
