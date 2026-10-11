@@ -86,17 +86,6 @@
   color: var(--on-glass);
 }
 
-.email {
-  margin: 0;
-  color: var(--on-glass-2);
-  overflow-wrap: anywhere;
-}
-
-.waiting button {
-  padding: 10px 18px;
-  font-weight: 600;
-}
-
 .link {
   display: inline-block;
   padding: 10px 16px;
@@ -202,5 +191,15 @@
   z-index: 2;
   top: calc(12px + env(safe-area-inset-top));
   left: 16px;
+  right: 16px;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  pointer-events: none; /* the strip spans the width; only its children are hit targets */
   text-shadow: 0 1px 8px rgb(0 0 0 / 0.5);
+}
+
+.brand > * {
+  pointer-events: auto;
 }
