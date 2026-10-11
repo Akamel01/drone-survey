@@ -9,6 +9,8 @@ import { firstRunDestination, type FirstRunStep } from "@/lib/firstRun";
 import MapPane, { type DrawMode } from "@/components/MapPane";
 import MapToolbar from "@/components/MapToolbar";
 import Wordmark from "@/components/Wordmark";
+import AccountMenu from "@/components/AccountMenu";
+import { authClient } from "@/lib/authClient";
 import HeroScene from "@/components/HeroScene";
 import MissionList from "@/components/MissionList";
 import LoadSheet from "@/components/LoadSheet";
@@ -157,6 +159,9 @@ export default function PlanPage() {
   // Accounts waiting for Approval (admin-only: only the admin-gated
   // AccountsSection ever reports a nonzero count). Badge unmounts at 0.
   const [pendingCount, setPendingCount] = useState(0);
+  // The operator's own identity in the chrome: the avatar the Account menu
+  // hangs from. Renders nothing without a session (Q1).
+  const { data: session } = authClient.useSession();
 
   const collapseMissions = useRef<HTMLButtonElement>(null);
   const collapseSettings = useRef<HTMLButtonElement>(null);
@@ -371,6 +376,9 @@ export default function PlanPage() {
       <h1 className="visually-hidden">Mission Control</h1>
       <Notice key={notice?.key ?? "empty"} payload={notice} onDismiss={dismissNotice} />
       <div className={styles.brand}><Wordmark /></div>
+      <div className={styles.account}>
+        <AccountMenu name={session?.user?.name ?? null} email={session?.user?.email ?? null} />
+      </div>
       <div className={styles.top}>
         <div className={styles.heroLayer} aria-hidden="true">
           <HeroScene playing={view === "missions"} />
