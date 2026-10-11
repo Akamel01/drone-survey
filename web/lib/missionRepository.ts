@@ -61,6 +61,8 @@ export interface ListView {
 }
 
 export interface ActOutcome {
+  /** The store took it, or the change is safely on this device. */
+  ok: boolean;
   text: string;
   /** Kept on this device rather than sent. */
   queued: boolean;
@@ -107,8 +109,6 @@ export interface RepositoryDeps {
    *  keep-or-send rule without redefining a global (#348). */
   online: () => boolean;
   transport: Transport;
-  /** The rows the list last read, for naming what a replay reports. */
-  rows: () => MissionRow[];
   onNotice?: (n: Notice) => void;
   /** When the read was taken. Injected so the cache stamp is assertable. */
   now: () => number;
@@ -119,9 +119,10 @@ export interface Repository {
   act(action: MissionAction, id: string): Promise<ActOutcome>;
   save(draft: MissionDraft, how?: Parameters<typeof missionClient.save>[1], base?: string): Promise<SaveOutcome>;
   reportLoaded(id: string, cards: BoardCard[]): Promise<MarkResult>;
-  /** Send what waited, in order, and say what came of it. Null when there was
+  /** Send what waited, in order, and say what came of it. `rows` is what the
+   *  list last read, for naming what a replay reports. Null when there was
    *  nothing to send, or nothing came of it. */
-  sync(): Promise<Report | null>;
+  sync(rows?: MissionRow[]): Promise<Report | null>;
   /** Everything of this Mission's that has not reached the store: what the
    *  row offers, and what a press must not overtake. */
   waitingFor(id: string): Entry[];
@@ -131,7 +132,6 @@ export function createRepository(deps: Partial<RepositoryDeps> = {}): Repository
   const store = deps.store !== undefined ? deps.store : safeStorage();
   const online = deps.online ?? (() => globalThis.navigator?.onLine !== false);
   const transport = deps.transport ?? missionClient;
-  const rows = deps.rows ?? (() => []);
   const now = deps.now ?? Date.now;
 
   /**
@@ -193,15 +193,16 @@ export function createRepository(deps: Partial<RepositoryDeps> = {}): Repository
     // overtakes one made before it. Dispatch is never kept -- with no network
     // it is refused, and behind a queued change it waits for one (ADR 0022).
     const keep = (): ActOutcome => {
-      if (!op) return { text: `Dispatch failed: ${NEEDS_NETWORK}`, queued: false };
-      if (!store || !enqueue(store, op, id)) return { text: noRoom(action), queued: false };
-      return { text: kept(action), queued: true };
+      if (!op) return { ok: false, text: `Dispatch failed: ${NEEDS_NETWORK}`, queued: false };
+      if (!store || !enqueue(store, op, id)) return { ok: false, text: noRoom(action), queued: false };
+      return { ok: true, text: kept(action), queued: true };
     };
     if (!online()) return keep();
     if (mustWait(id)) {
-      return op ? keep() : { text: `Dispatch failed: ${WAITING_FIRST}`, queued: false };
+      return op ? keep() : { ok: false, text: `Dispatch failed: ${WAITING_FIRST}`, queued: false };
     }
-    return { text: (await transport.run(action, id)).text, queued: false };
+    const sent = await transport.run(action, id);
+    return { ok: sent.ok, text: sent.text, queued: false };
   }
 
   async function save(draft: MissionDraft, how?: Parameters<typeof missionClient.save>[1], base?: string): Promise<SaveOutcome> {
@@ -245,12 +246,12 @@ export function createRepository(deps: Partial<RepositoryDeps> = {}): Repository
     return done.status === undefined || done.status >= 500 || done.status === 401 ? wait() : "refused";
   }
 
-  async function sync(): Promise<Report | null> {
+  async function sync(rows: MissionRow[] = []): Promise<Report | null> {
     if (!store || transport.signedOut() || !readOutbox(store).some((e) => !e.problem)) return null;
     const report = await replay(store, transport.send);
     if (report.sent.length === 0 && report.refused.length === 0) return null;
     const named = (e: Entry) =>
-      `“${e.draft?.name ?? e.problem?.conflict?.name ?? rows().find((r) => r.id === e.mission_id)?.name ?? "A Mission"}”`;
+      `“${e.draft?.name ?? e.problem?.conflict?.name ?? rows.find((r) => r.id === e.mission_id)?.name ?? "A Mission"}”`;
     const lines = report.refused.map((e) =>
       e.problem?.conflict
         ? `${named(e)} changed in the store while you were offline. Compare the two versions on its row and choose which to keep.`

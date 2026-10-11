@@ -21,23 +21,18 @@ import { firstSentence } from "@/lib/notice";
 import {
   compareFacts,
   discard,
-  enqueue,
   forMission,
   keepMine,
-  noSignal,
   overlay,
   readOutbox,
-  replay,
   subscribeOutbox,
   unshown,
   waitingLabel,
   type Entry,
-  type OutboxOp,
 } from "@/lib/outbox";
+import { NEEDS_NETWORK, WAITING_FIRST, createRepository } from "@/lib/missionRepository";
 import {
   asOfStamp,
-  cacheRead,
-  cachedRead,
   cardList,
   checkedAgo,
   formatStamp,
@@ -124,21 +119,8 @@ interface MissionListProps {
   onFirstRunNavigate?: (step: FirstRunStep) => void;
 }
 
-/** Why Dispatch is not offered, or null. It reserves Cards, so it is never kept
- *  for later: a refusal has to reach the operator while they can still do
- *  something about it (ADR 0022). */
-const NEEDS_NETWORK =
-  "Dispatch needs the network: it reserves a Card, and a refusal has to reach you while you can still act on it. Dispatch it when you are back online.";
-/** The row actions that wait for the network when there is none. Dispatch is
- *  not among them. */
-const OP_OF: Partial<Record<MissionAction, OutboxOp>> = {
-  Withdraw: "withdraw",
-  "Mark Flown": "flown",
-  "Unmark Flown": "unflown",
-  Remove: "remove",
-};
-const WAITING_FIRST =
-  "Dispatch waits until this Mission's changes have synced, so the store Dispatches what you see.";
+/** Why Dispatch is not offered, or null, and what each row's buttons wait on
+ *  are both `missionRepository`'s to answer (#348); this screen renders them. */
 
 export default function MissionList({ onEdit, onCopy, editingId = null, onRead, onSent, onNotice, onFirstRunNavigate }: MissionListProps) {
   const router = useRouter();
@@ -233,6 +215,10 @@ export default function MissionList({ onEdit, onCopy, editingId = null, onRead, 
   // The outbox replay `load` starts after a good read, defined below it.
   const syncRef = useRef<() => void>(() => {});
   const rowsRef = useRef<MissionRow[]>([]);
+
+  // Every send, keep and refusal about a Mission, and the sentences for them
+  // (#348). One for the life of the screen: it holds no state of its own.
+  const repository = useMemo(() => createRepository({ onNotice: onNotice }), [onNotice]);
 
   // `load` is stable and runs long after the render that made it; it must read
   // the filter as it is now, so it does not dissolve rows the operator has just
@@ -471,90 +457,56 @@ export default function MissionList({ onEdit, onCopy, editingId = null, onRead, 
     try {
       // Always the whole list: `archived_count` and the archived rows come in
       // one call, so the filter costs nothing and the count cannot disagree
-      // with what the filter reveals.
-      const outcome = await missionClient.list();
-      if (outcome.ok) {
-        const fresh = outcome.read;
-        const at = Date.now();
-        applyRead(fresh, gen);
-        setReadAt(at);
-        setNow(at);
-        setLive(true);
-        setError(null);
-        setGate(false);
-        const ls = safeStorage();
-        if (ls) cacheRead(ls, fresh, at);
-        reportRead.current?.(fresh);
-        // The store answered: whatever waited offline goes now.
-        syncRef.current();
-        return fresh;
-      }
-      // No session, or an Account still waiting: the cached list may be
-      // another Account's, so it is never shown in their place. Signed out
-      // goes to the home page, which is the sign-in (#244); waiting stays here
-      // and says so (the home page would send an approved Account straight
-      // back, and a pending one is told the same thing there).
-      if (outcome.status === 401 || outcome.status === 403) {
-        setError(outcome.text);
+      // with what the filter reveals. Which read, what is kept as the cache and
+      // what a 401 or a 403 means are the repository's to decide.
+      const view = await repository.load();
+      if (view.blocked) {
+        // No session, or an Account still waiting: the cached list may be
+        // another Account's, so it is never shown in their place. Signed out
+        // goes to the home page, which is the sign-in (#244); waiting stays here
+        // and says so (the home page would send an approved Account straight
+        // back, and a pending one is told the same thing there).
+        setError(view.error);
         setGate(true);
-        if (outcome.status === 401) router.replace("/");
+        if (view.signedOut) router.replace("/");
         return null;
       }
-      fallBackToCache(outcome.text);
-    } catch (err) {
-      fallBackToCache(
-        `The store could not be reached: ${err instanceof Error ? err.message : "unknown"}.`,
-      );
+      if (view.read) {
+        applyRead(view.read, gen);
+        setReadAt(view.readAt);
+        setNow(view.readAt ?? Date.now());
+        setLive(view.live);
+        setError(view.error);
+        setGate(false);
+        reportRead.current?.(view.read);
+        // The store answered: whatever waited offline goes now.
+        if (view.live) syncRef.current();
+        return view.read;
+      }
+      setError(view.error);
+      if (view.readAt === null) {
+        setLive(true);
+      } else {
+        setReadAt(view.readAt);
+        setLive(false);
+        setGate(false);
+      }
+      return null;
     } finally {
       setLoading(false);
     }
-    return null;
-
-    // Standing next to the aircraft with no signal, the last answer is worth
-    // more than an empty screen -- but only if it can never be mistaken for
-    // the live one, which is what the stamp on it is for.
-    function fallBackToCache(why: string) {
-      // No signal at all is said as such: it is the common case at a Site, and
-      // "could not be reached" reads like a fault (PWA-1, #313).
-      setError(typeof navigator !== "undefined" && navigator.onLine === false ? "You are offline" : why);
-      const ls = safeStorage();
-      const cached = ls ? cachedRead(ls) : null;
-      if (cached) {
-        applyRead(cached.read, gen);
-        setReadAt(cached.read_at);
-        setLive(false);
-        setGate(false);
-      } else {
-        setLive(true);
-      }
-    }
-  }, [applyRead, router]);
+  }, [applyRead, repository, router]);
 
   // Send what waited offline, in order, and say what happened (PWA-3). Called
-  // after every good read; a pass that finds nothing to send does nothing.
+  // after every good read; a pass that finds nothing to send does nothing. The
+  // replay and the Notice lines are the repository's; the re-read is this
+  // screen's, because the marker and the moments judge reads by generation.
   const syncOutbox = useCallback(async () => {
-    const ls = safeStorage();
-    if (!ls || missionClient.signedOut() || !readOutbox(ls).some((e) => !e.problem)) return;
-    const report = await replay(ls, missionClient.send);
-    if (report.sent.length === 0 && report.refused.length === 0) return;
+    const report = await repository.sync(rowsRef.current);
+    if (!report) return;
     reportSent.current?.(report.sent);
-    const named = (e: Entry) =>
-      `“${e.draft?.name ?? e.problem?.conflict?.name ?? rowsRef.current.find((r) => r.id === e.mission_id)?.name ?? "A Mission"}”`;
-    const lines = report.refused.map((e) =>
-      e.problem?.conflict
-        ? `${named(e)} changed in the store while you were offline. Compare the two versions on its row and choose which to keep.`
-        : `${named(e)} could not be sent: ${e.problem?.text}`,
-    );
-    const n = report.sent.length;
-    if (n > 0) lines.push(`${n} ${n === 1 ? "change" : "changes"} made offline ${n === 1 ? "is" : "are"} now in the store.`);
-    onNotice?.({
-      title: firstSentence(lines[0]),
-      body: lines.join(" "),
-      missionName: "",
-      failed: report.refused.length > 0,
-    });
     void load();
-  }, [load, onNotice]);
+  }, [load, repository]);
   useEffect(() => {
     syncRef.current = () => void syncOutbox();
   }, [syncOutbox]);
@@ -705,19 +657,9 @@ export default function MissionList({ onEdit, onCopy, editingId = null, onRead, 
       setAction((s) => beginAction(s, label, on));
       // With no signal Dispatch is refused with the reason, and every other
       // action is kept on this device and sent when the network is back
-      // (PWA-3).
-      let queued = false;
-      let outcome: missionClient.RunResult;
-      if (noSignal()) {
-        const ls = safeStorage();
-        const op = OP_OF[label];
-        queued = !!(ls && op && enqueue(ls, op, on));
-        outcome = queued
-          ? { ok: true, text: `${label} kept on this device, waiting to sync. It is sent to the store when the network is back.` }
-          : { ok: false, text: op ? `${label} failed: this browser has no room to keep it for later. Nothing changed.` : `Dispatch failed: ${NEEDS_NETWORK}` };
-      } else {
-        outcome = await missionClient.run(label, on);
-      }
+      // (PWA-3) -- and behind an older change to the same Mission whether there
+      // is a signal or not, which is what the repository decides.
+      const outcome = await repository.act(label, on);
       inFlight.current = false;
       setAction(IDLE);
       // The cause, set here and nowhere else: only the operator's own Mark
@@ -725,7 +667,7 @@ export default function MissionList({ onEdit, onCopy, editingId = null, onRead, 
       // storage events and cache fallbacks never touch it, so an inferred or
       // re-read Flown can never replay the moment. Consumed by the first read
       // issued after it (applyRead); reads already in flight cannot.
-      if (label === "Mark Flown" && outcome.ok && !queued) {
+      if (label === "Mark Flown" && outcome.ok && !outcome.queued) {
         flownMarkerRef.current = { id: on, seq: readGenRef.current };
       }
       const fresh = await load();
@@ -736,7 +678,7 @@ export default function MissionList({ onEdit, onCopy, editingId = null, onRead, 
         failed: !outcome.ok,
       });
     },
-    [load, onNotice],
+    [load, onNotice, repository],
   );
 
   const runAction = useCallback(
@@ -786,11 +728,14 @@ export default function MissionList({ onEdit, onCopy, editingId = null, onRead, 
   // so a reload shows the change the operator made, marked as not sent yet.
   const all = useMemo(() => overlay(read?.missions ?? [], entries), [read, entries]);
   const apart = useMemo(() => unshown(read?.missions ?? [], entries), [read, entries]);
-  // What waits on a row of its own (the rest is listed apart), and why Dispatch
-  // is not offered on it, or null.
+  // What waits on a row of its own (the rest is listed apart), what the whole
+  // Mission has still to go, and why Dispatch is not offered on it, or null.
+  // The second is the repository's answer, and the buttons follow it: a press
+  // must not overtake a change made before it (#348).
   const waitingOn = (row: MissionRow) => forMission(entries, row.id).filter((e) => !apart.includes(e));
+  const heldOn = (row: MissionRow) => repository.waitingFor(row.id);
   const dispatchWhy = (row: MissionRow) =>
-    offline || !live ? NEEDS_NETWORK : waitingOn(row).length > 0 ? WAITING_FIRST : null;
+    offline || !live ? NEEDS_NETWORK : heldOn(row).length > 0 ? WAITING_FIRST : null;
 
   const takeStores = (entry: Entry) => {
     const ls = safeStorage();
@@ -980,6 +925,7 @@ export default function MissionList({ onEdit, onCopy, editingId = null, onRead, 
               view={settledView ?? rowView(row, figures.get(row.id) ?? null, read?.stale_cards ?? [], read?.host?.notice ?? null)}
               editing={row.id === editingId}
               waiting={waitingOn(row)}
+              held={heldOn(row).length > 0}
               dispatchWhy={dispatchWhy(row)}
               onResolve={resolve}
               busy={action.running !== null}
@@ -1244,6 +1190,7 @@ function Row({
   view,
   editing,
   waiting,
+  held,
   dispatchWhy,
   onResolve,
   busy,
@@ -1256,6 +1203,9 @@ function Row({
   editing: boolean;
   /** What of this Mission's has not reached the store (PWA-3). */
   waiting: Entry[];
+  /** Whether anything of this Mission's is still to go, including what the row
+   *  lists apart: the buttons wait on all of it, not only on `waiting` (#348). */
+  held: boolean;
   dispatchWhy: string | null;
   onResolve: (entry: Entry) => void;
   busy: boolean;
@@ -1331,7 +1281,7 @@ function Row({
           <button
             key={name}
             onClick={() => onAction(name)}
-            disabled={(busy || waiting.length > 0 || (name === "Dispatch" && dispatchWhy !== null)) && name !== "Edit" && name !== "Copy"}
+            disabled={(busy || waiting.length > 0 || held || (name === "Dispatch" && dispatchWhy !== null)) && name !== "Edit" && name !== "Copy"}
             aria-describedby={name === "Dispatch" && dispatchWhy ? `${row.id}-why` : undefined}
             className={name === "Dispatch" ? "primary" : undefined}
           >

@@ -146,6 +146,7 @@ test("act: an online action waits behind this Mission's older queued save, inste
 
   assert.deepEqual(transport.ran, [], "nothing went to the store");
   assert.deepEqual(done, {
+    ok: true,
     text: "Withdraw kept on this device, waiting to sync. It is sent to the store when the network is back.",
     queued: true,
   });
@@ -181,6 +182,7 @@ test("act: with nothing waiting it goes to the store; with no room to keep it, t
   const store = storage();
   const transport = recorder();
   assert.deepEqual(await createRepository({ store, online: () => true, transport }).act("Mark Flown", "m1"), {
+    ok: true,
     text: "Mark Flown done",
     queued: false,
   });
@@ -243,8 +245,7 @@ test("reportLoaded: it waits behind this Mission's changes, keeps when there is 
 });
 
 test("load: a session that ended is signed out and never falls back to the cache; 403 never falls back either", async () => {
-  const answer = (body: unknown, status: number) => () => Response.json(body, { status });
-  let now = () => 1000;
+  const now = () => 1000;
 
   const signedOut = await createRepository({
     store: storage(),
@@ -327,11 +328,10 @@ test("sync: entries go in the order they were made, a refusal holds that Mission
     store,
     online: () => true,
     transport,
-    rows: () => [ROW],
     onNotice: (p) => notices.push(p),
   });
 
-  const report = await repo.sync();
+  const report = await repo.sync([ROW]);
 
   assert.deepEqual(transport.sent.map((e) => e.op), ["save", "flown"], "the refusal holds m1's later entry, not m2's");
   assert.deepEqual(report?.refused.map((e) => e.op), ["save"]);
