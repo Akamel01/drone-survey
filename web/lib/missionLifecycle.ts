@@ -96,6 +96,9 @@ export interface WithdrawBody {
   key?: string;
   withdrawn_at: string | undefined;
   cards_released: string[];
+  /** The Mission Name, so the phone can be told which one (#319). Absent on
+   *  the idempotent repeat, which tells nobody. */
+  name?: string;
 }
 export interface FlownBody {
   id: string;
@@ -624,7 +627,7 @@ export function createMissionLifecycle(store: MissionStore, owners: MissionOwner
 
         return {
           ok: true,
-          body: { id, key: specKey, withdrawn_at: withdrawn.withdrawn_at, cards_released: released },
+          body: { id, key: specKey, withdrawn_at: withdrawn.withdrawn_at, cards_released: released, name: record.name },
         };
       } catch (err) {
         return failure(err);

@@ -40,12 +40,14 @@ delete process.env.B2_READ_APP_KEY;
 const { getAuth } = await import("./accountAuth.ts");
 const { getPool, closeDb } = await import("./accountDb.ts");
 const { migrateMissionOwners } = await import("./missionOwners.ts");
+const { migratePush } = await import("./push.ts");
 const { getMigrations } = await import("better-auth/db/migration");
 
 const auth = await getAuth();
 await (await getMigrations(auth.options)).runMigrations();
 const pool = (await getPool())!;
 await migrateMissionOwners(pool);
+await migratePush(pool);
 
 type Who = "owner" | "alpha" | "beta" | "pending";
 const USERS: Record<Who, { id: string; email: string; emailVerified: boolean; approved: boolean; slug: string }> = {

@@ -65,6 +65,10 @@ Optional:
   configuration builds from that URL. Recovery is unset-the-trio plus redeploy.
 - `PGLITE_PORT` — fixed port for the local PGlite socket (default: one is
   picked).
+- Notifications (PWA-5, #319) — see "Notifications" below:
+  `VAPID_SUBJECT`, `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY` (all three, or
+  Web Push is off), `PUSH_HOST_TOKEN` (the host's token; unset, the host's
+  route answers 503), `NTFY_URL` (default `https://ntfy.sh`).
 
 ## Database
 
@@ -98,6 +102,45 @@ OAuth stand-in server, drives both providers, and writes screenshots to
 npm run build
 node scripts/auth-evidence.mjs
 ```
+
+## Notifications
+
+The installed app is told when a Mission changes (PWA-5, #319; decided in
+#232). The planner's routes send what the planner changes — Dispatched,
+Withdrawn, Superseded — to every device of the Workspace that owns the
+Mission. The Linux host sends what only it sees — Collected, Loaded (naming
+the Card to open), a Load refused — by POSTing to `/api/push/host` with the
+header `x-push-token: $PUSH_HOST_TOKEN`; the planner words it and sends it
+(a refusal goes to the operator's Workspace only). Flown is never announced.
+Subscriptions belong to an Account (`push_subscription`, created by
+`npm run db:migrate`) and are turned on per device in Settings, Notifications.
+The ntfy.sh fallback is switched on per Account there too: the planner makes a
+random topic, and the operator subscribes to it in the free ntfy app.
+
+The operator sets, in Vercel (production; previews too if wanted):
+
+| Variable | Value |
+| --- | --- |
+| `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY` | `npx web-push generate-vapid-keys` once, offline. The private key goes nowhere else. Changing the pair turns every device off until it is turned on again. |
+| `VAPID_SUBJECT` | `mailto:` the operator's address |
+| `PUSH_HOST_TOKEN` | a long random value, e.g. `openssl rand -base64 32`; the same value goes in the host's `push.env` |
+| `NTFY_URL` | optional; only for a self-hosted ntfy |
+
+On the Linux host, beside `b2-status.env` (mode 600):
+
+```
+~/.config/wayfinder/push.env
+PLANNER_URL=https://<the planner's domain>
+PUSH_HOST_TOKEN=<the same value as in Vercel>
+```
+
+and deploy `scripts/mission/host_push.py` beside `host_store.py`. Without the
+file the host sends nothing and everything else works as before; a planner that
+cannot be reached is printed and never costs a Collect or a Load.
+
+iPhone and iPad: Web Push reaches only the app added to the Home Screen, on
+iOS 16.4 or later, and is turned on from a tap inside it. If notifications
+were blocked, only the device's Settings can allow them again.
 
 ## Deploy on Vercel
 

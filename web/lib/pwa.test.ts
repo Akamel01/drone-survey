@@ -77,3 +77,38 @@ test("each build's worker has its own cache and deletes the older ones", () => {
   assert.match(a, /caches\.delete/);
   assert.ok(a.includes(`name.startsWith(${JSON.stringify(CACHE_PREFIX)}) && name !== CACHE`));
 });
+
+// PWA-5 (#319): every push is shown (Safari revokes an app that shows none),
+// and a tap opens the planner.
+test("worker shows every push it receives, and a tap opens the planner", async () => {
+  const listeners: Record<string, (e: unknown) => void> = {};
+  const shown: { title: string; options: { body: string; tag?: string; data: { url: string } } }[] = [];
+  const opened: string[] = [];
+  const self = {
+    location: new URL("https://planner.test/sw.js"),
+    addEventListener: (type: string, fn: (e: unknown) => void) => (listeners[type] = fn),
+    registration: { showNotification: async (title: string, options: never) => void shown.push({ title, options }) },
+    clients: { matchAll: async () => [], openWindow: async (url: string) => void opened.push(url) },
+  };
+  vm.runInNewContext(serviceWorkerSource("v"), { self, caches: {}, URL, Request, Response, fetch });
+  const waits: Promise<unknown>[] = [];
+  const push = (data: unknown) => listeners.push({ data, waitUntil: (p: Promise<unknown>) => waits.push(p) });
+  push({ json: () => ({ title: "Loaded", body: "North half is Loaded into way finder 1. Open way finder 1.", tag: "mission-m1", url: "/plan" }) });
+  push(null);
+  push({ json: () => JSON.parse("not json") });
+  await Promise.all(waits);
+  assert.equal(shown.length, 3);
+  assert.equal(shown[0].title, "Loaded");
+  assert.equal(shown[0].options.tag, "mission-m1");
+  assert.equal(shown[1].title, "Mission Control");
+  assert.match(shown[2].options.body, /A Mission changed/);
+
+  let closed = false;
+  listeners.notificationclick({
+    notification: { close: () => (closed = true), data: shown[0].options.data },
+    waitUntil: (p: Promise<unknown>) => waits.push(p),
+  });
+  await Promise.all(waits);
+  assert.ok(closed);
+  assert.deepEqual(opened, ["https://planner.test/plan"]);
+});

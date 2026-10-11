@@ -1,8 +1,9 @@
 import { requireCaller } from "@/lib/accountAccess";
 import { createMissionLifecycle } from "@/lib/missionLifecycle";
-import { respond } from "@/lib/missionRoute";
+import { afterResponse, respond } from "@/lib/missionRoute";
 import { pgMissionOwners } from "@/lib/missionOwners";
 import { b2MissionStore } from "@/lib/missionStore";
+import { dispatchNotices, notify } from "@/lib/push";
 
 // Dispatch: put this Mission's Spec into the store, and reserve the Cards it
 // will occupy.
@@ -31,5 +32,12 @@ export async function POST(request: Request) {
   } catch {
     return Response.json({ error: "Body is not JSON. Send { id }." }, { status: 400 });
   }
-  return respond(await createMissionLifecycle(b2MissionStore(), pgMissionOwners()).dispatch(gate.caller, raw));
+  const outcome = await createMissionLifecycle(b2MissionStore(), pgMissionOwners()).dispatch(gate.caller, raw);
+  // Dispatched, and Superseded for the earlier one it replaced: told to the
+  // Workspace's phones after the answer has gone (#319).
+  if (outcome.ok) {
+    const { workspaceId } = gate.caller;
+    afterResponse(() => notify(workspaceId, dispatchNotices(outcome.body)));
+  }
+  return respond(outcome);
 }

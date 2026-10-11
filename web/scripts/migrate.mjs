@@ -17,6 +17,7 @@ const { getAuth } = await import("../lib/accountAuth.ts");
 const { getMigrations } = await import("better-auth/db/migration");
 const { closeDb, getPool } = await import("../lib/accountDb.ts");
 const { migrateMissionOwners } = await import("../lib/missionOwners.ts");
+const { migratePush } = await import("../lib/push.ts");
 
 const auth = await getAuth();
 const { toBeCreated, toBeAdded, runMigrations } = await getMigrations(auth.options);
@@ -32,4 +33,7 @@ await runMigrations();
 // Which Workspace owns each Mission (#244): ours, not Better Auth's schema.
 await migrateMissionOwners(await getPool());
 console.log("mission_workspace is in place");
+// Each Account's notification subscriptions (#319).
+await migratePush(await getPool());
+console.log("push_subscription is in place");
 await closeDb();

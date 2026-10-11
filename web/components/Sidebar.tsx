@@ -12,6 +12,7 @@ import { authClient, signOutToHome } from "@/lib/authClient";
 import { accountLabel } from "@/lib/home";
 import AccountsSection from "./AccountsSection";
 import DeveloperSection from "./DeveloperSection";
+import Notifications from "./Notifications";
 import OfflineMaps from "./OfflineMaps";
 import type { MissionRow } from "@/lib/missionRecords";
 import type { NoticePayload } from "./Notice";
@@ -597,6 +598,8 @@ export default function Sidebar({
       </Section>
 
       <OfflineMaps spec={spec} missions={missions} offline={offline} />
+
+      <Notifications />
 
       <AccountsSection onNotice={onNotice} onPendingCount={onPendingCount} />
 
