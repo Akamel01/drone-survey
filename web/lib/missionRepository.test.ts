@@ -232,7 +232,11 @@ test("reportLoaded: it waits behind this Mission's changes, keeps when there is 
   const store = storage();
   enqueue(store, "save", "m1", draft({ base_updated_at: "t1" }));
   const transport = recorder();
-  assert.equal(await createRepository({ store, online: () => true, transport }).reportLoaded("m1", CARDS), "waiting");
+  assert.equal(
+    await createRepository({ store, online: () => true, transport }).reportLoaded("m1", CARDS),
+    "queued",
+    "queued is its own answer: the store was not unreachable, it was not reached",
+  );
   assert.deepEqual(transport.marked, [], "the store was not told over the queued save");
   assert.deepEqual(readOutbox(store).map((e) => e.op), ["save", "loaded"]);
 

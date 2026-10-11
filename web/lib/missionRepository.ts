@@ -77,9 +77,11 @@ export type SaveOutcome =
   | { kept: true; text: string; mission: MissionRecord };
 
 /** "sent": the store has it. "waiting": kept in the outbox, sent when the
- *  store can be reached. "refused": the store will not take it, or it could not
- *  be kept. */
-export type MarkResult = "sent" | "refused" | "waiting";
+ *  store can be reached. "queued": kept, behind this Mission's own earlier
+ *  changes, which go first (#348) -- a different reason from the store being
+ *  unreachable, and said differently. "refused": the store will not take it, or
+ *  it could not be kept. */
+export type MarkResult = "sent" | "refused" | "waiting" | "queued";
 
 /** Why Dispatch is not offered, or null. It reserves Cards, so it is never kept
  *  for later: a refusal has to reach the operator while they can still do
@@ -238,7 +240,7 @@ export function createRepository(deps: Partial<RepositoryDeps> = {}): Repository
   async function reportLoaded(id: string, cards: BoardCard[]): Promise<MarkResult> {
     const wait = (): MarkResult => (store && enqueueLoaded(store, id, cards) ? "waiting" : "refused");
     if (!online()) return wait();
-    if (mustWait(id)) return wait();
+    if (mustWait(id)) return store && enqueueLoaded(store, id, cards) ? "queued" : "refused";
     const done = await transport.markLoaded(id, cards);
     if (done.ok) return "sent";
     // No route reached, the store failing, or a session that ended (401): the
