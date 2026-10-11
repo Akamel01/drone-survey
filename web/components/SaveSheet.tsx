@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useId, useRef, useState, type FormEvent, type RefObject } from "react";
-import { MISSION_NAME_MAX } from "@/lib/missionRecords";
+import { MISSION_NAME_MAX } from "@/lib/missionIdentity";
 import type { MissionState } from "@/lib/model";
 import {
   STATE_LABEL,
