@@ -3,8 +3,9 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState, type CSSProperties } from "react";
-import { authClient, signOutToHome } from "@/lib/authClient";
+import { authClient } from "@/lib/authClient";
 import { markHomeEntrancePlayed, shouldPlayHomeEntrance, type HomeState } from "@/lib/home";
+import AccountMenu from "./AccountMenu";
 import EmailSignIn from "./EmailSignIn";
 import Wordmark from "./Wordmark";
 import HeroScene from "./HeroScene";
@@ -31,7 +32,7 @@ const SUPABASE_OPTION = { provider: "supabase" as const, label: "Continue with y
 
 export const UNVERIFIED_MESSAGE = "Confirm your email first; check your inbox.";
 
-export default function HomeScreen({ state, email, emailEnabled = false, supabaseOnly = false, refused = false }: HomeScreenProps) {
+export default function HomeScreen({ state, email, name, emailEnabled = false, supabaseOnly = false, refused = false }: HomeScreenProps) {
   const router = useRouter();
   const rootRef = useRef<HTMLElement>(null);
   const [busy, setBusy] = useState<string | null>(null);
@@ -71,7 +72,12 @@ export default function HomeScreen({ state, email, emailEnabled = false, supabas
   return (
     <main ref={rootRef} className={styles.root}>
       <HeroScene playing showOnWide />
-      <div className={styles.brand}><Wordmark /></div>
+      {/* The wordmark left, the Account's own menu right: the strip spans the
+          width so the avatar sits at the viewport edge whatever the name is. */}
+      <div className={styles.brand}>
+        <Wordmark />
+        <AccountMenu name={name ?? null} email={email ?? null} />
+      </div>
       <div className={styles.content}>
         <h1 className={styles.title}>Mission Control</h1>
         {state === "signedout" && withEmail && <EmailSignIn onBack={() => setWithEmail(false)} />}
@@ -108,14 +114,6 @@ export default function HomeScreen({ state, email, emailEnabled = false, supabas
         {state === "pending" && (
           <div className={styles.waiting}>
             <p className={styles.waitingCopy}>Your account is waiting for approval</p>
-            <p className={styles.email}>{email}</p>
-            <button
-              type="button"
-              className="glass-clear-strong"
-              onClick={() => void signOutToHome()}
-            >
-              Sign out
-            </button>
           </div>
         )}
         {state === "unconfigured" && (

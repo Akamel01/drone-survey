@@ -8,8 +8,6 @@ import { coord, type SiteChoice } from "@/lib/missionView";
 import type { Editing } from "@/app/plan/page";
 import SiteCombobox from "./SiteCombobox";
 import styles from "./Sidebar.module.css";
-import { authClient, signOutToHome } from "@/lib/authClient";
-import { accountLabel } from "@/lib/home";
 import AccountsSection from "./AccountsSection";
 import DeveloperSection from "./DeveloperSection";
 import Notifications from "./Notifications";
@@ -605,23 +603,7 @@ export default function Sidebar({
 
       <DeveloperSection />
 
-      <SignedInLine />
-
     </aside>
-  );
-}
-
-function SignedInLine() {
-  const { data, error } = authClient.useSession();
-  if (error || !data?.user) return null;
-  const { name, email } = data.user;
-  return (
-    <div className={styles.accountLine}>
-      <span className={styles.accountText}>Signed in as {accountLabel(name, email)} ·</span>
-      <button type="button" onClick={() => void signOutToHome()}>
-        Sign out
-      </button>
-    </div>
   );
 }
 

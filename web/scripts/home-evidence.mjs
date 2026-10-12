@@ -338,23 +338,24 @@ async function phaseT2(browser, standin, base) {
     );
 
     if (ownerLanded) {
-      const panel = page.locator("#settings-panel");
-      const line = panel.getByText("Signed in as");
-      await line.waitFor({ timeout: 15_000 });
-      const lineText = ((await line.textContent()) ?? "").replace(/\s+/g, " ").trim();
-      const signOut = panel.getByRole("button", { name: "Sign out", exact: true });
+      // The operator's identity and exit live in the Account menu now (#358).
+      const avatar = page.getByRole("button", { name: /^Account: / });
+      await avatar.waitFor({ timeout: 15_000 });
+      await avatar.click();
+      const menu = page.getByRole("menu", { name: "Account" });
+      await menu.waitFor({ timeout: 15_000 });
+      const nameText = ((await menu.getByText("Owner Example", { exact: true }).textContent()) ?? "").trim();
+      const emailText = ((await menu.getByText(OWNER_EMAIL, { exact: true }).textContent()) ?? "").trim();
+      const signOut = menu.getByRole("menuitem", { name: "Sign out", exact: true });
       const signOutVisible = await signOut.isVisible();
-      // The line is the last child of the settings column: scroll it into the
-      // viewport so the screenshot actually shows it.
-      await signOut.scrollIntoViewIfNeeded();
       await page.waitForTimeout(500);
       const box = await signOut.boundingBox();
       const inFrame = !!box && box.y >= 0 && box.y + box.height <= 900;
-      const settingsShot = await shoot(page, "settings-line.png", { width: 1440, height: 900 });
+      const menuShot = await shoot(page, "account-menu.png", { width: 1440, height: 900 });
       row(
         "T2",
-        lineText === "Signed in as Owner Example ·" && signOutVisible && inFrame && settingsShot.ok,
-        `Settings line "${lineText}" + Sign out button (in frame: y=${box ? Math.round(box.y) : "?"}); ${shotDetail(settingsShot, "settings-line.png")}`,
+        nameText === "Owner Example" && emailText === OWNER_EMAIL && signOutVisible && inFrame && menuShot.ok,
+        `Account menu "${nameText}" ${emailText} + Sign out (in frame: y=${box ? Math.round(box.y) : "?"}); ${shotDetail(menuShot, "account-menu.png")}`,
       );
 
       await signOut.click();
@@ -388,14 +389,19 @@ async function phaseT2(browser, standin, base) {
     const request = await clickPill(page, standin, "Continue with Google");
     const landed = await waitForFlowLanding(page);
     if (landed) {
-      const emailOk = await page.getByText(PENDING_EMAIL, { exact: true }).isVisible();
-      const signOutOk = await page.getByRole("button", { name: "Sign out", exact: true }).isVisible();
+      // The address and Sign out sit behind the Account menu now (#358): open
+      // it, assert both, and screenshot with it open.
+      await page.getByRole("button", { name: /^Account: / }).click();
+      const menu = page.getByRole("menu", { name: "Account" });
+      await menu.waitFor({ timeout: 15_000 });
+      const emailOk = await menu.getByText(PENDING_EMAIL, { exact: true }).isVisible();
+      const signOutOk = await menu.getByRole("menuitem", { name: "Sign out", exact: true }).isVisible();
       await page.waitForTimeout(1_000);
       const pendingShot = await shoot(page, "waiting-pending.png", { width: 375, height: 812 });
       row(
         "T2",
         !!request && emailOk && signOutOk && pendingShot.ok,
-        `pending ${PENDING_EMAIL}: "Your account is waiting for approval" + email + Sign out; ${shotDetail(pendingShot, "waiting-pending.png")}`,
+        `pending ${PENDING_EMAIL}: "Your account is waiting for approval" + Account menu (email + Sign out); ${shotDetail(pendingShot, "waiting-pending.png")}`,
       );
     } else {
       row(

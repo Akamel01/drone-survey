@@ -152,11 +152,34 @@ async function getSession(context) {
   return response.json();
 }
 
+/** The Account menu (#358): the avatar button every signed-in surface mounts,
+ *  the glass menu hanging from it, and its Sign out item. */
+const accountButton = (page) => page.getByRole("button", { name: /^Account: / });
+const accountMenu = (page) => page.getByRole("menu", { name: "Account" });
+const signOutItem = (page) => accountMenu(page).getByRole("menuitem", { name: "Sign out", exact: true });
+
+/** Opens the Account menu by pointer and waits for it to show. */
+async function openAccountMenu(page) {
+  const button = accountButton(page);
+  await button.waitFor({ state: "visible", timeout: 20_000 });
+  await button.click();
+  await accountMenu(page).waitFor({ state: "visible", timeout: 10_000 });
+}
+
+/** Closes it with Escape and waits for the 260 ms close to unmount it. */
+async function closeAccountMenu(page) {
+  await page.keyboard.press("Escape");
+  await accountMenu(page).waitFor({ state: "hidden", timeout: 10_000 });
+}
+
 /** The pending landing screen: copy + the email the identity reported. Waiting
- *  for it proves the identity queue advanced. */
+ *  for it proves the identity queue advanced. The address sits behind the
+ *  Account menu now (#358), so open it, assert and close. */
 async function waitForPending(page, email) {
   await page.getByText("Your account is waiting for approval").waitFor({ timeout: 45_000 });
-  await shown(page.getByText(email, { exact: true }));
+  await openAccountMenu(page);
+  await shown(accountMenu(page).getByText(email, { exact: true }));
+  await closeAccountMenu(page);
 }
 
 // better-auth's default special rule is 3 POSTs per 10 s on paths starting
@@ -335,6 +358,20 @@ test("sign up with Google, sign out, and sign in again: the same user with a new
   await clickPill(page, standin, "Continue with Google");
   await waitForPending(page, IDENTITIES[0].email);
 
+  // E2E_SHOTS=<dir>: the pending home with its Account menu open at 375, for
+  // the pull request (#358). The menu needs a live session, so it is captured
+  // here while this context is signed in.
+  if (process.env.E2E_SHOTS) {
+    mkdirSync(process.env.E2E_SHOTS, { recursive: true });
+    await page.setViewportSize({ width: 375, height: 812 });
+    await page.waitForTimeout(400);
+    await openAccountMenu(page);
+    await page.waitForTimeout(600); // the 500 ms opening morph settles
+    await page.screenshot({ path: path.join(process.env.E2E_SHOTS, "pending-home-375-open.png") });
+    await closeAccountMenu(page);
+    await page.setViewportSize({ width: 1280, height: 720 });
+  }
+
   const session1 = await getSession(context);
   assert.equal(session1.user.email, IDENTITIES[0].email);
   assert.equal(session1.user.approved, false, "a new account starts pending");
@@ -342,8 +379,10 @@ test("sign up with Google, sign out, and sign in again: the same user with a new
   captured.googleSessionId = session1.session.id;
   captured.googleCookie = await sessionCookieHeader(context);
 
-  // Sign out: back to the signed-out home page, session row deleted.
-  await page.getByRole("button", { name: "Sign out", exact: true }).click();
+  // Sign out through the Account menu (#358): back to the signed-out home
+  // page, session row deleted.
+  await openAccountMenu(page);
+  await signOutItem(page).click();
   await page.waitForURL((url) => url.pathname === "/", { timeout: 20_000 });
   await shown(page.getByRole("button", { name: "Continue with Google", exact: true }));
   assert.equal(await getSession(context), null, "sign-out left no session");
@@ -394,9 +433,12 @@ test("the OWNER_EMAIL Account lands in the planner as admin; any other Account w
   await clickPill(page, standin, "Continue with Google");
   await page.waitForURL((url) => url.pathname === "/plan", { timeout: 45_000 });
 
-  const settings = page.locator("#settings-panel");
-  await settings.getByText("Signed in as").waitFor({ timeout: 15_000 });
-  await shown(settings.getByRole("button", { name: "Sign out", exact: true }));
+  // The operator's identity lives in the Account menu now (#358), not Settings.
+  await openAccountMenu(page);
+  await shown(accountMenu(page).getByText("Owner Example", { exact: true }));
+  await shown(accountMenu(page).getByText(OWNER_EMAIL, { exact: true }));
+  await shown(signOutItem(page));
+  await closeAccountMenu(page);
   assert.equal(
     await page.getByText("Your account is waiting for approval").count(),
     0,
@@ -410,6 +452,49 @@ test("the OWNER_EMAIL Account lands in the planner as admin; any other Account w
   captured.ownerUserId = ownerSession.user.id;
   captured.ownerSessionId = ownerSession.session.id;
   captured.ownerCookie = await sessionCookieHeader(ownerContext);
+
+  // E2E_SHOTS=<dir>: the Account menu on the planner, closed and open at both
+  // widths, plus the folded-Settings variant (Q6), for the pull request (#358).
+  if (process.env.E2E_SHOTS) {
+    mkdirSync(process.env.E2E_SHOTS, { recursive: true });
+    const shot = (p, name) => p.screenshot({ path: path.join(process.env.E2E_SHOTS, name) });
+
+    await page.waitForTimeout(600);
+    await shot(page, "account-1440-closed.png");
+    await openAccountMenu(page);
+    await page.waitForTimeout(600); // the 500 ms opening morph settles
+    await shot(page, "account-1440-open.png");
+    await closeAccountMenu(page);
+
+    // Folded Settings: the edge tab is what the avatar must stay clear of (Q6).
+    await page.getByRole("button", { name: "Collapse Settings", exact: true }).click();
+    await shown(page.getByRole("button", { name: /^Expand Settings/ }));
+    await openAccountMenu(page);
+    await page.waitForTimeout(600);
+    await shot(page, "account-1440-settings-folded-open.png");
+    await closeAccountMenu(page);
+    await page.getByRole("button", { name: /^Expand Settings/ }).click();
+
+    // 375 on the Map view, so the map pills are in frame beside the avatar.
+    const phone = await browser.newContext({
+      viewport: { width: 375, height: 812 },
+      isMobile: true,
+      hasTouch: true,
+    });
+    await phone.addCookies(await ownerContext.cookies());
+    const phonePage = await phone.newPage();
+    await phonePage.goto(`${base}/plan`, { waitUntil: "domcontentloaded" });
+    const mapTab = phonePage.getByRole("navigation", { name: "Show" }).getByRole("button", { name: "Map" });
+    await shown(mapTab);
+    await mapTab.click();
+    await phonePage.getByRole("group", { name: "Map display" }).waitFor({ timeout: 15_000 });
+    await phonePage.waitForTimeout(1_500);
+    await shot(phonePage, "account-375-map-closed.png");
+    await openAccountMenu(phonePage);
+    await phonePage.waitForTimeout(600);
+    await shot(phonePage, "account-375-map-open.png");
+    await phone.close();
+  }
 
   // The same pill, a non-owner identity: waiting screen, no planner.
   const otherContext = await browser.newContext();
@@ -437,18 +522,150 @@ test("signing out of the planner returns to the signed-out home page", async () 
   await clickPill(page, standin, "Continue with Google");
   await page.waitForURL((url) => url.pathname === "/plan", { timeout: 45_000 });
 
-  const settings = page.locator("#settings-panel");
-  await settings.getByText("Signed in as").waitFor({ timeout: 15_000 });
+  // The Account menu is this surface's identity + exit now (#358).
+  await openAccountMenu(page);
+  await shown(accountMenu(page).getByText(OWNER_EMAIL, { exact: true }));
   const session = await getSession(context);
   assert.equal(session.user.email, OWNER_EMAIL);
   captured.t35SessionId = session.session.id; // T6 proves this row was deleted
 
-  await settings.getByRole("button", { name: "Sign out", exact: true }).click();
+  await signOutItem(page).click();
   await page.waitForURL((url) => url.pathname === "/", { timeout: 20_000 });
   await shown(page.getByRole("button", { name: "Continue with Google", exact: true }));
   await shown(page.getByRole("button", { name: "Continue with GitHub", exact: true }));
   assert.equal(await getSession(context), null, "the planner sign-out left no session");
 
+  await context.close();
+});
+
+// ---------------------------------------------------------------------------
+// T3.6 -- the Account menu itself: mouse, keyboard, links, reduced motion
+// ---------------------------------------------------------------------------
+
+/** A signed-in planner page on the owner session: no sign-in, so the identity
+ *  queue and the sign-in rate limit stay untouched (T6 counts 7 authorizes). */
+async function ownerPlanner(options = {}) {
+  const eq = captured.ownerCookie.indexOf("=");
+  const context = await browser.newContext({ viewport: { width: 1440, height: 900 }, ...options });
+  await context.addCookies([
+    {
+      name: captured.ownerCookie.slice(0, eq),
+      value: captured.ownerCookie.slice(eq + 1),
+      domain: "localhost",
+      path: "/",
+      secure: true,
+    },
+  ]);
+  const page = await context.newPage();
+  await page.goto(`${base}/plan`, { waitUntil: "domcontentloaded" });
+  return { context, page };
+}
+
+test("the Account menu: opens by mouse and keyboard, arrows wrap, End/Home jump, Escape returns focus, tap-outside closes", async () => {
+  const { context, page } = await ownerPlanner();
+
+  const btn = accountButton(page);
+  const menu = accountMenu(page);
+  const onButton = () => page.evaluate(() => document.activeElement === document.querySelector('[aria-haspopup="menu"]'));
+  const focusedText = () => page.evaluate(() => document.activeElement?.textContent?.trim() ?? "");
+
+  // The menu-button a11y contract (spec §10): haspopup, collapsed, labelled.
+  await shown(btn);
+  assert.equal(await btn.getAttribute("aria-haspopup"), "menu");
+  assert.equal(await btn.getAttribute("aria-expanded"), "false");
+  assert.equal(await btn.getAttribute("aria-label"), "Account: Owner Example");
+
+  // The two links carry the exact absolute destinations (grilling checklist).
+  await openAccountMenu(page);
+  assert.equal(
+    await menu.getByRole("menuitem", { name: "Profile", exact: true }).getAttribute("href"),
+    "https://papyrus-ai.net/account",
+  );
+  assert.equal(
+    await menu.getByRole("menuitem", { name: "Plans & billing", exact: true }).getAttribute("href"),
+    "https://papyrus-ai.net/account/billing",
+  );
+  assert.equal(await btn.getAttribute("aria-expanded"), "true");
+  await closeAccountMenu(page);
+  assert.equal(await btn.getAttribute("aria-expanded"), "false");
+  assert.ok(await onButton(), "Escape returned focus to the avatar button");
+
+  // ArrowDown opens on the first item; arrows move and wrap; Home/End jump.
+  await btn.focus();
+  await page.keyboard.press("ArrowDown");
+  await menu.waitFor({ state: "visible" });
+  assert.equal(await focusedText(), "Profile");
+  await page.keyboard.press("ArrowDown");
+  assert.equal(await focusedText(), "Plans & billing");
+  await page.keyboard.press("ArrowDown");
+  assert.equal(await focusedText(), "Sign out");
+  await page.keyboard.press("ArrowDown"); // wraps to the top
+  assert.equal(await focusedText(), "Profile");
+  await page.keyboard.press("ArrowUp"); // wraps to the bottom
+  assert.equal(await focusedText(), "Sign out");
+  await page.keyboard.press("Home");
+  assert.equal(await focusedText(), "Profile");
+  await page.keyboard.press("End");
+  assert.equal(await focusedText(), "Sign out");
+
+  // Escape closes and returns focus.
+  await page.keyboard.press("Escape");
+  await menu.waitFor({ state: "hidden" });
+  assert.ok(await onButton(), "Escape returned focus after a keyboard open");
+
+  // ArrowUp also opens, on the first item (spec §10).
+  await btn.focus();
+  await page.keyboard.press("ArrowUp");
+  await menu.waitFor({ state: "visible" });
+  assert.equal(await focusedText(), "Profile");
+
+  // Tap-outside (mouse) closes.
+  await page.mouse.click(400, 500);
+  await menu.waitFor({ state: "hidden" });
+
+  await context.close();
+});
+
+test("the Account menu crossfades under reduced motion instead of morphing", async () => {
+  const { context, page } = await ownerPlanner({ reducedMotion: "reduce" });
+  await openAccountMenu(page);
+  const name = await accountMenu(page).evaluate((el) => getComputedStyle(el).animationName);
+  assert.ok(name.endsWith("menuFade"), `reduced motion gets the 150 ms crossfade (${name})`);
+  await shown(signOutItem(page));
+  await closeAccountMenu(page);
+  await context.close();
+});
+
+// Q4 pins the motion to the MapPane precedent (spec §8/§9): a 500 ms morph in
+// and a 150 ms blur-to-sharp on the items, with a 250 ms dissolve out. Q8 adds
+// the 44 px item target.
+test("the Account menu carries the spec motion and 44 px items", async () => {
+  const { context, page } = await ownerPlanner();
+  await openAccountMenu(page);
+  // The 500 ms morph scales the menu from 0.6, so measuring mid-flight reads the
+  // 44 px items as 26.4 px. Wait for the animations themselves, not a guessed
+  // timeout: --ease-emphasised is still at scale(0.9993) well past 600 ms.
+  await accountMenu(page).evaluate((el) =>
+    Promise.all(el.getAnimations({ subtree: true }).map((a) => a.finished)),
+  );
+  const styles = await accountMenu(page).evaluate((el) => {
+    const cs = getComputedStyle(el);
+    const item = el.querySelector('[role="menuitem"]');
+    return {
+      name: cs.animationName,
+      duration: cs.animationDuration,
+      itemDuration: getComputedStyle(item).animationDuration,
+      itemHeight: item.getBoundingClientRect().height,
+    };
+  });
+  // CSS modules scope keyframe names, so match the tail.
+  assert.ok(styles.name.endsWith("menuIn"), `the opening morph (${styles.name})`);
+  assert.equal(styles.duration, "0.5s", "500 ms in (spec §8)");
+  assert.equal(styles.itemDuration, "0.15s", "items blur to sharp over 150 ms");
+  assert.ok(styles.itemHeight >= 44, `menu items are a 44 px touch target (${styles.itemHeight}px)`);
+
+  // Close: the 250 ms dissolve plays out and the menu leaves the DOM.
+  await closeAccountMenu(page);
   await context.close();
 });
 
@@ -771,10 +988,11 @@ test("email and password: sign up, confirm by mail, sign in, a wrong password, a
     await page.goto(`${base}/`, { waitUntil: "domcontentloaded" });
     await page.getByRole("button", { name: "Continue with email", exact: true }).click();
   };
-  // The pending screen's Sign out already sits at "/", so wait for the
-  // signed-out screen itself, not the URL, before reloading.
+  // The pending screen's Sign out is behind the Account menu and already sits
+  // at "/", so wait for the signed-out screen itself, not the URL, before reloading.
   const signOutHere = async () => {
-    await page.getByRole("button", { name: "Sign out", exact: true }).click();
+    await openAccountMenu(page);
+    await signOutItem(page).click();
     await shown(page.getByRole("button", { name: "Continue with Google", exact: true }));
     assert.equal(await getSession(context), null, "signed out");
   };

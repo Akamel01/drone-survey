@@ -2,6 +2,8 @@
   height: 100dvh;
   display: flex;
   flex-direction: column;
+  /* Containing block for the chrome that floats (wordmark, Account menu). */
+  position: relative;
 }
 
 /* Papyrus AI wordmark strip above the columns: covers no control (#342). */
@@ -9,6 +11,17 @@
   flex: none;
   padding: env(safe-area-inset-top) 12px 0;
   background: var(--canopy-900);
+}
+
+/* The Account menu's home in the chrome (#358). Narrow: the right end of the
+   wordmark strip. Wide: over the map, and it steps clear of the Settings panel
+   the same way the map pills do, so it never lands on the collapse button.
+   The menu itself opens downward and paints above the pills, below the Notice. */
+.account {
+  position: absolute;
+  z-index: 3;
+  top: env(safe-area-inset-top);
+  right: 12px;
 }
 
 .top {
@@ -351,6 +364,20 @@
   }
 
   .missions { padding-top: 48px; }
+
+  /* The account follows the Settings panel's edge: with the panel open the
+     avatar sits clear of its header (and so of the collapse button). */
+  .account {
+    top: 12px;
+    right: calc(var(--settings-w, 0px) + 24px);
+  }
+
+  /* Folded, the panel's place at the corner belongs to the edge tab it leaves
+     behind (right 12px, 28 wide), so the avatar steps left of it: 52px clears
+     the tab by 12px, the same gap the open panel leaves. */
+  .page[data-settings="closed"] .account {
+    right: 52px;
+  }
 
   .top {
     position: absolute;
