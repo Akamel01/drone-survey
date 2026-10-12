@@ -642,6 +642,12 @@ test("the Account menu crossfades under reduced motion instead of morphing", asy
 test("the Account menu carries the spec motion and 44 px items", async () => {
   const { context, page } = await ownerPlanner();
   await openAccountMenu(page);
+  // The 500 ms morph scales the menu from 0.6, so measuring mid-flight reads the
+  // 44 px items as 26.4 px. Wait for the animations themselves, not a guessed
+  // timeout: --ease-emphasised is still at scale(0.9993) well past 600 ms.
+  await accountMenu(page).evaluate((el) =>
+    Promise.all(el.getAnimations({ subtree: true }).map((a) => a.finished)),
+  );
   const styles = await accountMenu(page).evaluate((el) => {
     const cs = getComputedStyle(el);
     const item = el.querySelector('[role="menuitem"]');
