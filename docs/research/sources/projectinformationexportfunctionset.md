@@ -1,32 +1,8 @@
-<!-- source: https://dev.epicgames.com/documentation/en-us/realityscan/projectinformationexportfunctionset
-     http: 200
-     fetched: 2026-09-19T01:50:09Z
-     extracted from HTML; wording verbatim, layout lost -->
+<!-- source: https://dev.epicgames.com/documentation/en-us/realityscan/projectinformationexportfunctionset -->
+<!-- http: 200 -->
+<!-- fetched: 2026-09-19T01:50:09Z -->
+<!-- full extracted text: docs/research/sources/.cache/projectinformationexportfunctionset.md (gitignored, never committed) -->
 
-ProjectInformationExportFunctionSet | Realityscan Documentation | Epic Developer Community 
+# ProjectInformationExportFunctionSet / Realityscan Documentation / Epic Develo...
 
-Table of Contents 
-
-Developer 
-
-Project Information Export Function Set 
-
-Project Information Export Function Set
-
-Functions and variables used within ProjectInformationExportFunctionSet. 
-
-This function set can be invoked using the $Using function.   
-
-$Using( "RealityScan.Report.ProjectInformationExportFunctionSet" ) 
-
-Available Variables (ProjectInformationExportFunctionSet)
-
-Variables available within ProjectInformationExportFunctionSet.
-
-Available Functions (ProjectInformationExportFunctionSet)
-
-Functions available within ProjectInformationExportFunctionSet.
-
-Ask questions and help your peers  Developer Forums 
-
-Write your own tutorials or read those from others  Learning Library
+Licence/terms: vendor documentation, copyrighted, excerpt only

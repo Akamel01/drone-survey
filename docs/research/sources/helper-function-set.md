@@ -1,32 +1,8 @@
-<!-- source: https://dev.epicgames.com/documentation/en-us/realityscan/helper-function-set
-     http: 200
-     fetched: 2026-09-19T01:50:04Z
-     extracted from HTML; wording verbatim, layout lost -->
+<!-- source: https://dev.epicgames.com/documentation/en-us/realityscan/helper-function-set -->
+<!-- http: 200 -->
+<!-- fetched: 2026-09-19T01:50:04Z -->
+<!-- full extracted text: docs/research/sources/.cache/helper-function-set.md (gitignored, never committed) -->
 
-Helper Function Set | Realityscan Documentation | Epic Developer Community 
+# Helper Function Set / Realityscan Documentation / Epic Developer Community
 
-Table of Contents 
-
-Developer 
-
-Helper Function Set 
-
-Helper Function Set
-
-Functions and variables used within HelperFunctionSet. 
-
-This function set can be invoked using the $Using function. 
-
-$Using( "RealityScan.Report.HelperFunctionSet" ) 
-
-Available Functions (HelperFunctionSet)
-
-Functions available within HelperFunctionSet.
-
-Available Expression Functions (HelperFunctionSet)
-
-Expression functions available within HelperFunctionSet.
-
-Ask questions and help your peers  Developer Forums 
-
-Write your own tutorials or read those from others  Learning Library
+Licence/terms: vendor documentation, copyrighted, excerpt only
