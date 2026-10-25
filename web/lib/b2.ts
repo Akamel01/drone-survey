@@ -158,24 +158,32 @@ export async function downloadRange(
 }
 
 export async function uploadFile(s: B2Session, key: string, body: Buffer): Promise<void> {
-  const up = await b2Fetch(s, (t) => `${t.apiUrl}/b2api/v2/b2_get_upload_url`, (t) => ({
-    method: "POST",
-    headers: { Authorization: t.token, "Content-Type": "application/json" },
-    body: JSON.stringify({ bucketId: t.bucketId }),
-  }));
-  if (!up.ok) throw new Error(`upload url failed: ${up.status}`);
-  const { uploadUrl, authorizationToken: uploadToken } = await up.json();
-  const put = await fetch(uploadUrl, {
-    method: "POST",
-    headers: {
-      Authorization: uploadToken,
-      "X-Bz-File-Name": encodeURIComponent(key),
-      "Content-Type": "application/json",
-      "X-Bz-Content-Sha1": createHash("sha1").update(body).digest("hex"),
-    },
-    body: new Uint8Array(body),
-  });
-  if (!put.ok) throw new Error(`upload failed: ${put.status}`);
+  const sha1 = createHash("sha1").update(body).digest("hex");
+  async function doUpload(): Promise<Response> {
+    const up = await b2Fetch(s, (t) => `${t.apiUrl}/b2api/v2/b2_get_upload_url`, (t) => ({
+      method: "POST",
+      headers: { Authorization: t.token, "Content-Type": "application/json" },
+      body: JSON.stringify({ bucketId: t.bucketId }),
+    }));
+    if (!up.ok) throw new Error(`upload url failed: ${up.status}`);
+    const { uploadUrl, authorizationToken: uploadToken } = await up.json();
+    return fetch(uploadUrl, {
+      method: "POST",
+      headers: {
+        Authorization: uploadToken,
+        "X-Bz-File-Name": encodeURIComponent(key),
+        "Content-Type": "application/json",
+        "X-Bz-Content-Sha1": sha1,
+      },
+      body: new Uint8Array(body),
+    });
+  }
+  const first = await doUpload();
+  if (first.ok) return;
+  if (first.status !== 401) throw new Error(`upload failed: ${first.status}`);
+  // B2 recommends a fresh upload URL on a failed upload; retry once.
+  const second = await doUpload();
+  if (!second.ok) throw new Error(`upload failed: ${second.status}`);
 }
 
 export async function deleteFile(s: B2Session, fileId: string, fileName: string): Promise<void> {
