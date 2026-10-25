@@ -149,3 +149,60 @@ test("a rejected token is refreshed once, and the call succeeds on the new one",
     globalThis.fetch = real;
   }
 });
+
+test("uploadFile retries once on a 401 upload PUT with a fresh upload URL", async () => {
+  const body = Buffer.from('{"x":1}');
+  const real = globalThis.fetch;
+  let uploadUrlCalls = 0;
+  let putCalls = 0;
+  globalThis.fetch = (async (input: RequestInfo | URL) => {
+    const url = String(input);
+    if (url.includes("b2_get_upload_url")) {
+      uploadUrlCalls++;
+      return new Response(
+        JSON.stringify({ uploadUrl: `https://upload.example/${uploadUrlCalls}`, authorizationToken: `up-${uploadUrlCalls}` }),
+        { status: 200 },
+      );
+    }
+    if (url.startsWith("https://upload.example")) {
+      putCalls++;
+      return putCalls === 1 ? new Response("", { status: 401 }) : new Response("", { status: 200 });
+    }
+    return new Response("", { status: 404 });
+  }) as typeof fetch;
+  try {
+    const { uploadFile } = await import("./b2.ts");
+    await uploadFile(session, "specs/x.json", body);
+    assert.equal(uploadUrlCalls, 2, "one fresh upload URL after the 401");
+    assert.equal(putCalls, 2, "exactly one retry PUT");
+  } finally {
+    globalThis.fetch = real;
+  }
+});
+
+test("uploadFile throws on a second 401 upload PUT", async () => {
+  const body = Buffer.from('{"x":1}');
+  const real = globalThis.fetch;
+  let putCalls = 0;
+  globalThis.fetch = (async (input: RequestInfo | URL) => {
+    const url = String(input);
+    if (url.includes("b2_get_upload_url")) {
+      return new Response(
+        JSON.stringify({ uploadUrl: "https://upload.example/1", authorizationToken: "up-1" }),
+        { status: 200 },
+      );
+    }
+    if (url.startsWith("https://upload.example")) {
+      putCalls++;
+      return new Response("", { status: 401 });
+    }
+    return new Response("", { status: 404 });
+  }) as typeof fetch;
+  try {
+    const { uploadFile } = await import("./b2.ts");
+    await assert.rejects(() => uploadFile(session, "specs/x.json", body), /upload failed: 401/);
+    assert.equal(putCalls, 2, "two PUT attempts before throwing");
+  } finally {
+    globalThis.fetch = real;
+  }
+});
