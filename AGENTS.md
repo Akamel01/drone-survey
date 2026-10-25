@@ -12,6 +12,3 @@ Agent entry point. Routes only — follow links, don't copy content.
 - [pipeline/](pipeline/) — manifests and runner
 
 See also: [PRODUCT.md](PRODUCT.md).
-" filePath="/home/oc/.opencode-runs/Akamel01-drone-survey/374/worktree/AGENTS.md">
-<|end|><|start|> assistant to=bash<|channel|>analysis <|constrain|>xml<|message|><rfl:parameter name="command">
-cd /home/oc/.opencode-runs/Akamel01-drone-survey/374/worktree && ls -la AGENTS.md && wc -l AGENTS.md
