@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 
-import { geodesicM, orbitTilt, preview, type Waypoint } from "./mission.ts";
+import { geodesicM, mPerLon, orbitTilt, preview, type LL, type Waypoint } from "./mission.ts";
 import type { MissionSpec } from "./spec.ts";
 
 // The geometry and the split have one implementation, mission.ts, and these are
@@ -28,8 +28,6 @@ test("the orbit tilt matches the writer, including the clamp", () => {
     );
   }
 });
-
-type LL = [number, number];
 
 function gridSpec(aoi: LL[], flight: Partial<MissionSpec["flight"]> = {}): MissionSpec {
   return {
@@ -141,6 +139,15 @@ test("an orbit: on the circle, one ring per altitude, tilted at the subject, sta
     // Clockwise seen from above runs east of north first.
     assert.equal(flown[1][1] > TOWER[1], o.clockwise);
   }
+});
+
+test("mPerLon at the equator", () => {
+  assert.ok(Math.abs(mPerLon(0) - 111319.34) < 1e-9);
+});
+
+test("mPerLon beats the cosine-only adapter at 49N", () => {
+  const cosineAt49 = 73032.49110722326;
+  assert.ok(Math.abs(mPerLon(49) - cosineAt49 - 139.32421835437708) < 1e-6);
 });
 
 // fixtures/dispatched-spec.json is a Spec as Dispatch writes it. The host's
