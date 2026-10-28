@@ -7,6 +7,7 @@ import { mPerLon, type LL } from "./mission";
 import { canFinish } from "./areaEditing";
 import type { CircleShape } from "./spec";
 
+// GeoJSON is [lon, lat]; the spec/contract is [lat, lon]. Convert at the edges only.
 export const toLngLat = (p: LL): [number, number] => [p[1], p[0]];
 
 /** Due east of a point, used to give a circle one radius handle to drag. */
