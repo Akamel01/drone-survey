@@ -141,9 +141,6 @@ test("an orbit: on the circle, one ring per altitude, tilted at the subject, sta
   }
 });
 
-// fixtures/dispatched-spec.json is a Spec as Dispatch writes it. The host's
-// load tests feed it to the real writer without running node, so it is pinned
-// here to what this module computes today.
 test("mPerLon at the equator", () => {
   assert.ok(Math.abs(mPerLon(0) - 111319.34) < 1e-9);
 });
@@ -153,6 +150,9 @@ test("mPerLon beats the cosine-only adapter at 49N", () => {
   assert.ok(Math.abs(mPerLon(49) - cosineAt49 - 139.32421835437708) < 1e-6);
 });
 
+// fixtures/dispatched-spec.json is a Spec as Dispatch writes it. The host's
+// load tests feed it to the real writer without running node, so it is pinned
+// here to what this module computes today.
 test("the dispatched-Spec fixture is what Dispatch would record", () => {
   const fixture = JSON.parse(
     readFileSync(new URL("../../fixtures/dispatched-spec.json", import.meta.url), "utf8"),
