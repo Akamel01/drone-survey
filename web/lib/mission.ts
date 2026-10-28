@@ -78,7 +78,13 @@ const EMPTY: Preview = {
 };
 
 type XY = [number, number];
-type LL = [number, number];
+export type LL = [number, number];
+
+/** Metres per degree of longitude at `lat` degrees (WGS84 series). */
+export function mPerLon(lat: number): number {
+  const r = Math.PI / 180;
+  return 111412.84 * Math.cos(lat * r) - 93.5 * Math.cos(3 * lat * r);
+}
 
 /** Equirectangular metres about the centroid. Good to well under 0.1% over a Site. */
 function localFrame(points: LL[]) {
@@ -86,10 +92,10 @@ function localFrame(points: LL[]) {
   const lon0 = points.reduce((a, p) => a + p[1], 0) / points.length;
   const r = Math.PI / 180;
   const mPerLat = 111132.92 - 559.82 * Math.cos(2 * lat0 * r) + 1.175 * Math.cos(4 * lat0 * r);
-  const mPerLon = 111412.84 * Math.cos(lat0 * r) - 93.5 * Math.cos(3 * lat0 * r);
+  const mPerLonAtLat0 = mPerLon(lat0);
   return {
-    toXY: (lat: number, lon: number): XY => [(lon - lon0) * mPerLon, (lat - lat0) * mPerLat],
-    toLL: (x: number, y: number): LL => [y / mPerLat + lat0, x / mPerLon + lon0],
+    toXY: (lat: number, lon: number): XY => [(lon - lon0) * mPerLonAtLat0, (lat - lat0) * mPerLat],
+    toLL: (x: number, y: number): LL => [y / mPerLat + lat0, x / mPerLonAtLat0 + lon0],
   };
 }
 
