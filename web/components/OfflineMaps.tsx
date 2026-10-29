@@ -56,12 +56,15 @@ export default function OfflineMaps({ spec, missions, offline }: { spec: Mission
     if (!spec.site_id) return;
     setBusy(true);
     setResult(null);
-    const saved = await saveSiteMap({ siteId: spec.site_id, name: siteName }, points);
-    setBusy(false);
-    if (saved.ok) {
-      setPersisted(saved.persistence);
-      setResult(`Kept ${saved.map.name} offline: ${saved.map.tiles} tiles, ${formatBytes(saved.map.bytes)}.`);
-    } else setResult(saved.text);
+    try {
+      const saved = await saveSiteMap({ siteId: spec.site_id, name: siteName }, points);
+      if (saved.ok) {
+        setPersisted(saved.persistence);
+        setResult(`Kept ${saved.map.name} offline: ${saved.map.tiles} tiles, ${formatBytes(saved.map.bytes)}.`);
+      } else setResult(saved.text);
+    } finally {
+      setBusy(false);
+    }
   };
 
   const remove = async (map: SiteMap) => {
