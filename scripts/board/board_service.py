@@ -56,7 +56,8 @@ LOADER_DIR = Path(os.environ.get("BOARD_LOADER_DIR") or (HERE.parent / "mission"
 sys.path.insert(0, str(LOADER_DIR))
 import b2_status  # noqa: E402
 import keys  # noqa: E402
-import load  # noqa: E402  (its paths, the store adapter and the CLI we run)
+import load  # noqa: E402  (its paths and the CLI we run)
+from host_store import HostStore  # noqa: E402  (the one door to the store)
 import load_core  # noqa: E402  (queue_specs, split_reserved: what cron decides with)
 
 CONTROLLER_USB = ("2ca3", "1021")  # the RC2, as cron's lsusb -d checks it
@@ -138,7 +139,7 @@ class Board:
                  skipped=load._load_skipped, fetch_ledger=None, plugged=controller_plugged,
                  runner=run_loader, cron_lock: Path = CRON_LOCK):
         self.specs, self.loaded, self.skipped = specs, loaded, skipped
-        self.fetch_ledger = fetch_ledger or load.B2Store(load.DEFAULT_STATUS_CONFIG).fetch_ledger
+        self.fetch_ledger = fetch_ledger or HostStore(load.DEFAULT_STATUS_CONFIG).fetch_ledger
         self.plugged, self.runner, self.cron_lock = plugged, runner, cron_lock
         self._mu = threading.Lock()
         self._current: dict | None = None  # the Load in flight, or being admitted

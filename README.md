@@ -124,7 +124,7 @@ shell history:
 bash scripts/save_b2_credentials.sh b2-read
 ```
 
-The web app needs `DISPATCH_SECRET`, `B2_KEY_ID`, `B2_APP_KEY`, `B2_BUCKET`
+The web app needs `B2_KEY_ID`, `B2_APP_KEY`, `B2_BUCKET`
 (Vercel env on deployed, `vercel env pull` for local dev).
 
 Accounts add nine required variables, also in the Vercel environment. They are
@@ -142,6 +142,14 @@ running, and the auth endpoints answer 503 naming what is missing.
 - `GITHUB_CLIENT_SECRET` — GitHub OAuth client secret.
 - `OWNER_EMAIL` — the operator's email; that Account gets the operator
   Workspace and the admin role.
+
+Optional alternate sign-in: setting all three of `SUPABASE_URL`,
+`SUPABASE_OAUTH_CLIENT_ID` and `SUPABASE_OAUTH_CLIENT_SECRET` switches
+accounts to Papyrus-only sign-in (the single "Continue with your Papyrus
+account" button; Google, GitHub and email sign-in are off). With any of the
+three unset, sign-in stays as above. Recovery is unset-the-trio plus redeploy,
+which restores the Google/GitHub/email sign-in above; existing sessions are
+preserved.
 
 Local setup — `pglite://`, migrations, tests, evidence screenshots — is in
 [`web/README.md`](web/README.md).

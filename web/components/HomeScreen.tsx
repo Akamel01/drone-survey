@@ -3,9 +3,11 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState, type CSSProperties } from "react";
-import { authClient, signOutToHome } from "@/lib/authClient";
+import { authClient } from "@/lib/authClient";
 import { markHomeEntrancePlayed, shouldPlayHomeEntrance, type HomeState } from "@/lib/home";
+import AccountMenu from "./AccountMenu";
 import EmailSignIn from "./EmailSignIn";
+import Wordmark from "./Wordmark";
 import HeroScene from "./HeroScene";
 import styles from "./HomeScreen.module.css";
 
@@ -13,6 +15,10 @@ export interface HomeScreenProps {
   state: HomeState;
   /** Email and password is offered only where its mail can be sent (#247). */
   emailEnabled?: boolean;
+  /** Supabase mode: Papyrus-only sign-in, decided server-side (#336). */
+  supabaseOnly?: boolean;
+  /** Papyrus mode: the callback refused this sign-in (?error=...), so the email is not verified. */
+  refused?: boolean;
   email?: string | null;
   name?: string | null;
 }
@@ -22,11 +28,15 @@ const OPTIONS = [
   { provider: "github" as const, label: "Continue with GitHub" },
 ];
 
-export default function HomeScreen({ state, email, emailEnabled = false }: HomeScreenProps) {
+const SUPABASE_OPTION = { provider: "supabase" as const, label: "Continue with your Papyrus account" };
+
+export const UNVERIFIED_MESSAGE = "Confirm your email first; check your inbox.";
+
+export default function HomeScreen({ state, email, name, emailEnabled = false, supabaseOnly = false, refused = false }: HomeScreenProps) {
   const router = useRouter();
   const rootRef = useRef<HTMLElement>(null);
   const [busy, setBusy] = useState<string | null>(null);
-  const [problem, setProblem] = useState<string | null>(null);
+  const [problem, setProblem] = useState<string | null>(refused ? UNVERIFIED_MESSAGE : null);
   const [withEmail, setWithEmail] = useState(false);
 
   useEffect(() => {
@@ -44,11 +54,11 @@ export default function HomeScreen({ state, email, emailEnabled = false }: HomeS
     return () => clearTimeout(timer);
   }, [state, router]);
 
-  async function signIn(provider: "google" | "github") {
+  async function signIn(provider: "google" | "github" | "supabase") {
     setBusy(provider);
     setProblem(null);
     try {
-      const { error } = await authClient.signIn.social({ provider, callbackURL: "/" });
+      const { error } = await authClient.signIn.social({ provider, callbackURL: "/", errorCallbackURL: "/" });
       if (error) setProblem(error.message || "Sign-in could not start. Try again.");
     } catch {
       setProblem("Sign-in could not start. Try again.");
@@ -57,15 +67,23 @@ export default function HomeScreen({ state, email, emailEnabled = false }: HomeS
     }
   }
 
+  const options = supabaseOnly ? [SUPABASE_OPTION] : OPTIONS;
+
   return (
     <main ref={rootRef} className={styles.root}>
       <HeroScene playing showOnWide />
+      {/* The wordmark left, the Account's own menu right: the strip spans the
+          width so the avatar sits at the viewport edge whatever the name is. */}
+      <div className={styles.brand}>
+        <Wordmark />
+        <AccountMenu name={name ?? null} email={email ?? null} />
+      </div>
       <div className={styles.content}>
         <h1 className={styles.title}>Mission Control</h1>
         {state === "signedout" && withEmail && <EmailSignIn onBack={() => setWithEmail(false)} />}
         {state === "signedout" && !withEmail && (
           <div className={styles.options}>
-            {OPTIONS.map((option, index) => (
+            {options.map((option, index) => (
               <button
                 key={option.provider}
                 type="button"
@@ -81,7 +99,7 @@ export default function HomeScreen({ state, email, emailEnabled = false }: HomeS
               <button
                 type="button"
                 className="glass-clear-strong"
-                style={{ "--i": OPTIONS.length } as CSSProperties}
+                style={{ "--i": options.length } as CSSProperties}
                 disabled={busy !== null}
                 onClick={() => {
                   setProblem(null);
@@ -96,14 +114,6 @@ export default function HomeScreen({ state, email, emailEnabled = false }: HomeS
         {state === "pending" && (
           <div className={styles.waiting}>
             <p className={styles.waitingCopy}>Your account is waiting for approval</p>
-            <p className={styles.email}>{email}</p>
-            <button
-              type="button"
-              className="glass-clear-strong"
-              onClick={() => void signOutToHome()}
-            >
-              Sign out
-            </button>
           </div>
         )}
         {state === "unconfigured" && (

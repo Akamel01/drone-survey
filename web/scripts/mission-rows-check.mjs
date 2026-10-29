@@ -20,7 +20,6 @@ import { chromiumLaunchOptions } from "./lib/harness.mjs";
 import { DEFAULT_SPEC } from "../lib/spec.ts";
 import { deriveMissions } from "../lib/missionRecords.ts";
 import { MISSIONS_CHANGED_KEY } from "../lib/actions.ts";
-import { PASSPHRASE_KEY } from "../lib/passphrase.ts";
 
 const BASE = process.argv[2] ?? "http://127.0.0.1:3101";
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -146,8 +145,7 @@ function transitionSubset(t) {
 // In-page store mock: RAW records, re-derived on every GET
 // ---------------------------------------------------------------------------
 
-function mockInit({ seed, passphraseKey, manifest = {} }) {
-  localStorage.setItem(passphraseKey, "evidence");
+function mockInit({ seed, manifest = {} }) {
   const records = JSON.parse(JSON.stringify(seed));
   const ARCHIVED = ["flown", "withdrawn", "superseded"];
 
@@ -398,7 +396,7 @@ async function contextFor(browser, { width, height, mobile = false, reduced = fa
   };
   if (video) options.recordVideo = { dir: VIDEO_DIR, size: { width, height } };
   const context = await browser.newContext(options);
-  await context.addInitScript(mockInit, { seed, passphraseKey: PASSPHRASE_KEY, manifest });
+  await context.addInitScript(mockInit, { seed, manifest });
   if (slowTimers) await context.addInitScript(slowTimerInit);
   const page = await context.newPage();
   if (throttle > 0) {
@@ -479,7 +477,9 @@ async function firstLoadAndIdle(page) {
   const slot = transitionSubset(rest.slot);
   check("f6", "slot transition is in the allowed set", slot.ok && rest.slot.transitionProperty.includes("transform"), slot.detail);
   const press = transitionSubset(rest.press);
-  check("f6", "press is transform-only", press.ok && rest.press.transitionProperty.trim() === "transform", `${rest.press.transitionProperty} / ${rest.press.transitionDuration}`);
+  const pressProps = rest.press.transitionProperty.split(",").map((s) => s.trim());
+  const pressOk = press.ok && pressProps.length === 2 && pressProps.includes("transform") && pressProps.includes("filter");
+  check("f6", "press animates transform and filter per spec §9.3", pressOk, `${rest.press.transitionProperty} / ${rest.press.transitionDuration}`);
 
   const frames = await page.evaluate(
     async () => {

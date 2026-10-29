@@ -11,7 +11,6 @@
 // and is deleted at once.
 
 import type { StyleSpecification } from "maplibre-gl";
-import { readPassphrase } from "./passphrase";
 import { MAX_ZOOM, MIN_ZOOM, siteBounds, tilesFor, type Bounds } from "./siteMap";
 
 const PREFIX = "site-map-";
@@ -98,7 +97,6 @@ export async function saveSiteMap(site: { siteId: string; name: string }, points
   const name = PREFIX + site.siteId;
   await caches.delete(name);
   const cache = await caches.open(name);
-  const key = readPassphrase() ?? "";
   let bytes = 0;
   let next = 0;
   let failure: string | null = null;
@@ -106,7 +104,7 @@ export async function saveSiteMap(site: { siteId: string; name: string }, points
     while (failure === null && next < kept.tiles.length) {
       const [z, x, y] = kept.tiles[next++];
       try {
-        const res = await fetch(`/api/site-map/${z}/${x}/${y}`, { headers: { "x-wayfinder-key": key } });
+        const res = await fetch(`/api/site-map/${z}/${x}/${y}`);
         if (!res.ok) {
           const body = (await res.json().catch(() => ({}))) as { error?: string };
           failure = body.error ?? `The map could not be read (HTTP ${res.status}).`;

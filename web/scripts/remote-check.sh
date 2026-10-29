@@ -17,7 +17,7 @@ LOCK_PATH=""
 # Classification from the frozen table in .autoforge/requirements/grilling.md.
 script_mode() {
   case "$1" in
-    check:look|check:motion|check:map-chrome|check:scrollbar|check:chrome-motion|check:mission-rows|check:fold|check:area-edit) printf 'serve\n' ;;
+    check:look|check:motion|check:map-chrome|check:scrollbar|check:chrome-motion|check:mission-rows|check:fold|check:area-edit|check:phone-fit) printf 'serve\n' ;;
     test:e2e) printf 'self\n' ;;
     check:showcase-player) printf 'refused\n' ;;
     *) printf 'unknown\n' ;;
@@ -180,8 +180,9 @@ phase_prune() { remote bash "$(hostsh)" prune "$@"; }
 # ----------------------------------------------------------------- transport
 
 # (a) branch folder, (b) replace host.sh from this worktree, (c,d) tar-pipe
-# web/ (plus an outside-web PREVIEW_CSS member); the remote web/ is cleaned
-# depth-1 first (node_modules kept) so the extraction is exactly this tree.
+# web/ (plus the board service and the loader it imports, which test:e2e's
+# stand-in board runs, and an outside-web PREVIEW_CSS member); the remote web/
+# is cleaned depth-1 first (node_modules kept) so the extraction is exactly this tree.
 send_tree() {
   local root extra="" wt
   SLUG="${SLUG:-$(slug)}"
@@ -189,15 +190,18 @@ send_tree() {
   wt="$HOST_ROOT/$SLUG/worktree"
   remote mkdir -p "$HOST_ROOT/$SLUG"
   remote "cat > \"$HOST_ROOT/$SLUG/host.sh\"" < "$root/web/scripts/remote-check-host.sh"
-  if [ -n "${PREVIEW_CSS:-}" ]; then
-    case "$PREVIEW_CSS" in
+  # translate_path_envs has already made PREVIEW_CSS host-relative; ship by the local path.
+  local css="${PREVIEW_CSS_LOCAL:-${PREVIEW_CSS:-}}"
+  if [ -n "$css" ]; then
+    case "$css" in
       "$root"/web/*) ;;                        # already in the web member
-      "$root"/*) extra="${PREVIEW_CSS#"$root"/}" ;;
+      "$root"/*) extra="${css#"$root"/}" ;;
     esac
   fi
   COPYFILE_DISABLE=1 tar --no-xattrs --no-mac-metadata -czf - -C "$root" \
     --exclude=web/node_modules --exclude=web/.next --exclude=web/.pglite --exclude=web/.e2e-mail \
-    web ${extra:+"$extra"} | \
+    --exclude=__pycache__ \
+    web scripts/board scripts/mission ${extra:+"$extra"} | \
     remote "mkdir -p \"$wt\" && find \"$wt/web\" -mindepth 1 -maxdepth 1 ! -name node_modules -exec rm -rf {} + 2>/dev/null || true; tar xzf - -C \"$wt\""
 }
 
@@ -250,10 +254,10 @@ run_and_fetch() {
 
 # ------------------------------------------------------------ path env setup
 
-# Absolute-inside-worktree values must name the copy on the host: rewrite to
-# $HOME/drone/webcheck/<slug>/worktree/<rel> (the "$HOME" stays literal so the
-# remote shell expands it at run time) and keep the local path as <NAME>_LOCAL.
-# Relative or empty values pass through untouched.
+# Absolute-inside-worktree values are converted to web-relative paths since the
+# npm script runs from the web/ directory on the host: paths inside web/ lose "web/",
+# paths outside web/ are prefixed with "../" to go up one level. Store the original
+# path as <NAME>_LOCAL. Relative or empty values pass through untouched.
 translate_path_envs() {
   local n v root rel
   root="$(repo_root)"
@@ -263,7 +267,11 @@ translate_path_envs() {
     case "$v" in "$root"/*) ;; *) continue ;; esac
     rel="${v#"$root"/}"
     export "${n}_LOCAL=$v"
-    export "$n=$HOST_ROOT/${SLUG:-$(slug)}/worktree/$rel"
+    # Web-relative: paths in web/ drop the "web/", others get a "../" prefix
+    case "$rel" in
+      web/*) export "$n=${rel#web/}" ;;
+      *) export "$n=../$rel" ;;
+    esac
   done
 }
 
@@ -344,12 +352,21 @@ selftest() {
 
   # e. translate_path_envs rewrites inside-worktree paths, keeps <NAME>_LOCAL
   n=$((n+1))
-  got="$(export PREVIEW_CSS="$PWD/web/app/globals.css"
+  root_test="$(repo_root)"
+  got="$(export PREVIEW_CSS="$root_test/web/app/globals.css"
          translate_path_envs
          printf '%s\n%s\n' "${PREVIEW_CSS:-}" "${PREVIEW_CSS_LOCAL:-}")"
-  case "$got" in *"/worktree/"*) ;; *) bad "translate_path_envs did not rewrite PREVIEW_CSS" ;; esac
+  case "$got" in "app/globals.css"*) ;; *) bad "translate_path_envs did not make PREVIEW_CSS web-relative" ;; esac
   n=$((n+1))
-  case "$got" in *"$PWD/web/app/globals.css"*) ;; *) bad "translate_path_envs lost PREVIEW_CSS_LOCAL" ;; esac
+  case "$got" in *"$root_test/web/app/globals.css"*) ;; *) bad "translate_path_envs lost PREVIEW_CSS_LOCAL" ;; esac
+  # Also test paths outside web/: e.g. E2E_SHOTS outside web/ should get ../ prefix
+  n=$((n+1))
+  got="$(export E2E_SHOTS="$root_test/.autoforge/shots"
+         translate_path_envs
+         printf '%s\n%s\n' "${E2E_SHOTS:-}" "${E2E_SHOTS_LOCAL:-}")"
+  case "$got" in *"../.autoforge/shots"*) ;; *) bad "translate_path_envs did not use ../ prefix for E2E_SHOTS outside web/" ;; esac
+  n=$((n+1))
+  case "$got" in *"$root_test/.autoforge/shots"*) ;; *) bad "translate_path_envs lost E2E_SHOTS_LOCAL" ;; esac
 
   printf 'remote selftest: %s checks, all pass\n' "$n"
   exit 0

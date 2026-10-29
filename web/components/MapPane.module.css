@@ -92,6 +92,18 @@
   max-width: min(calc(100vw - 48px), 420px);
 }
 
+/* The Account menu's avatar takes the same corner as this pill row on the wide
+   layout -- its right edge at --settings-w + 24px (plan.module.css .account),
+   the same offset the pills use -- so the row steps left by the avatar's 44px
+   plus a 12px gap to sit clear of it (#358). Narrow needs no shift: there the
+   avatar rides the wordmark strip above the map, not this row (Q6). After the
+   base rule above, so its source order lets it win. */
+@media (min-width: 1000px) {
+  .basemapToggle {
+    right: calc(var(--settings-w, 0px) + 80px);
+  }
+}
+
 /* Clear-glass pills (spec §5, §8). The reference tunes "clear glass" for a
    controlled sky backdrop; ours sits on live satellite or OSM tiles that can
    be paper-bright concrete or near-black forest. A translucent white fill can

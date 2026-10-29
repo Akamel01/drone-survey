@@ -20,12 +20,13 @@ import {
   type Refusal,
 } from "./missionLifecycle.ts";
 import { refusalStatus } from "./missionRoute.ts";
+import { memoryMissionOwners } from "./missionOwners.ts";
 import type { CardLedger } from "./model.ts";
 import type { MissionRow } from "./missionRecords.ts";
 import { actionsFor } from "./missionView.ts";
 import { DEFAULT_SPEC, type MissionSpec } from "./spec.ts";
 
-const caller = { kind: "passphrase" } as const;
+const caller = { workspaceId: "w-operator", ownsUnclaimed: true } as const;
 
 /** A small rectangle that plans as one flight on one battery. */
 const ONE_FLIGHT: [number, number][] = [
@@ -62,7 +63,7 @@ interface Harness {
 
 function fresh(seed: MemorySeed = {}): Harness {
   const store = memoryMissionStore({ ledger: POOL3, ...seed });
-  return { store, lc: createMissionLifecycle(store) };
+  return { store, lc: createMissionLifecycle(store, memoryMissionOwners()) };
 }
 
 function expectOk<T>(r: Outcome<T>): T {
@@ -375,8 +376,76 @@ test("the same Mission edited in two windows keeps the later edit, whole", async
 });
 
 // ---------------------------------------------------------------------------
+// Edits made offline (PWA-3)
+// ---------------------------------------------------------------------------
+
+test("offline: a save against the version it was made against is written; one against an older version is refused with both", async () => {
+  const { lc, store } = fresh();
+  const id = await saved(lc, { name: "Ortho" });
+  const version = (await rowOf(lc, id)).updated_at;
+  await new Promise((r) => setTimeout(r, 5)); // updated_at is to the millisecond
+
+  const ok = expectOk(await saveMission(lc, { id, name: "Mine", base_updated_at: version }));
+  assert.equal(ok.mission.name, "Mine");
+
+  // The version is now the one that save wrote, so the same base is stale.
+  const writes = () => store.calls.filter((c) => c.startsWith("write")).length;
+  const before = writes();
+  const stale = expectRefusal(await saveMission(lc, { id, name: "Later", base_updated_at: version }));
+  assert.equal(stale.kind, "refused");
+  assert.match(stale.message, /changed in the store after you edited it here/);
+  assert.equal((stale.extras?.conflict as { name: string }).name, "Mine");
+  assert.equal(stale.extras?.state, "planned");
+  assert.equal(writes(), before, "a refused save writes nothing");
+  assert.equal((await rowOf(lc, id)).name, "Mine");
+
+  // No base, the browser's own interactive save: unchanged, last write wins whole.
+  expectOk(await saveMission(lc, { id, name: "Typed" }));
+  assert.equal((await rowOf(lc, id)).name, "Typed");
+});
+
+test("offline: a stale edit of a Mission that was Dispatched since is refused, not forked", async () => {
+  const { lc } = fresh();
+  const id = await saved(lc);
+  const version = (await rowOf(lc, id)).updated_at;
+  await new Promise((r) => setTimeout(r, 5));
+  expectOk(await dispatch(lc, id));
+  const r = expectRefusal(await saveMission(lc, { id, name: "Mine", base_updated_at: version }));
+  assert.equal(r.extras?.state, "dispatched");
+  assert.equal(expectOk(await list(lc)).missions.length, 1, "no replacement was made");
+});
+
+test("offline: a Mission made with no signal is created under the id the phone gave it, once", async () => {
+  const { lc } = fresh();
+  const made = expectOk(await saveMission(lc, { id: "local-abc123", name: "Offline" }));
+  assert.equal(made.mission.id, "local-abc123");
+  assert.equal(made.forked_from, null);
+  assert.equal((await rowOf(lc, "local-abc123")).state, "planned");
+
+  // The answer was lost and the phone tries again: an edit in place, not a second Mission.
+  expectOk(await saveMission(lc, { id: "local-abc123", name: "Offline" }));
+  assert.equal(expectOk(await list(lc)).missions.length, 1);
+
+  // Another Mission's name is still refused, local id or not.
+  const clash = expectRefusal(await saveMission(lc, { id: "local-other", name: "Offline" }));
+  assert.match(clash.message, /already exists/);
+
+  // Only the phone's own namespace creates; any other unknown id is gone from the store.
+  assert.equal(expectRefusal(await saveMission(lc, { id: "not-there", name: "X" })).kind, "not_found");
+});
+
+// ---------------------------------------------------------------------------
 // Time and keys
 // ---------------------------------------------------------------------------
+
+test("dispatch records in the Spec the parts its Cards were reserved for (#346)", async () => {
+  const { lc, store } = fresh();
+  const r = expectOk(await dispatch(lc, await saved(lc)));
+  const written = store.specs().get(r.key);
+  assert.ok(written?.plan, "the Spec carries the plan the host writes");
+  assert.ok(written.plan.parts.length >= 1);
+  assert.equal(r.cards.length, written.plan.parts.length, "one Card per recorded part");
+});
 
 test("dispatch key shape", async () => {
   const { lc } = fresh();
@@ -741,4 +810,126 @@ test("state × action matrix matches actionsFor", async () => {
       }
     }
   }
+});
+
+// ---------------------------------------------------------------------------
+// The app reports a Load (PWA-4, #318)
+// ---------------------------------------------------------------------------
+
+const CARDS = [{ card: "way finder 1", name: "GeorgeTown2 2026-09-24", waypoints: 125 }];
+
+test("setLoaded: a Collected Mission becomes Loaded, with the Cards the board wrote", async () => {
+  const { store, lc } = fresh();
+  const id = await saved(lc);
+  expectOk(await dispatch(lc, id));
+  hostCollects(store, (await rowOf(lc, id)).spec_key as string);
+  const r = expectOk(await lc.setLoaded(caller, { id, cards: CARDS }));
+  assert.equal(r.mission?.state, "loaded");
+  assert.deepEqual(r.mission?.loaded_cards, CARDS);
+  const row = await rowOf(lc, id);
+  assert.equal(row.state, "loaded");
+  assert.ok(row.loaded_at);
+});
+
+test("setLoaded: the host's own report wins once it speaks, and a repeat writes nothing", async () => {
+  const { store, lc } = fresh();
+  const id = await saved(lc);
+  expectOk(await dispatch(lc, id));
+  hostLoads(store, (await rowOf(lc, id)).spec_key as string, 184);
+  store.calls.length = 0;
+  const r = expectOk(await lc.setLoaded(caller, { id, cards: CARDS }));
+  assert.equal(r.mission?.loaded_cards[0].waypoints, 184);
+  assert.deepEqual(WRITE_SHAPE(store), []);
+});
+
+test("setLoaded: refuses a Planned or Withdrawn Mission, a bad id and bad Cards", async () => {
+  const { lc } = fresh();
+  const id = await saved(lc);
+  assert.match(expectRefusal(await lc.setLoaded(caller, { id, cards: CARDS })).message, /is planned/);
+  expectOk(await dispatch(lc, id));
+  expectOk(await withdraw(lc, id));
+  assert.match(expectRefusal(await lc.setLoaded(caller, { id, cards: CARDS })).message, /is withdrawn/);
+  assert.equal(expectRefusal(await lc.setLoaded(caller, { id: "../x", cards: CARDS })).kind, "invalid");
+  assert.equal(expectRefusal(await lc.setLoaded(caller, { id, cards: [] })).kind, "invalid");
+  assert.equal(expectRefusal(await lc.setLoaded(caller, { id, cards: [{ card: "a", name: "b" }] })).kind, "invalid");
+  assert.equal(expectRefusal(await lc.setLoaded(caller, { id: "gone", cards: CARDS })).kind, "not_found");
+});
+
+// ---------------------------------------------------------------------------
+// Workspaces (#244): every action sees only the Caller's Workspace's Missions
+// ---------------------------------------------------------------------------
+
+const operator = caller;
+const alpha = { workspaceId: "w-alpha", ownsUnclaimed: false } as const;
+const beta = { workspaceId: "w-beta", ownsUnclaimed: false } as const;
+
+function workspaces(seed: MemorySeed = {}) {
+  const store = memoryMissionStore({ ledger: POOL3, ...seed });
+  const owners = memoryMissionOwners();
+  return { store, owners, lc: createMissionLifecycle(store, owners) };
+}
+
+const draft = (name = "Ortho") => {
+  const s = spec();
+  return { site_id: s.site_id, site: s.site, name, date: s.date, spec: s };
+};
+
+test("workspaces: a new Mission is its Workspace's, and no other Workspace can list, save, dispatch, withdraw, mark or remove it", async () => {
+  const { store, owners, lc } = workspaces();
+  const id = expectOk(await lc.save(alpha, draft())).mission.id;
+  assert.equal(owners.rows.get(id), "w-alpha");
+
+  assert.deepEqual(expectOk(await lc.list(alpha, { archived: true })).missions.map((m) => m.id), [id]);
+  assert.deepEqual(expectOk(await lc.list(beta, { archived: true })).missions, []);
+  assert.deepEqual(expectOk(await lc.list(operator, { archived: true })).missions, [], "the operator sees no Workspace's Missions but its own");
+
+  const writes = (from: number) => store.calls.slice(from).filter((c) => !c.startsWith("read"));
+  let before = store.calls.length;
+  assert.equal(expectRefusal(await lc.save(beta, { ...draft(), id })).kind, "not_found");
+  assert.equal(expectRefusal(await lc.dispatch(beta, { id })).kind, "not_found");
+  assert.equal(expectRefusal(await lc.remove(beta, { id })).kind, "not_found");
+  assert.equal(expectRefusal(await lc.setFlown(beta, { id, flown: true })).kind, "not_found");
+  assert.equal(expectRefusal(await lc.setLoaded(beta, { id, cards: CARDS })).kind, "not_found");
+  assert.deepEqual(writes(before), [], "beta's refusals wrote nothing");
+  expectOk(await lc.dispatch(alpha, { id }));
+  before = store.calls.length;
+  assert.equal(expectRefusal(await lc.withdraw(beta, { id })).kind, "not_found");
+  assert.deepEqual(writes(before), [], "beta's withdraw wrote nothing");
+  const row = expectOk(await lc.list(alpha, { archived: true })).missions[0];
+  assert.equal(row.state, "dispatched", "beta's refusals changed nothing");
+});
+
+test("workspaces: a Mission with no ownership row is the operator's alone", async () => {
+  const { store, lc } = workspaces();
+  // A Mission from before Accounts: written straight to the store, no row.
+  const legacy = expectOk(await createMissionLifecycle(store, memoryMissionOwners()).save(operator, draft("Legacy"))).mission.id;
+  assert.deepEqual(expectOk(await lc.list(operator, { archived: true })).missions.map((m) => m.id), [legacy]);
+  assert.deepEqual(expectOk(await lc.list(alpha, { archived: true })).missions, []);
+  assert.equal(expectRefusal(await lc.withdraw(alpha, { id: legacy })).kind, "not_found");
+  expectOk(await lc.save(operator, { ...draft("Legacy, edited"), id: legacy }));
+});
+
+test("workspaces: names, Sites and Card holdings of another Workspace neither clash nor show", async () => {
+  const { lc } = workspaces();
+  const a = expectOk(await lc.save(alpha, draft())).mission.id;
+  expectOk(await lc.dispatch(alpha, { id: a }));
+  // The same Site, date and name in another Workspace is a different Mission.
+  const b = expectOk(await lc.save(beta, draft())).mission.id;
+  const betaRead = expectOk(await lc.list(beta, { archived: true }));
+  assert.deepEqual(betaRead.missions.map((m) => m.id), [b]);
+  assert.deepEqual(betaRead.ledger.holdings, {}, "alpha's Card holding is not beta's to see");
+  assert.deepEqual(betaRead.host, { notice: null, drift: null });
+  // Dispatching beta's does not supersede alpha's, and takes a free Card.
+  const dispatched = expectOk(await lc.dispatch(beta, { id: b }));
+  assert.deepEqual(dispatched.superseded, []);
+  assert.equal(expectOk(await lc.list(alpha, { archived: true })).missions[0].state, "dispatched");
+});
+
+test("workspaces: a phone-named create never lands on another Workspace's id", async () => {
+  const { store, lc } = workspaces();
+  const local = "local-abc123";
+  expectOk(await lc.save(alpha, { ...draft(), id: local }));
+  const before = JSON.stringify(store.records());
+  assert.equal(expectRefusal(await lc.save(beta, { ...draft("Mine"), id: local })).kind, "not_found");
+  assert.equal(JSON.stringify(store.records()), before, "alpha's Mission was not overwritten");
 });

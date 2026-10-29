@@ -8,8 +8,12 @@ import { copyOf, localDate, sitesFrom, type MissionListRead } from "@/lib/missio
 import { firstRunDestination, type FirstRunStep } from "@/lib/firstRun";
 import MapPane, { type DrawMode } from "@/components/MapPane";
 import MapToolbar from "@/components/MapToolbar";
+import Wordmark from "@/components/Wordmark";
+import AccountMenu from "@/components/AccountMenu";
+import { authClient } from "@/lib/authClient";
 import HeroScene from "@/components/HeroScene";
 import MissionList from "@/components/MissionList";
+import LoadSheet from "@/components/LoadSheet";
 import Notice, { type NoticePayload } from "@/components/Notice";
 import Sidebar from "@/components/Sidebar";
 import SummaryBar from "@/components/SummaryBar";
@@ -40,6 +44,9 @@ export interface Editing {
   /** Set while the editor holds an unsaved copy of another Mission, so the
    *  operator can see that saving makes a new one. */
   copied_from?: string;
+  /** The `updated_at` of the stored Mission when it was opened (or last saved
+   *  or sent from here): what an edit made with no signal is guarded by. */
+  base?: string;
 }
 
 /** Which column a narrow screen shows. Wide screens show all three. */
@@ -135,6 +142,9 @@ export default function PlanPage() {
   // from and the state of the Mission being edited both come from this read, so
   // one page load is one storage transaction rather than two.
   const [missions, setMissions] = useState<MissionRow[]>([]);
+  // The Load view (PWA-4): a sheet, so it opens from the app shell the worker keeps for offline starts.
+  const [loadOpen, setLoadOpen] = useState(false);
+  const closeLoad = useCallback(() => setLoadOpen(false), []);
   const sites = useMemo(() => sitesFrom(missions), [missions]);
   const edited = editing.id ? (missions.find((m) => m.id === editing.id) ?? null) : null;
   // The single reporting path for action results (M2 seam): one slot owned
@@ -149,6 +159,9 @@ export default function PlanPage() {
   // Accounts waiting for Approval (admin-only: only the admin-gated
   // AccountsSection ever reports a nonzero count). Badge unmounts at 0.
   const [pendingCount, setPendingCount] = useState(0);
+  // The operator's own identity in the chrome: the avatar the Account menu
+  // hangs from. Renders nothing without a session (Q1).
+  const { data: session } = authClient.useSession();
 
   const collapseMissions = useRef<HTMLButtonElement>(null);
   const collapseSettings = useRef<HTMLButtonElement>(null);
@@ -328,7 +341,7 @@ export default function PlanPage() {
   // On a narrow screen, opening a Mission moves to the map, where it is.
   const editMission = (row: MissionRow) => {
     setSpecState(row.spec);
-    setEditing({ id: row.id, name: row.name });
+    setEditing({ id: row.id, name: row.name, base: row.updated_at });
     setOpenToken((t) => t + 1);
     setView("map");
   };
@@ -342,6 +355,13 @@ export default function PlanPage() {
   };
 
   const onListRead = (read: MissionListRead) => setMissions(read.missions);
+  // Edits that waited offline have reached the store: the Mission in the editor
+  // is now at the version they wrote.
+  const onSent = (sent: { id: string; updated_at?: string }[]) =>
+    setEditing((e) => {
+      const done = sent.findLast((s) => s.id === e.id);
+      return done?.updated_at ? { ...e, base: done.updated_at } : e;
+    });
 
   return (
     <main
@@ -355,6 +375,10 @@ export default function PlanPage() {
       {/* The page's one top-level heading; the panels carry the h2s (UI-12 audit). */}
       <h1 className="visually-hidden">Mission Control</h1>
       <Notice key={notice?.key ?? "empty"} payload={notice} onDismiss={dismissNotice} />
+      <div className={styles.brand}><Wordmark /></div>
+      <div className={styles.account}>
+        <AccountMenu name={session?.user?.name ?? null} email={session?.user?.email ?? null} />
+      </div>
       <div className={styles.top}>
         <div className={styles.heroLayer} aria-hidden="true">
           <HeroScene playing={view === "missions"} />
@@ -365,6 +389,9 @@ export default function PlanPage() {
         <section id="missions-panel" className={`${styles.missions} glass-smoke`} aria-label="Missions" inert={wide ? !missionsOpen : view !== "missions"}>
           <div className={styles.panelHead}>
             <h2 className={styles.viewTitle}>Missions</h2>
+            <button type="button" className={`primary ${styles.loadButton}`} onClick={() => setLoadOpen(true)}>
+              Load
+            </button>
             <button
               ref={collapseMissions}
               type="button"
@@ -377,7 +404,7 @@ export default function PlanPage() {
               ‹
             </button>
           </div>
-          <MissionList onEdit={editMission} onCopy={copyMission} editingId={editing.id} onRead={onListRead} onNotice={showNotice} onFirstRunNavigate={navigateFirstRun} />
+          <MissionList onEdit={editMission} onCopy={copyMission} editingId={editing.id} onRead={onListRead} onSent={onSent} onNotice={showNotice} onFirstRunNavigate={navigateFirstRun} />
         </section>
         <section className={styles.map} aria-label="Map" inert={!wide && view !== "map"}>
           <MapPane
@@ -458,13 +485,14 @@ export default function PlanPage() {
       <p className={styles.srOnly} role="status">
         {noNetwork ? "The map needs a connection." : ""}
       </p>
+      <LoadSheet open={loadOpen} onClose={closeLoad} missions={missions} onNotice={showNotice} />
       <div ref={summaryRef} className={`glass-smoke ${styles.summary}`}>
         <SummaryBar
           spec={spec}
           preview={preview_}
           editing={editing}
           onSaved={(row) => {
-            setEditing({ id: row.id, name: row.name });
+            setEditing({ id: row.id, name: row.name, base: row.updated_at || undefined });
             // The Sheet may have changed the Site; the editor now shows what was saved.
             setSpecState((s) => ({ ...s, site: row.site, site_id: row.site_id }));
           }}

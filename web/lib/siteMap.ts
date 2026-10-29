@@ -80,8 +80,9 @@ export function validTile(z: number, x: number, y: number): boolean {
   );
 }
 
-/** "1.4 MB", "820 KB": what the operator reads for a Site's size. */
+/** "1.4 MB", "820 KB", "2.1 GB": what the operator reads for a size. */
 export function formatBytes(n: number): string {
+  if (n >= 1_000_000_000) return `${(n / 1_000_000_000).toFixed(1)} GB`;
   if (n < 1000) return `${n} B`;
   if (n < 1_000_000) return `${Math.round(n / 1000)} KB`;
   return `${(n / 1_000_000).toFixed(1)} MB`;

@@ -29,3 +29,7 @@ On the phone's own hotspot with the board joined to it, open Safari at `https://
 What this trust allows: only names inside the board's own network (`board.local`, `localhost` and private addresses). The CA is built so that even a stolen CA key cannot make a certificate iOS accepts for a real website.
 
 Sources: [Trust manually installed certificate profiles in iOS](https://support.apple.com/en-us/102390) (Settings, General, About, Certificate Trust Settings); [TLS server certificate requirements, 825 days](https://support.apple.com/en-us/103769).
+
+## Android
+
+Android steps (local-network permission prompt, CA install via `ca.crt`, and the IP-not-`.local` name rule) live in [README.md](README.md) under "HTTPS the iPhone trusts", step 4. The board's replies already carry `Access-Control-Allow-Private-Network: true`. AC 4's "no certificate trust needed beyond the board's" holds only for `--insecure-http`; over HTTPS Android needs the CA installed too.

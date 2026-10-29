@@ -1,43 +1,8 @@
-<!-- source: https://dev.epicgames.com/documentation/en-us/realityscan/available-expression-functions-modelexportfunctionset
-     http: 200
-     fetched: 2026-09-19T01:50:33Z
-     extracted from HTML; wording verbatim, layout lost -->
+<!-- source: https://dev.epicgames.com/documentation/en-us/realityscan/available-expression-functions-modelexportfunctionset -->
+<!-- http: 200 -->
+<!-- fetched: 2026-09-19T01:50:33Z -->
+<!-- full extracted text: docs/research/sources/.cache/available-expression-functions-modelexportfunctionset.md (gitignored, never committed) -->
 
-Available Expression Functions (ModelExportFunctionSet) | Realityscan Documentation | Epic Developer Community 
+# Available Expression Functions (ModelExportFunctionSet) / Realityscan Documen...
 
-Table of Contents 
-
-Developer 
-
-Available Expression Functions (ModelExportFunctionSet) 
-
-Available Expression Functions (ModelExportFunctionSet)
-
-Functions available within ModelExportFunctionSet. 
-
-On this page 
-
-GetNumberOfModels 
-
-Returns the number of models in the specified component.
-
-Syntax: 
-
-GetNumberOfModels( componentGuid ) 
-
-Parameter | Type | Description | 
-
-componentGuid 
-| 
-CHAR_STRING
-| 
-GUID of the component.
-| 
-
-Ask questions and help your peers  Developer Forums 
-
-Write your own tutorials or read those from others  Learning Library 
-
-On this page
-
-GetNumberOfModels
+Licence/terms: vendor documentation, copyrighted, excerpt only

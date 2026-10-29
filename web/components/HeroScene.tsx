@@ -25,6 +25,13 @@ const GLIDE = 16;
 
 const rnd = (a: number, b: number) => a + Math.random() * (b - a);
 
+// iOS ignores the React muted prop alone: property + attribute before play().
+function ensureMuted(video: HTMLVideoElement) {
+  video.muted = true;
+  video.defaultMuted = true;
+  video.setAttribute("muted", "");
+}
+
 interface Bird {
   el: HTMLDivElement;
   size: number;
@@ -146,6 +153,9 @@ function BirdLayer({ playing }: { playing: boolean }) {
 export default function HeroScene({ playing, variant = "live", showOnWide = false }: HeroSceneProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [reduced, setReduced] = useState(false);
+  // iPadOS Low Power Mode draws its own play button over a refused video, and
+  // CSS cannot reach it. So the video stays invisible until it really plays.
+  const [shown, setShown] = useState(false);
   const [pick, setPick] = useState<{ key: string; poster?: string; src?: string }>({ key: "" });
 
   // Live reduced-motion signal: poster only, no video, no birds.
@@ -208,7 +218,8 @@ export default function HeroScene({ playing, variant = "live", showOnWide = fals
       video.pause();
       return;
     }
-    video.play().catch(() => {});
+    ensureMuted(video);
+    video.play().catch(() => setShown(false));
   }, [active, pick.src]);
 
   useEffect(() => {
@@ -216,7 +227,10 @@ export default function HeroScene({ playing, variant = "live", showOnWide = fals
       const video = videoRef.current;
       if (!video) return;
       if (document.hidden) video.pause();
-      else if (playing) video.play().catch(() => {});
+      else if (playing) {
+        ensureMuted(video);
+        video.play().catch(() => setShown(false));
+      }
     };
     document.addEventListener("visibilitychange", onHide);
     return () => document.removeEventListener("visibilitychange", onHide);
@@ -229,7 +243,10 @@ export default function HeroScene({ playing, variant = "live", showOnWide = fals
     const video = videoRef.current;
     if (!video) return;
     const resume = () => {
-      if (video.paused && !document.hidden) video.play().catch(() => {});
+      if (video.paused && !document.hidden) {
+        ensureMuted(video);
+        video.play().catch(() => setShown(false));
+      }
     };
     const done = () => {
       removeEventListener("pointerdown", resume);
@@ -274,9 +291,17 @@ export default function HeroScene({ playing, variant = "live", showOnWide = fals
         playsInline
         autoPlay
         loop
+        disablePictureInPicture
+        disableRemotePlayback
         preload={active ? "metadata" : "none"}
         poster={active ? pick.poster : undefined}
         src={active ? pick.src : undefined}
+        data-shown={shown}
+        onPlaying={() => setShown(true)}
+        // A page-hidden pause keeps the last frame; any other pause (or a new
+        // source) hides it, so a refused resume never exposes the button.
+        onPause={() => document.hidden || setShown(false)}
+        onEmptied={() => setShown(false)}
       />
       <BirdLayer playing={playing} />
       <div className={styles.scrim} />

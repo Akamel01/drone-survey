@@ -48,7 +48,6 @@ const dbDir = path.join(webRoot, ".pglite", "home-evidence");
 const DATABASE_URL = `pglite://${dbDir}`;
 const OWNER_EMAIL = "owner@example.com";
 const PENDING_EMAIL = "waiting@example.com";
-const PASSPHRASE_KEY = "drone-planner.wayfinder-key";
 
 const IDENTITIES = [
   { id: "t1-probe-google", name: "T1 Google Probe", email: "t1-google@example.com", image: null },
@@ -339,23 +338,24 @@ async function phaseT2(browser, standin, base) {
     );
 
     if (ownerLanded) {
-      const panel = page.locator("#settings-panel");
-      const line = panel.getByText("Signed in as");
-      await line.waitFor({ timeout: 15_000 });
-      const lineText = ((await line.textContent()) ?? "").replace(/\s+/g, " ").trim();
-      const signOut = panel.getByRole("button", { name: "Sign out", exact: true });
+      // The operator's identity and exit live in the Account menu now (#358).
+      const avatar = page.getByRole("button", { name: /^Account: / });
+      await avatar.waitFor({ timeout: 15_000 });
+      await avatar.click();
+      const menu = page.getByRole("menu", { name: "Account" });
+      await menu.waitFor({ timeout: 15_000 });
+      const nameText = ((await menu.getByText("Owner Example", { exact: true }).textContent()) ?? "").trim();
+      const emailText = ((await menu.getByText(OWNER_EMAIL, { exact: true }).textContent()) ?? "").trim();
+      const signOut = menu.getByRole("menuitem", { name: "Sign out", exact: true });
       const signOutVisible = await signOut.isVisible();
-      // The line is the last child of the settings column: scroll it into the
-      // viewport so the screenshot actually shows it.
-      await signOut.scrollIntoViewIfNeeded();
       await page.waitForTimeout(500);
       const box = await signOut.boundingBox();
       const inFrame = !!box && box.y >= 0 && box.y + box.height <= 900;
-      const settingsShot = await shoot(page, "settings-line.png", { width: 1440, height: 900 });
+      const menuShot = await shoot(page, "account-menu.png", { width: 1440, height: 900 });
       row(
         "T2",
-        lineText === "Signed in as Owner Example ·" && signOutVisible && inFrame && settingsShot.ok,
-        `Settings line "${lineText}" + Sign out button (in frame: y=${box ? Math.round(box.y) : "?"}); ${shotDetail(settingsShot, "settings-line.png")}`,
+        nameText === "Owner Example" && emailText === OWNER_EMAIL && signOutVisible && inFrame && menuShot.ok,
+        `Account menu "${nameText}" ${emailText} + Sign out (in frame: y=${box ? Math.round(box.y) : "?"}); ${shotDetail(menuShot, "account-menu.png")}`,
       );
 
       await signOut.click();
@@ -389,14 +389,19 @@ async function phaseT2(browser, standin, base) {
     const request = await clickPill(page, standin, "Continue with Google");
     const landed = await waitForFlowLanding(page);
     if (landed) {
-      const emailOk = await page.getByText(PENDING_EMAIL, { exact: true }).isVisible();
-      const signOutOk = await page.getByRole("button", { name: "Sign out", exact: true }).isVisible();
+      // The address and Sign out sit behind the Account menu now (#358): open
+      // it, assert both, and screenshot with it open.
+      await page.getByRole("button", { name: /^Account: / }).click();
+      const menu = page.getByRole("menu", { name: "Account" });
+      await menu.waitFor({ timeout: 15_000 });
+      const emailOk = await menu.getByText(PENDING_EMAIL, { exact: true }).isVisible();
+      const signOutOk = await menu.getByRole("menuitem", { name: "Sign out", exact: true }).isVisible();
       await page.waitForTimeout(1_000);
       const pendingShot = await shoot(page, "waiting-pending.png", { width: 375, height: 812 });
       row(
         "T2",
         !!request && emailOk && signOutOk && pendingShot.ok,
-        `pending ${PENDING_EMAIL}: "Your account is waiting for approval" + email + Sign out; ${shotDetail(pendingShot, "waiting-pending.png")}`,
+        `pending ${PENDING_EMAIL}: "Your account is waiting for approval" + Account menu (email + Sign out); ${shotDetail(pendingShot, "waiting-pending.png")}`,
       );
     } else {
       row(
@@ -412,7 +417,7 @@ async function phaseT2(browser, standin, base) {
 
 // ---------------------------------------------------------------------------
 // T3 — second server with NO auth env: quiet line + /plan link, GET /plan 200
-// with the passphrase gate, the seeded Missions list, planner files untouched
+// naming the missing account setup, the seeded Missions list, planner files untouched
 // ---------------------------------------------------------------------------
 
 async function phaseT3(browser, base2) {
@@ -436,26 +441,20 @@ async function phaseT3(browser, base2) {
     await context.close();
   }
 
-  // /plan renders and MissionList asks for the passphrase in place.
+  // /plan renders, and MissionList says why it has no Missions: with no
+  // accounts configured the Mission routes answer 503 (#244).
   const gateContext = await browser.newContext({ viewport: { width: 1440, height: 900 } });
   try {
     const page = await gateContext.newPage();
     const response = await page.goto(`${base2}/plan`, { waitUntil: "domcontentloaded" });
-    const gateInput = page.locator('input[aria-label="Wayfinder passphrase"]');
-    await gateInput.waitFor({ timeout: 15_000 });
-    const prompt = await page
-      .getByText(/Type the Wayfinder passphrase to read the Missions in the store/)
-      .isVisible();
-    row(
-      "T3",
-      response.status() === 200 && prompt,
-      `GET /plan → ${response.status()}; passphrase gate present: input[aria-label="Wayfinder passphrase"] + typed-in-place prompt`,
-    );
+    const refusal = page.getByText(/This deployment is not configured for accounts/);
+    await refusal.waitFor({ timeout: 15_000 });
+    row("T3", response.status() === 200, `GET /plan → ${response.status()}; the Missions view names the missing account setup`);
   } finally {
     await gateContext.close();
   }
 
-  // The seeded Missions list still renders once the passphrase is on file,
+  // The seeded Missions list renders
   // with /api/missions answered from memory (motion-check.mjs's pattern).
   const { DEFAULT_SPEC } = await import("../lib/spec.ts");
   const { deriveMissions } = await import("../lib/missionRecords.ts");
@@ -482,8 +481,7 @@ async function phaseT3(browser, base2) {
   const seedContext = await browser.newContext({ viewport: { width: 1440, height: 900 } });
   try {
     await seedContext.addInitScript(
-      ({ body, key, value }) => {
-        localStorage.setItem(key, value);
+      ({ body }) => {
         const original = window.fetch.bind(window);
         window.fetch = (input, init) => {
           const url = typeof input === "string" ? input : input && input.url ? input.url : String(input);
@@ -495,13 +493,12 @@ async function phaseT3(browser, base2) {
           return original(input, init);
         };
       },
-      { body: payload, key: PASSPHRASE_KEY, value: "evidence" },
+      { body: payload },
     );
     const page = await seedContext.newPage();
     await page.goto(`${base2}/plan`, { waitUntil: "domcontentloaded" });
     await page.getByRole("button", { name: "Edit", exact: true }).first().waitFor({ timeout: 20_000 });
-    const gateGone = (await page.locator('input[aria-label="Wayfinder passphrase"]').count()) === 0;
-    row("T3", gateGone, "seeded Missions list renders on the no-env server (row Edit button found; gate stepped aside)");
+    row("T3", true, "seeded Missions list renders on the no-env server (row Edit button found)");
   } finally {
     await seedContext.close();
   }

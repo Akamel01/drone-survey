@@ -3,14 +3,14 @@
 import { Children, cloneElement, Fragment, isValidElement, useEffect, useId, useRef, useState, type ReactElement, type ReactNode } from "react";
 import type { MissionSpec, MissionType, TurnMode } from "@/lib/spec";
 import { orbitTilt, type Preview } from "@/lib/mission";
-import { MISSION_NAME_MAX, missionNameProblem } from "@/lib/missionRecords";
+import { MISSION_NAME_MAX, missionNameProblem } from "@/lib/missionIdentity";
 import { coord, type SiteChoice } from "@/lib/missionView";
 import type { Editing } from "@/app/plan/page";
 import SiteCombobox from "./SiteCombobox";
 import styles from "./Sidebar.module.css";
-import { authClient, signOutToHome } from "@/lib/authClient";
-import { accountLabel } from "@/lib/home";
 import AccountsSection from "./AccountsSection";
+import DeveloperSection from "./DeveloperSection";
+import Notifications from "./Notifications";
 import OfflineMaps from "./OfflineMaps";
 import type { MissionRow } from "@/lib/missionRecords";
 import type { NoticePayload } from "./Notice";
@@ -597,25 +597,13 @@ export default function Sidebar({
 
       <OfflineMaps spec={spec} missions={missions} offline={offline} />
 
+      <Notifications />
+
       <AccountsSection onNotice={onNotice} onPendingCount={onPendingCount} />
 
-      <SignedInLine />
+      <DeveloperSection />
 
     </aside>
-  );
-}
-
-function SignedInLine() {
-  const { data, error } = authClient.useSession();
-  if (error || !data?.user) return null;
-  const { name, email } = data.user;
-  return (
-    <div className={styles.accountLine}>
-      <span className={styles.accountText}>Signed in as {accountLabel(name, email)} ·</span>
-      <button type="button" onClick={() => void signOutToHome()}>
-        Sign out
-      </button>
-    </div>
   );
 }
 

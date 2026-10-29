@@ -9,8 +9,10 @@
 //
 // Reads Specs; writes only specs/_status/summaries.json. Safe to re-run: it
 // skips keys whose summary already carries a part count.
-import { authorize, b2Env, b2ReadEnv, downloadFile, listFiles, uploadFile } from "../lib/b2.ts";
-import { SPECS_PREFIX, SUMMARIES_KEY, parseSpecKey } from "../lib/keys.ts";
+import { authorize, b2Env, b2ReadEnv, downloadFile, listFiles } from "../lib/b2.ts";
+import { readRecord } from "../lib/storeRecord.ts";
+import { SUMMARIES_SPEC, updateSummaries } from "../lib/missionStore.ts";
+import { SPECS_PREFIX, parseSpecKey } from "../lib/keys.ts";
 import type { SpecSummary } from "../lib/missions.ts";
 import { preview } from "../lib/mission.ts";
 import type { MissionSpec } from "../lib/spec.ts";
@@ -26,12 +28,11 @@ async function main(): Promise<void> {
   const read = await authorize(readEnv);
   const write = readEnv.keyId === writeEnv.keyId ? read : await authorize(writeEnv);
 
-  const existingRaw = await downloadFile(read, writeEnv.bucket, SUMMARIES_KEY);
-  const summaries: Record<string, SpecSummary> = existingRaw
-    ? (JSON.parse(existingRaw.toString()) as Record<string, SpecSummary>)
-    : {};
+  // Only to know which keys to skip; the write below re-reads and folds in.
+  const summaries: Record<string, SpecSummary> = await readRecord(read, writeEnv.bucket, SUMMARIES_SPEC);
 
   const files = await listFiles(read, SPECS_PREFIX);
+  const touched = new Set<string>();
   let added = 0;
   for (const f of files) {
     const key = f.fileName;
@@ -63,6 +64,7 @@ async function main(): Promise<void> {
       // no explanation is the failure this whole set of fixes is about.
       summaries[key] = { unavailable: "Dispatched before the current Mission format" };
       added++;
+      touched.add(key);
       console.log(`no figures (pre-schema Spec)  ${key}`);
       continue;
     }
@@ -74,38 +76,19 @@ async function main(): Promise<void> {
       parts: p.parts,
     };
     added++;
+    touched.add(key);
     console.log(`${had ? "filled in" : "added"} ${p.photo_count} points · ${p.path_length_m.toFixed(1)} m · ${p.parts} part(s)  ${key}`);
   }
 
-  // This uploads the whole file, so anything written while the loop was running
-  // -- a Dispatch recording its own summary -- would be replaced by a copy that
-  // predates it. Re-read immediately before writing and fold in anything new,
-  // and refuse outright if a key we started with has gone. Recomputing is cheap;
-  // silently dropping another writer's record is not, and nothing downstream
-  // could tell that it happened.
-  const beforeKeys = new Set(Object.keys(summaries));
-  const latestRaw = await downloadFile(read, writeEnv.bucket, SUMMARIES_KEY);
-  const latest: Record<string, SpecSummary> = latestRaw
-    ? (JSON.parse(latestRaw.toString()) as Record<string, SpecSummary>)
-    : {};
-
-  const lost = Object.keys(latest).filter((k) => !beforeKeys.has(k) && summaries[k] == null);
-  let folded = 0;
-  for (const k of lost) {
-    summaries[k] = latest[k];
-    folded++;
-  }
-  const dropped = Object.keys(latest).filter((k) => summaries[k] == null);
-  if (dropped.length) {
-    console.error(`refusing to write: ${dropped.length} summaries would be lost, first ${dropped[0]}`);
+  // Fold only what we computed into whatever is stored now, so a Dispatch
+  // recording its own summary while the loop ran is never dropped.
+  const computed = Object.fromEntries(Object.entries(summaries).filter(([k]) => touched.has(k)));
+  const result = await updateSummaries(read, write, writeEnv.bucket, computed, (cur, k) => cur[k]?.parts == null);
+  if (typeof result === "string") {
+    console.error(`refusing to write: ${result}`);
     process.exit(1);
   }
-
-  await uploadFile(write, SUMMARIES_KEY, Buffer.from(JSON.stringify(summaries, null, 2)));
-  console.log(
-    `summaries: ${Object.keys(summaries).length} total, ${added} written` +
-      (folded ? `, ${folded} folded in from a concurrent write` : ""),
-  );
+  console.log(`summaries: ${Object.keys(result).length} total, ${added} written`);
 }
 
 main().catch((err) => {

@@ -1,9 +1,9 @@
 name: Mission planning
 
-# The planner's preview maths is a deliberate mirror of the writer's. Mirrors
-# drift, and a preview that lies about photo count or flight time is worse than
-# no preview — so the end-to-end test runs on every push that touches either
-# side, not only when someone remembers.
+# Dispatch records the Missions it reserved Cards for, computed by the one
+# geometry module (web/lib/mission.ts); the host's writer serialises them. The
+# end-to-end test checks the KMZ holds exactly those waypoints, on every push
+# that touches either side, not only when someone remembers.
 
 on:
   push:
@@ -46,10 +46,13 @@ jobs:
           python3 scripts/mission/b2.py --selftest
           python3 scripts/mission/b2_status.py --selftest
           python3 scripts/mission/collect.py --selftest
+          python3 scripts/mission/host_store_test.py
+          python3 scripts/mission/host_push.py --selftest
           python3 scripts/mission/load_test.py
           python3 scripts/mission/calibrate.py --selftest
           python3 scripts/mission/kmz.py --selftest
           python3 scripts/board/board_service_test.py
+          python3 scripts/maps/cut_region_test.py
       # ADR 0018: every Node carries a check, and the seam between Nodes runs
       # too. They are offline by construction, so they run here on every change.
       # check_head inspects image metadata with exiftool; Pillow builds its fixtures.
@@ -103,7 +106,6 @@ jobs:
           B2_APP_KEY: ci
           B2_READ_KEY_ID: ci
           B2_READ_APP_KEY: ci
-          DISPATCH_SECRET: ci
 
   # D15: the auth work needs a real Postgres, so it runs as its own job and
   # only this job pays for the service. The web job above stays DB-free.

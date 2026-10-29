@@ -3,10 +3,11 @@
 Drone survey mission planner. One screen (`/plan`): draw the survey area on a
 satellite map, tune flight and camera settings, and download a mission spec.
 
-The planning screen is still static and passphrase-gated; the app now also
-carries the accounts backend — a Better Auth surface at `/api/auth/[...all]`
-with its schema and migrations — which later tickets wire into the planner.
-Nothing on `/plan` needs an account yet.
+Every planner route needs an approved Account (#244): the session cookie is
+the only credential, and each Account sees only its Workspace's Missions
+(`lib/accountAccess.requireCaller`, scoped in `lib/missionLifecycle.ts`).
+Which Workspace owns a Mission is the `mission_workspace` table, created by
+`npm run db:migrate`; a Mission with no row is the operator's.
 
 ## Run locally
 
@@ -55,8 +56,19 @@ Optional:
 - `AUTH_TRUSTED_HOSTS` — comma-separated extra hosts allowed in `baseURL`.
 - `AUTH_TRUSTED_ORIGINS` — comma-separated extra trusted origins.
 - `OWNER_WORKSPACE_SLUG` — the operator Workspace's slug (default `operator`).
+- `SUPABASE_URL`, `SUPABASE_OAUTH_CLIENT_ID`, `SUPABASE_OAUTH_CLIENT_SECRET` —
+  optional alternate sign-in: when all three are set, the app offers only the
+  Papyrus sign-in button and the nine-variable Google/GitHub/email mode is off;
+  with any unset, sign-in stays in that mode. No `AUTH_TEST_*` stand-in trio
+  exists for Supabase — local runs point `SUPABASE_URL` at the stand-in base
+  directly, and the stand-in answers the discovery document the production
+  configuration builds from that URL. Recovery is unset-the-trio plus redeploy.
 - `PGLITE_PORT` — fixed port for the local PGlite socket (default: one is
   picked).
+- Notifications (PWA-5, #319) — see "Notifications" below:
+  `VAPID_SUBJECT`, `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY` (all three, or
+  Web Push is off), `PUSH_HOST_TOKEN` (the host's token; unset, the host's
+  route answers 503), `NTFY_URL` (default `https://ntfy.sh`).
 
 ## Database
 
@@ -91,24 +103,72 @@ npm run build
 node scripts/auth-evidence.mjs
 ```
 
+## Notifications
+
+The installed app is told when a Mission changes (PWA-5, #319; decided in
+#232). The planner's routes send what the planner changes — Dispatched,
+Withdrawn, Superseded — to every device of the Workspace that owns the
+Mission. The Linux host sends what only it sees — Collected, Loaded (naming
+the Card to open), a Load refused — by POSTing to `/api/push/host` with the
+header `x-push-token: $PUSH_HOST_TOKEN`; the planner words it and sends it
+(a refusal goes to the operator's Workspace only). Flown is never announced.
+Subscriptions belong to an Account (`push_subscription`, created by
+`npm run db:migrate`) and are turned on per device in Settings, Notifications.
+The ntfy.sh fallback is switched on per Account there too: the planner makes a
+random topic, and the operator subscribes to it in the free ntfy app.
+
+The operator sets, in Vercel (production; previews too if wanted):
+
+| Variable | Value |
+| --- | --- |
+| `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY` | `npx web-push generate-vapid-keys` once, offline. The private key goes nowhere else. Changing the pair turns every device off until it is turned on again. |
+| `VAPID_SUBJECT` | `mailto:` the operator's address |
+| `PUSH_HOST_TOKEN` | a long random value, e.g. `openssl rand -base64 32`; the same value goes in the host's `push.env` |
+| `NTFY_URL` | optional; only for a self-hosted ntfy |
+
+On the Linux host, beside `b2-status.env` (mode 600):
+
+```
+~/.config/wayfinder/push.env
+PLANNER_URL=https://<the planner's domain>
+PUSH_HOST_TOKEN=<the same value as in Vercel>
+```
+
+and deploy `scripts/mission/host_push.py` beside `host_store.py`. Without the
+file the host sends nothing and everything else works as before; a planner that
+cannot be reached is printed and never costs a Collect or a Load.
+
+iPhone and iPad: Web Push reaches only the app added to the Home Screen, on
+iOS 16.4 or later, and is turned on from a tap inside it. If notifications
+were blocked, only the device's Settings can allow them again.
+
 ## Deploy on Vercel
 
 - Root directory: `web`
 - Framework preset: Next.js
 - Set the nine variables in the project's environment (`vercel env pull` for
   local dev), with the same `OAUTH_PROXY_SECRET` in production, previews and
-  local; register `/api/auth/callback/google` and `/api/auth/callback/github`
-  on the production URL.
-- The planner's Dispatch variables (`DISPATCH_SECRET`, `B2_KEY_ID`,
-  `B2_APP_KEY`, `B2_BUCKET`) are listed in the root `README.md`.
-- `SITE_MAP_PMTILES_URL` (optional): where the offline street map reads
-  from, a Protomaps basemap PMTiles archive (OpenStreetMap data, ODbL) that
-  **we host** and that is readable by range request. Protomaps asks that its
-  public daily builds are not hotlinked, so cut a region from one and upload
-  it: `pmtiles extract <daily-build-url> region.pmtiles --bbox=W,S,E,N
-  --maxzoom=15`. Unset, "Keep this Site's map offline" says so and keeps
-  nothing; the planner works as before. Esri satellite and tile.openstreetmap.org tiles are
-  never kept offline: their providers' terms forbid it.
+   local; register `/api/auth/callback/google` and `/api/auth/callback/github`
+   on the production URL. A deployment with the Supabase trio set registers
+   `/api/auth/callback/supabase` instead (the only callback live in that mode).
+- The planner's storage variables (`B2_KEY_ID`, `B2_APP_KEY`, `B2_BUCKET`)
+  are listed in the root `README.md`.
+- Offline map regions (PWA-2, #315). The street map a Site keeps for offline
+  is read from region archives (Protomaps basemap PMTiles, OpenStreetMap data,
+  ODbL) in the private B2 bucket under `specs/_maps/`, listed in
+  `specs/_maps/manifest.json`; the planner reads them with the same read key
+  as everything else, and picks the region that covers the Site. The Linux
+  host cuts them: `scripts/maps/cut_region.py` (copy it to `~/drone/maps/`
+  beside the `pmtiles` binary) takes the newest Protomaps daily build,
+  `pmtiles extract`s the box to z15, uploads it and updates the manifest.
+  `cut_region.py --once` does every cut queued from the Developer section of
+  Settings (admin only); `--cut bc --name "British Columbia"
+  --bbox=-139.06,48.3,-114.03,60` does one by hand; `--check` cuts nothing.
+  It will not start with under 6 GB free and kills a cut that takes the host
+  under 5 GB free. Run `--once` from cron if queued cuts should be picked up
+  on their own. `SITE_MAP_PMTILES_URL` (optional) overrides all of this with
+  one archive at a plain URL (development and tests). Esri satellite and
+  tile.openstreetmap.org tiles are never kept offline: their terms forbid it.
 
 ## Layout
 

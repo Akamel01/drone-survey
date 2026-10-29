@@ -2,6 +2,26 @@
   height: 100dvh;
   display: flex;
   flex-direction: column;
+  /* Containing block for the chrome that floats (wordmark, Account menu). */
+  position: relative;
+}
+
+/* Papyrus AI wordmark strip above the columns: covers no control (#342). */
+.brand {
+  flex: none;
+  padding: env(safe-area-inset-top) 12px 0;
+  background: var(--canopy-900);
+}
+
+/* The Account menu's home in the chrome (#358). Narrow: the right end of the
+   wordmark strip. Wide: over the map, and it steps clear of the Settings panel
+   the same way the map pills do, so it never lands on the collapse button.
+   The menu itself opens downward and paints above the pills, below the Notice. */
+.account {
+  position: absolute;
+  z-index: 3;
+  top: env(safe-area-inset-top);
+  right: 12px;
 }
 
 .top {
@@ -74,6 +94,15 @@
   flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
+}
+
+/* Opens the Load sheet. Sits beside the fold control, which keeps its place at
+   the right edge. 44 tall, inside the title's own height, so the list below
+   does not move. */
+.loadButton {
+  min-height: 44px;
+  margin: 0 8px 0 auto;
+  padding: 0 18px;
 }
 
 .map {
@@ -322,6 +351,34 @@
     --settings-delay: var(--dur-base);
   }
 
+  /* The panels float on the map, so the wordmark floats too: over the top of
+     the Missions panel, which makes room for it. */
+  .brand {
+    position: absolute;
+    z-index: 3;
+    top: 12px;
+    left: 28px;
+    padding: 0;
+    background: none;
+    text-shadow: 0 1px 8px rgb(0 0 0 / 0.5);
+  }
+
+  .missions { padding-top: 48px; }
+
+  /* The account follows the Settings panel's edge: with the panel open the
+     avatar sits clear of its header (and so of the collapse button). */
+  .account {
+    top: 12px;
+    right: calc(var(--settings-w, 0px) + 24px);
+  }
+
+  /* Folded, the panel's place at the corner belongs to the edge tab it leaves
+     behind (right 12px, 28 wide), so the avatar steps left of it: 52px clears
+     the tab by 12px, the same gap the open panel leaves. */
+  .page[data-settings="closed"] .account {
+    right: 52px;
+  }
+
   .top {
     position: absolute;
     inset: 0;
@@ -508,15 +565,9 @@
       visibility 0s linear 0s;
   }
 
-  /* Without its basemap the map has no surface: the chrome gives way to the
-     hero scene and one line saying why. */
-  .page[data-network="offline"] .missions,
-  .page[data-network="offline"] .settings,
-  .page[data-network="offline"] .summary,
-  .page[data-network="offline"] .edgeTab {
-    display: none;
-  }
-
+  /* Without its basemap the map area shows the hero scene and one line saying
+     why. The panels and the Summary stay: offline is when edits wait to sync
+     (PWA-3), and the Missions list is where that shows. */
   .noNetwork {
     position: absolute;
     inset: 0;

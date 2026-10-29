@@ -53,4 +53,5 @@ test("sizes read as KB and MB", () => {
   assert.equal(formatBytes(512), "512 B");
   assert.equal(formatBytes(820_000), "820 KB");
   assert.equal(formatBytes(1_400_000), "1.4 MB");
+  assert.equal(formatBytes(2_140_000_000), "2.1 GB");
 });

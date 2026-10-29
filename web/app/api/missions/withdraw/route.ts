@@ -1,7 +1,9 @@
-import { authProblem } from "@/lib/auth";
+import { requireCaller } from "@/lib/accountAccess";
 import { createMissionLifecycle } from "@/lib/missionLifecycle";
-import { respond } from "@/lib/missionRoute";
+import { afterResponse, respond } from "@/lib/missionRoute";
+import { pgMissionOwners } from "@/lib/missionOwners";
 import { b2MissionStore } from "@/lib/missionStore";
+import { notify, withdrawNotice } from "@/lib/push";
 
 // Withdraw: cancel a Dispatched Mission before it is Collected, and give its
 // Cards back. Nothing reached the Controller, so nothing has to be undone
@@ -19,8 +21,8 @@ export const preferredRegion = "yyz1";
  * in the field, and withdrawing cannot reach it.
  */
 export async function POST(request: Request) {
-  const denied = authProblem(request);
-  if (denied) return denied;
+  const gate = await requireCaller(request);
+  if (!gate.ok) return gate.response;
 
   let raw: unknown;
   try {
@@ -28,5 +30,12 @@ export async function POST(request: Request) {
   } catch {
     return Response.json({ error: "Body is not JSON. Send { id }." }, { status: 400 });
   }
-  return respond(await createMissionLifecycle(b2MissionStore()).withdraw({ kind: "passphrase" }, raw));
+  const outcome = await createMissionLifecycle(b2MissionStore(), pgMissionOwners()).withdraw(gate.caller, raw);
+  // The repeat carries no name and tells nobody: it changed nothing (#319).
+  if (outcome.ok && outcome.body.name !== undefined) {
+    const { workspaceId } = gate.caller;
+    const { id, name, cards_released } = outcome.body;
+    afterResponse(() => notify(workspaceId, [withdrawNotice({ id, name, cards_released })]));
+  }
+  return respond(outcome);
 }

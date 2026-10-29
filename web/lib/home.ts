@@ -18,6 +18,10 @@ export function accountLabel(name?: string | null, email?: string | null): strin
   return name?.trim() || email || "";
 }
 
+export function initialOf(name?: string | null, email?: string | null): string {
+  return (accountLabel(name, email).charAt(0) || "?").toUpperCase();
+}
+
 function entranceStore<K extends "getItem" | "setItem">(): Pick<Storage, K> | null {
   try {
     return sessionStorage;

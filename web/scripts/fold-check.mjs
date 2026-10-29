@@ -7,8 +7,7 @@
 // The harness writes ONLY to a fresh `mkdtempSync(os.tmpdir())` directory
 // (printed at the end); there is no output-directory argument, so a run cannot
 // leave media in the repo. There is no live B2 store: a fetch wrapper answers
-// /api/missions from memory and a localStorage key stands in for the
-// planner's passphrase, exactly as motion-check.mjs does.
+// /api/missions from memory, exactly as motion-check.mjs does.
 //
 // Assertion style: pass 1 fold/unfold samples the real CSS transitions by
 // pausing them and setting `currentTime` to exact instants (getAnimations /
@@ -29,7 +28,6 @@ import { deriveMissions } from "../lib/missionRecords.ts";
 const BASE = process.argv[2] ?? "http://127.0.0.1:3101";
 // Fresh temp dir per run: the recordings land here and nowhere else.
 const OUT = fs.mkdtempSync(path.join(os.tmpdir(), "ui18-fold-"));
-const PASSPHRASE_KEY = "drone-planner.wayfinder-key";
 
 // ---------------------------------------------------------------------------
 // Seeded Mission list (readiness signal, same shape as motion-check.mjs)
@@ -114,8 +112,7 @@ async function pageFor(browser, { width, height, mobile = false, reduced = false
   const context = await browser.newContext(contextOptions);
   try {
     await context.addInitScript(
-      ({ payload, key, value }) => {
-        localStorage.setItem(key, value);
+      ({ payload }) => {
         const orig = window.fetch.bind(window);
         window.fetch = (input, init) => {
           const url = typeof input === "string" ? input : input && input.url ? input.url : String(input);
@@ -130,7 +127,7 @@ async function pageFor(browser, { width, height, mobile = false, reduced = false
           return orig(input, init);
         };
       },
-      { payload: PAYLOAD, key: PASSPHRASE_KEY, value: "evidence" },
+      { payload: PAYLOAD },
     );
     const page = await context.newPage();
     const videoHandle = video ? page.video() : null;
@@ -962,7 +959,7 @@ async function offlinePass(browser) {
       };
     });
     check("offline", "offline state engages", offline.network === "offline", offline.network);
-    check("offline", "panels and tabs are display:none while offline", offline.panels.every((d) => d === "none") && offline.tabs.every((d) => d === "none"), JSON.stringify(offline));
+    check("offline", "panels stay on screen while offline (edits wait to sync there)", offline.panels.every((d) => d !== "none"), JSON.stringify(offline));
     check("offline", "no fold motion runs while offline", offline.running === 0, `animations=${offline.running}`);
 
     const restored = await page.evaluate(async () => {

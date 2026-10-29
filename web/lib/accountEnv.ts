@@ -13,7 +13,10 @@ export type RequiredVar =
   | "GOOGLE_CLIENT_SECRET"
   | "GITHUB_CLIENT_ID"
   | "GITHUB_CLIENT_SECRET"
-  | "OWNER_EMAIL";
+  | "OWNER_EMAIL"
+  | "SUPABASE_URL"
+  | "SUPABASE_OAUTH_CLIENT_ID"
+  | "SUPABASE_OAUTH_CLIENT_SECRET";
 
 const REQUIRED_VARS: readonly RequiredVar[] = [
   "DATABASE_URL",
@@ -27,6 +30,29 @@ const REQUIRED_VARS: readonly RequiredVar[] = [
   "OWNER_EMAIL",
 ];
 
+// Supabase mode: the base vars plus the locked trio plus OWNER_EMAIL --
+// never GOOGLE_*/GITHUB_*. Same D4 relative order as the legacy set.
+const SUPABASE_REQUIRED_VARS: readonly RequiredVar[] = [
+  "DATABASE_URL",
+  "BETTER_AUTH_SECRET",
+  "BETTER_AUTH_URL",
+  "OAUTH_PROXY_SECRET",
+  "SUPABASE_URL",
+  "SUPABASE_OAUTH_CLIENT_ID",
+  "SUPABASE_OAUTH_CLIENT_SECRET",
+  "OWNER_EMAIL",
+];
+
+/** True when the locked Supabase trio is fully set (non-empty, read at
+ *  call time): the deployment runs Papyrus-only auth. Otherwise legacy. */
+export function supabaseOAuthEnabled(): boolean {
+  return Boolean(
+    process.env.SUPABASE_URL &&
+      process.env.SUPABASE_OAUTH_CLIENT_ID &&
+      process.env.SUPABASE_OAUTH_CLIENT_SECRET,
+  );
+}
+
 // Optional, read where they are used and never part of the 503 set: the six
 // stand-in URLs AUTH_TEST_GOOGLE_* / AUTH_TEST_GITHUB_* (accountAuth.ts),
 // AUTH_TRUSTED_HOSTS, AUTH_TRUSTED_ORIGINS, OWNER_WORKSPACE_SLUG (default
@@ -35,9 +61,10 @@ const REQUIRED_VARS: readonly RequiredVar[] = [
 /** The present required values and, in D4 order, the absent names. Absent
  *  means unset or empty -- an empty string is not a value here. */
 export function accountEnv(): { values: Partial<Record<RequiredVar, string>>; missing: RequiredVar[] } {
+  const required = supabaseOAuthEnabled() ? SUPABASE_REQUIRED_VARS : REQUIRED_VARS;
   const values: Partial<Record<RequiredVar, string>> = {};
   const missing: RequiredVar[] = [];
-  for (const name of REQUIRED_VARS) {
+  for (const name of required) {
     const value = process.env[name];
     if (value) values[name] = value;
     else missing.push(name);

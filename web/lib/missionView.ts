@@ -16,15 +16,11 @@
 import type { CardHolding, MissionState } from "./model.ts";
 import {
   ACTION_ORDER,
-  MISSION_NAME_MAX,
-  SITE_NAME_MAX,
-  UNPRINTABLE,
   actionProblem,
-  missionNameProblem,
-  sameName,
   type ActionName,
   type MissionRow,
 } from "./missionRecords.ts";
+import { MISSION_NAME_MAX, missionNameProblem, sameName, siteLabelProblem } from "./missionIdentity.ts";
 import type { HostDrift, HostNotice, LoadedCard } from "./missions.ts";
 
 /** The glossary's own words, capitalised for a heading and nothing more. */
@@ -321,7 +317,7 @@ export function unreadableLine(keys: string[] | undefined): string | null {
 }
 
 /** What to check inside a Card before flying it (#155). */
-function countCheck(fs: Flight[]): string {
+export function countCheck(fs: { points: number | null }[]): string {
   const known = fs.filter((f) => f.points !== null);
   if (known.length === 0) return "Open that Card by name — the Card's own label describes whatever it held before.";
   const what =
@@ -479,8 +475,8 @@ export function specBlocker(spec: { date?: string }): string | null {
  *  after a round trip. Null when the Site is usable. */
 export function siteProblem(spec: { site?: string; site_id?: string }, sites: SiteChoice[] = []): string | null {
   if (!spec.site?.trim()) return "Choose the Site this Mission belongs to, or name a new one.";
-  if (UNPRINTABLE.test(spec.site)) return "A Site name cannot contain invisible control characters; retype it.";
-  if (spec.site.trim().length > SITE_NAME_MAX) return `A Site name is at most ${SITE_NAME_MAX} characters; shorten it.`;
+  const bad = siteLabelProblem(spec.site);
+  if (bad) return bad;
   const twin = siteTwin(sites, spec.site_id, spec.site);
   if (twin) return `There is already a Site called “${twin.site}”. Choose it in the Site field instead.`;
   if (!spec.site_id?.trim()) return "This Site has no identifier yet. Name it, and one is assigned.";

@@ -42,8 +42,8 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 from kmz import WAYPOINT_DIR, read_create_time, with_create_time  # noqa: E402
-import b2_status  # noqa: E402  (network to B2 only; no mount, no Controller)
-import keys  # noqa: E402
+import b2_status  # noqa: E402  (the pure Ledger and manifest rules)
+from host_store import HostStore, StoreError  # noqa: E402  (the one door to the store)
 import load_core  # noqa: E402  (the Load module: decisions and the two seams)
 from load_core import (  # noqa: E402
     ControllerBusy,
@@ -247,130 +247,7 @@ def survey(root: Path) -> list[tuple[int | None, str]]:
     return MountedController(root).survey()
 
 
-class B2Store:
-    """The store seam: the Card Ledger and the cloud manifest over B2, plus collect auth."""
-
-    def __init__(self, status_config: Path):
-        self.status_config = status_config
-
-    def _auth(self) -> dict:
-        """Authorized store access for the status key (read specs/, write status/*)."""
-        from collect import authorize, load_env  # local import: same bin dir, no cycle at runtime
-        senv = load_env(self.status_config)
-        return authorize(senv["B2_KEY_ID"], senv["B2_APP_KEY"])
-
-    def fetch_ledger(self) -> dict:
-        """The Card Ledger from the store; an empty one only if it was never written.
-
-        A Ledger that cannot be read raises instead of coming back empty. It used to
-        come back empty, and every run then published the pool onto that empty
-        copy -- erasing every Reservation and every written Card on one failed
-        read, after which a Dispatch could be given a Card still holding an unflown
-        Mission (#161). The host never chooses Cards for itself, and never writes a
-        Ledger it did not read.
-        """
-        if not self.status_config.exists():
-            raise LedgerUnreadable(f"no status credentials at {self.status_config}")
-        try:
-            sauth = self._auth()
-            return b2_status.download_ledger(
-                sauth["downloadUrl"], sauth["allowed"]["bucketName"], sauth["authorizationToken"])
-        except (Exception, SystemExit) as e:
-            raise LedgerUnreadable(f"the Card Ledger could not be read ({e})") from e
-
-    def publish_ledger(self, ledger: dict) -> None:
-        """Write the Ledger back. Bookkeeping, not the Load: the cards are already
-        written and verified, so this is loud when it fails and never fatal."""
-        if not self.status_config.exists():
-            print(f"no status credentials at {self.status_config}; the Card Ledger was not updated")
-            return
-        try:
-            sauth = self._auth()
-            b2_status.upload_ledger(sauth["apiUrl"], sauth["authorizationToken"],
-                                    sauth["allowed"]["bucketId"], ledger)
-        except (Exception, SystemExit) as e:
-            print(f"the Card Ledger was not updated ({e}); the Load itself succeeded")
-            return
-        print("Updated the Card Ledger")
-
-    def report_drift(self, drift: list[dict]) -> None:
-        """Put the disagreement where the planner can withhold readiness over it."""
-        if not self.status_config.exists():
-            print(f"no status credentials at {self.status_config}; drift not reported")
-            return
-        try:
-            sauth = self._auth()
-            sallowed = sauth["allowed"]
-            manifest = b2_status.download_manifest(
-                sauth["apiUrl"], sauth["downloadUrl"], sallowed["bucketName"], sauth["authorizationToken"])
-            b2_status.merge_drift(manifest, drift, b2_status.utcnow())
-            b2_status.upload_manifest(sauth["apiUrl"], sauth["authorizationToken"], sallowed["bucketId"], manifest)
-        except (Exception, SystemExit) as e:
-            print(f"drift report failed ({e})")
-            return
-        print(f"Reported {len(drift)} disagreeing Card(s) to the manifest" if drift
-              else "Card Ledger agrees with the Controller")
-
-    def report_refusal(self, kind: str, spec_keys: list[str], reason: str) -> None:
-        """Write a refusal into the manifest so the planner shows it above the
-        Missions it held up. Nothing was touched, or everything was put back -- but
-        the operator must never learn of it only from a cron log."""
-        if not self.status_config.exists():
-            print(f"no status credentials at {self.status_config}; the refusal was not reported")
-            return
-        try:
-            sauth = self._auth()
-            sallowed = sauth["allowed"]
-            manifest = b2_status.download_manifest(
-                sauth["apiUrl"], sauth["downloadUrl"], sallowed["bucketName"], sauth["authorizationToken"])
-            b2_status.merge_refusal(manifest, kind, spec_keys, reason, b2_status.utcnow())
-            b2_status.upload_manifest(sauth["apiUrl"], sauth["authorizationToken"], sallowed["bucketId"], manifest)
-        except (Exception, SystemExit) as e:
-            print(f"the refusal was not reported ({e})")
-            return
-        print("Reported the refusal to the manifest")
-
-    def report_overflow(self, spec_keys: list[str], needed: int, have: int) -> None:
-        """Write the atomic refusal into the manifest so the Status tab shows it
-        against the waiting missions. Like every report: loud when missing, never
-        fatal to anything (there is nothing to roll back — nothing was touched)."""
-        if not self.status_config.exists():
-            print(f"no status credentials at {self.status_config}; overflow not reported")
-            return
-        try:
-            sauth = self._auth()
-            sallowed = sauth["allowed"]
-            manifest = b2_status.download_manifest(
-                sauth["apiUrl"], sauth["downloadUrl"], sallowed["bucketName"], sauth["authorizationToken"])
-            b2_status.merge_overflow(manifest, spec_keys, needed, have, b2_status.utcnow())
-            b2_status.upload_manifest(sauth["apiUrl"], sauth["authorizationToken"], sallowed["bucketId"], manifest)
-        except SystemExit as e:
-            print(f"overflow report failed ({e})")
-            return
-        print("Reported the overflow refusal to the manifest")
-
-    def report_loaded(self, entries: list[tuple[str, list[tuple[str, dict]]]]) -> None:
-        """Stamp the cloud manifest so the planner shows Loaded with card names.
-        Bookkeeping, not the Load: without status credentials the cards are still
-        Loaded and the run still succeeds — it just says so loudly."""
-        if not self.status_config.exists():
-            print(f"no status credentials at {self.status_config}; manifest not updated")
-            return
-        try:
-            sauth = self._auth()
-            sallowed = sauth["allowed"]
-            manifest = b2_status.download_manifest(
-                sauth["apiUrl"], sauth["downloadUrl"], sallowed["bucketName"], sauth["authorizationToken"])
-            b2_status.clear_notice(manifest)
-            b2_status.merge_loaded(manifest, entries, b2_status.utcnow())
-            b2_status.upload_manifest(sauth["apiUrl"], sauth["authorizationToken"], sallowed["bucketId"], manifest)
-        except SystemExit as e:
-            print(f"manifest update failed ({e}); the Load itself succeeded")
-            return
-        print(f"Reported {len(entries)} Loaded to the manifest")
-
-
-def announce_refusal(store: B2Store, kind: str, queue: list[Path], reason: str, *,
+def announce_refusal(store: HostStore, kind: str, queue: list[Path], reason: str, *,
                      now: float | None = None, record: Path = LAST_REFUSAL) -> None:
     """Dedupe a refusal, record it locally, then report it through the store.
 
@@ -396,7 +273,7 @@ def announce_refusal(store: B2Store, kind: str, queue: list[Path], reason: str, 
 
 
 def verify_ledger(ledger: dict, slots: dict[str, str], controller: MountedController,
-                  store: B2Store) -> dict:
+                  store: HostStore) -> dict:
     """Check the Ledger against the Controller at this plug-in and stamp
     verified_at. Drift is reported and never corrected: the Ledger keeps saying
     what was planned, because the difference is the only evidence that a Card
@@ -472,13 +349,16 @@ def main() -> None:
     if args.publish_pool:
         # Seeding, and the recovery when calibration changes: no Controller is
         # needed to say which Cards exist, only the calibration file.
-        load_core.publish_pool(B2Store(args.status_config), list(read_slots()), print,
-                               settle_s=SETTLE_S, sleep=time.sleep)
+        try:
+            load_core.publish_pool(HostStore(args.status_config), list(read_slots()), print,
+                                   settle_s=SETTLE_S, sleep=time.sleep)
+        except LedgerUnreadable as e:
+            sys.exit(str(e))
         return
     stamp = time.strftime("%Y%m%dT%H%M%S")
     backups = LOADS / stamp
     if args.newest:
-        store = B2Store(args.status_config)
+        store = HostStore(args.status_config)
         # Before anything else: the planner cannot reserve a Card it does not
         # know exists, and it is the only thing that reserves. Publishing the
         # pool here is what lets a store that has never seen one get started.
@@ -490,14 +370,10 @@ def main() -> None:
         # after the last Collect still holds; falls back to Collect's synced
         # copy. Best-effort and never fatal to the Load (offline-safe).
         try:
-            from collect import load_env, authorize, download  # local import: same bin dir
-            _senv = load_env(args.status_config)
-            _sauth = authorize(_senv["B2_KEY_ID"], _senv["B2_APP_KEY"])
-            _data = download(_sauth["downloadUrl"], _sauth["allowed"]["bucketName"],
-                             keys.SKIPPED_KEY, _sauth["authorizationToken"])
+            skipped = store.fetch_skipped()
             (SPECS / "_status").mkdir(parents=True, exist_ok=True)
-            (SPECS / "_status" / "skipped.json").write_bytes(_data)
-        except (Exception, SystemExit):
+            (SPECS / "_status" / "skipped.json").write_text(json.dumps(skipped))
+        except (StoreError, OSError):
             pass
         found = sorted(SPECS.glob("*/*/*.json"), key=lambda f: f.relative_to(SPECS).as_posix())
         loaded = set(json.loads(LOADED.read_text())) if found and LOADED.exists() else None
@@ -600,7 +476,7 @@ def main() -> None:
         sys.exit(str(e))
 
     backups = LOADS / stamp
-    store = B2Store(args.status_config)
+    store = HostStore(args.status_config)
     try:
         ledger = store.fetch_ledger()
     except LedgerUnreadable as e:

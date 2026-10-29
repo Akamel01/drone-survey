@@ -1,5 +1,7 @@
-// The account gate and its helpers (D10). #244 wires these into the planner
-// routes one line at a time; #241 ships them unwired.
+// The account gate and its helpers (D10). Every planner route asks
+// `requireCaller` and nothing else (#244): no session is a 401, a pending
+// Account a 403, and an approved one becomes the Caller -- its Workspace --
+// that the Mission lifecycle scopes every read and write by.
 //
 // Import discipline: explicit .ts on relative imports, and next/headers is
 // loaded inside getAccount() only -- `node --test` and `node
@@ -7,8 +9,9 @@
 
 import type { Session, User } from "better-auth";
 import { getPool } from "./accountDb.ts";
-import { getAuth } from "./accountAuth.ts";
+import { getAuth, ownerWorkspaceSlug, promoteOwnerIfVerified } from "./accountAuth.ts";
 import { accountEnvProblem } from "./accountEnv.ts";
+import type { Caller } from "./missionLifecycle.ts";
 
 /** A session as the account surface sees it: Better Auth's API session
  *  payload, user included. (The bare `Session` export is the session row
@@ -50,6 +53,59 @@ export async function requireApprovedAccount(request: Request): Promise<AccountG
     };
   }
   return { ok: true, session };
+}
+
+/** The planner routes' one gate (#244): the approved Account as its
+ *  Workspace, or the refusal. A Mission outside that Workspace is the
+ *  lifecycle's 404, not a refusal here. */
+export async function requireCaller(
+  request: Request,
+): Promise<{ ok: true; caller: Caller; accountId: string } | { ok: false; response: Response }> {
+  const gate = await requireApprovedAccount(request);
+  if (!gate.ok) return gate;
+  const { user } = gate.session;
+  let workspace = await workspaceOf(user.id);
+  if (workspace?.slug !== ownerWorkspaceSlug() && isOwnerEmail(user)) {
+    // The verified owner outside the operator's Workspace (an Account created
+    // before its email was verified, then linked): the bootstrap is
+    // re-runnable, so heal here rather than hide the operator's Missions.
+    await promoteOwnerIfVerified(user);
+    workspace = await workspaceOf(user.id);
+  }
+  if (!workspace) {
+    return {
+      ok: false,
+      response: Response.json(
+        { error: "This account has no Workspace yet, so it has no Missions to reach. Sign out and sign in again." },
+        { status: 403 },
+      ),
+    };
+  }
+  return {
+    ok: true,
+    caller: { workspaceId: workspace.id, ownsUnclaimed: workspace.slug === ownerWorkspaceSlug() },
+    // The Account itself, for what belongs to it rather than its Workspace:
+    // its notification subscriptions (#319).
+    accountId: user.id,
+  };
+}
+
+function isOwnerEmail(user: { email?: string | null; emailVerified?: boolean | null }): boolean {
+  const owner = (process.env.OWNER_EMAIL ?? "").toLowerCase();
+  return owner !== "" && (user.email ?? "").toLowerCase() === owner && user.emailVerified === true;
+}
+
+/** The Account's Workspace: the operator's when it is a member of it, else
+ *  its first. One Workspace per Account today (inviting is not specified). */
+async function workspaceOf(userId: string): Promise<{ id: string; slug: string } | null> {
+  const pool = await getPool();
+  if (!pool) return null;
+  const { rows } = await pool.query<{ id: string; slug: string }>(
+    `SELECT o.id, o.slug FROM "member" m JOIN "organization" o ON o.id = m."organizationId"
+      WHERE m."userId" = $1 ORDER BY (o.slug = $2) DESC, m."createdAt" ASC LIMIT 1`,
+    [userId, ownerWorkspaceSlug()],
+  );
+  return rows[0] ?? null;
 }
 
 /** The Accounts API: an approved admin only (403 otherwise), checked on the

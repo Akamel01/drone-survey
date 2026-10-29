@@ -31,7 +31,9 @@
   padding: 0 0 calc(32px + env(safe-area-inset-bottom));
 }
 /* A soft dark gradient behind the title and buttons, so they hold contrast
-   over the brightest hero mist (Option A, operator 2026-09-29, #188). */
+   over the brightest hero mist (Option A, operator 2026-09-29, #188). The
+   planner link's own 0.22 highlight lifts the pixels under its text, so the
+   bottom stop is 0.80: 0.72 left that link at 4.44:1 at 375 px. */
 .content::before {
   content: "";
   position: absolute;
@@ -40,7 +42,7 @@
   right: -50vw;
   top: -140px;
   bottom: 0;
-  background: linear-gradient(to top, rgb(8 12 16 / 0.72), rgb(8 12 16 / 0.45) 55%, transparent);
+  background: linear-gradient(to top, rgb(8 12 16 / 0.80), rgb(8 12 16 / 0.52) 55%, transparent);
   pointer-events: none;
 }
 
@@ -82,17 +84,6 @@
 .quietCopy {
   margin: 0;
   color: var(--on-glass);
-}
-
-.email {
-  margin: 0;
-  color: var(--on-glass-2);
-  overflow-wrap: anywhere;
-}
-
-.waiting button {
-  padding: 10px 18px;
-  font-weight: 600;
 }
 
 .link {
@@ -192,4 +183,23 @@
     transform: none !important;
     transition: opacity var(--dur-fast) var(--ease-out) !important;
   }
+}
+
+/* Papyrus AI wordmark, top left, over the hero (#342). */
+.brand {
+  position: absolute;
+  z-index: 2;
+  top: calc(12px + env(safe-area-inset-top));
+  left: 16px;
+  right: 16px;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  pointer-events: none; /* the strip spans the width; only its children are hit targets */
+  text-shadow: 0 1px 8px rgb(0 0 0 / 0.5);
+}
+
+.brand > * {
+  pointer-events: auto;
 }

@@ -11,7 +11,7 @@
   --glass-smoke:rgb(40 44 46 / 0.68);
   --glass-clear:rgb(255 255 255 / 0.14);
   --glass-clear-strong:rgb(255 255 255 / 0.22);
-  --glass-edge:rgb(255 255 255 / 0.14);
+  --glass-edge:var(--pa-edge);
   --scrim-bottom:linear-gradient(transparent,#0A0908);
   --panel-light:#E7EDEF;
   --panel-light-alt:#E0E2E4;
@@ -25,8 +25,8 @@
   --on-glass-4:rgb(255 255 255 / 0.80);
   --black:#000000;
   --badge-blue:#1C618A;
-  --warn:#E0A94F;
-  --danger:#E0704F;
+  --warn:var(--pa-warn);
+  --danger:var(--pa-danger);
   --dur-press:120ms;
   --dur-fast:150ms;
   --dur-base:250ms;
@@ -122,6 +122,13 @@ button:active:not(:disabled):not([aria-disabled="true"]),
 input[type="range"] { width: 100%; }
 input[type="number"], input[type="text"], input[type="date"], input[type="password"], input[type="email"], select {
   background: var(--glass-clear); border: 1px solid var(--glass-edge); border-radius: 12px; padding: 4px 6px; color: var(--on-glass); width: 100%; }
+
+/* iOS Safari zooms the page in when a field with text under 16px takes focus,
+   and does not zoom back out: the planner then scrolls sideways and down (#338).
+   Phones only (a touch screen under 500px); iPad and Android layouts are as before. */
+@media (pointer: coarse) and (max-width: 500px) {
+  input, select, textarea { font-size: 1rem; }
+}
 
 :focus-visible { outline: 2px solid #fff; outline-offset: 2px; box-shadow: 0 0 0 4px rgba(0,0,0,.35); }
 /* A date field's focus lands on its day, month and year segments inside the

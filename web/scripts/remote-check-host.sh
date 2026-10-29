@@ -44,7 +44,7 @@ DEFAULT_CHROMIUM_JSON='{"channel":"chromium","args":["--use-angle=gl-egl","--ign
 # The script table (frozen; grilling.md section A -- the one place to edit).
 # serve = wrapper build + host-picked port + URL as argv[2]; self = the suite
 # builds/serves itself; refused = launches WebKit, which bootstrap never installs.
-SERVE_SCRIPTS="check:look check:motion check:map-chrome check:scrollbar check:chrome-motion check:mission-rows check:fold check:area-edit"
+SERVE_SCRIPTS="check:look check:motion check:map-chrome check:scrollbar check:chrome-motion check:mission-rows check:fold check:area-edit check:phone-fit"
 SELF_SCRIPTS="test:e2e"
 REFUSED_SCRIPTS="check:showcase-player"
 PROBE_SCRIPTS="check:look check:motion test:e2e"
@@ -140,12 +140,18 @@ state_node_of() {
 disk_below_floor() { [ "$1" -lt "$2" ]; }
 
 # The checks resolve relative paths against their cwd (web/); absolute values
-# must already sit inside the worktree. Print the worktree-relative path, or
+# must already sit inside the worktree. Paths starting with "../" are treated as
+# worktree-relative (not web-relative). Print the worktree-relative path, or
 # return 1 for anything else. Used for E2E_SHOTS/SHOT_DIR clean + fetch.
 map_web_path() {
   case "${1:-}" in
     "") return 1 ;;
     /*) case "$1" in "$WORKTREE"/*) printf '%s\n' "${1#"$WORKTREE"/}"; return 0 ;; *) return 1 ;; esac ;;
+    ../*)
+      # Path starting with "../" is worktree-relative; strip the "../" prefix
+      printf '%s\n' "${1#../}"
+      return 0
+      ;;
     *) printf 'web/%s\n' "$1"; return 0 ;;
   esac
 }
@@ -551,7 +557,7 @@ start_and_wait() {
 build_web() {
   disk_guard
   say "next build (B2/DISPATCH placeholders, no DATABASE_URL)"
-  export B2_BUCKET=ci B2_KEY_ID=ci B2_APP_KEY=ci B2_READ_KEY_ID=ci B2_READ_APP_KEY=ci DISPATCH_SECRET=ci
+  export B2_BUCKET=ci B2_KEY_ID=ci B2_APP_KEY=ci B2_READ_KEY_ID=ci B2_READ_APP_KEY=ci
   export NEXT_TELEMETRY_DISABLED=1
   if ! ( cd "$WEB" && "$NPM_BIN" run build ); then
     die 1 "npm run build failed"
@@ -740,7 +746,7 @@ phase_fetch() {
   fetch_add "$list" "$(map_web_path "${E2E_SHOTS:-}" 2>/dev/null || true)"
   fetch_add "$list" "$(map_web_path "${SHOT_DIR:-}" 2>/dev/null || true)"
   if [ -s "$list" ]; then
-    if ! tar -czf - $(tar_exclude_args) -C "$WORKTREE" -T "$list"; then
+    if ! tar --hard-dereference -czf - $(tar_exclude_args) -C "$WORKTREE" -T "$list"; then
       rm -f -- "$list"
       die 1 "artifact tar failed (paths listed above)"
     fi

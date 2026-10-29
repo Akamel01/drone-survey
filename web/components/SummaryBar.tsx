@@ -5,6 +5,7 @@ import type { MissionSpec } from "@/lib/spec";
 import type { Preview } from "@/lib/mission";
 import type { MissionRecord } from "@/lib/missionRecords";
 import { safeStorage } from "@/lib/actions";
+import { createRepository } from "@/lib/missionRepository";
 import { flightTimeDelta, specBlocker, type SiteChoice } from "@/lib/missionView";
 import * as missionClient from "@/lib/missionClient";
 import { firstSentence } from "@/lib/notice";
@@ -42,8 +43,8 @@ interface SummaryBarProps {
 // one Mission's controls in two places under two names, and a Dispatch button
 // beside an editor cannot say which Mission it means (ADR 0021).
 
-// Per-browser memory for the collapse, beside the passphrase key convention
-// (`lib/passphrase.ts:14`). Read once after mount, written on every toggle.
+// Per-browser memory for the collapse, under the planner's `drone-planner.`
+// key convention. Read once after mount, written on every toggle.
 // Where storage itself is blocked both no-op and the Summary stays collapsed.
 const SUMMARY_OPEN_KEY = "drone-planner.summary-open";
 
@@ -62,8 +63,7 @@ export default function SummaryBar({ spec, preview, editing, onSaved, sites = []
 
   // Collapsed on the server (no localStorage there) and on first paint, so
   // the server-rendered and first client-rendered HTML match; the stored
-  // choice applies after mount. The Summary's own passphrase field is gone
-  // (UI-27, #304) — the Missions view keeps its field until #244.
+  // choice applies after mount.
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- one-time client-only read of localStorage
     if (safeStorage()?.getItem(SUMMARY_OPEN_KEY) === "1") setOpen(true);
@@ -112,23 +112,24 @@ export default function SummaryBar({ spec, preview, editing, onSaved, sites = []
       return failed ? { ok: false, text } : { ok: true };
     };
     try {
-      const outcome = await missionClient.save(
-        {
-          // Only a new Mission is a save with no id. Changes and a replacement
-          // name the Mission, and the store decides what that means from its
-          // state: in place while Planned, a fork once Dispatched.
-          id: choice === "new" ? undefined : (editing.id ?? undefined),
-          site_id: site.site_id,
-          site: site.site,
-          name,
-          date: spec.date,
-          // The Spec carries the Site it is saved under, as the store reads it.
-          spec: { ...spec, site: site.site, site_id: site.site_id },
-        },
-        editedMission ? { choice, from: editedMission.name } : undefined,
-      );
-      if (outcome.ok) onSaved(outcome.mission);
-      return report(outcome.text, !outcome.ok);
+      const draft: missionClient.MissionDraft = {
+        // Only a new Mission is a save with no id. Changes and a replacement
+        // name the Mission, and the store decides what that means from its
+        // state: in place while Planned, a fork once Dispatched.
+        id: choice === "new" ? undefined : (editing.id ?? undefined),
+        site_id: site.site_id,
+        site: site.site,
+        name,
+        date: spec.date,
+        // The Spec carries the Site it is saved under, as the store reads it.
+        spec: { ...spec, site: site.site, site_id: site.site_id },
+      };
+      // Sent, refused or kept on this device is the repository's call (#348):
+      // with no signal, and behind anything already waiting for this Mission,
+      // the save waits rather than overtaking it.
+      const outcome = await createRepository().save(draft, editedMission ? { choice, from: editedMission.name } : undefined, editing.base);
+      if ("mission" in outcome) onSaved(outcome.mission);
+      return report(outcome.text, "ok" in outcome && !outcome.ok);
     } catch (err) {
       return report(
         `Not saved: ${err instanceof Error ? err.message : "the store could not be reached"}. Nothing changed.`,

@@ -22,19 +22,23 @@ _Avoid_: accurate, precise, professional-grade
 
 **Account**:
 one person's identity in the planner: an email address they sign in with
-through Google, GitHub, or email and password. An Account works inside a
+through whichever sign-in method the deployment configures. An Account works
+inside a
 Workspace.
 _Avoid_: user (in the product's own words), login, profile.
 
 **Workspace**:
 the unit that owns Missions and, later, pays for them: every Account works
-inside one, and every Mission belongs to exactly one.
+inside one, and every Mission belongs to exactly one. A Mission made before
+Accounts, with no record of its Workspace, is the operator's.
 _Avoid_: organization, team, tenant.
 
 **Approval**:
 the operator's decision that lets a new Account reach its Workspace's Missions
 and the machines behind them. Until then the Account can sign in but reaches
-nothing. It stands in for billing until billing exists.
+nothing. It stands in for billing until billing exists. A verified provider email
+(Papyrus, Google or GitHub) is its own Approval; only an unverified one
+waits for the operator's decision.
 _Avoid_: verification (that is the email check), activation, whitelist.
 
 ### Capture
@@ -104,10 +108,10 @@ _Avoid_: KML, flight plan file, route
 
 **Mission Spec**:
 The planner's record of one Capture's flying, in our own format, from which the
-files the Controller reads are generated. A Spec covers the whole Site; the
-writer decides how many Missions that takes, because a Site larger than one
-battery is flown as several. A Spec is never edited: a change is a new Spec
-that supersedes the earlier one.
+files the Controller reads are generated. A Spec covers the whole Site; Dispatch
+decides how many Missions that takes, because a Site larger than one battery is
+flown as several, and records them in the Spec so the writer only writes them.
+A Spec is never edited: a change is a new Spec that supersedes the earlier one.
 _Avoid_: JSON, plan, config, mission file
 
 **Mission Name**:

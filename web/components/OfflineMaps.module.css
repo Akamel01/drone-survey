@@ -70,3 +70,8 @@
   min-height: 44px;
   padding: 0 20px;
 }
+
+/* A second heading inside one section (Notifications' ntfy backup, #319). */
+.section h2.subhead {
+  margin-top: 24px;
+}
