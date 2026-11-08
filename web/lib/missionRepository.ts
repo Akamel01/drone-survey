@@ -93,13 +93,20 @@ export const NEEDS_NETWORK =
 export const WAITING_FIRST = "Dispatch waits until this Mission's changes have synced, so the store Dispatches what you see.";
 
 /** The row actions that wait for the network when there is none. Dispatch is
- *  not among them. */
-const OP_OF: Partial<Record<MissionAction, OutboxOp>> = {
+ *  not among them ("local": never kept). Every action must be listed, so a new
+ *  one fails `tsc` until it is placed (#371). */
+const OP_OF = {
+  Dispatch: "local",
   Withdraw: "withdraw",
   "Mark Flown": "flown",
   "Unmark Flown": "unflown",
   Remove: "remove",
-};
+} as const satisfies Record<MissionAction, OutboxOp | "local">;
+
+/** ... and the other way: every OutboxOp is either a row action above or one of
+ *  the two that are not (a save, a Loaded report), else this fails `tsc`. */
+const _everyOpHasAnAction: [Exclude<OutboxOp, "save" | "loaded" | (typeof OP_OF)[MissionAction]>] extends [never] ? true : never = true;
+void _everyOpHasAnAction;
 
 const kept = (label: string) => `${label} kept on this device, waiting to sync. It is sent to the store when the network is back.`;
 const noRoom = (label: string) => `${label} failed: this browser has no room to keep it for later. Nothing changed.`;
@@ -189,7 +196,7 @@ export function createRepository(deps: Partial<RepositoryDeps> = {}): Repository
   }
 
   async function act(action: MissionAction, id: string): Promise<ActOutcome> {
-    const op = OP_OF[action];
+    const op = OP_OF[action] === "local" ? null : OP_OF[action];
     // Kept on this device when there is no network to send it over, and when
     // this Mission has something older still waiting: a newer change never
     // overtakes one made before it. Dispatch is never kept -- with no network
