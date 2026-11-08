@@ -34,7 +34,17 @@ import type {
   PressTarget,
 } from "@/lib/areaEditing";
 import type { CircleShape, MissionSpec } from "@/lib/spec";
-import type { Preview } from "@/lib/mission";
+import type { LL, Preview } from "@/lib/mission";
+import {
+  eastOf,
+  fc,
+  footprintGeoJSON,
+  lineGeoJSON,
+  midpointsGeoJSON,
+  pointsGeoJSON,
+  polygonGeoJSON,
+  toLngLat,
+} from "@/lib/mapGeometry";
 import styles from "./MapPane.module.css";
 
 // Every drawing rule lives in `lib/areaEditing`; this component is its
@@ -77,76 +87,6 @@ interface MapPaneProps {
 const isBasemap = (id?: string) => id === "esri" || id === "osm";
 
 const START = { lat: 49.1891, lon: -122.8396, zoom: 16 };
-type LL = [number, number];
-
-// GeoJSON is [lon, lat]; the spec/contract is [lat, lon]. Convert at the edges only.
-const toLngLat = (p: LL): [number, number] => [p[1], p[0]];
-
-const mPerLon = (lat: number) => 111320 * Math.cos((lat * Math.PI) / 180);
-
-/** Due east of a point, used to give a circle one radius handle to drag. */
-const eastOf = (center: LL, radiusM: number): LL => [center[0], center[1] + radiusM / mPerLon(center[0])];
-
-function fc(features: GeoJSON.Feature[]): GeoJSON.FeatureCollection {
-  return { type: "FeatureCollection", features };
-}
-
-function polygonGeoJSON(ring: LL[]): GeoJSON.FeatureCollection {
-  if (ring.length < 3) return fc([]);
-  const coords = ring.map(toLngLat);
-  coords.push(coords[0]);
-  return fc([{ type: "Feature", properties: {}, geometry: { type: "Polygon", coordinates: [coords] } }]);
-}
-
-function pointsGeoJSON(points: LL[], props: (i: number) => object = () => ({})) {
-  return fc(
-    points.map((p, i) => ({
-      type: "Feature" as const,
-      properties: props(i),
-      geometry: { type: "Point" as const, coordinates: toLngLat(p) },
-    })),
-  );
-}
-
-/** Midpoint of every edge — the handle that inserts a vertex on that edge. */
-function midpointsGeoJSON(aoi: LL[], shape: CircleShape | null | undefined) {
-  // `canFinish` is the same length test the panel uses.
-  if (!canFinish(aoi) || shape) return fc([]);
-  return fc(
-    aoi.map((p, i) => {
-      const q = aoi[(i + 1) % aoi.length];
-      return {
-        type: "Feature" as const,
-        properties: { edgeIndex: i },
-        geometry: { type: "Point" as const, coordinates: toLngLat([(p[0] + q[0]) / 2, (p[1] + q[1]) / 2]) },
-      };
-    }),
-  );
-}
-
-function lineGeoJSON(points: LL[]) {
-  if (points.length < 2) return fc([]);
-  return fc([
-    {
-      type: "Feature" as const,
-      properties: {},
-      geometry: { type: "LineString" as const, coordinates: points.map(toLngLat) },
-    },
-  ]);
-}
-
-/** What one photograph covers on the ground, drawn where the map is looking. */
-function footprintGeoJSON(center: LL, acrossM: number, alongM: number) {
-  if (!acrossM || !alongM) return fc([]);
-  const dLat = alongM / 2 / 111132;
-  const dLon = acrossM / 2 / mPerLon(center[0]);
-  return polygonGeoJSON([
-    [center[0] - dLat, center[1] - dLon],
-    [center[0] - dLat, center[1] + dLon],
-    [center[0] + dLat, center[1] + dLon],
-    [center[0] + dLat, center[1] - dLon],
-  ]);
-}
 
 /**
  * An arrowhead drawn to a canvas.

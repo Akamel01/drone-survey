@@ -85,7 +85,9 @@ export async function persistence(request: boolean): Promise<Persistence> {
 
 /** Keep the map around a Site: ask for persistent storage, read every tile of
  *  its bounded area, and list it only once all of them are stored. `points` are
- *  the [lat, lon] corners of the Site's Missions. */
+ *  the [lat, lon] corners of the Site's Missions. A save that fails (no signal
+ *  in the field) leaves the Site's earlier map as it was: it is only replaced
+ *  once every new tile is in hand. */
 export async function saveSiteMap(site: { siteId: string; name: string }, points: [number, number][]): Promise<Saved> {
   if (!supported()) return { ok: false, text: "This browser cannot keep maps for offline." };
   const bounds = siteBounds(points);
@@ -95,11 +97,10 @@ export async function saveSiteMap(site: { siteId: string; name: string }, points
   }
   const persisted = await persistence(true);
   const name = PREFIX + site.siteId;
-  await caches.delete(name);
-  const cache = await caches.open(name);
   let bytes = 0;
   let next = 0;
   let failure: string | null = null;
+  const fetched: { path: string; data: ArrayBuffer }[] = [];
   const worker = async () => {
     while (failure === null && next < kept.tiles.length) {
       const [z, x, y] = kept.tiles[next++];
@@ -112,17 +113,14 @@ export async function saveSiteMap(site: { siteId: string; name: string }, points
         }
         const data = await res.arrayBuffer();
         bytes += data.byteLength;
-        await cache.put(tilePath(z, x, y), new Response(data));
+        fetched.push({ path: tilePath(z, x, y), data });
       } catch (err) {
         failure = `The map could not be reached: ${err instanceof Error ? err.message : "unknown"}.`;
       }
     }
   };
   await Promise.all([worker(), worker(), worker(), worker()]);
-  if (failure !== null) {
-    await caches.delete(name);
-    return { ok: false, text: failure };
-  }
+  if (failure !== null) return { ok: false, text: failure };
   const map: SiteMap = {
     siteId: site.siteId,
     name: site.name,
@@ -132,7 +130,21 @@ export async function saveSiteMap(site: { siteId: string; name: string }, points
     bounds,
     savedAt: new Date().toISOString(),
   };
-  await cache.put(MANIFEST, Response.json(map));
+  try {
+    const cache = await caches.open(name);
+    for (const tile of fetched) await cache.put(tile.path, new Response(tile.data));
+    await cache.put(MANIFEST, Response.json(map));
+    try {
+      const keep = new Set([...fetched.map((tile) => tile.path), MANIFEST]);
+      for (const stored of await cache.keys()) {
+        if (!keep.has(new URL(stored.url).pathname)) await cache.delete(stored);
+      }
+    } catch {
+      // Leftover tiles are harmless: the map and its manifest are already in place.
+    }
+  } catch (err) {
+    return { ok: false, text: `The map could not be stored: ${err instanceof Error ? err.message : "unknown"}.` };
+  }
   changed();
   return { ok: true, map, persistence: persisted };
 }

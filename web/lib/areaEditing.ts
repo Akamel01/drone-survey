@@ -14,10 +14,10 @@
 // the adapter, which is why `set-poi` is not a branch here: the adapter turns
 // that click into the page's placement callback directly.
 
-import { circlePolygon, geodesicM } from "./mission";
+import { circlePolygon, geodesicM, type LL } from "./mission";
 import type { CircleShape, MissionType } from "./spec";
 
-export type LL = [number, number];
+export type { LL };
 
 /** The modes a map click can be in, as the planner names them. */
 export type DrawMode =
