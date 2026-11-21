@@ -1,9 +1,10 @@
 # Pipeline
 
 A Pipeline is a **Manifest**: a JSON file naming its Nodes, their commands,
-and the edges between them. The **Runner** (`runner.py`) executes one Node
-at a time, in the order listed, wiring each Node's outputs into the inputs
-of later Nodes that reference them. See ADR 0006 and `docs/design.md` §4.
+and the edges between them. Pipelines run on the shared `recon-core` Runner
+(`recon-runner` / `python -m recon_core`), which executes one Node at a time,
+in the order listed, wiring each Node's outputs into the inputs of later Nodes
+that reference them. See ADR 0006 and `docs/design.md` §4.
 
 ## Manifest example
 
@@ -25,6 +26,10 @@ of the format.
       ],
       "outputs": {
         "images": "images"
+      },
+      "input_types": {},
+      "output_types": {
+        "images": "dir"
       }
     },
     {
@@ -45,6 +50,12 @@ of the format.
       },
       "outputs": {
         "report": "audit.json"
+      },
+      "input_types": {
+        "images": "dir"
+      },
+      "output_types": {
+        "report": "file"
       }
     }
   ]
@@ -57,8 +68,8 @@ Add `"image": "some-container"` to a Node to run its command in a container.
 ## Running
 
 ```
-python3 pipeline/runner.py MANIFEST.json --workdir RUN_DIR
-python3 pipeline/runner.py --selftest      # proves the Runner, no real Node needed
+recon-runner MANIFEST.json --workdir RUN_DIR
+recon-runner --selftest      # proves the Runner, no real Node needed
 ```
 
 Per-Node status goes to `RUN_DIR/state.json` after every Node. Re-running the
@@ -77,9 +88,10 @@ resumes from an earlier Manifest's output (#105, #83). `fit-splat` is resumable;
 `reconstruct` is not yet, until ODM is shown to resume cleanly from a
 half-finished project.
 
-Only one run may be in progress at a time (#12): a lock file at
-`pipeline/.runner.lock` refuses a second concurrent run; a lock left by a
-killed process is cleared automatically once its PID is gone.
+Only one run may be in progress at a time (#12): `recon-core` enforces a
+per-user runtime lock (`$XDG_RUNTIME_DIR/recon-core-<uid>.lock`, or a temp-dir
+fallback), not a repo-local `pipeline/.runner.lock`; a lock left by a killed
+process is cleared automatically once its PID is gone.
 
 ## Decisions to review
 

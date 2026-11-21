@@ -3,15 +3,42 @@
   "nodes": [
     {
       "name": "bundle",
-      "command": ["python3", "nodes/bundle/build.py", "--out", "{out.bundle}"],
-      "outputs": {"bundle": "bundle"},
-      "notes": "No ingest/reconstruct/export-cog Node exists yet to wire as {in.x}, so the source Orthomosaic/splat/showcase/report/vendor-asset paths are read from the BUNDLE_ORTHO / BUNDLE_SPLAT_SCENE / BUNDLE_SPLAT_META / BUNDLE_SHOWCASE / BUNDLE_SPRITE / BUNDLE_REPORT / BUNDLE_VENDOR_DIR env vars (see nodes/bundle/build.py). At least one of BUNDLE_ORTHO, BUNDLE_SPLAT_SCENE or BUNDLE_SHOWCASE is required."
+      "command": [
+        "python3",
+        "nodes/bundle/build.py",
+        "--out",
+        "{out.bundle}"
+      ],
+      "outputs": {
+        "bundle": "bundle"
+      },
+      "notes": "No ingest/reconstruct/export-cog Node exists yet to wire as {in.x}, so the source Orthomosaic/splat/showcase/report/vendor-asset paths are read from the BUNDLE_ORTHO / BUNDLE_SPLAT_SCENE / BUNDLE_SPLAT_META / BUNDLE_SHOWCASE / BUNDLE_SPRITE / BUNDLE_REPORT / BUNDLE_VENDOR_DIR env vars (see nodes/bundle/build.py). At least one of BUNDLE_ORTHO, BUNDLE_SPLAT_SCENE or BUNDLE_SHOWCASE is required.",
+      "input_types": {},
+      "output_types": {
+        "bundle": "dir"
+      }
     },
     {
       "name": "publish",
-      "command": ["python3", "nodes/publish/publish.py", "--bundle", "{in.bundle}", "--bucket", "wayfinder-delivery-ca-east"],
-      "inputs": {"bundle": {"node": "bundle", "output": "bundle"}},
-      "notes": "Publishes for real. The bucket wayfinder-delivery-ca-east exists in B2 CA-East, is allPrivate with SSE-B2, and carries the CORS rules the viewer needs. Credentials come from ~/.config/wayfinder/b2-delivery.env on the machine that runs this."
+      "command": [
+        "python3",
+        "nodes/publish/publish.py",
+        "--bundle",
+        "{in.bundle}",
+        "--bucket",
+        "wayfinder-delivery-ca-east"
+      ],
+      "inputs": {
+        "bundle": {
+          "node": "bundle",
+          "output": "bundle"
+        }
+      },
+      "notes": "Publishes for real. The bucket wayfinder-delivery-ca-east exists in B2 CA-East, is allPrivate with SSE-B2, and carries the CORS rules the viewer needs. Credentials come from ~/.config/wayfinder/b2-delivery.env on the machine that runs this.",
+      "input_types": {
+        "bundle": "dir"
+      },
+      "output_types": {}
     }
   ]
 }

@@ -21,8 +21,15 @@ import tempfile
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
-RUNNER = REPO_ROOT / "pipeline" / "runner.py"
 MANIFEST = REPO_ROOT / "pipeline" / "manifests" / "retention.json"
+
+
+def recon_runner_cmd() -> list[str]:
+    import shutil
+    rr = shutil.which("recon-runner")
+    if rr:
+        return [rr]
+    return [sys.executable, "-m", "recon_core"]
 
 
 def main() -> None:
@@ -42,7 +49,7 @@ def main() -> None:
         fresh = capture(10, "new.jpg")
 
         result = subprocess.run(
-            [sys.executable, str(RUNNER), str(MANIFEST), "--workdir", str(work)],
+            [*recon_runner_cmd(), str(MANIFEST), "--workdir", str(work)],
             capture_output=True, text=True, timeout=300,
         )
         assert result.returncode == 0, result.stdout + result.stderr

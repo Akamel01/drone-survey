@@ -32,12 +32,18 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 BUNDLE_BUILD = REPO_ROOT / "nodes" / "bundle" / "build.py"
 PUBLISH = REPO_ROOT / "nodes" / "publish" / "publish.py"
 DELIVER_MANIFEST = REPO_ROOT / "pipeline" / "manifests" / "deliver.json"
-RUNNER = REPO_ROOT / "pipeline" / "runner.py"
-
 # The frozen Showcase names live in nodes/bundle/build.py, which is importable
 # with no side effects (main guarded): one source for the nine names.
 sys.path.insert(0, str(REPO_ROOT / "nodes" / "bundle"))
 from build import DEFAULT_SPRITE, SHOWCASE_CUTS, SHOWCASE_FILES  # noqa: E402
+
+
+def recon_runner_cmd() -> list[str]:
+    import shutil
+    rr = shutil.which("recon-runner")
+    if rr:
+        return [rr]
+    return [sys.executable, "-m", "recon_core"]
 
 HTML_REF = re.compile(r'(?:src|href)="([^"]+)"')
 
@@ -349,7 +355,7 @@ def check_runner_end_to_end(ortho: Path, scene: Path, meta: Path, showcase_dir: 
                 node["command"] = node["command"] + ["--dry-run"]
         manifest_path = Path(workdir) / "deliver-rehearsal.json"
         manifest_path.write_text(json.dumps(rehearsal))
-        result = run([sys.executable, str(RUNNER), str(manifest_path), "--workdir", workdir], env=env)
+        result = run([*recon_runner_cmd(), str(manifest_path), "--workdir", workdir], env=env)
         assert result.returncode == 0, f"Runner failed on deliver.json:\n{result.stdout}\n{result.stderr}"
         assert "pipeline 'deliver' complete." in result.stdout, result.stdout
 

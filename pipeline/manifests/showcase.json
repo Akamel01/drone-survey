@@ -10,14 +10,30 @@
       "name": "cut-island",
       "placement": "local",
       "command": [
-        "python3", "nodes/cut-island/cut_island.py",
-        "--reconstruction", "{in.reconstruction}",
-        "--boundary", "{in.boundary}",
-        "--out-island", "{out.island}",
-        "--out-report", "{out.cut_report}"
+        "python3",
+        "nodes/cut-island/cut_island.py",
+        "--reconstruction",
+        "{in.reconstruction}",
+        "--boundary",
+        "{in.boundary}",
+        "--out-island",
+        "{out.island}",
+        "--out-report",
+        "{out.cut_report}"
       ],
-      "outputs": {"island": "island", "cut_report": "cut-report.json"},
-      "notes": "Runs on host python3 (no image key, M1). Reads the C6 boundary and the Reconstruction read-only, trims to the polygon and writes the C1 island dir + C2 cut-report.json the gate re-hashes."
+      "outputs": {
+        "island": "island",
+        "cut_report": "cut-report.json"
+      },
+      "notes": "Runs on host python3 (no image key, M1). Reads the C6 boundary and the Reconstruction read-only, trims to the polygon and writes the C1 island dir + C2 cut-report.json the gate re-hashes.",
+      "input_types": {
+        "reconstruction": "dir",
+        "boundary": "file"
+      },
+      "output_types": {
+        "island": "dir",
+        "cut_report": "file"
+      }
     },
     {
       "name": "render",
@@ -26,30 +42,76 @@
       "gpu": true,
       "resumable": true,
       "command": [
-        "blender", "-b", "--factory-startup", "-P", "nodes/render/render_island.py", "--",
-        "{in.island}", "{out.frames_wide}", "{out.frames_tall}"
+        "blender",
+        "-b",
+        "--factory-startup",
+        "-P",
+        "nodes/render/render_island.py",
+        "--",
+        "{in.island}",
+        "{out.frames_wide}",
+        "{out.frames_tall}"
       ],
-      "inputs": {"island": {"node": "cut-island", "output": "island"}},
-      "outputs": {"frames_wide": "frames-wide", "frames_tall": "frames-tall"},
-      "notes": "Pinned Blender 5.2.2 image, gpu: true (C3/C4). Resumable (D7): skip-existing + PNG-parse validation keeps frame dirs across a retry; declared files still re-emit. Both framings share one angle array from one scene."
+      "inputs": {
+        "island": {
+          "node": "cut-island",
+          "output": "island"
+        }
+      },
+      "outputs": {
+        "frames_wide": "frames-wide",
+        "frames_tall": "frames-tall"
+      },
+      "notes": "Pinned Blender 5.2.2 image, gpu: true (C3/C4). Resumable (D7): skip-existing + PNG-parse validation keeps frame dirs across a retry; declared files still re-emit. Both framings share one angle array from one scene.",
+      "input_types": {
+        "island": "dir"
+      },
+      "output_types": {
+        "frames_wide": "dir",
+        "frames_tall": "dir"
+      }
     },
     {
       "name": "grade-frames",
       "placement": "local",
       "command": [
-        "python3", "nodes/grade/grade.py",
-        "--frames-wide", "{in.frames_wide}",
-        "--frames-tall", "{in.frames_tall}",
-        "--sky", "{in.sky}",
-        "--graded-wide", "{out.graded_wide}",
-        "--graded-tall", "{out.graded_tall}"
+        "python3",
+        "nodes/grade/grade.py",
+        "--frames-wide",
+        "{in.frames_wide}",
+        "--frames-tall",
+        "{in.frames_tall}",
+        "--sky",
+        "{in.sky}",
+        "--graded-wide",
+        "{out.graded_wide}",
+        "--graded-tall",
+        "{out.graded_tall}"
       ],
       "inputs": {
-        "frames_wide": {"node": "render", "output": "frames_wide"},
-        "frames_tall": {"node": "render", "output": "frames_tall"}
+        "frames_wide": {
+          "node": "render",
+          "output": "frames_wide"
+        },
+        "frames_tall": {
+          "node": "render",
+          "output": "frames_tall"
+        }
       },
-      "outputs": {"graded_wide": "graded-wide", "graded_tall": "graded-tall"},
-      "notes": "Frame-dir loop over the shared grade() (M3, D2), so the turn look cannot fork from the stills look. Names only the render frame dirs plus the C5 sky input, never the Reconstruction or island dir (D4)."
+      "outputs": {
+        "graded_wide": "graded-wide",
+        "graded_tall": "graded-tall"
+      },
+      "notes": "Frame-dir loop over the shared grade() (M3, D2), so the turn look cannot fork from the stills look. Names only the render frame dirs plus the C5 sky input, never the Reconstruction or island dir (D4).",
+      "input_types": {
+        "frames_wide": "dir",
+        "frames_tall": "dir",
+        "sky": "file"
+      },
+      "output_types": {
+        "graded_wide": "dir",
+        "graded_tall": "dir"
+      }
     },
     {
       "name": "interpolate",
@@ -57,56 +119,127 @@
       "image": "drone-interpolate:rife-v4.6",
       "gpu": true,
       "command": [
-        "python3", "nodes/interpolate/interpolate.py",
-        "--graded-wide", "{in.graded_wide}",
-        "--graded-tall", "{in.graded_tall}",
-        "--out-dir", "{out.masters}",
-        "--rife-bin", "/opt/rife/rife-ncnn-vulkan",
-        "--rife-model", "/opt/rife/rife-v4.6"
+        "python3",
+        "nodes/interpolate/interpolate.py",
+        "--graded-wide",
+        "{in.graded_wide}",
+        "--graded-tall",
+        "{in.graded_tall}",
+        "--out-dir",
+        "{out.masters}",
+        "--rife-bin",
+        "/opt/rife/rife-ncnn-vulkan",
+        "--rife-model",
+        "/opt/rife/rife-v4.6"
       ],
       "inputs": {
-        "graded_wide": {"node": "grade-frames", "output": "graded_wide"},
-        "graded_tall": {"node": "grade-frames", "output": "graded_tall"}
+        "graded_wide": {
+          "node": "grade-frames",
+          "output": "graded_wide"
+        },
+        "graded_tall": {
+          "node": "grade-frames",
+          "output": "graded_tall"
+        }
       },
-      "outputs": {"masters": "masters"},
-      "notes": "RIFE 16x + seam close in the M4 container (RIFE binary + rife-v4.6 model baked in, same pattern as the render image). Writes the HEVC+AV1 masters + poster/blur into one dir; no ESRGAN (native 4K in)."
+      "outputs": {
+        "masters": "masters"
+      },
+      "notes": "RIFE 16x + seam close in the M4 container (RIFE binary + rife-v4.6 model baked in, same pattern as the render image). Writes the HEVC+AV1 masters + poster/blur into one dir; no ESRGAN (native 4K in).",
+      "input_types": {
+        "graded_wide": "dir",
+        "graded_tall": "dir"
+      },
+      "output_types": {
+        "masters": "dir"
+      }
     },
     {
       "name": "cuts",
       "placement": "local",
       "command": [
-        "python3", "nodes/cuts/cuts.py",
-        "--masters-dir", "{in.masters}",
-        "--out-dir", "{out.cuts}"
+        "python3",
+        "nodes/cuts/cuts.py",
+        "--masters-dir",
+        "{in.masters}",
+        "--out-dir",
+        "{out.cuts}"
       ],
       "inputs": {
-        "masters": {"node": "interpolate", "output": "masters"}
+        "masters": {
+          "node": "interpolate",
+          "output": "masters"
+        }
       },
-      "outputs": {"cuts": "cuts"},
-      "notes": "§6 delivery set from the M4 HEVC masters (M5, cuts.sh verbatim): 1440p/60 AV1+HEVC, 1080p/30 H.264, wide-only 4K/60 AV1, 1440p poster. Skip-existing, so a re-run only makes what is missing."
+      "outputs": {
+        "cuts": "cuts"
+      },
+      "notes": "\u00a76 delivery set from the M4 HEVC masters (M5, cuts.sh verbatim): 1440p/60 AV1+HEVC, 1080p/30 H.264, wide-only 4K/60 AV1, 1440p poster. Skip-existing, so a re-run only makes what is missing.",
+      "input_types": {
+        "masters": "dir"
+      },
+      "output_types": {
+        "cuts": "dir"
+      }
     },
     {
       "name": "check-showcase",
       "placement": "local",
       "command": [
-        "python3", "nodes/check-showcase/gate.py",
-        "--frames-wide", "{in.frames_wide}",
-        "--frames-tall", "{in.frames_tall}",
-        "--masters-dir", "{in.masters}",
-        "--cuts-dir", "{in.cuts}",
-        "--cut-report", "{in.cut_report}",
-        "--reconstruction", "{in.reconstruction}",
-        "--out-verdict", "{out.verdict}"
+        "python3",
+        "nodes/check-showcase/gate.py",
+        "--frames-wide",
+        "{in.frames_wide}",
+        "--frames-tall",
+        "{in.frames_tall}",
+        "--masters-dir",
+        "{in.masters}",
+        "--cuts-dir",
+        "{in.cuts}",
+        "--cut-report",
+        "{in.cut_report}",
+        "--reconstruction",
+        "{in.reconstruction}",
+        "--out-verdict",
+        "{out.verdict}"
       ],
       "inputs": {
-        "frames_wide": {"node": "render", "output": "frames_wide"},
-        "frames_tall": {"node": "render", "output": "frames_tall"},
-        "masters": {"node": "interpolate", "output": "masters"},
-        "cuts": {"node": "cuts", "output": "cuts"},
-        "cut_report": {"node": "cut-island", "output": "cut_report"}
+        "frames_wide": {
+          "node": "render",
+          "output": "frames_wide"
+        },
+        "frames_tall": {
+          "node": "render",
+          "output": "frames_tall"
+        },
+        "masters": {
+          "node": "interpolate",
+          "output": "masters"
+        },
+        "cuts": {
+          "node": "cuts",
+          "output": "cuts"
+        },
+        "cut_report": {
+          "node": "cut-island",
+          "output": "cut_report"
+        }
       },
-      "outputs": {"verdict": "verdict.json"},
-      "notes": "Gate (C7 + M6): C4 on frame-0 of the render frame dirs (raw RGBA alpha), seam + direction on the frame dirs, counts/codecs on masters + §6 cuts, C2 re-hash of the Reconstruction against the report. Exits non-zero on failure; verdict.json declared so a silent gate fails."
+      "outputs": {
+        "verdict": "verdict.json"
+      },
+      "notes": "Gate (C7 + M6): C4 on frame-0 of the render frame dirs (raw RGBA alpha), seam + direction on the frame dirs, counts/codecs on masters + \u00a76 cuts, C2 re-hash of the Reconstruction against the report. Exits non-zero on failure; verdict.json declared so a silent gate fails.",
+      "input_types": {
+        "frames_wide": "dir",
+        "frames_tall": "dir",
+        "masters": "dir",
+        "cuts": "dir",
+        "cut_report": "file",
+        "reconstruction": "dir"
+      },
+      "output_types": {
+        "verdict": "file"
+      }
     }
   ]
 }

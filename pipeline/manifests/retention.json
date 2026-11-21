@@ -17,7 +17,13 @@
       "outputs": {
         "report": "report.json"
       },
-      "notes": "Dry run by default: deleting Captures is the operator's call. Add --delete through the environment map when a real sweep is intended."
+      "notes": "Dry run by default: deleting Captures is the operator's call. Add --delete through the environment map when a real sweep is intended.",
+      "input_types": {
+        "root": "dir"
+      },
+      "output_types": {
+        "report": "file"
+      }
     }
   ]
 }
