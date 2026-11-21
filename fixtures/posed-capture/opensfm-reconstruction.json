@@ -1,0 +1,49 @@
+[
+  {
+    "cameras": {
+      "camera1": {
+        "projection_type": "perspective",
+        "width": 640,
+        "height": 480,
+        "focal_x": 0.85,
+        "focal_y": 0.85,
+        "c_x": 0.001,
+        "c_y": -0.0005
+      }
+    },
+    "shots": {
+      "IMG_0.jpg": {
+        "rotation": [1.5707963267948966, 0.0, 0.0],
+        "translation": [-100.0, 50.0, -200.0],
+        "camera": "camera1"
+      },
+      "IMG_1.jpg": {
+        "rotation": [1.5707963267948966, 0.0, 0.0],
+        "translation": [-105.0, 52.0, -202.0],
+        "camera": "camera1"
+      },
+      "IMG_2.jpg": {
+        "rotation": [1.5707963267948966, 0.0, 0.0],
+        "translation": [-98.0, 49.0, -204.0],
+        "camera": "camera1"
+      }
+    },
+    "points": {
+      "0": {"coordinates": [100.0, 200.0, 0.0], "color": [0, 0, 255]},
+      "1": {"coordinates": [101.0, 200.0, 0.0], "color": [20, 0, 235]},
+      "2": {"coordinates": [102.0, 200.0, 0.0], "color": [40, 0, 215]},
+      "3": {"coordinates": [103.0, 200.0, 0.0], "color": [60, 0, 195]},
+      "4": {"coordinates": [104.0, 200.0, 0.0], "color": [80, 0, 175]},
+      "5": {"coordinates": [105.0, 200.0, 0.0], "color": [100, 0, 155]},
+      "6": {"coordinates": [106.0, 200.0, 0.0], "color": [120, 0, 135]},
+      "7": {"coordinates": [107.0, 200.0, 0.0], "color": [140, 0, 115]},
+      "8": {"coordinates": [108.0, 200.0, 0.0], "color": [160, 0, 95]},
+      "9": {"coordinates": [109.0, 200.0, 0.0], "color": [180, 0, 75]}
+    },
+    "reference_lla": {
+      "latitude": 41.2264,
+      "longitude": -81.7043,
+      "altitude": 0.0
+    }
+  }
+]
