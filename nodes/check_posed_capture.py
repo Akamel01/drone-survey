@@ -79,6 +79,23 @@ def main() -> None:
         check("image ids", sorted(cap.colmap.images) == [1, 2, 3], str(sorted(cap.colmap.images)))
         check("point ids", sorted(cap.colmap.points3d) == list(range(1, 11)), str(sorted(cap.colmap.points3d)))
 
+        # fixture camera exact values: PINHOLE, 640x480, fx=focal_x*max(w,h)=0.85*640=544.0,
+        # fy=focal_y*max(w,h)=544.0, cx=c_x*max(w,h)+w/2=0.001*640+320=320.64,
+        # cy=c_y*max(w,h)+h/2=-0.0005*640+240=239.68.
+        cam = cap.colmap.cameras[1]
+        check("camera model", cam.model == "PINHOLE", cam.model)
+        check("camera width", cam.width == 640, str(cam.width))
+        check("camera height", cam.height == 480, str(cam.height))
+        check("camera params", cam.params == (544.0, 544.0, 320.64, 239.68), str(cam.params))
+
+        # point mapping: point ids follow sorted(points keys) string order on fixture keys 0..9.
+        check("point 1 xyz", cap.colmap.points3d[1].xyz == (100.0, 200.0, 0.0), str(cap.colmap.points3d[1].xyz))
+        check("point 10 xyz", cap.colmap.points3d[10].xyz == (109.0, 200.0, 0.0), str(cap.colmap.points3d[10].xyz))
+
+        # image id/name mapping in sorted shot key order.
+        check("image 2 name", cap.colmap.images[2].name == "IMG_1.jpg", cap.colmap.images[2].name)
+        check("image 3 name", cap.colmap.images[3].name == "IMG_2.jpg", cap.colmap.images[3].name)
+
         # COLMAP read/write round-trip
         rt_dir = tmp_path / "rt"
         write_colmap(cap.colmap, rt_dir)
@@ -107,7 +124,29 @@ def main() -> None:
         cap2 = load_capture(out2)
         check("precedence used explicit file", len(cap2.colmap.images) == 3, str(len(cap2.colmap.images)))
 
-        # brown camera yields notes containing k1=
+        # Point id ordering follows sorted(points keys) string order per plan; pin with key >= 10.
+        numeric_points = [{
+            "cameras": {"cam": {"projection_type": "perspective", "width": 640, "height": 480, "focal": 0.5}},
+            "shots": {"A.jpg": {"rotation": [0, 0, 0], "translation": [0, 0, 0], "camera": "cam"}},
+            "points": {
+                "2": {"coordinates": [2, 0, 0], "color": [0, 0, 0]},
+                "10": {"coordinates": [10, 0, 0], "color": [0, 0, 0]},
+                "1": {"coordinates": [1, 0, 0], "color": [0, 0, 0]},
+            },
+            "reference_lla": {"latitude": 0.0, "longitude": 0.0, "altitude": 0.0}
+        }]
+        numeric_json = tmp_path / "numeric-points.json"
+        numeric_json.write_text(json.dumps(numeric_points), encoding="utf-8")
+        out_num = tmp_path / "out-numeric-points"
+        proc_num = run_adapter(["--solve-dir", str(tmp_path), "--opensfm-json", str(numeric_json), "--out", str(out_num)])
+        check("numeric-point ordering exit 0", proc_num.returncode == 0, proc_num.stderr.strip())
+        cap_num = load_capture(out_num)
+        # sorted string keys: ["1", "10", "2"] => ids 1..3 map to those keys in that order.
+        check("point order key 1 -> id 1", cap_num.colmap.points3d[1].xyz == (1.0, 0.0, 0.0), str(cap_num.colmap.points3d[1].xyz))
+        check("point order key 10 -> id 2", cap_num.colmap.points3d[2].xyz == (10.0, 0.0, 0.0), str(cap_num.colmap.points3d[2].xyz))
+        check("point order key 2 -> id 3", cap_num.colmap.points3d[3].xyz == (2.0, 0.0, 0.0), str(cap_num.colmap.points3d[3].xyz))
+
+        # brown camera yields notes containing all five distortion params.
         brown = [{
             "cameras": {
                 "cam": {
@@ -130,7 +169,10 @@ def main() -> None:
         proc_b = run_adapter(["--solve-dir", str(tmp_path), "--opensfm-json", str(brown_json), "--out", str(out_brown)])
         check("brown exit 0", proc_b.returncode == 0, proc_b.stderr.strip())
         cap_b = load_capture(out_brown)
-        check("brown notes has k1=", isinstance(cap_b.meta.notes, str) and "k1=" in cap_b.meta.notes, str(cap_b.meta.notes))
+        notes = cap_b.meta.notes
+        check("brown notes str", isinstance(notes, str), str(notes))
+        for token in ("k1=-0.01", "k2=0.002", "k3=0.0", "p1=0.0001", "p2=-0.0002"):
+            check(f"brown notes has {token}", isinstance(notes, str) and token in notes, str(notes))
 
         # fisheye fails loudly
         fisheye = [{

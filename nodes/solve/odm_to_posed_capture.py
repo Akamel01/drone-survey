@@ -158,7 +158,7 @@ def convert(component: dict, solve_dir: Path) -> Capture:
 
     cam_keys = sorted(cameras_raw)
     shot_keys = sorted(shots_raw)
-    point_keys = sorted(points_raw, key=lambda k: int(k) if str(k).lstrip("-").isdigit() else str(k))
+    point_keys = sorted(points_raw)
     cam_id_map = {k: i + 1 for i, k in enumerate(cam_keys)}
     shot_id_map = {k: i + 1 for i, k in enumerate(shot_keys)}
 
