@@ -233,7 +233,7 @@ def main() -> None:
 
     ok, detail = validate(dst)
     fraction = valid_fraction(dst)
-    node_root = Path(os.environ.get("NODE_ROOT") or args.out)
+    node_root = Path(os.environ.get("NODE_ROOT") or args.out.parent)
     emit_checks(node_root, node_checks(ok, fraction))
     (args.out / "validator_output.txt").write_text(f"ok={ok}\n{detail}\nvalid_pixel_fraction={fraction:.4f}\n")
     print(f"export-cog: {detail}; valid pixels {fraction:.1%}")
