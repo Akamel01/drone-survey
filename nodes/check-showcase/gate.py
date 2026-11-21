@@ -57,6 +57,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -64,7 +65,7 @@ from pathlib import Path
 from PIL import Image
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-from common import emit_report, sha256_file  # noqa: E402
+from common import emit_checks, emit_report, sha256_file  # noqa: E402
 
 RAW_SIZES = {"wide": (3840, 2160), "tall": (2160, 3840)}
 # Product defaults (M4: 243f x16 + seam close = 3888f @120fps = 32.4s).
@@ -531,6 +532,18 @@ def cut_report_checks(cut_report_path: Path, reconstruction_dir: Path) -> list[d
     return [{"name": "cut-report: reconstruction files byte-identical", "ok": ok, "detail": detail}]
 
 
+def node_checks(verdict_checks: list[dict]) -> list[dict]:
+    return [
+        {
+            "name": c["name"],
+            "value": 1 if c.get("ok") else 0,
+            "threshold": 1,
+            "pass": bool(c.get("ok")),
+        }
+        for c in verdict_checks
+    ]
+
+
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description="Showcase gate: C4 framing + C2 re-hash + M6 seam/direction/counts.")
     ap.add_argument("--raw-wide", default=None, help="render Node's raw wide RGBA still (island alpha)")
@@ -600,6 +613,8 @@ def main(argv: list[str] | None = None) -> int:
 
     passed = all(c["ok"] for c in checks)
     emit_report(Path(args.out_verdict), {"pass": passed, "checks": checks})
+    node_root = Path(os.environ.get("NODE_ROOT") or Path(args.out_verdict).parent)
+    emit_checks(node_root, node_checks(checks))
     for c in checks:
         if not c["ok"]:
             print(f"[FAIL] {c['name']} -- {c['detail']}", file=sys.stderr)

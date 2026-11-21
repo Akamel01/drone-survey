@@ -40,10 +40,14 @@ Usage:
 
 import argparse
 import json
+import os
 import shutil
 import subprocess
 import sys
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+from common import emit_checks  # noqa: E402
 
 # ADR 0018's raster check: ODM has delivered a mostly-empty orthophoto with a
 # zero exit, and the first golden run did it again (0.28% valid pixels).
@@ -198,6 +202,19 @@ def validate(path: Path) -> tuple[bool, str]:
     sys.exit("export-cog: neither osgeo nor gdalinfo available to validate the output")
 
 
+def node_checks(valid: bool, fraction: float) -> list[dict]:
+    return [
+        {"name": "cog_valid", "value": 1 if valid else 0, "threshold": 1, "pass": bool(valid)},
+        {
+            "name": "valid_pixel_fraction",
+            "value": fraction,
+            "threshold": MIN_VALID_FRACTION,
+            "pass": fraction >= MIN_VALID_FRACTION,
+            "unit": "fraction",
+        },
+    ]
+
+
 def main() -> None:
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("--in", dest="src", required=True, type=Path)
@@ -216,6 +233,8 @@ def main() -> None:
 
     ok, detail = validate(dst)
     fraction = valid_fraction(dst)
+    node_root = Path(os.environ.get("NODE_ROOT") or args.out)
+    emit_checks(node_root, node_checks(ok, fraction))
     (args.out / "validator_output.txt").write_text(f"ok={ok}\n{detail}\nvalid_pixel_fraction={fraction:.4f}\n")
     print(f"export-cog: {detail}; valid pixels {fraction:.1%}")
     if not ok:
