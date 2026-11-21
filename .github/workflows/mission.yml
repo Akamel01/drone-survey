@@ -11,16 +11,20 @@ on:
       - "scripts/mission/**"
       - "scripts/board/**"
       - "nodes/**"
+      - "pipeline/**"
       - "web/**"
       - "fixtures/**"
+      - "fixtures/posed-capture/**"
       - ".github/workflows/mission.yml"
   pull_request:
     paths:
       - "scripts/mission/**"
       - "scripts/board/**"
       - "nodes/**"
+      - "pipeline/**"
       - "web/**"
       - "fixtures/**"
+      - "fixtures/posed-capture/**"
   workflow_dispatch:
 
 jobs:
@@ -36,6 +40,7 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
+      - run: pip install -r pipeline/requirements.txt
       - name: A Mission Spec becomes a Mission the aircraft can fly
         run: python3 scripts/mission/e2e_test.py
       # The host-side self-checks assert against the same fixtures the web tests
@@ -69,7 +74,11 @@ jobs:
           python3 nodes/check_splat.py
           python3 nodes/check_head.py
           python3 nodes/check_showcase.py
-          python3 pipeline/runner.py --selftest
+          recon-runner --selftest
+          python3 -m recon_core --version
+          python3 nodes/check_manifests.py
+          python3 nodes/check_checks.py
+          python3 nodes/check_posed_capture.py
           python3 nodes/retention/retention.py --selftest
           python3 nodes/check_retention.py
           python3 nodes/check_deliver.py
