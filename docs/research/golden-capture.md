@@ -114,7 +114,7 @@ reference/          known-good outputs from the run below
 ## Pipeline run
 
 `pipeline/manifests/orthomosaic.json`, `ingest` through `export-cog`, run by
-the real recon-core Runner (`recon-runner`) on `akamel-linux` against the live
+the real Runner as it then existed (`pipeline/runner.py`, since replaced by recon-core's `recon-runner`) on `akamel-linux` against the live
 `nodeodm` container (127.0.0.1:3180, NodeODM 2.2.4 / ODM 3.5.6), 2026-09-14,
 with an empty `state.json` (no pre-seeding). `splat-*` (another agent's
 OpenSplat fit) was running concurrently on the GPU throughout; this run used
