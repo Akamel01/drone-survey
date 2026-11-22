@@ -40,6 +40,10 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
+      - uses: webfactory/ssh-agent@dc588b651fe13675774614f8e6a936a468676387
+        with:
+          ssh-private-key: ${{ secrets.RECON_CORE_DEPLOY_KEY }}
+      - run: git config --global url."git@github.com:Akamel01/recon-core".insteadOf "https://github.com/Akamel01/recon-core"
       - run: pip install -r pipeline/requirements.txt
       - name: A Mission Spec becomes a Mission the aircraft can fly
         run: python3 scripts/mission/e2e_test.py
