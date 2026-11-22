@@ -52,12 +52,13 @@ from __future__ import annotations
 import argparse
 import json
 import math
+import os
 import struct
 import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-from common import die, emit_report  # noqa: E402
+from common import die, emit_checks, emit_report  # noqa: E402
 
 # --- calibration debt: first conservative cuts, unmeasured past this one project (see module docstring) ---
 OPACITY_MIN = 0.02
@@ -288,6 +289,53 @@ def evaluate_gate(counts: dict, val_psnr: float | None, polygon_given: bool,
     return (len(reasons) == 0), reasons
 
 
+def node_checks(counts: dict, val_psnr: float | None, polygon_given: bool, boundary_overlap_ok: bool) -> list[dict]:
+    initial = counts["initial"]
+    after_crop = counts["after_crop"]
+    crop_removed_fraction = counts["dropped_crop"] / initial if initial else 1.0
+    sor_removed_fraction = counts["dropped_sor"] / after_crop if after_crop else 1.0
+    checks = [
+        {
+            "name": "final_gaussians",
+            "value": counts["final"],
+            "threshold": MIN_FINAL_GAUSSIANS,
+            "pass": counts["final"] >= MIN_FINAL_GAUSSIANS,
+        },
+        {
+            "name": "sor_removed_fraction",
+            "value": sor_removed_fraction,
+            "threshold": MAX_SOR_REMOVED_FRACTION,
+            "pass": sor_removed_fraction <= MAX_SOR_REMOVED_FRACTION,
+            "unit": "fraction",
+        },
+    ]
+    if polygon_given:
+        checks.extend([
+            {
+                "name": "crop_removed_fraction",
+                "value": crop_removed_fraction,
+                "threshold": MAX_CROP_REMOVED_FRACTION,
+                "pass": crop_removed_fraction <= MAX_CROP_REMOVED_FRACTION,
+                "unit": "fraction",
+            },
+            {
+                "name": "boundary_overlap",
+                "value": 1 if boundary_overlap_ok else 0,
+                "threshold": 1,
+                "pass": bool(boundary_overlap_ok),
+            },
+        ])
+    if val_psnr is not None:
+        checks.append({
+            "name": "val_psnr",
+            "value": val_psnr,
+            "threshold": MIN_VAL_PSNR,
+            "pass": val_psnr >= MIN_VAL_PSNR,
+            "unit": "dB",
+        })
+    return checks
+
+
 def main() -> None:
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("--in", dest="in_ply", required=True, type=Path, help="raw splat from fit-splat")
@@ -345,6 +393,8 @@ def main() -> None:
     }
     args.out_report.parent.mkdir(parents=True, exist_ok=True)
     emit_report(args.out_report, report)
+    node_root = Path(os.environ.get("NODE_ROOT") or args.out.parent)
+    emit_checks(node_root, node_checks(counts, val_psnr, polygon_given, bool(boundary_overlap_ok)))
     print(f"clean-splat: {json.dumps(report, indent=1)}")
 
     if not passed:

@@ -10,4 +10,5 @@
 FROM ghcr.io/osgeo/gdal:ubuntu-small-3.10.3
 
 WORKDIR /work
+COPY nodes/common.py /work/nodes/common.py
 COPY nodes/export-cog/ /work/nodes/export-cog/

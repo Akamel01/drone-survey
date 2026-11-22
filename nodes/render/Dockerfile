@@ -1,8 +1,9 @@
 # One container for the Showcase render Node (and the island-cut Node that
 # shares it): pinned Blender plus the CC0 Poly Haven assets the island
-# materials and sky are built from.  The Runner mounts only the workdir and
-# sets no working directory (pipeline/runner.py:206), so the assets and the
-# Node script have to travel in the image, at the path the command names.
+# materials and sky are built from.  The recon-core Runner mounts only the
+# workdir and runs without setting a per-Node working directory, so the assets
+# and the Node script have to travel in the image, at the path the command
+# names.
 #
 # Build: stage the asset store and this Node's script into the context
 # (assets are not committed):

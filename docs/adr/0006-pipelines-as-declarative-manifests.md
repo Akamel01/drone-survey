@@ -1,5 +1,7 @@
 # Pipelines are declarative manifests executed by a thin runner
 
+Status: superseded/moved into recon-core ADR 0001 (decisions 2 and 10), 2026-11-18.
+
 We need node-based pipelines that share common steps rather than duplicating
 them, driven from the command line. No headless node-graph orchestrator exists
 for photogrammetry — Meshroom's is bound to its GUI, and general workflow

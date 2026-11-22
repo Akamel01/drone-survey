@@ -52,6 +52,24 @@ def emit_report(path: Path, payload: dict[str, Any]) -> None:
     p.write_text(text, encoding="utf-8")
 
 
+def emit_checks(node_root: Path, checks: list[dict]) -> Path:
+    """Write recon-core checks.json for a node root.
+
+    Emits {"version": 1, "checks": [...]} with sorted keys and a trailing
+    newline. Atomic-ish: write temp file in the same dir, then rename. No
+    recon_core import so GDAL-only node images can use it.
+    """
+    root = Path(node_root)
+    root.mkdir(parents=True, exist_ok=True)
+    out = root / "checks.json"
+    payload = {"version": 1, "checks": checks}
+    text = json.dumps(payload, sort_keys=True, ensure_ascii=False) + "\n"
+    tmp = out.with_name(out.name + ".tmp")
+    tmp.write_text(text, encoding="utf-8")
+    tmp.replace(out)
+    return out
+
+
 def require_exiftool() -> None:
     if shutil.which("exiftool") is None:
         die("exiftool not found on PATH (apt/brew install libimage-exiftool-perl / exiftool)")

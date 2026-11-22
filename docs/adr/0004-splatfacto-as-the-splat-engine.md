@@ -1,5 +1,7 @@
 # Use splatfacto on gsplat as the Gaussian Splatting engine
 
+Status: superseded by recon-core ADR 0001 (decision 6), 2026-11-18.
+
 ADR 0003 narrowed the field to permissively licensed engines, leaving splatfacto
 (Nerfstudio on gsplat, Apache 2.0) and OpenSplat (AGPLv3). We chose splatfacto.
 

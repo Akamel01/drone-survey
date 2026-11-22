@@ -118,9 +118,12 @@ regardless of where a job lands.
 ## 4. Pipeline model
 
 A Pipeline is a **Manifest**: a declarative file naming its Nodes, their inputs
-and outputs, and the edges between them. A thin **Runner** executes a Manifest,
-placing each Node's work on the machine meant to do it
-([ADR 0006](adr/0006-pipelines-as-declarative-manifests.md)).
+and outputs, and the edges between them. The **Runner** and Manifest validation
+come from recon-core v0.1.0 (`recon-runner`); manifests carry typed
+`input_types`/`output_types` (core types `dir`/`file`/`raster`/`splat`/`posed_capture`).
+Checks are written in core `checks.json` while ADR 0018 gates still exit
+nonzero. The Runner executes a Manifest, placing each Node's work on the machine
+meant to do it ([ADR 0006](adr/0006-pipelines-as-declarative-manifests.md)).
 
 There is no workflow engine. The general ones solve problems this system does
 not have, at the cost of operational surface on the machine least able to spare

@@ -17,7 +17,13 @@
       "outputs": {
         "project": "project"
       },
-      "notes": "Built concurrently under nodes/solve/ (ticket #24 does not create or edit it). Referenced by name only; 'outputs' here declares the contract fit-splat needs (an ODM project directory) so the Manifest validates and wires -- it is not a claim about solve.py's actual implementation."
+      "notes": "Built concurrently under nodes/solve/ (ticket #24 does not create or edit it). Referenced by name only; 'outputs' here declares the contract fit-splat needs (an ODM project directory) so the Manifest validates and wires -- it is not a claim about solve.py's actual implementation.",
+      "input_types": {
+        "images": "dir"
+      },
+      "output_types": {
+        "project": "dir"
+      }
     },
     {
       "name": "fit-splat",
@@ -41,7 +47,14 @@
         "splat": "splat.ply",
         "report": "fit-report.json"
       },
-      "resumable": true
+      "resumable": true,
+      "input_types": {
+        "project": "dir"
+      },
+      "output_types": {
+        "splat": "splat",
+        "report": "file"
+      }
     },
     {
       "name": "clean-splat",
@@ -70,6 +83,14 @@
       "outputs": {
         "splat": "cleaned.ply",
         "report": "clean-report.json"
+      },
+      "input_types": {
+        "splat": "splat",
+        "report": "file"
+      },
+      "output_types": {
+        "splat": "splat",
+        "report": "file"
       }
     },
     {
@@ -96,6 +117,14 @@
         "scene": "scene.sog",
         "meta": "meta.json",
         "report": "compress-report.json"
+      },
+      "input_types": {
+        "splat": "splat"
+      },
+      "output_types": {
+        "scene": "splat",
+        "meta": "file",
+        "report": "file"
       }
     }
   ]

@@ -4,124 +4,379 @@
   "nodes": [
     {
       "name": "ingest",
-      "command": ["python3", "nodes/ingest/ingest.py", "--out", "{out.images}"],
-      "outputs": {"images": "images"}
+      "command": [
+        "python3",
+        "nodes/ingest/ingest.py",
+        "--out",
+        "{out.images}"
+      ],
+      "outputs": {
+        "images": "images"
+      },
+      "input_types": {},
+      "output_types": {
+        "images": "dir"
+      }
     },
     {
       "name": "exif-audit",
-      "command": ["python3", "nodes/exif-audit/exif_audit.py", "--in", "{in.images}", "--out", "{out.report}"],
-      "inputs": {"images": {"node": "ingest", "output": "images"}},
-      "outputs": {"report": "audit.json"}
+      "command": [
+        "python3",
+        "nodes/exif-audit/exif_audit.py",
+        "--in",
+        "{in.images}",
+        "--out",
+        "{out.report}"
+      ],
+      "inputs": {
+        "images": {
+          "node": "ingest",
+          "output": "images"
+        }
+      },
+      "outputs": {
+        "report": "audit.json"
+      },
+      "input_types": {
+        "images": "dir"
+      },
+      "output_types": {
+        "report": "file"
+      }
     },
     {
       "name": "filter",
-      "command": ["python3", "nodes/filter/filter.py", "--in", "{in.images}", "--out-images", "{out.images}", "--out-report", "{out.report}"],
-      "inputs": {"images": {"node": "ingest", "output": "images"}},
-      "outputs": {"images": "images", "report": "filter.json"}
+      "command": [
+        "python3",
+        "nodes/filter/filter.py",
+        "--in",
+        "{in.images}",
+        "--out-images",
+        "{out.images}",
+        "--out-report",
+        "{out.report}"
+      ],
+      "inputs": {
+        "images": {
+          "node": "ingest",
+          "output": "images"
+        }
+      },
+      "outputs": {
+        "images": "images",
+        "report": "filter.json"
+      },
+      "input_types": {
+        "images": "dir"
+      },
+      "output_types": {
+        "images": "dir",
+        "report": "file"
+      }
     },
     {
       "name": "correct",
-      "command": ["python3", "nodes/correct/correct.py", "--in", "{in.images}", "--out", "{out.images}"],
-      "inputs": {"images": {"node": "filter", "output": "images"}},
-      "outputs": {"images": "images"}
+      "command": [
+        "python3",
+        "nodes/correct/correct.py",
+        "--in",
+        "{in.images}",
+        "--out",
+        "{out.images}"
+      ],
+      "inputs": {
+        "images": {
+          "node": "filter",
+          "output": "images"
+        }
+      },
+      "outputs": {
+        "images": "images"
+      },
+      "input_types": {
+        "images": "dir"
+      },
+      "output_types": {
+        "images": "dir"
+      }
     },
     {
       "name": "solve-initial",
       "command": [
-        "python3", "nodes/solve/solve.py",
-        "--in", "{in.images}", "--out", "{out.solved}",
-        "--option", "feature-quality=low"
+        "python3",
+        "nodes/solve/solve.py",
+        "--in",
+        "{in.images}",
+        "--out",
+        "{out.solved}",
+        "--option",
+        "feature-quality=low"
       ],
-      "inputs": {"images": {"node": "correct", "output": "images"}},
+      "inputs": {
+        "images": {
+          "node": "correct",
+          "output": "images"
+        }
+      },
       "outputs": {
         "solved": "solved",
         "poses": "solved/poses.json",
         "camera": "solved/camera.json"
       },
-      "cleanup_paths": ["odm_project"]
+      "cleanup_paths": [
+        "odm_project"
+      ],
+      "input_types": {
+        "images": "dir"
+      },
+      "output_types": {
+        "solved": "dir",
+        "poses": "file",
+        "camera": "file"
+      }
     },
     {
       "name": "register",
       "command": [
-        "python3", "nodes/register/register.py",
-        "--poses", "{in.poses}", "--camera", "{in.camera}",
-        "--out", "{out.registered}"
+        "python3",
+        "nodes/register/register.py",
+        "--poses",
+        "{in.poses}",
+        "--camera",
+        "{in.camera}",
+        "--out",
+        "{out.registered}"
       ],
       "inputs": {
-        "solved": {"node": "solve-initial", "output": "solved"},
-        "poses": {"node": "solve-initial", "output": "poses"},
-        "camera": {"node": "solve-initial", "output": "camera"}
+        "solved": {
+          "node": "solve-initial",
+          "output": "solved"
+        },
+        "poses": {
+          "node": "solve-initial",
+          "output": "poses"
+        },
+        "camera": {
+          "node": "solve-initial",
+          "output": "camera"
+        }
       },
-      "outputs": {"registered": "registered", "gcp_list": "registered/gcp_list.txt"}
+      "outputs": {
+        "registered": "registered",
+        "gcp_list": "registered/gcp_list.txt"
+      },
+      "input_types": {
+        "solved": "dir",
+        "poses": "file",
+        "camera": "file"
+      },
+      "output_types": {
+        "registered": "dir",
+        "gcp_list": "file"
+      }
     },
     {
       "name": "solve-final",
       "command": [
-        "python3", "nodes/solve/solve.py",
-        "--in", "{in.images}", "--gcp", "{in.gcp_list}", "--out", "{out.solved}",
-        "--option", "feature-quality=low"
+        "python3",
+        "nodes/solve/solve.py",
+        "--in",
+        "{in.images}",
+        "--gcp",
+        "{in.gcp_list}",
+        "--out",
+        "{out.solved}",
+        "--option",
+        "feature-quality=low"
       ],
       "inputs": {
-        "images": {"node": "correct", "output": "images"},
-        "registered": {"node": "register", "output": "registered"},
-        "gcp_list": {"node": "register", "output": "gcp_list"}
+        "images": {
+          "node": "correct",
+          "output": "images"
+        },
+        "registered": {
+          "node": "register",
+          "output": "registered"
+        },
+        "gcp_list": {
+          "node": "register",
+          "output": "gcp_list"
+        }
       },
-      "outputs": {"solved": "solved"}
+      "outputs": {
+        "solved": "solved"
+      },
+      "input_types": {
+        "images": "dir",
+        "registered": "dir",
+        "gcp_list": "file"
+      },
+      "output_types": {
+        "solved": "dir"
+      }
     },
     {
       "name": "reconstruct-dense",
       "command": [
-        "python3", "nodes/reconstruct/reconstruct.py",
-        "--in", "{in.solved}", "--out", "{out.reconstructed}",
-        "--rerun-from", "opensfm", "--end-with", "odm_filterpoints",
-        "--option", "pc-quality=low"
+        "python3",
+        "nodes/reconstruct/reconstruct.py",
+        "--in",
+        "{in.solved}",
+        "--out",
+        "{out.reconstructed}",
+        "--rerun-from",
+        "opensfm",
+        "--end-with",
+        "odm_filterpoints",
+        "--option",
+        "pc-quality=low"
       ],
-      "inputs": {"solved": {"node": "solve-final", "output": "solved"}},
-      "outputs": {"reconstructed": "reconstructed"}
+      "inputs": {
+        "solved": {
+          "node": "solve-final",
+          "output": "solved"
+        }
+      },
+      "outputs": {
+        "reconstructed": "reconstructed"
+      },
+      "input_types": {
+        "solved": "dir"
+      },
+      "output_types": {
+        "reconstructed": "dir"
+      }
     },
     {
       "name": "reconstruct-mesh",
       "command": [
-        "python3", "nodes/reconstruct/reconstruct.py",
-        "--in", "{in.reconstructed}", "--out", "{out.reconstructed}",
-        "--rerun-from", "odm_meshing", "--end-with", "mvs_texturing"
+        "python3",
+        "nodes/reconstruct/reconstruct.py",
+        "--in",
+        "{in.reconstructed}",
+        "--out",
+        "{out.reconstructed}",
+        "--rerun-from",
+        "odm_meshing",
+        "--end-with",
+        "mvs_texturing"
       ],
-      "inputs": {"reconstructed": {"node": "reconstruct-dense", "output": "reconstructed"}},
-      "outputs": {"reconstructed": "reconstructed"}
+      "inputs": {
+        "reconstructed": {
+          "node": "reconstruct-dense",
+          "output": "reconstructed"
+        }
+      },
+      "outputs": {
+        "reconstructed": "reconstructed"
+      },
+      "input_types": {
+        "reconstructed": "dir"
+      },
+      "output_types": {
+        "reconstructed": "dir"
+      }
     },
     {
       "name": "reconstruct-georef",
       "command": [
-        "python3", "nodes/reconstruct/reconstruct.py",
-        "--in", "{in.reconstructed}", "--out", "{out.reconstructed}",
-        "--rerun-from", "odm_georeferencing", "--end-with", "odm_orthophoto"
+        "python3",
+        "nodes/reconstruct/reconstruct.py",
+        "--in",
+        "{in.reconstructed}",
+        "--out",
+        "{out.reconstructed}",
+        "--rerun-from",
+        "odm_georeferencing",
+        "--end-with",
+        "odm_orthophoto"
       ],
-      "inputs": {"reconstructed": {"node": "reconstruct-mesh", "output": "reconstructed"}},
-      "outputs": {"reconstructed": "reconstructed", "odm_orthophoto": "reconstructed/odm_orthophoto.tif"}
+      "inputs": {
+        "reconstructed": {
+          "node": "reconstruct-mesh",
+          "output": "reconstructed"
+        }
+      },
+      "outputs": {
+        "reconstructed": "reconstructed",
+        "odm_orthophoto": "reconstructed/odm_orthophoto.tif"
+      },
+      "input_types": {
+        "reconstructed": "dir"
+      },
+      "output_types": {
+        "reconstructed": "dir",
+        "odm_orthophoto": "raster"
+      }
     },
     {
       "name": "reconstruct-report",
       "command": [
-        "python3", "nodes/reconstruct/reconstruct.py",
-        "--in", "{in.reconstructed}", "--out", "{out.reconstructed}",
-        "--rerun-from", "odm_report", "--end-with", "odm_postprocess"
+        "python3",
+        "nodes/reconstruct/reconstruct.py",
+        "--in",
+        "{in.reconstructed}",
+        "--out",
+        "{out.reconstructed}",
+        "--rerun-from",
+        "odm_report",
+        "--end-with",
+        "odm_postprocess"
       ],
-      "inputs": {"reconstructed": {"node": "reconstruct-georef", "output": "reconstructed"},
-                  "odm_orthophoto": {"node": "reconstruct-georef", "output": "odm_orthophoto"}},
-      "outputs": {"reconstructed": "reconstructed", "odm_orthophoto": "reconstructed/odm_orthophoto.tif"}
+      "inputs": {
+        "reconstructed": {
+          "node": "reconstruct-georef",
+          "output": "reconstructed"
+        },
+        "odm_orthophoto": {
+          "node": "reconstruct-georef",
+          "output": "odm_orthophoto"
+        }
+      },
+      "outputs": {
+        "reconstructed": "reconstructed",
+        "odm_orthophoto": "reconstructed/odm_orthophoto.tif"
+      },
+      "input_types": {
+        "reconstructed": "dir",
+        "odm_orthophoto": "raster"
+      },
+      "output_types": {
+        "reconstructed": "dir",
+        "odm_orthophoto": "raster"
+      }
     },
     {
       "name": "export-cog",
       "image": "drone-export-cog",
       "command": [
-        "python3", "nodes/export-cog/export_cog.py",
-        "--in", "{in.odm_orthophoto}", "--out", "{out.cog}"
+        "python3",
+        "nodes/export-cog/export_cog.py",
+        "--in",
+        "{in.odm_orthophoto}",
+        "--out",
+        "{out.cog}"
       ],
       "inputs": {
-        "reconstructed": {"node": "reconstruct-report", "output": "reconstructed"},
-        "odm_orthophoto": {"node": "reconstruct-report", "output": "odm_orthophoto"}
+        "reconstructed": {
+          "node": "reconstruct-report",
+          "output": "reconstructed"
+        },
+        "odm_orthophoto": {
+          "node": "reconstruct-report",
+          "output": "odm_orthophoto"
+        }
       },
-      "outputs": {"cog": "cog"}
+      "outputs": {
+        "cog": "cog"
+      },
+      "input_types": {
+        "reconstructed": "dir",
+        "odm_orthophoto": "raster"
+      },
+      "output_types": {
+        "cog": "dir"
+      }
     }
   ]
 }
