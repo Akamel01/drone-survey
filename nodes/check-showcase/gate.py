@@ -15,8 +15,9 @@ cut-report.json, then measures:
 
 The gate owns those definitions (plan.md C4 notes). It writes the C7 verdict
 `{pass, checks: [{name, ok, detail}]}` via emit_report and exits 1 on any failed
-check: the Runner stops the run (pipeline/runner.py:250-254), and a silent gate
-is impossible because verdict.json is a declared output (runner.py:258-263).
+check: the recon-core Runner stops the run because a Node's non-zero exit stops
+the run, and a silent gate is impossible because verdict.json is a declared
+output whose absence fails the Node.
 
 M6 adds, same verdict: seam + direction on frame dirs, counts/codecs on
 masters + §6 cuts (D4/D5/D6; thresholds are CLI flags, #194 owns calibration):
