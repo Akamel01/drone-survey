@@ -1,1 +1,1 @@
-recon-core @ git+https://github.com/Akamel01/recon-core@64da47a6aa73cfb5854eb2704c7738064a7d255c
+recon-core @ git+https://github.com/Akamel01/recon-core@v0.1.1
